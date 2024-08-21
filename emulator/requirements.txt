@@ -1,0 +1,4 @@
+future==0.17.1
+pyglet<2
+gmqtt
+pyserial
