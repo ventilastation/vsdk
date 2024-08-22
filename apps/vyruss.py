@@ -129,7 +129,7 @@ class StarfleetState:
         self.fighter.step()
 
     def game_over(self):
-        director.music_play("vy-gameover")
+        director.music_play("vyruss/vy-gameover")
         self.game_over_sprite.set_frame(0)
         self.scene.call_later(8333, self.scene.finished)
 
@@ -144,7 +144,7 @@ class StarfleetState:
         remaining_lives = len(self.fighters) - 1
         self.scene.scoreboard.setlives(remaining_lives)
         self.exploded = True
-        director.sound_play(b"explosion3")
+        director.sound_play(b"vyruss/explosion3")
         if remaining_lives:
             self.scene.call_later(1500, self.respawn)
         else:
@@ -193,7 +193,7 @@ class VyrusGame(Scene):
         self.used_baddie = 0
         self.everyone = []
         self.explosions = []
-        director.music_play("vy-main")
+        director.music_play("vyruss/vy-main")
 
     def getBaddie(self, base_picture):
         b = self.all_baddies[self.used_baddie]
@@ -240,7 +240,7 @@ class VyrusGame(Scene):
             hit = self.laser.collision(self.everyone)
             if hit:
                 self.laser.finish()
-                director.sound_play(b"explosion2")
+                director.sound_play(b"vyruss/explosion2")
                 self.explode_baddie(hit)
 
         self.starfleet.step()
@@ -313,7 +313,7 @@ class FleetState:
 
 class StateDefeated(FleetState):
     def setup(self):
-        director.music_play("vy-3warps")
+        director.music_play("vyruss/vy-3warps")
         self.fleet.planet.set_y(0)
         self.fleet.planet.set_frame(0)
         self.animating_planet = True
@@ -579,7 +579,7 @@ class Laser(Sprite):
         self.enabled = False
 
     def fire(self, starfighter):
-        director.sound_play(b"shoot1")
+        director.sound_play(b"vyruss/shoot1")
         self.enabled = True
         self.set_y(starfighter.y() + 11)
         self.set_x(starfighter.x() + 6)
@@ -603,7 +603,7 @@ class Bomb(Sprite):
         self.enabled = False
 
     def fire(self, baddie):
-        director.sound_play(b"shoot3")
+        director.sound_play(b"vyruss/shoot3")
         self.enabled = True
         self.set_y(baddie.y() + 11)
         self.set_x(baddie.x() + 6)

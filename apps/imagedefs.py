@@ -92,7 +92,6 @@ unused_images = image_group(
         strip("09_dumbbug.png", frames=28),
         strip("10_newsat.png", frames=28),
         strip("11_spock.png", frames=28),
-
         strip("crawling.png"),
 
         fullscreen("yourgame.png"),

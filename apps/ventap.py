@@ -64,11 +64,11 @@ class Ventap(Scene):
             nub_x = self.nubareda.x
             nub_finx = self.nubareda.x + self.nubareda.width + 16
             if nub_x < self.bola.x() < nub_finx:
-                director.sound_play(b"shoot1")
+                director.sound_play(b"vyruss/shoot1")
                 self.nubareda.reiniciar()
             else:
-                director.sound_play(b"explosion3")
-                director.music_play("vy-gameover")
+                director.sound_play(b"vyruss/explosion3")
+                director.music_play("vyruss/vy-gameover")
                 self.finished()
             
         if director.was_pressed(director.BUTTON_D):

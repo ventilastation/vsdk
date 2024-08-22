@@ -170,7 +170,7 @@ class Ready(TimedScene):
         self.blink()
         self.call_later(2000, self.start_scrolling)
         self.call_later(4000, self.start_hiding)
-        director.music_play(b"demo/vladfarty/intro")
+        director.music_play(b"vladfarty/intro")
 
     def start_scrolling(self):
         self.scrolling = True
@@ -269,7 +269,7 @@ class BuildFuture(Scroller):
 
     def on_enter(self):
         super().on_enter()
-        director.music_play(b"demo/vladfarty/happy-place")
+        director.music_play(b"vladfarty/happy-place")
 
     def step_letter(self, letter):
         letter.step(letter.x())
@@ -287,7 +287,7 @@ class DancingLions(TimedScene):
         self.farty_lion.set_frame(0)
         self.n = 0
         self.call_later(self.duration - 1500, self.start_lionhead)
-        director.music_play(b"demo/vladfarty/farty-lion")
+        director.music_play(b"vladfarty/farty-lion")
         self.increment = 2
 
     def start_lionhead(self):
@@ -295,7 +295,7 @@ class DancingLions(TimedScene):
         self.farty_lionhead.set_y(100)
         self.farty_lionhead.set_frame(0)
         director.music_off()
-        director.sound_play(b"demo/vladfarty/hit")
+        director.sound_play(b"vladfarty/hit")
 
     def step(self):
         new_y = self.farty_lion.y() + self.increment
@@ -369,7 +369,7 @@ class OrchestraHit(TimedScene):
     duration = 1500
 
     def on_enter(self):
-        director.sound_play(b"demo/vladfarty/hit")
+        director.sound_play(b"vladfarty/hit")
         director.music_off()
 
 
@@ -398,7 +398,7 @@ class WorldRight(Scroller):
         self.earth = make_me_a_planet(10)
         self.earth.set_y(50)
         self.earth.set_frame(0)
-        director.music_play(b"demo/vladfarty/part2")
+        director.music_play(b"vladfarty/part2")
 
     def step(self):
         super().step()
@@ -525,7 +525,7 @@ class Kudowz(TimedScene):
         self.line = 0
         self.advance_line()
 
-        director.music_play(b"demo/vladfarty/credits")
+        director.music_play(b"vladfarty/credits")
     
     def advance_line(self):
         if self.line >= len(credits):

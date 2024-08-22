@@ -24,7 +24,7 @@ class Bembidiona(Scene):
         self.jere = make_me_a_planet(44)
         self.jere.set_y(255)
         self.jere.set_frame(0)
-        director.music_play(b"piostart")
+        director.music_play(b"other/piostart")
 
     def step(self):
         self.animation_frames += 1

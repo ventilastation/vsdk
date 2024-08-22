@@ -19,7 +19,7 @@ def make_me_a_planet(n):
 class Credits(Scene):
 
     def start_music(self):
-        director.music_play("credits")
+        director.music_play("other/credits")
 
     def on_enter(self):
         self.vs = make_me_a_planet(15)
