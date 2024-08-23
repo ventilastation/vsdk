@@ -108,10 +108,10 @@ for palnumber, filenames in sorted(images_per_palette.items()):
 
     palette = list(grouper(workspace.getpalette(), 3))
     mi = palette.index(TRANSPARENT)
-    print(palette)
-    print([n for n, c in enumerate(palette) if c in [(254, 0, 254), (255, 0, 255)]])
-    print(mi)
-    import pdb; pdb.set_trace()
+    print(palette, file=sys.stderr)
+    print([n for n, c in enumerate(palette) if c in [(254, 0, 254), (255, 0, 255)]], file=sys.stderr)
+    print(mi, file=sys.stderr)
+    #import pdb; pdb.set_trace()
     for n, c in enumerate(palette):
         if (c == TRANSPARENT or c == (254, 0, 254)) and n != 255:
             palette[n] = (255, 0, 255)
