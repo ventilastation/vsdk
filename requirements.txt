@@ -1,5 +1,5 @@
 future==0.17.1
-pyglet=1.5.11
+pyglet==1.5.11
 gmqtt
 pyserial
-mathplotlib
+matplotlib
