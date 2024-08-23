@@ -15,5 +15,5 @@ pip install -r requirements.txt
 ## Running
 ```
 . .venv/bin/activate
-vs-emu.sh
+./vs-emu.sh
 ```
