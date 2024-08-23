@@ -10,6 +10,9 @@ from numpy import sin, cos, pi, ndarray, array, uint8
 
 TRANSPARENT = (255, 0, 255)
 FOLDER = "../images"
+WORKDIR = ".workdir/"
+
+os.makedirs(WORKDIR, exist_ok=True)
 
 def grouper(iterable, n, fillvalue=None):
     "Collect data into fixed-length chunks or blocks"
@@ -93,7 +96,7 @@ for palnumber, filenames in sorted(images_per_palette.items()):
         attributes[fn] = (width, i.height, frames, palnumber)
 
     #Debug:
-    workspace.save(".output/workspace%d-A.png" % palnumber)
+    workspace.save(WORKDIR + "workspace%d-A.png" % palnumber)
 
     import pprint
     workspace = workspace.convert("P", palette=Image.ADAPTIVE, dither=0, colors=256)
@@ -121,12 +124,12 @@ for palnumber, filenames in sorted(images_per_palette.items()):
         print("no transparent in this palette", file=sys.stderr)
     workspace.putpalette(chain.from_iterable(palette))
     #Debug:
-    workspace.save(".output/workspace%d-B.png" % palnumber)
+    workspace.save(WORKDIR + "workspace%d-B.png" % palnumber)
 
     #print("unsigned long palette_pal[] PROGMEM = {")
 
     pal_raw = []
-    with open(".output/palette.pal", "wb") as palfile:
+    with open(WORKDIR + "palette.pal", "wb") as palfile:
         for c in palette:
             r, g, b = c
             #if (r, g, b) == TRANSPARENT:
@@ -170,7 +173,7 @@ for palnumber, filenames in sorted(images_per_palette.items()):
         rom_strips.append(var_name.encode("utf-8") + bytes(0) + attrbytes + b)
         
         if ("fondo.png" in fn):
-            fn = ".output/" + fn.rsplit(".", 1)[0] + ".raw"
+            fn = WORKDIR + fn.rsplit(".", 1)[0] + ".raw"
             with open(fn, "wb") as raw:
                 raw.write(b)
         else:
@@ -180,10 +183,10 @@ for palnumber, filenames in sorted(images_per_palette.items()):
 print("palette_pal =", repr(b"".join(palettes)))
 print()
 
-with open(".output/images.raw", "wb") as raw:
+with open(WORKDIR + "images.raw", "wb") as raw:
     raw.write(b"".join(raws))
 
-with open(".output/sprites.rom", "wb") as rom:
+with open(WORKDIR + "sprites.rom", "wb") as rom:
     offset = 4 + len(rom_strips) * 4 + len(palettes) * 4
     rom.write(struct.pack("<HH", len(rom_strips), len(palettes)))
 
