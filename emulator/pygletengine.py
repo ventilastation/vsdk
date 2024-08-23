@@ -4,6 +4,7 @@ import pyglet
 pyglet.options['audio'] = ('openal', 'silent')
 import math
 import random
+import os
 from pyglet.gl import *
 from pyglet.window import key
 from struct import pack, unpack
@@ -11,17 +12,17 @@ from deepspace import deepspace
 
 
 
-sounds = {}
-for sn in ["shoot1", "explosion2", "explosion3", "shoot3", "demo/vladfarty/hit",
-    "die", "ventilagon/audio/es/super ventilagon", "ventilagon/audio/es/buenisimo", "ventilagon/audio/es/perdiste", "ventilagon/audio/es/empeza", "ventilagon/audio/es/linea",
-    "ventilagon/audio/es/triangulo", "ventilagon/audio/es/cuadrado", "ventilagon/audio/es/pentagono", "ventilagon/audio/es/ventilagono"]:
-    sounds[bytes(sn, "latin1")] = pyglet.media.load("../sounds/%s.mp3" % sn, streaming=False)
 
-for mn in ["credits", "vy-gameover", "vy-main", "vy-3warps", "ventilagon/music/superventilagon-track",
-           "demo/vladfarty/intro", "demo/vladfarty/part2",
-           "demo/vladfarty/farty-lion", "demo/vladfarty/credits",
-           "demo/vladfarty/happy-place", "piostart"]:
-    sounds[bytes(mn, "latin1")] = pyglet.media.load("../sounds/%s.mp3" % mn, streaming=False)
+# preload all sounds
+sounds = {}
+
+for dirpath, dirs, files in os.walk("../sounds"):
+    for fn in files:
+        if fn.endswith(".mp3"):
+            fullname = os.path.join(dirpath, fn)
+            fn = fullname[10:-4]
+            sounds[bytes(fn, "latin1")] = pyglet.media.load(fullname, streaming=False)
+
 
 sound_queue = []
 def playsound(name):
@@ -43,41 +44,41 @@ image_stripes = {
     "7": imagenes.menu_png,
     "8": imagenes.credits_png,
 
-    "10": imagenes.tierra_flat_png,
-    "11": imagenes.marte_flat_png,
-    "12": imagenes.jupiter_flat_png,
-    "13": imagenes.saturno_flat_png,
-    "14": imagenes.sves_flat_png,
-    "15": imagenes.ventilastation_flat_png,
-    "16": imagenes.tecno_estructuras_flat_png,
-    "17": imagenes.menatwork_flat_png,
-    "18": imagenes.vladfartylogo_flat_png,
+    "10": imagenes.tierra_png,
+    "11": imagenes.marte_png,
+    "12": imagenes.jupiter_png,
+    "13": imagenes.saturno_png,
+    "14": imagenes.sves_png,
+    "15": imagenes.ventilastation_png,
+    "16": imagenes.tecno_estructuras_png,
+    "17": imagenes.menatwork_png,
+    "18": imagenes.vladfartylogo_png,
     "19": imagenes.vga_pc734_png,
     "20": imagenes.vga_cp437_png,
-    "21": imagenes.vlad_farting_flat_png,
-    "22": imagenes.farty_lion_flat_png,
+    "21": imagenes.vladfartylogo_png,
+    "22": imagenes.farty_lion_png,
     "23": imagenes.ready_png,
-    "24": imagenes.bg64_flat_png,
+    "24": imagenes.bg64_png,
     "25": imagenes.copyright_png,
-    "26": imagenes.bgspeccy_flat_png,
+    "26": imagenes.bgspeccy_png,
     "27": imagenes.reset_png,
-    "28": imagenes.farty_lionhead_flat_png,
+    "28": imagenes.farty_lionhead_png,
     "29": imagenes.rainbow437_png,
-    "30": imagenes.chanime01_flat_png,
-    "31": imagenes.chanime02_flat_png,
-    "32": imagenes.chanime03_flat_png,
-    "33": imagenes.chanime04_flat_png,
-    "34": imagenes.chanime05_flat_png,
-    "35": imagenes.chanime06_flat_png,
-    "36": imagenes.chanime07_flat_png,
-    "37": imagenes.salto01_flat_png,
-    "38": imagenes.salto02_flat_png,
-    "39": imagenes.salto03_flat_png,
-    "40": imagenes.salto04_flat_png,
-    "41": imagenes.salto05_flat_png,
-    "42": imagenes.salto06_flat_png,
+    "30": imagenes.chanime01_png,
+    "31": imagenes.chanime02_png,
+    "32": imagenes.chanime03_png,
+    "33": imagenes.chanime04_png,
+    "34": imagenes.chanime05_png,
+    "35": imagenes.chanime06_png,
+    "36": imagenes.chanime07_png,
+    "37": imagenes.salto01_png,
+    "38": imagenes.salto02_png,
+    "39": imagenes.salto03_png,
+    "40": imagenes.salto04_png,
+    "41": imagenes.salto05_png,
+    "42": imagenes.salto06_png,
     "43": imagenes.pollitos_png,
-    "44": imagenes.bembi_flat_png,
+    "44": imagenes.bembi_png,
 }
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 

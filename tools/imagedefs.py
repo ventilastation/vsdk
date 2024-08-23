@@ -10,7 +10,7 @@ def strip(filename, frames=1, palette=0):
     return filename, dict(frames=frames, palette=palette)
 
 def fullscreen(filename, radius=54, palette=0):
-    return filename, dict(radius=radius, palette=palette, process="reproject")
+    return filename, dict(frames=1, radius=radius, palette=palette, process="reproject")
 
 # width, height, frames, palette
 vyruss_images = image_group(
@@ -42,7 +42,7 @@ vladfarty_images = image_group(
         strip("reset.png", frames=5),
 
         fullscreen("vladfartylogo.png", radius=30),
-        fullscreen("vlad_farting.png"),
+        #fullscreen("vlad_farting.png"),
         fullscreen("farty_lion.png", palette=7),
         fullscreen("farty_lionhead.png", palette=7),
         fullscreen("bg64.png"),
@@ -69,11 +69,11 @@ other_images = image_group(
         strip("menu.png", frames=5),
         strip("credits.png", frames=32),
         strip("pollitos.png", frames=5, palette=1),
-        strip("tecno_estructuras.png"),
-        strip("ventilastation.png"),
-        strip("doom.png", palette=8),
-        strip("sves.png"),
-        strip("bembi.png", palette=1)
+        fullscreen("tecno_estructuras.png"),
+        fullscreen("ventilastation.png"),
+        fullscreen("doom.png", palette=8),
+        fullscreen("sves.png"),
+        fullscreen("bembi.png", palette=1)
     ]
 )
 
@@ -105,8 +105,12 @@ all_images.update(vladfarty_images)
 all_images.update(other_images)
 all_images.update(unused_images)
 
-from pprint import pprint
-pprint(all_images)
 
-for filename, params in all_images.items():
-    print(filename, os.stat("../images/" + filename))
+def debug():
+    from pprint import pprint
+    pprint(all_images)
+
+    for filename, params in all_images.items():
+        print(filename, os.stat("../images/" + filename))
+
+#debug()
