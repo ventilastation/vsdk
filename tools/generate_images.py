@@ -1,4 +1,4 @@
-from PIL import Image
+from PIL import Image, ImageChops
 import os
 import sys
 from itertools import zip_longest, chain
@@ -20,20 +20,13 @@ def grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return zip_longest(*args, fillvalue=fillvalue)
 
-def gamma(value, gamma=2.5, offset=0.5):
-    assert 0 <= value <= 255
-    return int( pow( float(value) / 255.0, gamma ) * 255.0 + offset )
-
-def null_gamma(value):
-    return value
-
 """
 La funcion toma un archivo *.png y devuelve en binario (RGBI) la secuencia 
 de n_leds prendidos para n_ang diferentes
 """
 def reproject(image, n_led=54, n_ang=256):
     src = array(image)                    # Levanta la imagen
-    dst = ndarray((n_led, n_ang, 3), uint8)        # Imagen de destino
+    dst = ndarray((n_led, n_ang, 4), uint8)        # Imagen de destino
 
     wx, wy, dim = src.shape         # Me da las dimensiones del frame en pixeles
 
@@ -41,16 +34,13 @@ def reproject(image, n_led=54, n_ang=256):
     center_y = int((wy-1)/2)        # Calcula la cordenada y del centro de la imagen
     rad = min(center_x, center_y)   # Calcula el radio que barre la imagen dentro del frame
 
-    #led = []
-    
-    intensidad = [ int(31 * i**2 / n_led**2) for i in range(n_led)]
+    #intensidad = [ int(31 * i**2 / n_led**2) for i in range(n_led)]
     
     for m in range(0,n_ang):
         for n in range(0,n_led):
             x = center_x + int(rad * (n+1)/n_led * cos(m * 2*pi/n_ang)) 
             y = center_y + int(rad * (n+1)/n_led * sin(m * 2*pi/n_ang))
-            #tupla_rgb = tuple(null_gamma(int(255 * g)) for g in src[x,y,0:3])
-            dst[n, m] = src[x,y,0:3]
+            dst[n, m] = src[x,y,0:4]
 
     return Image.fromarray(dst)
 
@@ -62,7 +52,6 @@ for filename, opts in imagedefs.all_images.items():
     images_per_palette.setdefault(palnumber, []).append(filename)
 
 raws = []
-sizes = []
 rom_strips = []
 palettes = []
 attributes = {}
@@ -71,22 +60,22 @@ for palnumber, filenames in sorted(images_per_palette.items()):
     images = {}
 
     for f in filenames:
-        image = Image.open(os.path.join(FOLDER, f)).convert("RGB")
+        image = Image.open(os.path.join(FOLDER, f)).convert("RGBA")
         opts = imagedefs.all_images[f]
         if opts.get("process") == "reproject":
             image = reproject(image)
         images[f] = image
 
-    #w_size = (sum(i.width for i in images) + 1, max(i.height for i in images) + 1)
-    w_size = (max(i.width for i in images.values()) + 1, int(sum(i.height for i in images.values()) * 1.3))
+    workspace_size = (
+        max(i.width for i in images.values()),
+        sum(i.height for i in images.values())
+    )
 
-    workspace = Image.new("RGB", w_size, (255,0,255))
+    workspace = Image.new("RGBA", workspace_size, (0,0,0,255))
 
     y = 0
     for fn, i in images.items():
-        #workspace.paste(i, (x, 0, x+i.width, i.height))
-        #x+=i.width
-        workspace.paste(i, (0, y, i.width, y+i.height))
+        workspace.alpha_composite(i, (0, y))
         y += i.height
         opts = imagedefs.all_images[fn]
         frames = opts["frames"]
@@ -98,43 +87,30 @@ for palnumber, filenames in sorted(images_per_palette.items()):
     #Debug:
     workspace.save(WORKDIR + "workspace%d-A.png" % palnumber)
 
-    import pprint
-    workspace = workspace.convert("P", palette=Image.ADAPTIVE, dither=0, colors=256)
-    palette = list(grouper(workspace.getpalette(), 3))
-    #pprint.pprint(palette, stream=sys.stderr)
-    mi = palette.index(TRANSPARENT)
-    palorder = list(range(256))
-    palorder[255] = mi
-    palorder[mi] = 255
-    workspace = workspace.remap_palette(palorder)
-    #pprint.pprint(list(grouper(workspace.getpalette(), 3)), stream=sys.stderr)
+    def fill_palette(palette):
+        """If less that 256 colors, fill up to 255 with black + 1 magenta."""
+        black = [0,0,0]
+        magenta = [255,0,255]
+        entries_missing = (765-len(palette))//3 
+        return palette + entries_missing * black + magenta
 
-    palette = list(grouper(workspace.getpalette(), 3))
-    mi = palette.index(TRANSPARENT)
-    print(palette, file=sys.stderr)
-    print([n for n, c in enumerate(palette) if c in [(254, 0, 254), (255, 0, 255)]], file=sys.stderr)
-    print(mi, file=sys.stderr)
-    #import pdb; pdb.set_trace()
-    for n, c in enumerate(palette):
-        if (c == TRANSPARENT or c == (254, 0, 254)) and n != 255:
-            palette[n] = (255, 0, 255)
-    try:
-        print("transparent index=", palette.index(TRANSPARENT), file=sys.stderr)
-    except:
-        print("no transparent in this palette", file=sys.stderr)
-    workspace.putpalette(chain.from_iterable(palette))
+    workspace_paletted = workspace.convert("RGB").quantize(dither=0, colors=255)
+    palette = workspace_paletted.getpalette()
+    #print("palette=", palette, len(palette), file=sys.stderr)
+
+    full_palette = fill_palette(palette)
+    #print("full_palette=", full_palette, len(full_palette), file=sys.stderr)
+
+
     #Debug:
-    workspace.save(WORKDIR + "workspace%d-B.png" % palnumber)
+    workspace_paletted.save(WORKDIR + "workspace%d-B.png" % palnumber)
+
 
     #print("unsigned long palette_pal[] PROGMEM = {")
 
     pal_raw = []
     with open(WORKDIR + "palette.pal", "wb") as palfile:
-        for c in palette:
-            r, g, b = c
-            #if (r, g, b) == TRANSPARENT:
-                #r, g, b = 255, 255, 0
-            #r, g, b = gamma(r), gamma(g), gamma(b)
+        for r, g, b in grouper(full_palette, 3):
             quad = bytearray((255, b, g, r))
             palfile.write(quad)
             #print("    0x%02x%02x%02x%02x," % (r, g, b, 255))
@@ -145,11 +121,14 @@ for palnumber, filenames in sorted(images_per_palette.items()):
 
     palettes.append(b"".join(pal_raw))
 
-    for (j, (fn, i)) in enumerate(images.items()):
-        p = i.quantize(palette=workspace, colors=256, method=Image.FASTOCTREE, dither=Image.NONE)
-        #Debug:
-        #p.save("debug/xx%02d.png" % j)
-        b = p.transpose(Image.ROTATE_270).tobytes()
+    y = 0
+    for fn, i in images.items():
+        bitmask = ImageChops.invert(i.getchannel(3).convert("1"))
+        i_paletted = workspace_paletted.crop((0, y, i.width, y + i.height))
+        y += i.height
+        i_paletted.paste(255, mask=bitmask)
+
+        b = i_paletted.transpose(Image.ROTATE_270).tobytes()
         filename = fn.rsplit("/", 1)[-1]
         frames, palette = attributes[fn][2:4]
         width = i.width // frames
@@ -178,7 +157,6 @@ for palnumber, filenames in sorted(images_per_palette.items()):
                 raw.write(b)
         else:
             raws.append(b)
-            sizes.append(p.size)
 
 print("palette_pal =", repr(b"".join(palettes)))
 print()
