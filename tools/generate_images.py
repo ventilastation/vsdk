@@ -64,7 +64,7 @@ for palnumber, filenames in sorted(images_per_palette.items()):
         opts = imagedefs.all_images[f]
         if opts.get("process") == "reproject":
             print("reprojecting", f, file=sys.stderr)
-            image = reproject(image)
+            image = reproject(image, n_led=opts["radius"])
         images[f] = image
 
     workspace_size = (
@@ -86,7 +86,7 @@ for palnumber, filenames in sorted(images_per_palette.items()):
         attributes[fn] = (width, i.height, frames, palnumber)
 
     #Debug:
-    workspace.save(WORKDIR + "workspace%d-A.png" % palnumber)
+    #workspace.save(WORKDIR + "workspace%d-A.png" % palnumber)
 
     def fill_palette(palette):
         """If less that 256 colors, fill up to 255 with black + 1 magenta."""
@@ -104,7 +104,7 @@ for palnumber, filenames in sorted(images_per_palette.items()):
 
 
     #Debug:
-    workspace_paletted.save(WORKDIR + "workspace%d-B.png" % palnumber)
+    #workspace_paletted.save(WORKDIR + "workspace%d-B.png" % palnumber)
 
 
     #print("unsigned long palette_pal[] PROGMEM = {")
