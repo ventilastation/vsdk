@@ -63,6 +63,7 @@ for palnumber, filenames in sorted(images_per_palette.items()):
         image = Image.open(os.path.join(FOLDER, f)).convert("RGBA")
         opts = imagedefs.all_images[f]
         if opts.get("process") == "reproject":
+            print("reprojecting", f, file=sys.stderr)
             image = reproject(image)
         images[f] = image
 
@@ -123,6 +124,7 @@ for palnumber, filenames in sorted(images_per_palette.items()):
 
     y = 0
     for fn, i in images.items():
+        print("processing", fn, file=sys.stderr)
         bitmask = ImageChops.invert(i.getchannel(3).convert("1"))
         i_paletted = workspace_paletted.crop((0, y, i.width, y + i.height))
         y += i.height
