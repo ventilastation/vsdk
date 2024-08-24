@@ -1,5 +1,7 @@
 future==0.17.1
-pyglet==1.5.11
+pyglet==1.5.11; sys_platform != 'darwin'
+pyglet<2; sys_platform == 'darwin'
 gmqtt
 pyserial
-matplotlib
+pillow
+numpy

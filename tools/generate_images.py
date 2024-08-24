@@ -5,7 +5,6 @@ from itertools import zip_longest, chain
 import struct
 import imagedefs
 
-import matplotlib.image as mpimg
 from numpy import sin, cos, pi, ndarray, array, uint8
 
 TRANSPARENT = (255, 0, 255)
