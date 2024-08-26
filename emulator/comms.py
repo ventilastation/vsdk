@@ -11,7 +11,7 @@ import urllib.parse
 import struct
 import socket
 import threading
-from pygletengine import image_stripes, palette, spritedata, playsound, playmusic
+from pygletengine import imagenes, palette, spritedata, playsound, playmusic
 
 sock = None
 sockfile = None
@@ -95,7 +95,7 @@ def receive_loop():
 
             if command == b"imagestrip":
                 length, slot = args
-                image_stripes[slot.decode()] = sockfile.read(int(length))
+                imagenes.all_strips[int(slot.decode())] = sockfile.read(int(length))
 
             if command == b"debug":
                 length = 32 * 16
@@ -178,7 +178,7 @@ def on_message(client, topic, payload, qos, properties):
         palette[:] = payload
 
     if topic == "imagestrip":
-        image_stripes[slot.decode()] = payload
+        imagenes.all_strips[int(slot.decode())] = payload
 
     if topic == "audio_play":
         #playsound(payload)

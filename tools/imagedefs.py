@@ -103,7 +103,7 @@ all_images = {}
 all_images.update(vyruss_images)
 all_images.update(vladfarty_images)
 all_images.update(other_images)
-all_images.update(unused_images)
+#all_images.update(unused_images)
 
 
 def debug():

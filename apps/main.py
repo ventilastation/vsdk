@@ -1,6 +1,8 @@
 from director import director
 import imagenes
+import sprites
 import menu
+from imagenes import strips
 
 def update_over_the_air():
     import ota_update
@@ -8,12 +10,12 @@ def update_over_the_air():
 
 class GamesMenu(menu.Menu):
     OPTIONS = [
-        ('vyruss', 7, 0, 64),
-        ('bembi', 43, 0, 64),
-        ('vladfarty', 7, 2, 64),
-        #('credits', 7, 3, 64),
-        #('ventap', 7, 4, 64),
-        ('ventilagon', 7, 1, 64),
+        ('vyruss', strips.other.menu, 0, 64),
+        ('bembi', strips.other.pollitos, 0, 64),
+        ('vladfarty', strips.other.menu, 2, 64),
+        #('credits', strips.other.menu, 3, 64),
+        #('ventap', strips.other.menu, 4, 64),
+        ('ventilagon', strips.other.menu, 1, 64),
     ]
 
     def on_enter(self):
@@ -74,51 +76,8 @@ class GamesMenu(menu.Menu):
 
 def main():
     # init images
-    director.register_strip(0, imagenes.galaga_png)
-    director.register_strip(1, imagenes.numerals_png)
-    director.register_strip(2, imagenes.gameover_png)
-    director.register_strip(3, imagenes.disparo_png)
-    director.register_strip(4, imagenes.ll9_png)
-    director.register_strip(5, imagenes.explosion_png)
-    director.register_strip(6, imagenes.explosion_nave_png)
-    director.register_strip(7, imagenes.menu_png)
-    director.register_strip(8, imagenes.credits_png)
-    director.register_strip(10, imagenes.tierra_png)
-    director.register_strip(11, imagenes.marte_png)
-    director.register_strip(12, imagenes.jupiter_png)
-    director.register_strip(13, imagenes.saturno_png)
-    director.register_strip(14, imagenes.sves_png)
-    director.register_strip(15, imagenes.ventilastation_png)
-    director.register_strip(16, imagenes.tecno_estructuras_png)
-    director.register_strip(17, imagenes.menatwork_png)
-    director.register_strip(18, imagenes.vladfartylogo_png)
-    director.register_strip(19, imagenes.vga_pc734_png)
-    director.register_strip(20, imagenes.vga_cp437_png)
-    director.register_strip(21, imagenes.vladfartylogo_png)
-    director.register_strip(22, imagenes.farty_lion_png)
-    director.register_strip(23, imagenes.ready_png)
-    director.register_strip(24, imagenes.bg64_png)
-    director.register_strip(25, imagenes.copyright_png)
-    director.register_strip(26, imagenes.bgspeccy_png)
-    director.register_strip(27, imagenes.reset_png)
-    director.register_strip(28, imagenes.farty_lionhead_png)
-    director.register_strip(29, imagenes.rainbow437_png)
-    director.register_strip(30, imagenes.chanime01_png)
-    director.register_strip(31, imagenes.chanime02_png)
-    director.register_strip(32, imagenes.chanime03_png)
-    director.register_strip(33, imagenes.chanime04_png)
-    director.register_strip(34, imagenes.chanime05_png)
-    director.register_strip(35, imagenes.chanime06_png)
-    director.register_strip(36, imagenes.chanime07_png)
-    director.register_strip(37, imagenes.salto01_png)
-    director.register_strip(38, imagenes.salto02_png)
-    director.register_strip(39, imagenes.salto03_png)
-    director.register_strip(40, imagenes.salto04_png)
-    director.register_strip(41, imagenes.salto05_png)
-    director.register_strip(42, imagenes.salto06_png)
-    director.register_strip(43, imagenes.pollitos_png)
-    director.register_strip(44, imagenes.bembi_png)
-
+    for n, strip in enumerate(imagenes.all_strips):
+        sprites.set_imagestrip(n, strip)
     director.push(GamesMenu())
     director.run()
 

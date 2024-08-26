@@ -3,6 +3,7 @@ from director import director
 from scene import Scene
 from sprites import Sprite, reset_sprites
 from urandom import randrange
+from imagenes import strips
 
 credits = """
 [TBD Group]
@@ -24,9 +25,9 @@ Flashparty
 
 RESET_SPEED = 2
 
-def make_me_a_planet(n):
+def make_me_a_planet(strip):
     planet = Sprite()
-    planet.set_strip(n)
+    planet.set_strip(strip)
     planet.set_perspective(0)
     planet.set_x(0)
     planet.set_y(0)
@@ -34,7 +35,7 @@ def make_me_a_planet(n):
 
 
 class Letter(Sprite):
-  strip = 20
+  strip = strips.vladfarty.vga_cp437
   def __init__(self):
     super().__init__()
     self.set_strip(self.strip)
@@ -70,7 +71,7 @@ class Letter(Sprite):
 
 
 class RainbowLetter(Letter):
-  strip = 29
+  strip = strips.vladfarty.rainbow437
 
 #sinetable = list(range(16,32,1)) + list(range(32,16,-1))
 #sinetable = [24, 26, 27, 28, 30, 31, 31, 32, 32, 32, 31, 31, 30, 28, 27, 26, 24, 22, 21, 20, 18, 17, 17, 16, 16, 16, 17, 17, 18, 20, 21, 22]
@@ -145,19 +146,19 @@ class Ready(TimedScene):
 
     def on_enter(self):
         self.ready = Sprite()
-        self.ready.set_strip(23)
+        self.ready.set_strip(strips.vladfarty.ready)
         self.ready.set_perspective(2)
         self.ready.set_x(256-24)
         self.ready.set_y(8)
 
         self.cursor = Sprite()
-        self.cursor.set_strip(23)
+        self.cursor.set_strip(strips.vladfarty.ready)
         self.cursor.set_perspective(2)
         self.cursor.set_x(256-22)
         self.cursor.set_y(0)
         self.cursor_show = True
 
-        self.background = make_me_a_planet(24)
+        self.background = make_me_a_planet(strips.vladfarty.bg64)
         self.background.set_y(255)
 
         self.background.set_frame(0)
@@ -279,10 +280,10 @@ class DancingLions(TimedScene):
     duration = 11960 + 1500
 
     def on_enter(self):
-        self.farty_lionhead = make_me_a_planet(28)
+        self.farty_lionhead = make_me_a_planet(strips.vladfarty.farty_lionhead)
         self.farty_lionhead.set_y(0)
         self.farty_lionhead.disable()
-        self.farty_lion = make_me_a_planet(22)
+        self.farty_lion = make_me_a_planet(strips.vladfarty.farty_lion)
         self.farty_lion.set_y(100)
         self.farty_lion.set_frame(0)
         self.n = 0
@@ -308,6 +309,26 @@ class DancingLions(TimedScene):
             self.farty_lionhead.set_y(lionhead_size + 10)
 
 
+vf = strips.vladfarty
+chanimation_frames = [
+    vf.chanime01,
+    vf.chanime02,
+    vf.chanime03,
+    vf.chanime04,
+    vf.chanime05,
+    vf.chanime06,
+    vf.chanime07,
+]    
+
+chanijump_frames = [
+    vf.salto01,
+    vf.salto02,
+    vf.salto03,
+    vf.salto04,
+    vf.salto05,
+    vf.salto06,
+]
+
 
 class Chanimation(TimedScene):
     duration = 15000
@@ -316,8 +337,8 @@ class Chanimation(TimedScene):
 
     def on_enter(self):
         self.chame_pics = []
-        for n in range(self.CHAMEPICS):
-            chp = make_me_a_planet(30 + n)
+        for f in chanimation_frames:
+            chp = make_me_a_planet(f)
             self.chame_pics.append(chp)
             chp.set_y(255)
         self.n = 0
@@ -347,8 +368,8 @@ class Chanijump(TimedScene):
 
     def on_enter(self):
         self.chame_pics = []
-        for n in range(self.CHAMEPICS):
-            chp = make_me_a_planet(37 + n)
+        for f in chanijump_frames:
+            chp = make_me_a_planet(f)
             self.chame_pics.append(chp)
             chp.set_y(255)
         self.n = 0
@@ -395,7 +416,7 @@ class WorldRight(Scroller):
 
     def on_enter(self):
         super().on_enter()
-        self.earth = make_me_a_planet(10)
+        self.earth = make_me_a_planet(strips.vyruss.tierra)
         self.earth.set_y(50)
         self.earth.set_frame(0)
         director.music_play(b"vladfarty/part2")
@@ -415,24 +436,24 @@ class Copyright(TimedScene):
     def on_enter(self):
         self.copyright = Sprite()
         self.copyright.disable()
-        self.copyright.set_strip(25)
+        self.copyright.set_strip(strips.vladfarty.copyright)
         self.copyright.set_perspective(2)
         self.copyright.set_x(256-64)
         self.copyright.set_y(1)
 
         self.reset = Sprite()
-        self.reset.set_strip(27)
+        self.reset.set_strip(strips.vladfarty.reset)
         self.reset.set_perspective(2)
         self.reset.set_x(256-64)
         self.reset.set_y(0)
 
         self.reset2 = Sprite()
-        self.reset2.set_strip(27)
+        self.reset2.set_strip(strips.vladfarty.reset)
         self.reset2.set_perspective(2)
         self.reset2.set_x(256+64)
         self.reset2.set_y(0)
 
-        self.background = make_me_a_planet(26)
+        self.background = make_me_a_planet(strips.vladfarty.bgspeccy)
         self.background.set_y(255)
 
         self.background.set_frame(0)
@@ -517,11 +538,14 @@ class Kudowz(TimedScene):
     duration = 60000
 
     def on_enter(self):
-        self.background = make_me_a_planet(18)
+        self.background = make_me_a_planet(strips.vladfarty.vladfartylogo)
         self.background.set_y(255)
         self.background.set_frame(0)
 
-        self.kudolines = [KudoLine(19, 128, invert=True), KudoLine(20, 0, invert=False)]
+        self.kudolines = [
+            KudoLine(strips.vladfarty.vga_pc734, 128, invert=True),
+            KudoLine(strips.vladfarty.vga_cp437, 0, invert=False)
+        ]
         self.line = 0
         self.advance_line()
 

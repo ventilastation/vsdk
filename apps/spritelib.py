@@ -17,7 +17,7 @@ stripes = {}
 
 def get_sprite(num_sprite):
     data = povdisplay.getaddress(num_sprite)
-    sp = uctypes.struct(data, sprite_struct) #, uctypes.LITLE_ENDIAN)
+    sp = uctypes.struct(data, sprite_struct)
     return sp
 
 def set_imagestrip(n, stripmap):

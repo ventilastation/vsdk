@@ -1,15 +1,16 @@
 from director import director
 from scene import Scene
 from sprites import Sprite
+from imagenes import strips
 
 try:
     import remotepov as povdisplay
 except:
     import povdisplay
 
-def make_me_a_planet(n):
+def make_me_a_planet(strip):
     planet = Sprite()
-    planet.set_strip(n)
+    planet.set_strip(strip)
     planet.set_perspective(0)
     planet.set_x(0)
     planet.set_y(255)
@@ -25,7 +26,7 @@ class TextDisplay:
         self.chars = []
         for n in range(display_len):
             s = Sprite()
-            s.set_strip(29)
+            s.set_strip(strips.vladfarty.rainbow437)
             s.set_x((256 -n * char_width + (display_len * char_width) // 2) % 256)
             s.set_y(y)
             s.set_frame(10)

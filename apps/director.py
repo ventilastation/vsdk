@@ -67,9 +67,6 @@ class Director:
             self.scene_stack[-1].on_enter()
         return scene
 
-    def register_strip(self, sprite_index, image):
-        sprites.set_imagestrip(sprite_index, image)
-
     def is_pressed(self, button):
         return bool(button & self.buttons)
 

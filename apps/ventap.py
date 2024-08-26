@@ -2,6 +2,7 @@ from urandom import choice, randrange, seed
 from director import director
 from scene import Scene
 from sprites import Sprite
+from imagenes import strips
 
 NUBES_POR_NUBAREDA = 8
 
@@ -10,7 +11,7 @@ class Nubareda:
     def __init__(self):
         self.nubareda = [Sprite() for n in range(NUBES_POR_NUBAREDA)]
         for nube in self.nubareda:
-            nube.set_strip(5)
+            nube.set_strip(strips.vyruss.explosion)
             nube.set_y(16)
 
     def reiniciar(self):
@@ -21,9 +22,9 @@ class Nubareda:
             nube.set_x(int(self.x + step * n))
             nube.set_frame(1)
 
-def make_me_a_planet(n):
+def make_me_a_planet(strip):
     planet = Sprite()
-    planet.set_strip(n)
+    planet.set_strip(strip)
     planet.set_perspective(0)
     planet.set_x(0)
     planet.set_y(0)
@@ -35,7 +36,7 @@ class Ventap(Scene):
         self.bola = Sprite()
         self.bola.set_x(0)
         self.bola.set_y(16)
-        self.bola.set_strip(0)
+        self.bola.set_strip(strips.vyruss.galaga)
         self.bola.set_frame(6)
 
         self.nubareda = Nubareda()
@@ -44,7 +45,7 @@ class Ventap(Scene):
         self.pollitos = Sprite()
         self.pollitos.set_x(-25)
         self.pollitos.set_y(0)
-        self.pollitos.set_strip(43)
+        self.pollitos.set_strip(strips.other.pollitos)
         self.pollitos.set_frame(0)
         self.pollitos.set_perspective(2)
         self.animation_frames = 0

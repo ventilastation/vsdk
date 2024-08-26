@@ -5,6 +5,7 @@ pyglet.options['audio'] = ('openal', 'silent')
 import math
 import random
 import os
+import imagenes
 from pyglet.gl import *
 from pyglet.window import key
 from struct import pack, unpack
@@ -32,54 +33,6 @@ def playmusic(name):
     sound_queue.append(("music", name))
 
 
-import imagenes
-image_stripes = {
-    "0": imagenes.galaga_png,
-    "1": imagenes.numerals_png,
-    "2": imagenes.gameover_png,
-    "3": imagenes.disparo_png,
-    "4": imagenes.ll9_png,
-    "5": imagenes.explosion_png,
-    "6": imagenes.explosion_nave_png,
-    "7": imagenes.menu_png,
-    "8": imagenes.credits_png,
-
-    "10": imagenes.tierra_png,
-    "11": imagenes.marte_png,
-    "12": imagenes.jupiter_png,
-    "13": imagenes.saturno_png,
-    "14": imagenes.sves_png,
-    "15": imagenes.ventilastation_png,
-    "16": imagenes.tecno_estructuras_png,
-    "17": imagenes.menatwork_png,
-    "18": imagenes.vladfartylogo_png,
-    "19": imagenes.vga_pc734_png,
-    "20": imagenes.vga_cp437_png,
-    "21": imagenes.vladfartylogo_png,
-    "22": imagenes.farty_lion_png,
-    "23": imagenes.ready_png,
-    "24": imagenes.bg64_png,
-    "25": imagenes.copyright_png,
-    "26": imagenes.bgspeccy_png,
-    "27": imagenes.reset_png,
-    "28": imagenes.farty_lionhead_png,
-    "29": imagenes.rainbow437_png,
-    "30": imagenes.chanime01_png,
-    "31": imagenes.chanime02_png,
-    "32": imagenes.chanime03_png,
-    "33": imagenes.chanime04_png,
-    "34": imagenes.chanime05_png,
-    "35": imagenes.chanime06_png,
-    "36": imagenes.chanime07_png,
-    "37": imagenes.salto01_png,
-    "38": imagenes.salto02_png,
-    "39": imagenes.salto03_png,
-    "40": imagenes.salto04_png,
-    "41": imagenes.salto05_png,
-    "42": imagenes.salto06_png,
-    "43": imagenes.pollitos_png,
-    "44": imagenes.bembi_png,
-}
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 
 joysticks = pyglet.input.get_joysticks()
@@ -253,7 +206,7 @@ class PygletEngine():
                 if frame == 255:
                     continue
 
-                strip = image_stripes["%d" % image]
+                strip = imagenes.all_strips[image]
                 w, h, total_frames, pal = unpack("BBBB", strip[0:4])
                 pal_base = 256 * pal
                 if w == 255: w = 256 # caso especial, para los planetas
