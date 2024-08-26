@@ -11,8 +11,8 @@ import credits
 
 LEVELS = [
     # oleadas, planeta, disparos_simultaneos
-    (2, strips.vyruss.jupiter, 3),
-    (3, strips.vyruss.saturno, 4),
+    (2, strips.vyruss.saturno, 3),
+    (3, strips.vyruss.jupiter, 4),
     (4, strips.vyruss.marte, 6),
     (5, strips.vyruss.tierra, 8),
 ]
