@@ -1,6 +1,7 @@
 from director import director
 from scene import Scene
 from sprites import Sprite
+from imagenes import strips
 
 SPEED = 4
 TITLE_DELAYS = 3000
