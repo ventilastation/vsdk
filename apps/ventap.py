@@ -42,24 +42,8 @@ class Ventap(Scene):
         self.nubareda = Nubareda()
         self.nubareda.reiniciar()
 
-        self.pollitos = Sprite()
-        self.pollitos.set_x(-25)
-        self.pollitos.set_y(0)
-        self.pollitos.set_strip(strips.other.pollitos)
-        self.pollitos.set_frame(0)
-        self.pollitos.set_perspective(2)
-        self.animation_frames = 0
-
-        self.jere = make_me_a_planet(44)
-        self.jere.set_y(255)
-        self.jere.set_frame(0)
-
     def step(self):
         self.bola.set_x(self.bola.x() + 3)
-
-        self.animation_frames += 1
-        pf = (self.animation_frames // 3) % 5
-        self.pollitos.set_frame(pf)
 
         if director.was_pressed(director.BUTTON_A):
             nub_x = self.nubareda.x
