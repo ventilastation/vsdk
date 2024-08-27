@@ -66,6 +66,14 @@ glEnable(GL_BLEND)
 #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_ONE)
 
+@window.event
+def on_key_press(symbol, modifiers):
+    if symbol == pyglet.window.key.ESCAPE:
+        return pyglet.event.EVENT_HANDLED
+    if symbol == pyglet.window.key.Q:
+        pyglet.app.exit()
+
+
 def change_colors(colors):
     # byteswap all longs
     fmt_unpack = "<" + "L" * (len(colors)//4)
@@ -101,6 +109,7 @@ class PygletEngine():
         led_step = (LED_SIZE / led_count)
         self.enable_display = enable_display
         self.music_player = None
+        self.help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
 
         vertex_pos = []
         theta = (math.pi * 2 / COLUMNS)
@@ -130,7 +139,7 @@ class PygletEngine():
 
 
         def send_keys():
-            reset = keys[key.P]
+            reset = keys[key.ESCAPE]
             try:
                 left = joystick.x < -0.5 or joystick.hat_x < -0.5 or joystick.buttons[4]
                 right = joystick.x > 0.5 or joystick.hat_x > 0.5 or joystick.buttons[5]
@@ -255,6 +264,7 @@ class PygletEngine():
                 return
             window.clear()
             fps_display.draw()
+            self.help_label.draw()
 
             angle = -(360.0 / 256.0)
 
