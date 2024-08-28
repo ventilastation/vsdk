@@ -1,10 +1,10 @@
-from director import director
-from scene import Scene
-from sprites import Sprite
-from imagenes import strips
+from libs.director import director
+from libs.scene import Scene
+from libs.sprites import Sprite
+from libs.imagenes import strips
 
 try:
-    import remotepov as povdisplay
+    import libs.remotepov as povdisplay
 except:
     import povdisplay
 

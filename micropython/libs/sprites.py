@@ -1,4 +1,4 @@
-from spritelib import *
+from libs.spritelib import *
 
 DISABLED_FRAME = 255
 sprite_num = 1

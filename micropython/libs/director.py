@@ -1,20 +1,20 @@
 import utime
 
 try:
-    import serialcomms as comms
+    from libs import serialcomms as comms
 except:
-    import comms
-import sprites
+    from libs import comms
+from libs import sprites
 import gc
 
 DEBUG = False
 INPUT_TIMEOUT = 62 * 1000  # 62 segundos de inactividad, volver al menu
 
 try:
-    from remotepov import update
+    from libs.remotepov import update
 except:
     import povdisplay
-    import imagenes
+    from libs import imagenes
     PIXELS = 54
     povdisplay.init(PIXELS, imagenes.palette_pal)
     update = lambda: None

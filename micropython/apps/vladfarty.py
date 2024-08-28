@@ -1,9 +1,9 @@
 import utime
-from director import director
-from scene import Scene
-from sprites import Sprite, reset_sprites
+from libs.director import director
+from libs.scene import Scene
+from libs.sprites import Sprite, reset_sprites
 from urandom import randrange
-from imagenes import strips
+from libs.imagenes import strips
 
 credits = """
 [TBD Group]

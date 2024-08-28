@@ -1,12 +1,12 @@
 from urandom import choice, randrange, seed
 import utime
 
-from director import director
-from scene import Scene
-from sprites import Sprite, reset_sprites
-from imagenes import strips
+from libs.director import director
+from libs.scene import Scene
+from libs.sprites import Sprite, reset_sprites
+from libs.imagenes import strips
 
-import credits
+import apps.credits
 
 
 LEVELS = [

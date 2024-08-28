@@ -1,6 +1,6 @@
 try:
-    import remotepov as povdisplay
-except:
+    import libs.remotepov as povdisplay
+except ImportError as e:
     import povdisplay
 
 import uctypes

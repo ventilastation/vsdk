@@ -1,5 +1,5 @@
 trap 'kill $BGPID; exit' SIGINT
-cd apps
+cd micropython
 micropython main.py &
 BGPID=$!
 cd ..

@@ -1,4 +1,4 @@
 cd tools
-python generate_images.py > ../apps/imagenes.py
-python generate_strips.py  >> ../apps/imagenes.py
-echo "Created apps/imagenes.py"
+python generate_images.py > ../micropython/libs/imagenes.py
+python generate_strips.py  >> ../micropython/libs/imagenes.py
+echo "Created micropython/libs/imagenes.py"

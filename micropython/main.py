@@ -1,8 +1,8 @@
-from director import director
-import imagenes
-import sprites
-import menu
-from imagenes import strips
+from libs.director import director
+from libs import imagenes
+from libs import sprites
+from libs import menu
+from libs.imagenes import strips
 
 def update_over_the_air():
     import ota_update
@@ -27,27 +27,27 @@ class GamesMenu(menu.Menu):
         option_pressed = self.options[option_index]
         print(option_pressed)
         if option_pressed[0] == 'vyruss':
-            import vyruss
+            from apps import vyruss
             director.push(vyruss.VyrusGame())
             raise StopIteration()
         if option_pressed[0] == 'credits':
-            import credits
+            from apps import credits
             director.push(credits.Credits())
             raise StopIteration()
         if option_pressed[0] == 'bembi':
-            import bembi
+            from apps import bembi
             director.push(bembi.Bembidiona())
             raise StopIteration()
         if option_pressed[0] == 'ventap':
-            import ventap
+            from apps import ventap
             director.push(ventap.Ventap())
             raise StopIteration()
         if option_pressed[0] == 'vladfarty':
-            import vladfarty
+            from apps import vladfarty
             director.push(vladfarty.VladFarty())
             raise StopIteration()
         if option_pressed[0] == 'ventilagon':
-            import ventilagon_game
+            from apps import ventilagon_game
             director.push(ventilagon_game.VentilagonGame())
             raise StopIteration()
 
@@ -56,7 +56,7 @@ class GamesMenu(menu.Menu):
             and director.is_pressed(director.JOY_LEFT)
             and director.is_pressed(director.JOY_RIGHT)
             and director.is_pressed(director.BUTTON_A) ):
-            import debugmode
+            from apps import debugmode
             director.push(debugmode.DebugMode())
             return True
             
