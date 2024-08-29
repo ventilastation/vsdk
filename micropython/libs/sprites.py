@@ -67,6 +67,9 @@ class Sprite:
     def set_perspective(self, value):
         self._sprite.perspective = value
 
+    def perspective(self):
+        return self._sprite.perspective
+
     def collision(self, targets):
         def intersects(x1, w1, x2, w2):
             delta = min(x1, x2)
