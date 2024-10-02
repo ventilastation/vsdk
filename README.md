@@ -12,7 +12,7 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Running
+## Running the games on the emulator
 ```
 . .venv/bin/activate
 ./vs-emu.sh
