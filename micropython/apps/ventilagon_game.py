@@ -20,7 +20,7 @@ class VentilagonGame(Scene):
 
     def on_exit(self):
         ventilagon.exit()
-	self.sending_loop()
+        self.sending_loop()
 
     def step(self):
         buttons = director.buttons
@@ -32,4 +32,4 @@ class VentilagonGame(Scene):
             director.pop()
             raise StopIteration()
 
-	self.sending_loop()
+        self.sending_loop()
