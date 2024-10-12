@@ -1,1 +1,1 @@
-../micropython/libs/imagenes.py
+../apps/micropython/libs/imagenes.py

@@ -8,7 +8,7 @@ from numpy import sin, cos, pi, ndarray, array, uint8
 from PIL import Image, ImageChops
 
 TRANSPARENT = (255, 0, 255)
-FOLDER = "../images"
+FOLDER = "../apps/images"
 WORKDIR = ".workdir/"
 
 os.makedirs(WORKDIR, exist_ok=True)

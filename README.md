@@ -14,6 +14,5 @@ pip install -r requirements.txt
 
 ## Running the games on the emulator
 ```
-. .venv/bin/activate
 ./vs-emu.sh
 ```

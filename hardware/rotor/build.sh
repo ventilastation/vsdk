@@ -1,5 +1,5 @@
 VENTILASTATION_MODULES=`pwd`/modules/micropython.cmake
-FROZEN_MANIFEST=`pwd`/../micropython/manifest.py
+FROZEN_MANIFEST=`pwd`/../../apps/micropython/manifest.py
 
 cd micropython/ports/esp32
 

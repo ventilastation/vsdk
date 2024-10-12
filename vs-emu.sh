@@ -1,8 +1,8 @@
 trap 'kill $BGPID; exit' SIGINT
-cd micropython
+cd apps/micropython
 micropython main.py &
 BGPID=$!
-cd ..
+cd ../..
 
 . .venv/bin/activate
 cd emulator

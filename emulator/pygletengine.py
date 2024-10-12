@@ -17,12 +17,15 @@ from deepspace import deepspace
 # preload all sounds
 sounds = {}
 
-for dirpath, dirs, files in os.walk("../sounds"):
+SOUNDS_FOLDER = "../apps/sounds"
+
+for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
     for fn in files:
         if fn.endswith(".mp3"):
             fullname = os.path.join(dirpath, fn)
-            fn = fullname[10:-4]
+            fn = fullname[len(SOUNDS_FOLDER)+1:-4]
             sounds[bytes(fn, "latin1")] = pyglet.media.load(fullname, streaming=False)
+            print(fn)
 
 
 sound_queue = []

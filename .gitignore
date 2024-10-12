@@ -164,3 +164,4 @@ cython_debug/
 .DS_Store
 .*.swp
 tools/.workdir
+hardware/rotor/micropython
