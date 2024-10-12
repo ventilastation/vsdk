@@ -1,9 +1,11 @@
+#include "freertos/idf_additions.h" // for xTaskCreatePinnedToCore
 #include "py/nlr.h"
 #include "py/obj.h"
 #include "py/objstr.h"
 #include "py/runtime.h"
 #include "py/binary.h"
-#include "py/mpprint.h"
+#include "mphalport.h"
+
 
 #include "driver/gpio.h"
 
@@ -17,8 +19,9 @@
 
 #define GPIO_HALL     GPIO_NUM_26
 #define GPIO_HALL_B     GPIO_NUM_36
+#define GPIO_DEBUG     GPIO_NUM_18
 
-#define printf(...) mp_printf(MP_PYTHON_PRINTER, __VA_ARGS__)
+//#define printf(...) mp_printf(MP_PYTHON_PRINTER, __VA_ARGS__)
 
 #define ESP_INTR_FLAG_DEFAULT 0
 #define COLUMNS 256
@@ -46,7 +49,7 @@ int buf_size;
 bool ventilagon_active = false;
 
 volatile int64_t last_turn = 0;
-volatile int64_t last_turn_duration = 3000000;
+volatile int64_t last_turn_duration = 102400;
 
 extern void render(int n, uint32_t* pixels);
 extern void init_sprites();
@@ -60,7 +63,7 @@ inline uint32_t max(uint32_t a, uint32_t b) {
 }
 
 char* init_buffers(int num_pixels) {
-    spi_buf=heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
+    spi_buf=heap_caps_malloc(buf_size, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
     memset(spi_buf, 0xff, buf_size);
     extra_buf=heap_caps_malloc(buf_size/2, MALLOC_CAP_DEFAULT);
     memset(extra_buf, 0x01, buf_size/2);
@@ -88,7 +91,7 @@ void spi_write_HSPI() {
 }
 
 void spi_write_VSPI() {
-    spiWriteNL(3, spi_buf + buf_size, buf_size);
+    //spiWriteNL(3, spi_buf + buf_size, buf_size);
 }
 
 void spi_shutdown() {
@@ -147,11 +150,13 @@ void gpu_step() {
     int64_t now = esp_timer_get_time();
     uint32_t column = ((now - last_turn) * COLUMNS / last_turn_duration) % COLUMNS;
     if (column != last_column) {
+	gpio_set_level(GPIO_DEBUG, true);
 	render((column + COLUMNS/2) % COLUMNS, extra_buf);
 	for(int n=0; n<54; n++) {
 	    pixels0[n] = extra_buf[53-n];
 	}
 	render(column, pixels1);
+	gpio_set_level(GPIO_DEBUG, false);
 	spi_write_HSPI();
 	last_column = column;
     }
@@ -164,32 +169,36 @@ void gpu_step() {
  
 
 void coreTask( void * pvParameters ){
-    printf("task running on core %d\n", xPortGetCoreID());
+// I suspect we can't print from this thread, perhaps printf is not reentrant?
+    //printf("GPU task running on core %d\n", xPortGetCoreID());
 
-    //gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
-    //hall_init(GPIO_HALL);
-    hall_init(GPIO_HALL_B);
+    // //gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+    // //hall_init(GPIO_HALL);
+    //hall_init(GPIO_HALL_B);
+    gpio_set_direction(GPIO_DEBUG, GPIO_MODE_OUTPUT);
 
     init_sprites();
+    spiAcquire();
 
     while(true){
-	if (ventilagon_active) {
-	    ventilagon_loop();
-	} else {
-	    gpu_step();
-	}
+        if (ventilagon_active) {
+            ventilagon_loop();
+        } else {
+            gpu_step();
+        }
     }
+    vTaskDelete(NULL);
 }
 
 
-STATIC mp_obj_t povdisplay_init(mp_obj_t num_pixels, mp_obj_t palette) {
+static mp_obj_t povdisplay_init(mp_obj_t num_pixels, mp_obj_t palette) {
     spi_init(mp_obj_get_int(num_pixels));
     palette_pal = (uint32_t *) mp_obj_str_get_str(palette);
-    printf("creating task, running on core %d\n", xPortGetCoreID());
+    //printf("Micropython running on core %d\n", xPortGetCoreID());
     ventilagon_init();
-    printf("pixels0: %p\n", pixels0);
-    printf("pixels1: %p\n", pixels1);
-    printf("extra_buf: %p\n", extra_buf);
+    //printf("pixels0: %p\n", pixels0);
+    //printf("pixels1: %p\n", pixels1);
+    //printf("extra_buf: %p\n", extra_buf);
 
     xTaskCreatePinnedToCore(
             coreTask,   /* Function to implement the task */
@@ -199,12 +208,12 @@ STATIC mp_obj_t povdisplay_init(mp_obj_t num_pixels, mp_obj_t palette) {
             10,          /* Priority of the task */
             NULL,       /* Task handle. */
             taskCore);  /* Core where the task should run */
-    printf("task created...\n");
+    // printf("task created...\n");
     return mp_const_none;
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_2(povdisplay_init_obj, povdisplay_init);
+static MP_DEFINE_CONST_FUN_OBJ_2(povdisplay_init_obj, povdisplay_init);
 
-STATIC mp_obj_t povdisplay_getaddress(mp_obj_t sprite_num) {
+static mp_obj_t povdisplay_getaddress(mp_obj_t sprite_num) {
     int num = mp_obj_get_int(sprite_num);
 #ifdef DEBUG_ROTATION
     if (num == 999) {
@@ -213,22 +222,22 @@ STATIC mp_obj_t povdisplay_getaddress(mp_obj_t sprite_num) {
 #endif
     return mp_obj_new_int((mp_int_t)(uintptr_t)&sprites[num]);
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_getaddress_obj, povdisplay_getaddress);
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_getaddress_obj, povdisplay_getaddress);
 // ------------------------------
-STATIC mp_obj_t povdisplay_last_turn_duration() {
+static mp_obj_t povdisplay_last_turn_duration() {
     return mp_obj_new_int(last_turn_duration);
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_last_turn_duration_obj, povdisplay_last_turn_duration);
+static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_last_turn_duration_obj, povdisplay_last_turn_duration);
 // ------------------------------
 
-STATIC const mp_map_elem_t povdisplay_globals_table[] = {
+static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR___name__), MP_OBJ_NEW_QSTR(MP_QSTR_povdisplay) },
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_last_turn_duration), (mp_obj_t)&povdisplay_last_turn_duration_obj },
 };
 
-STATIC MP_DEFINE_CONST_DICT (
+static MP_DEFINE_CONST_DICT (
     mp_module_povdisplay_globals,
     povdisplay_globals_table
 );
@@ -242,38 +251,38 @@ MP_REGISTER_MODULE(MP_QSTR_povdisplay, mp_module_povdisplay);
 
 // ------------------------------
 
-STATIC mp_obj_t ventilagon_ventilagon_enter(void) {
+static mp_obj_t ventilagon_ventilagon_enter(void) {
     ventilagon_enter();
     ventilagon_active = true;
     return mp_const_none;
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_enter_obj, ventilagon_ventilagon_enter);
+static MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_enter_obj, ventilagon_ventilagon_enter);
 
-STATIC mp_obj_t ventilagon_ventilagon_exit(void) {
+static mp_obj_t ventilagon_ventilagon_exit(void) {
     ventilagon_exit();
     ventilagon_active = false;
     return mp_const_none;
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_exit_obj, ventilagon_ventilagon_exit);
+static MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_exit_obj, ventilagon_ventilagon_exit);
 
-STATIC mp_obj_t ventilagon_ventilagon_received(mp_obj_t mp_value) {
+static mp_obj_t ventilagon_ventilagon_received(mp_obj_t mp_value) {
     byte value = mp_obj_get_int(mp_value);
     xQueueSend(queue_received, &value, 0);
     return mp_const_none;
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_1(ventilagon_ventilagon_received_obj, ventilagon_ventilagon_received);
+static MP_DEFINE_CONST_FUN_OBJ_1(ventilagon_ventilagon_received_obj, ventilagon_ventilagon_received);
 
-STATIC mp_obj_t ventilagon_ventilagon_sending(void) {
+static mp_obj_t ventilagon_ventilagon_sending(void) {
     char* buff;
     if( xQueueReceive( queue_sending, &buff, 0 ) ) {
 	return mp_obj_new_str(buff, strlen(buff));
     }
     return mp_const_none;
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_sending_obj, ventilagon_ventilagon_sending);
+static MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_sending_obj, ventilagon_ventilagon_sending);
 // ------------------------------
 
-STATIC const mp_map_elem_t ventilagon_globals_table[] = {
+static const mp_map_elem_t ventilagon_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR___name__), MP_OBJ_NEW_QSTR(MP_QSTR_ventilagon) },
     { MP_OBJ_NEW_QSTR(MP_QSTR_enter), (mp_obj_t)&ventilagon_ventilagon_enter_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_exit), (mp_obj_t)&ventilagon_ventilagon_exit_obj },
@@ -281,7 +290,7 @@ STATIC const mp_map_elem_t ventilagon_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_sending), (mp_obj_t)&ventilagon_ventilagon_sending_obj },
 };
 
-STATIC MP_DEFINE_CONST_DICT (
+static MP_DEFINE_CONST_DICT (
     mp_module_ventilagon_globals,
     ventilagon_globals_table
 );

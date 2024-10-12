@@ -24,6 +24,13 @@
 #include <soc/spi_struct.h>
 #include <soc/io_mux_reg.h>
 #include <driver/gpio.h>
+#include "esp_log.h"
+//#include "py/mpprint.h"
+#include "FreeRTOS.h"
+#include "freertos/task.h"
+
+static const char* TAG = "Ventilastation:SPI";
+
 //
 //#define HSPI_PIN_CLK  GPIO_NUM_14
 //#define HSPI_PIN_MOSI GPIO_NUM_13
@@ -207,50 +214,70 @@
 //}
 
 
-#include <stddef.h>
-#include <stdint.h>
+// --- #include <stddef.h>
+// --- #include <stdint.h>
+// --- 
+#include "hal/spi_types.h"
+#include "driver/spi_common.h"
+#include "driver/spi_master.h"
+#include "esp_err.h"
 
-#define EEPROM_HOST    SPI2_HOST
+//#define printf(...) mp_printf(MP_PYTHON_PRINTER, __VA_ARGS__)
 
-#define PIN_NUM_MISO 13
-#define PIN_NUM_MOSI 11
-#define PIN_NUM_CLK  12
-#define PIN_NUM_CS   10
+#define LEDS_SPI_HOST    SPI2_HOST
+
+#define PIN_NUM_MOSI 16
+#define PIN_NUM_CLK  15
+//#define PIN_NUM_MISO 13
+//#define PIN_NUM_CS   40
+
+spi_device_handle_t spi_handle;
+
+spi_bus_config_t buscfg={
+	.miso_io_num = -1,
+	.mosi_io_num = PIN_NUM_MOSI,
+	.sclk_io_num = PIN_NUM_CLK,
+	.quadwp_io_num = -1,
+	.quadhd_io_num = -1,
+	.max_transfer_sz = 32,
+};
+
+spi_device_interface_config_t devcfg = {
+	.clock_speed_hz = 20 * 1000 * 1000,     //Clock out at 20 MHz
+	.mode = 0,                              //SPI mode 0
+	.spics_io_num = -1,             //CS pin
+};
 
 void spiStartBuses(uint32_t freq) {
-    ESP_LOGI(TAG, "Initializing bus SPI%d...", EEPROM_HOST+1);
-    spi_bus_config_t buscfg={
-        .miso_io_num = PIN_NUM_MISO,
-        .mosi_io_num = PIN_NUM_MOSI,
-        .sclk_io_num = PIN_NUM_CLK,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = 32,
-    };
+    //printf("Initializing bus SPI%d...\n", LEDS_SPI_HOST+1);
 
-    ret = spi_bus_initialize(EEPROM_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    esp_err_t ret;
+
+    ret = spi_bus_initialize(LEDS_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
     ESP_ERROR_CHECK(ret);
+	//const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
+	//vTaskDelay( xDelay );
 
-    eeprom_config_t eeprom_config = {
-        .cs_io = -1,
-        .host = EEPROM_HOST,
-        .miso_io = PIN_NUM_MISO,
-    };
-
-    eeprom_handle_t eeprom_handle;
-
-    ESP_LOGI(TAG, "Initializing device...");
-    ret = spi_eeprom_init(&eeprom_config, &eeprom_handle);
+    spi_bus_add_device(LEDS_SPI_HOST, &devcfg, &spi_handle);
     ESP_ERROR_CHECK(ret);
+    //printf("adding device returned... %d\n", ret);
 
-    ret = spi_eeprom_write_enable(eeprom_handle);
+    //printf("spi bus ready\n");
+}
+
+void spiAcquire() {
+    esp_err_t ret;
+    ret = spi_device_acquire_bus(spi_handle, portMAX_DELAY);
     ESP_ERROR_CHECK(ret);
-
-    ret = spi_eeprom_write(eeprom_handle, i, test_str[i]);
-    ESP_ERROR_CHECK(ret);
-
-
 }
 
 void spiWriteNL(int device, const void * data_in, size_t len){
+    esp_err_t ret;
+    spi_transaction_t transaction = {
+        .length=len*8,
+	    .tx_buffer=data_in,
+	    //.flags=SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL
+    };
+    ret = spi_device_polling_transmit(spi_handle, &transaction);
+    ESP_ERROR_CHECK(ret);
 }
