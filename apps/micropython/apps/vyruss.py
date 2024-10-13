@@ -1,10 +1,10 @@
 from urandom import choice, randrange, seed
 import utime
 
-from libs.director import director
-from libs.scene import Scene
-from libs.sprites import Sprite, reset_sprites
-from libs.imagenes import strips
+from ventilastation.director import director
+from ventilastation.scene import Scene
+from ventilastation.sprites import Sprite, reset_sprites
+from ventilastation.imagenes import strips
 
 import apps.credits
 

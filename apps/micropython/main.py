@@ -1,8 +1,8 @@
-from libs.director import director
-from libs import imagenes
-from libs import sprites
-from libs import menu
-from libs.imagenes import strips
+from ventilastation.director import director
+from ventilastation import imagenes
+from ventilastation import sprites
+from ventilastation import menu
+from ventilastation.imagenes import strips
 
 def update_over_the_air():
     import ota_update

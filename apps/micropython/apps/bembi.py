@@ -1,7 +1,7 @@
-from libs.director import director
-from libs.scene import Scene
-from libs.sprites import Sprite
-from libs.imagenes import strips
+from ventilastation.director import director
+from ventilastation.scene import Scene
+from ventilastation.sprites import Sprite
+from ventilastation.imagenes import strips
 
 def make_me_a_planet(strip):
     planet = Sprite()

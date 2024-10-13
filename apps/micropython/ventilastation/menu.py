@@ -1,7 +1,7 @@
 import sys
-from libs.director import director
-from libs.scene import Scene
-from libs.sprites import Sprite, reset_sprites
+from ventilastation.director import director
+from ventilastation.scene import Scene
+from ventilastation.sprites import Sprite, reset_sprites
 
 
 class Menu(Scene):

@@ -1,5 +1,5 @@
 try:
-    import libs.remotepov as povdisplay
+    import ventilastation.remotepov as povdisplay
 except ImportError as e:
     import povdisplay
 

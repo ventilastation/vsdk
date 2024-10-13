@@ -1,10 +1,10 @@
 import ventilagon
-from libs.director import director
-from libs.scene import Scene
+from ventilastation.director import director
+from ventilastation.scene import Scene
 try:
-    import libs.serialcomms as comms
+    import ventilastation.serialcomms as comms
 except:
-    import libs.comms
+    import ventilastation.comms
 
 
 class VentilagonGame(Scene):

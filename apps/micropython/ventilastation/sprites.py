@@ -1,4 +1,4 @@
-from libs.spritelib import *
+from ventilastation.spritelib import *
 
 DISABLED_FRAME = 255
 sprite_num = 1

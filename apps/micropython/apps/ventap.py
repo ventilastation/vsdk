@@ -1,8 +1,8 @@
 from urandom import choice, randrange, seed
-from libs.director import director
-from libs.scene import Scene
-from libs.sprites import Sprite
-from libs.imagenes import strips
+from ventilastation.director import director
+from ventilastation.scene import Scene
+from ventilastation.sprites import Sprite
+from ventilastation.imagenes import strips
 
 NUBES_POR_NUBAREDA = 8
 
