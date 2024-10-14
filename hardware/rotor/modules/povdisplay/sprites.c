@@ -257,7 +257,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(randint_obj, randint);
 
 // Functions for the Module "sprites" and the Class "Sprite"
 static const mp_rom_map_elem_t sprites_globals_table[] = {
-    { MP_ROM_QSTR(MP_QSTR___name__),            MP_ROM_QSTR(MP_QSTR_sprites) },
+    { MP_ROM_QSTR(MP_QSTR___name__),            MP_ROM_QSTR(MP_QSTR_vshw_sprites) },
     { MP_ROM_QSTR(MP_QSTR_Sprite),              MP_ROM_PTR(&sprite_type) },
     { MP_ROM_QSTR(MP_QSTR_reset_sprites),       MP_ROM_PTR(&reset_sprites_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_imagestrip),      MP_ROM_PTR(&set_imagestrip_obj) },
@@ -274,4 +274,4 @@ const mp_obj_module_t mp_module_sprites = {
     .globals = (mp_obj_dict_t*)&mp_module_sprites_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_sprites, mp_module_sprites);
+MP_REGISTER_MODULE(MP_QSTR_vshw_sprites, mp_module_sprites);

@@ -231,7 +231,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_last_turn_duration_obj, povdisplay_l
 // ------------------------------
 
 static const mp_map_elem_t povdisplay_globals_table[] = {
-    { MP_OBJ_NEW_QSTR(MP_QSTR___name__), MP_OBJ_NEW_QSTR(MP_QSTR_povdisplay) },
+    { MP_OBJ_NEW_QSTR(MP_QSTR___name__), MP_OBJ_NEW_QSTR(MP_QSTR_vshw_povdisplay) },
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_last_turn_duration), (mp_obj_t)&povdisplay_last_turn_duration_obj },
@@ -247,7 +247,7 @@ const mp_obj_module_t mp_module_povdisplay = {
     .globals = (mp_obj_dict_t*)&mp_module_povdisplay_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_povdisplay, mp_module_povdisplay);
+MP_REGISTER_MODULE(MP_QSTR_vshw_povdisplay, mp_module_povdisplay);
 
 // ------------------------------
 

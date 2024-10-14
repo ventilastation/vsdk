@@ -2,11 +2,7 @@ from ventilastation.director import director
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 from ventilastation.imagenes import strips
-
-try:
-    import ventilastation.remotepov as povdisplay
-except:
-    import povdisplay
+from ventilastation import povdisplay
 
 
 char_width = 9

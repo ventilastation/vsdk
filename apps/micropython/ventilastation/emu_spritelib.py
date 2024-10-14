@@ -1,8 +1,4 @@
-try:
-    import ventilastation.remotepov as povdisplay
-except ImportError as e:
-    import povdisplay
-
+from ventilastation import povdisplay
 import uctypes
 
 sprite_struct = {
