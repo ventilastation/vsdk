@@ -2,33 +2,13 @@ import utime
 
 try:
     from ventilastation import serialcomms as comms
-except:
+except ImportError:
     from ventilastation import comms
 from ventilastation import sprites
 import gc
 
 DEBUG = False
 INPUT_TIMEOUT = 62 * 1000  # 62 segundos de inactividad, volver al menu
-
-try:
-    from ventilastation.remotepov import update
-except:
-    import povdisplay
-    from ventilastation import imagenes
-    PIXELS = 54
-    povdisplay.init(PIXELS, imagenes.palette_pal)
-    update = lambda: None
-    if DEBUG:
-        print("setting up fan debug")
-        import uctypes
-        debug_buffer = uctypes.bytearray_at(povdisplay.getaddress(999), 32*16)
-        next_loop = 1000
-        def update():
-            global next_loop
-            now = utime.ticks_ms()
-            if utime.ticks_diff(next_loop, now) < 0:
-                next_loop = utime.ticks_add(now, 1000)
-                comms.send(b"debug", debug_buffer)
 
 
 class Director:
@@ -105,9 +85,6 @@ class Director:
                 self.last_buttons = self.buttons
 
             self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
-
-            # TODO check this hack
-            update()
 
             gc.collect()
             delay = utime.ticks_diff(next_loop, utime.ticks_ms())
