@@ -69,6 +69,9 @@ class Director:
     def music_off(self):
         comms.send(b"music off")
 
+    def report_traceback(self, content):
+        comms.send(b"traceback %d"%len(content), content)
+        
     def run(self):
         while True:
             scene = self.scene_stack[-1]

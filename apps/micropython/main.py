@@ -1,3 +1,6 @@
+import io
+import sys
+
 from ventilastation.director import director
 from ventilastation import imagenes
 from ventilastation import sprites
@@ -84,7 +87,11 @@ def main():
 if __name__ == '__main__':
     import machine
     try:
+        director.sound_play(b"vyruss/shoot3")
         main()
     except Exception as e:
-        print(e)
-        machine.reboot()
+        buf = io.StringIO()
+        sys.print_exception(e, buf)
+        director.report_traceback(buf.getvalue().encode("utf-8"))
+        print(buf.getvalue())
+        #machine.reset()
