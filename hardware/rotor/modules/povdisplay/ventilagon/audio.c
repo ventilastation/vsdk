@@ -52,19 +52,19 @@ void audio_play(const char* command) {
 }
 
 void audio_play_superventilagon() {
-  audio_play("sound es/super ventilagon");
+  audio_play("sound ventilagon/audio/es/super ventilagon");
 }
 
 void audio_play_crash() {
-  audio_play("sound die");
+  audio_play("sound ventilagon/audio/die");
 }
 
 void audio_play_win() {
-  audio_play("sound es/buenisimo");
+  audio_play("sound ventilagon/audio/es/buenisimo");
 }
 
 void audio_play_game_over() {
-  audio_play("sound es/perdiste");
+  audio_play("sound ventilagon/audio/es/perdiste");
 }
 
 void audio_stop_song() {
@@ -72,7 +72,7 @@ void audio_stop_song() {
 }
 
 void audio_begin() {
-  serial_send("sound es/empeza");
+  serial_send("sound ventilagon/audio/es/empeza");
 }
 
 void audio_reset() {
@@ -85,11 +85,11 @@ void audio_stop_servo() {
 
 const char* section_sounds[] = {
   NULL,
-  "sound es/linea",
-  "sound es/triangulo",
-  "sound es/cuadrado",
-  "sound es/pentagono",
-  "sound es/ventilagono",
+  "sound ventilagon/audio/es/linea",
+  "sound ventilagon/audio/es/triangulo",
+  "sound ventilagon/audio/es/cuadrado",
+  "sound ventilagon/audio/es/pentagono",
+  "sound ventilagon/audio/es/ventilagono",
   NULL
 };
 
