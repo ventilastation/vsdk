@@ -202,6 +202,12 @@ static mp_obj_t sprite_set_strip(mp_obj_t self_in, mp_obj_t new_strip) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(sprite_set_strip_obj, sprite_set_strip);
 
+static mp_obj_t sprite_perspective(mp_obj_t self_in) {
+    sprite_obj_t *self = self_in;
+    return mp_obj_new_int(self->perspective);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(sprite_perspective_obj, sprite_perspective);
+
 static mp_obj_t sprite_set_perspective(mp_obj_t self_in, mp_obj_t value) {
     sprite_obj_t *self = self_in;
     self->perspective = mp_obj_get_int(value);
@@ -223,6 +229,7 @@ static const mp_rom_map_elem_t sprite_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_frame),           MP_ROM_PTR(&sprite_frame_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_frame),       MP_ROM_PTR(&sprite_set_frame_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_strip),       MP_ROM_PTR(&sprite_set_strip_obj) },
+    { MP_ROM_QSTR(MP_QSTR_perspective),     MP_ROM_PTR(&sprite_perspective_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_perspective), MP_ROM_PTR(&sprite_set_perspective_obj) },
 };
 
