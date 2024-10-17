@@ -18,7 +18,7 @@
 #include "ventilagon/ventilagon.h"
 
 #define GPIO_HALL     GPIO_NUM_26
-#define GPIO_HALL_B     GPIO_NUM_36
+#define GPIO_HALL_B     GPIO_NUM_4
 #define GPIO_DEBUG     GPIO_NUM_18
 
 //#define printf(...) mp_printf(MP_PYTHON_PRINTER, __VA_ARGS__)
@@ -27,7 +27,7 @@
 #define COLUMNS 256
 #define FASTEST_CREDIBLE_TURN 10000 // if the fan is going over 100 FPS, then I don't believe it, and discard the reading
 
-#define DEBUG_ROTATION 1
+#define DEBUG_ROTATION 0
 
 #ifdef DEBUG_ROTATION
 #define DEBUG_BUFFER_SIZE 32
@@ -90,10 +90,6 @@ void spi_write_HSPI() {
     spiWriteNL(2, spi_buf, buf_size);
 }
 
-void spi_write_VSPI() {
-    //spiWriteNL(3, spi_buf + buf_size, buf_size);
-}
-
 void spi_shutdown() {
     free(spi_buf);
 }
@@ -111,7 +107,7 @@ int color = 0;
 uint32_t count = 0;
 
  
-static void IRAM_ATTR hall_sensed(void* arg)
+static void IRAM_ATTR hall_neg_sensed(void* arg)
 {
     int64_t this_turn = esp_timer_get_time();
     int64_t this_turn_duration = this_turn - last_turn;
@@ -127,20 +123,29 @@ static void IRAM_ATTR hall_sensed(void* arg)
 #endif
 }
 
+static void IRAM_ATTR hall_any_sensed(void* arg)
+{
+    int level = gpio_get_level(GPIO_HALL_B);
+    if (level == false) {
+        hall_neg_sensed(arg);
+    }
+    gpio_set_level(GPIO_NUM_38, level);
+}
 
 
 void hall_init(int gpio_hall) {
+    gpio_set_direction(gpio_hall, GPIO_MODE_INPUT);
 #ifdef DEBUG_ROTATION
     for (int n = 0; n<DEBUG_BUFFER_SIZE; n++) {
         DEBUG_rotlog[n].now = 0xAA55AA55;
         DEBUG_rotlog[n].turn_duration = 0xFF00FF00;
     }
-#endif
-    gpio_set_direction(gpio_hall, GPIO_MODE_INPUT);
-    //gpio_set_pull_mode(gpio_hall, GPIO_PULLUP_ONLY);
-    //gpio_pullup_en(gpio_hall);
+    gpio_set_intr_type(gpio_hall, GPIO_INTR_ANYEDGE);
+    gpio_isr_handler_add(gpio_hall, hall_any_sensed, (void*) gpio_hall);
+#else
     gpio_set_intr_type(gpio_hall, GPIO_INTR_NEGEDGE);
-    gpio_isr_handler_add(gpio_hall, hall_sensed, (void*) gpio_hall);
+    gpio_isr_handler_add(gpio_hall, hall_neg_sensed, (void*) gpio_hall);
+#endif
 }
 
 
@@ -174,8 +179,9 @@ void coreTask( void * pvParameters ){
 
     // //gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
     // //hall_init(GPIO_HALL);
-    //hall_init(GPIO_HALL_B);
+    hall_init(GPIO_HALL_B);
     gpio_set_direction(GPIO_DEBUG, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_38, GPIO_MODE_OUTPUT);
 
     init_sprites();
     spiAcquire();

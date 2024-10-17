@@ -5,9 +5,6 @@ cd micropython/ports/esp32
 
 BOARD=ESP32_GENERIC_S3
 BOARD_VARIANT=SPIRAM_OCT
-#PORT=/dev/ttyACM0
-PORT=/dev/cu.usbmodem144301
-#PORT=/dev/cu.usbmodem585A0473901
 BAUD=1500000
 
 #BOARD=ESP32_GENERIC

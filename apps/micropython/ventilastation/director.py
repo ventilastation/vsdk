@@ -10,6 +10,10 @@ import gc
 DEBUG = False
 INPUT_TIMEOUT = 62 * 1000  # 62 segundos de inactividad, volver al menu
 
+from ventilastation import povdisplay
+from ventilastation import imagenes
+PIXELS = 54
+povdisplay.init(PIXELS, imagenes.palette_pal)
 
 class Director:
     JOY_LEFT = 1

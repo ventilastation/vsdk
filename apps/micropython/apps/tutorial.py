@@ -42,7 +42,7 @@ class Tutorial(Scene):
         self.planeta.set_x(0)
         self.planeta.set_y(255)
         #self.planeta.set_frame(0)
-        self.planeta.name = "Planeta"
+        #self.planeta.name = "Planeta"   # does not work on the sprite C module
 
         self.bicho = Sprite()
         self.bicho.set_strip(strips.vyruss.galaga)
@@ -50,7 +50,7 @@ class Tutorial(Scene):
         self.bicho.set_x(-32)
         self.bicho.set_y(16)
         #self.bicho.set_frame(6)
-        self.bicho.name = "Bicho"
+        #self.bicho.name = "Bicho"
 
         self.cartel = Sprite()
         self.cartel.set_strip(strips.vyruss.gameover)
@@ -58,7 +58,7 @@ class Tutorial(Scene):
         self.cartel.set_x(256-32)
         self.cartel.set_y(16)
         #self.cartel.set_frame(0)
-        self.cartel.name = "Cartel"
+        #self.cartel.name = "Cartel"
 
         self.sprites = [self.planeta, self.bicho, self.cartel]
 
