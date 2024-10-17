@@ -6,7 +6,7 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite, reset_sprites
 from ventilastation.imagenes import strips
 
-import apps.credits
+from apps import credits
 
 
 LEVELS = [
