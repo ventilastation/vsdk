@@ -1,6 +1,6 @@
 trap 'kill $BGPID; exit' SIGINT
 cd apps/micropython
-micropython main.py &
+micropython -X heapsize=8m main.py &
 BGPID=$!
 cd ../..
 

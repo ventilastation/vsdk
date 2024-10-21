@@ -1,5 +1,6 @@
 from urandom import choice, randrange, seed
 import utime
+import gc
 
 from ventilastation.director import director
 from ventilastation.scene import Scene
@@ -135,6 +136,7 @@ class StarfleetState:
         self.scene.call_later(8333, self.scene.finished)
 
     def respawn(self):
+        gc.collect()
         self.destroyed.append(self.fighters.pop(0))
         self.fighter = self.fighters[0]
         self.fighter.set_frame(0)
@@ -292,6 +294,7 @@ class VyrusGame(Scene):
         raise StopIteration()
 
     def advance_level(self):
+        gc.collect()
         self.level += 1
         if self.level >= len(LEVELS):
             director.pop()
