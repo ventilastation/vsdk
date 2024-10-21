@@ -3,7 +3,7 @@ from ventilastation.director import director
 from ventilastation.scene import Scene
 try:
     import ventilastation.serialcomms as comms
-except ImportError:
+except Exception:
     import ventilastation.comms
 
 

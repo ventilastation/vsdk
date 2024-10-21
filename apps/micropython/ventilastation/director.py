@@ -2,7 +2,7 @@ import utime
 
 try:
     from ventilastation import serialcomms as comms
-except ImportError:
+except Exception:
     from ventilastation import comms
 from ventilastation import sprites
 import gc
@@ -14,6 +14,12 @@ from ventilastation import povdisplay
 from ventilastation import imagenes
 PIXELS = 54
 povdisplay.init(PIXELS, imagenes.palette_pal)
+
+try:
+    from ventilastation.povdisplay import update
+except ImportError:
+    update = lambda: None
+
 
 class Director:
     JOY_LEFT = 1
@@ -92,6 +98,9 @@ class Director:
                 self.last_buttons = self.buttons
 
             self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
+
+            # Send the sprite positions to the emulator
+            update()
 
             delay = utime.ticks_diff(next_loop, utime.ticks_ms())
             if delay > 0:
