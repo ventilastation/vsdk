@@ -93,7 +93,6 @@ class Director:
 
             self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
 
-            gc.collect()
             delay = utime.ticks_diff(next_loop, utime.ticks_ms())
             if delay > 0:
                 utime.sleep_ms(delay)
