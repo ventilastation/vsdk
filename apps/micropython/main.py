@@ -59,8 +59,8 @@ class GamesMenu(menu.Menu):
             and director.is_pressed(director.JOY_LEFT)
             and director.is_pressed(director.JOY_RIGHT)
             and director.is_pressed(director.BUTTON_A) ):
-            from apps import tutorial
-            director.push(tutorial.Tutorial())
+            from apps.debugmode import DebugMode
+            director.push(DebugMode())
             return True
             
     def step(self):
