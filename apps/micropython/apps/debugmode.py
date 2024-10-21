@@ -57,6 +57,13 @@ class DebugMode(Scene):
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
+        if (director.is_pressed(director.JOY_DOWN)
+            and director.is_pressed(director.JOY_LEFT)
+            and director.is_pressed(director.JOY_RIGHT)
+            and director.is_pressed(director.BUTTON_A) ):
+            from apps.tutorial import Tutorial
+            director.push(Tutorial())
+
     def finished(self):
         director.pop()
         raise StopIteration()
