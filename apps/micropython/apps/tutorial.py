@@ -44,6 +44,14 @@ class Tutorial(Scene):
         #self.planeta.set_frame(0)
         #self.planeta.name = "Planeta"   # does not work on the sprite C module
 
+        self.doom = Sprite()
+        self.doom.set_strip(strips.other.doom)
+        self.doom.set_perspective(0)
+        self.doom.set_x(0)
+        self.doom.set_y(255)
+        #self.planeta.set_frame(0)
+        #self.planeta.name = "Planeta"   # does not work on the sprite C module
+
         self.bicho = Sprite()
         self.bicho.set_strip(strips.vyruss.galaga)
         self.bicho.set_perspective(1)
@@ -60,28 +68,43 @@ class Tutorial(Scene):
         #self.cartel.set_frame(0)
         #self.cartel.name = "Cartel"
 
-        self.sprites = [self.planeta, self.bicho, self.cartel]
+        self.sprites = [self.planeta, self.bicho, self.cartel, self.doom]
 
         self.current = 0
         self.sprite = self.sprites[self.current]
         self.activate_next()
 
     def activate_next(self):
-        self.current = (self.current + 1) % len(self.sprites)
-        self.sprite = self.sprites[self.current]
+        self.current = (self.current + 1) % (len(self.sprites) - 1)
+        self.activate(self.current)
+
+    def activate(self, new_active):
+        self.sprite = self.sprites[new_active]
         for n, s in enumerate(self.sprites):
-            if n == self.current:
+            if n == new_active:
                 s.set_frame(6 if self.sprite == self.bicho else 0)
             else:
                 s.disable()
 
+    def activate_doom(self):
+        self.display.set_value("")
+        self.current = len(self.sprites) - 1
+        self.activate(self.current)
+
     def step(self):
+
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
 
         if director.was_pressed(director.BUTTON_A):
             self.activate_next()
             self.display.set_value("Persp: %d" % self.sprite.perspective())
-        # Y
+
+        # SKIP movement if DOOM
+        if self.current == len(self.sprites) - 1:
+            return
             
+        # Y
         up = director.is_pressed(director.JOY_UP)
         down = director.is_pressed(director.JOY_DOWN)
 
@@ -110,8 +133,9 @@ class Tutorial(Scene):
             self.sprite.set_frame(new_frame)
             self.display.set_value("frame = %d" % self.sprite.frame())
 
-        if director.was_pressed(director.BUTTON_D):
-            self.finished()
+
+        if up and down and left and right:
+            self.activate_doom()
 
 
     def finished(self):
