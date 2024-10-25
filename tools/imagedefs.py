@@ -69,6 +69,7 @@ other_images = image_group(
         strip("menu.png", frames=5),
         strip("credits.png", frames=32),
         strip("pollitos.png", frames=5, palette=1),
+        strip("debug_arxels.png", frames=7),
         fullscreen("tecno_estructuras.png"),
         fullscreen("ventilastation.png"),
         fullscreen("doom.png", palette=8),
