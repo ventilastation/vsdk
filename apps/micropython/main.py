@@ -14,7 +14,8 @@ def update_over_the_air():
 class GamesMenu(menu.Menu):
     OPTIONS = [
         ('vyruss', strips.other.menu, 0, 64),
-        ('bembi', strips.other.pollitos, 0, 64),
+        #('bembi', strips.other.pollitos, 0, 64),
+        ('laupalav', strips.other.pollitos, 0, 64),
         ('vladfarty', strips.other.menu, 2, 64),
         #('credits', strips.other.menu, 3, 64),
         #('ventap', strips.other.menu, 4, 64),
@@ -40,6 +41,10 @@ class GamesMenu(menu.Menu):
         if option_pressed[0] == 'bembi':
             from apps import bembi
             director.push(bembi.Bembidiona())
+            raise StopIteration()
+        if option_pressed[0] == 'laupalav':
+            from apps import laupalav
+            director.push(laupalav.LauraPalavecino())
             raise StopIteration()
         if option_pressed[0] == 'ventap':
             from apps import ventap
