@@ -1,8 +1,14 @@
 from PIL import Image
 
 files = [
-    ("frente.png", 12),
-    ("fondo.png", 24),
+    ("frenteA.png", 12),
+    ("frenteB.png", 12),
+    ("frenteC.png", 12),
+    ("frenteD.png", 12),
+    ("fondoA.png", 24),
+    ("fondoB.png", 24),
+    ("fondoC.png", 24),
+    ("fondoD.png", 24),
 ]
 
 for filename, splits in files:
@@ -23,6 +29,6 @@ for filename, splits in files:
         frame = canvas.crop((step * n, 0, step * n + h, h))
         frame.save(fn_template % n)
         print(fn_template % n)
-    frame.show()
+    #frame.show()
         
 

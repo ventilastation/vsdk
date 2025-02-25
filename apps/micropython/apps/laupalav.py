@@ -15,81 +15,98 @@ class LauraPalavecino(Scene):
 
     def on_enter(self):
         self.animation_frames = 0
-        self.bambi = []
-        self.bambi.append(make_me_a_planet(strips.laupalav.bambi01))
-        self.bambi.append(make_me_a_planet(strips.laupalav.bambi02))
-        self.bambi.append(make_me_a_planet(strips.laupalav.bambi03))
 
         self.frente = []
-        self.frente.append(make_me_a_planet(strips.laupalav.frente00))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente01))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente02))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente03))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente04))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente05))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente06))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente07))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente08))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente09))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente10))
-        self.frente.append(make_me_a_planet(strips.laupalav.frente11))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteA00))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteB01))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteC02))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteD03))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteA04))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteB05))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteC06))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteD07))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteA08))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteB09))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteC10))
+        self.frente.append(make_me_a_planet(strips.laupalav.frenteD11))
+
+        self.bambi = []
+        self.bambi.append(make_me_a_planet(strips.laupalav.bambi01b))
+        self.bambi.append(self.bambi[-1])
+        self.bambi.append(make_me_a_planet(strips.laupalav.bambi02b))
+        self.bambi.append(self.bambi[-1])
+        self.bambi.append(make_me_a_planet(strips.laupalav.bambi03b))
+        self.bambi.append(self.bambi[-1])
+        self.bambi.append(make_me_a_planet(strips.laupalav.bambi04b))
+        self.bambi.append(self.bambi[-1])
 
         self.fondo = []
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo00))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo01))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo02))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo03))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo04))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo05))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo06))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo07))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo08))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo09))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo10))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo11))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo12))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo13))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo14))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo15))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo16))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo17))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo18))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo19))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo20))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo21))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo22))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondo23))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA00))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB01))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC02))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD03))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA04))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB05))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC06))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD07))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA08))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB09))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC10))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD11))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA12))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB13))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC14))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD15))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA16))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB17))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC18))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD19))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA20))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB21))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC22))
+        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD23))
 
-        self.rose_black = []
-        self.rose_black.append(make_me_a_planet(strips.laupalav.rose_black_00))
-        self.rose_black.append(make_me_a_planet(strips.laupalav.rose_black_01))
-
-        self.rose_green = []
-        self.rose_green.append(make_me_a_planet(strips.laupalav.rose_green_00))
-        self.rose_green.append(make_me_a_planet(strips.laupalav.rose_green_01))
+        self.rose = []
+        self.rose.append(make_me_a_planet(strips.laupalav.rose01))
+        self.rose.append(self.rose[-1])
+        self.rose.append(make_me_a_planet(strips.laupalav.rose02))
+        self.rose.append(self.rose[-1])
+        self.rose.append(make_me_a_planet(strips.laupalav.rose03))
+        self.rose.append(self.rose[-1])
+        self.rose.append(make_me_a_planet(strips.laupalav.rose04))
+        self.rose.append(self.rose[-1])
+        self.rose.append(make_me_a_planet(strips.laupalav.rose05))
+        self.rose.append(self.rose[-1])
+        self.rose.append(make_me_a_planet(strips.laupalav.rose06))
+        self.rose.append(self.rose[-1])
 
         self.animations = [
-                self.rose_black,
-                self.bambi,
-                self.rose_green,
+                [self.rose],
+                [self.frente, self.bambi, self.fondo],
         ]
 
         self.current_animation = -1
-        self.current_sprite = self.bambi[0]
+        self.current_sprites = []
         self.next_animation()
         #director.music_play(b"other/piostart")
 
     def next_animation(self):
-        self.current_sprite.disable()
+        for s in self.current_sprites:
+            s.disable()
         self.current_animation = (self.current_animation + 1) % len(self.animations)
 
     def step(self):
         self.animation_frames += 1
-        af = (self.animation_frames // 7) % len(self.animations[self.current_animation])
-        new_sprite = self.animations[self.current_animation][af]
-        self.current_sprite.disable()
-        new_sprite.set_frame(0)
-        self.current_sprite = new_sprite
+
+        new_sprites = [] 
+        for s in self.current_sprites:
+            s.disable()
+        for anim in self.animations[self.current_animation]:
+            af = (self.animation_frames // 3) % len(anim)
+            ns = anim[af]
+            ns.set_frame(0)
+            new_sprites.append(ns)
+        self.current_sprites = new_sprites
 
         if director.was_pressed(director.BUTTON_A):
             self.next_animation()
