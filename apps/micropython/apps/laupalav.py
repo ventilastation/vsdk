@@ -41,7 +41,8 @@ class LauraPalavecino(Scene):
             strips.laupalav.frenteD15,
         ])
 
-        self.frente = build_animation(frente_sprites, range(16))
+        frente_anim = build_animation(frente_sprites, range(16))
+        self.frente = lambda frame: frente_anim[(frame // 5) % len(frente_anim)]
 
         bambi_sprites = build_sprites([
             strips.laupalav.bambi01b,
@@ -50,7 +51,8 @@ class LauraPalavecino(Scene):
             strips.laupalav.bambi04b,
         ])
 
-        self.bambi = build_animation(bambi_sprites, [0, 0, 1, 1, 2, 2, 3, 3])
+        bambi_anim = build_animation(bambi_sprites, [0, 0, 1, 1, 2, 2, 3, 3])
+        self.bambi = lambda frame: bambi_anim[(frame // 4) % len(bambi_anim)]
 
         fondo_sprites = build_sprites([
             strips.laupalav.fondoA00,
@@ -79,7 +81,8 @@ class LauraPalavecino(Scene):
             strips.laupalav.fondoD23,
         ])
 
-        self.fondo = build_animation(fondo_sprites, range(24))
+        fondo_anim = build_animation(fondo_sprites, range(24))
+        self.fondo = lambda frame: fondo_anim[(frame // 6) % len(fondo_anim)]
 
         rose_sprites = build_sprites([
             strips.laupalav.rose01,
@@ -89,7 +92,8 @@ class LauraPalavecino(Scene):
             strips.laupalav.rose05,
             strips.laupalav.rose06,
         ])
-        self.rose = build_animation(rose_sprites, [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0, 0, 0])
+        rose_anim = build_animation(rose_sprites, [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0, 0, 0])
+        self.rose = lambda frame: rose_anim[(frame // 4) % len(rose_anim)]
 
         self.animations = [
                 [self.rose],
@@ -113,8 +117,7 @@ class LauraPalavecino(Scene):
         for s in self.current_sprites:
             s.disable()
         for anim in self.animations[self.current_animation]:
-            af = (self.animation_frames // 4) % len(anim)
-            ns = anim[af]
+            ns = anim(self.animation_frames)
             ns.set_frame(0)
             new_sprites.append(ns)
         self.current_sprites = new_sprites
