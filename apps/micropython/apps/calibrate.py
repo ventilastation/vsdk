@@ -152,18 +152,19 @@ class Calibrate(Scene):
         self.animation_frames += 1
 
         new_sprites = [] 
-        for s in self.current_sprites:
-            s.disable()
         for anim in self.animations[self.current_animation]:
             ns = anim(self.animation_frames)
             ns.set_frame(0)
             new_sprites.append(ns)
+        for s in self.current_sprites:
+            if s not in new_sprites:
+                s.disable()
         self.current_sprites = new_sprites
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
-         # Y
+         # brillo
         up = director.was_pressed(director.JOY_UP)
         down = director.was_pressed(director.JOY_DOWN)
 
@@ -172,7 +173,7 @@ class Calibrate(Scene):
             self.brillos[self.ring] = new_brillo
             self.display.set_value("brillo = %d" % new_brillo)
 
-        # X
+        # curva
 
         left = director.was_pressed(director.JOY_LEFT)
         right = director.was_pressed(director.JOY_RIGHT)

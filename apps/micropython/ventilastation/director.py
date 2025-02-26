@@ -14,6 +14,8 @@ from ventilastation import povdisplay
 from ventilastation import imagenes
 PIXELS = 54
 povdisplay.init(PIXELS, imagenes.palette_pal)
+povdisplay.set_gamma_mode(1)
+
 
 try:
     from ventilastation.povdisplay import update
