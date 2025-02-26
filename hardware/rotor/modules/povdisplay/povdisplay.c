@@ -305,6 +305,17 @@ static mp_obj_t ventilagon_ventilagon_sending(void) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_sending_obj, ventilagon_ventilagon_sending);
+
+static mp_obj_t ventilagon_ventilagon_is_idle(void) {
+    if (ventilagon_is_idle()) {
+        return mp_const_true;
+    } else {
+        return mp_const_false;
+    }
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_is_idle_obj, ventilagon_ventilagon_is_idle);
+
+
 // ------------------------------
 
 static const mp_map_elem_t ventilagon_globals_table[] = {
@@ -313,6 +324,7 @@ static const mp_map_elem_t ventilagon_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_exit), (mp_obj_t)&ventilagon_ventilagon_exit_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_received), (mp_obj_t)&ventilagon_ventilagon_received_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_sending), (mp_obj_t)&ventilagon_ventilagon_sending_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_is_idle), (mp_obj_t)&ventilagon_ventilagon_is_idle_obj },
 };
 
 static MP_DEFINE_CONST_DICT (
