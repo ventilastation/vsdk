@@ -11,6 +11,9 @@ def init(num_pixels, palette):
 def getaddress(sprite_num):
     return uctypes.addressof(sprite_data) + sprite_num * 5
 
+def set_gamma_mode(_):
+    return None
+
 def set_imagestrip(n, stripmap):
     stripes[n] = stripmap
     comms.send(b"imagestrip %s %d" % (n, len(stripmap)), stripmap)

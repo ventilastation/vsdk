@@ -22,7 +22,7 @@ class TextDisplay:
         self.chars = []
         for n in range(display_len):
             s = Sprite()
-            s.set_strip(strips.vladfarty.rainbow437)
+            s.set_strip(strips.vladfarty.vga_cp437)
             s.set_x((256 -n * char_width + (display_len * char_width) // 2) % 256)
             s.set_y(y)
             s.set_frame(10)
@@ -43,6 +43,7 @@ from ventilastation.director import director
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 from ventilastation.imagenes import strips
+import uctypes
 
 def make_me_a_planet(strip):
     planet = Sprite()
@@ -142,6 +143,11 @@ class Calibrate(Scene):
         self.ring = 0
         povdisplay.set_gamma_mode(1)
 
+    def next_animation(self):
+        for s in self.current_sprites:
+            s.disable()
+        self.current_animation = (self.current_animation + 1) % len(self.animations)
+
     def step(self):
         self.animation_frames += 1
 
@@ -158,8 +164,8 @@ class Calibrate(Scene):
             self.finished()
 
          # Y
-        up = director.is_pressed(director.JOY_UP)
-        down = director.is_pressed(director.JOY_DOWN)
+        up = director.was_pressed(director.JOY_UP)
+        down = director.was_pressed(director.JOY_DOWN)
 
         if up or down:
             new_brillo = (self.brillos[self.ring] - down + up) % 32
@@ -168,8 +174,8 @@ class Calibrate(Scene):
 
         # X
 
-        left = director.is_pressed(director.JOY_LEFT)
-        right = director.is_pressed(director.JOY_RIGHT)
+        left = director.was_pressed(director.JOY_LEFT)
+        right = director.was_pressed(director.JOY_RIGHT)
 
         if left or right:
             new_int = (self.intensidades_por_led[self.ring] - left + right) % PIXELS
@@ -183,7 +189,13 @@ class Calibrate(Scene):
 
         if back or forth:
             self.ring = (self.ring - back + forth) % PIXELS
-            self.display.set_value("ring = %d (%d, %d)" % self.ring, self.intensidades_por_led[self.ring], self.brillos[self.ring])
+            self.display.set_value(
+                "%d %d %d" % (
+                    self.ring, 
+                    self.intensidades_por_led[self.ring], 
+                    self.brillos[self.ring]
+                )
+            )
 
 
 
