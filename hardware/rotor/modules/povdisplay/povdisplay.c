@@ -44,6 +44,8 @@ char* spi_buf;
 uint32_t* extra_buf;
 uint32_t* pixels0;
 uint32_t* pixels1;
+extern uint8_t brillos[PIXELS];
+extern uint8_t intensidades_por_led[PIXELS];
 
 int buf_size;
 bool ventilagon_active = false;
@@ -215,13 +217,29 @@ static mp_obj_t povdisplay_init(mp_obj_t num_pixels, mp_obj_t palette) {
             NULL,       /* Task handle. */
             taskCore);  /* Core where the task should run */
     // printf("task created...\n");
+    gamma_mode = 0;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(povdisplay_init_obj, povdisplay_init);
 
+// ------------------------------
+
+static mp_obj_t povdisplay_set_gamma_mode(mp_obj_t mode) {
+    gamma_mode = mp_obj_get_int(mode);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_gamma_mode_obj, povdisplay_set_gamma_mode);
+
+// ------------------------------
 static mp_obj_t povdisplay_getaddress(mp_obj_t sprite_num) {
     int num = mp_obj_get_int(sprite_num);
 #ifdef DEBUG_ROTATION
+    if (num == 997) {
+        return mp_obj_new_int((mp_int_t)(uintptr_t)brillos);
+    }
+    if (num == 998) {
+        return mp_obj_new_int((mp_int_t)(uintptr_t)intensidades_por_led);
+    }
     if (num == 999) {
         return mp_obj_new_int((mp_int_t)(uintptr_t)DEBUG_rotlog);
     }
@@ -239,6 +257,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_last_turn_duration_obj, povdisplay_l
 static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR___name__), MP_OBJ_NEW_QSTR(MP_QSTR_vshw_povdisplay) },
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_gamma_mode), (mp_obj_t)&povdisplay_set_gamma_mode_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_last_turn_duration), (mp_obj_t)&povdisplay_last_turn_duration_obj },
 };

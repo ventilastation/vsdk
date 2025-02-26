@@ -67,6 +67,13 @@ class GamesMenu(menu.Menu):
             from apps.debugmode import DebugMode
             director.push(DebugMode())
             return True
+
+        if (director.is_pressed(director.BUTTON_B)
+            and director.is_pressed(director.BUTTON_C)
+            and director.is_pressed(director.BUTTON_A) ):
+            from apps.calibrate import Calibrate
+            director.push(Calibrate())
+            return True
             
     def step(self):
         if not self.check_debugmode():
