@@ -1,10 +1,10 @@
 from PIL import Image
 
 files = [
-    ("frenteA.png", 12),
-    ("frenteB.png", 12),
-    ("frenteC.png", 12),
-    ("frenteD.png", 12),
+    ("frenteA.png", 16),
+    ("frenteB.png", 16),
+    ("frenteC.png", 16),
+    ("frenteD.png", 16),
     ("fondoA.png", 24),
     ("fondoB.png", 24),
     ("fondoC.png", 24),

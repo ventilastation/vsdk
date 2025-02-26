@@ -11,74 +11,85 @@ def make_me_a_planet(strip):
     planet.set_y(255)
     return planet
 
+def build_sprites(strips):
+    return [make_me_a_planet(s) for s in strips]
+
+def build_animation(sprites, order):
+    return [sprites[n] for n in order]
+
 class LauraPalavecino(Scene):
 
     def on_enter(self):
         self.animation_frames = 0
 
-        self.frente = []
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteA00))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteB01))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteC02))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteD03))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteA04))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteB05))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteC06))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteD07))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteA08))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteB09))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteC10))
-        self.frente.append(make_me_a_planet(strips.laupalav.frenteD11))
+        frente_sprites = build_sprites([
+            strips.laupalav.frenteA00,
+            strips.laupalav.frenteB01,
+            strips.laupalav.frenteC02,
+            strips.laupalav.frenteD03,
+            strips.laupalav.frenteA04,
+            strips.laupalav.frenteB05,
+            strips.laupalav.frenteC06,
+            strips.laupalav.frenteD07,
+            strips.laupalav.frenteA08,
+            strips.laupalav.frenteB09,
+            strips.laupalav.frenteC10,
+            strips.laupalav.frenteD11,
+            strips.laupalav.frenteA12,
+            strips.laupalav.frenteB13,
+            strips.laupalav.frenteC14,
+            strips.laupalav.frenteD15,
+        ])
 
-        self.bambi = []
-        self.bambi.append(make_me_a_planet(strips.laupalav.bambi01b))
-        self.bambi.append(self.bambi[-1])
-        self.bambi.append(make_me_a_planet(strips.laupalav.bambi02b))
-        self.bambi.append(self.bambi[-1])
-        self.bambi.append(make_me_a_planet(strips.laupalav.bambi03b))
-        self.bambi.append(self.bambi[-1])
-        self.bambi.append(make_me_a_planet(strips.laupalav.bambi04b))
-        self.bambi.append(self.bambi[-1])
+        self.frente = build_animation(frente_sprites, range(16))
 
-        self.fondo = []
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA00))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB01))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC02))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD03))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA04))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB05))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC06))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD07))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA08))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB09))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC10))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD11))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA12))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB13))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC14))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD15))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA16))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB17))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC18))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD19))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoA20))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoB21))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoC22))
-        self.fondo.append(make_me_a_planet(strips.laupalav.fondoD23))
+        bambi_sprites = build_sprites([
+            strips.laupalav.bambi01b,
+            strips.laupalav.bambi02b,
+            strips.laupalav.bambi03b,
+            strips.laupalav.bambi04b,
+        ])
 
-        self.rose = []
-        self.rose.append(make_me_a_planet(strips.laupalav.rose01))
-        self.rose.append(self.rose[-1])
-        self.rose.append(make_me_a_planet(strips.laupalav.rose02))
-        self.rose.append(self.rose[-1])
-        self.rose.append(make_me_a_planet(strips.laupalav.rose03))
-        self.rose.append(self.rose[-1])
-        self.rose.append(make_me_a_planet(strips.laupalav.rose04))
-        self.rose.append(self.rose[-1])
-        self.rose.append(make_me_a_planet(strips.laupalav.rose05))
-        self.rose.append(self.rose[-1])
-        self.rose.append(make_me_a_planet(strips.laupalav.rose06))
-        self.rose.append(self.rose[-1])
+        self.bambi = build_animation(bambi_sprites, [0, 0, 1, 1, 2, 2, 3, 3])
+
+        fondo_sprites = build_sprites([
+            strips.laupalav.fondoA00,
+            strips.laupalav.fondoB01,
+            strips.laupalav.fondoC02,
+            strips.laupalav.fondoD03,
+            strips.laupalav.fondoA04,
+            strips.laupalav.fondoB05,
+            strips.laupalav.fondoC06,
+            strips.laupalav.fondoD07,
+            strips.laupalav.fondoA08,
+            strips.laupalav.fondoB09,
+            strips.laupalav.fondoC10,
+            strips.laupalav.fondoD11,
+            strips.laupalav.fondoA12,
+            strips.laupalav.fondoB13,
+            strips.laupalav.fondoC14,
+            strips.laupalav.fondoD15,
+            strips.laupalav.fondoA16,
+            strips.laupalav.fondoB17,
+            strips.laupalav.fondoC18,
+            strips.laupalav.fondoD19,
+            strips.laupalav.fondoA20,
+            strips.laupalav.fondoB21,
+            strips.laupalav.fondoC22,
+            strips.laupalav.fondoD23,
+        ])
+
+        self.fondo = build_animation(fondo_sprites, range(24))
+
+        rose_sprites = build_sprites([
+            strips.laupalav.rose01,
+            strips.laupalav.rose02,
+            strips.laupalav.rose03,
+            strips.laupalav.rose04,
+            strips.laupalav.rose05,
+            strips.laupalav.rose06,
+        ])
+        self.rose = build_animation(rose_sprites, [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0, 0, 0])
 
         self.animations = [
                 [self.rose],
@@ -102,7 +113,7 @@ class LauraPalavecino(Scene):
         for s in self.current_sprites:
             s.disable()
         for anim in self.animations[self.current_animation]:
-            af = (self.animation_frames // 3) % len(anim)
+            af = (self.animation_frames // 4) % len(anim)
             ns = anim[af]
             ns.set_frame(0)
             new_sprites.append(ns)
