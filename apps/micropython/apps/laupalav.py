@@ -95,9 +95,16 @@ class LauraPalavecino(Scene):
         rose_anim = build_animation(rose_sprites, [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0, 0, 0])
         self.rose = lambda frame: rose_anim[(frame // 4) % len(rose_anim)]
 
+        placa_sprites = build_sprites([
+            strips.laupalav.placa
+        ])
+        placa_anim = build_animation(placa_sprites, [0])
+        self.placa = lambda _: placa_anim[0]
+
         self.animations = [
                 [self.rose],
                 [self.frente, self.bambi, self.fondo],
+                [self.placa],
         ]
 
         self.current_animation = -1

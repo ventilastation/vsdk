@@ -81,6 +81,7 @@ other_images = image_group(
 laupalav_images = image_group(
     folder = "laupalav",
     stripes = [
+        fullscreen("placa.png", palette=10),
         fullscreen("bambi01b.png", palette=10),
         fullscreen("bambi02b.png", palette=10),
         fullscreen("bambi03b.png", palette=10),
@@ -125,12 +126,12 @@ laupalav_images = image_group(
         fullscreen("frenteB13.png", palette=9),
         fullscreen("frenteC14.png", palette=9),
         fullscreen("frenteD15.png", palette=9),
-        fullscreen("rose01.png", palette=9),
-        fullscreen("rose02.png", palette=9),
-        fullscreen("rose03.png", palette=9),
-        fullscreen("rose04.png", palette=9),
-        fullscreen("rose05.png", palette=9),
-        fullscreen("rose06.png", palette=9),
+        fullscreen("rose01.png", palette=11),
+        fullscreen("rose02.png", palette=11),
+        fullscreen("rose03.png", palette=11),
+        fullscreen("rose04.png", palette=11),
+        fullscreen("rose05.png", palette=11),
+        fullscreen("rose06.png", palette=11),
     ]
 )
 
