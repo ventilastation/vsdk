@@ -1,4 +1,7 @@
-import ventilagon
+try:
+    import ventilagon
+except ImportError:
+    from ventilastation import fake_ventilagon as ventilagon
 from ventilastation.director import director
 from ventilastation.scene import Scene
 try:

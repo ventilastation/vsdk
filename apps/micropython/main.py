@@ -6,16 +6,27 @@ from ventilastation import imagenes
 from ventilastation import sprites
 from ventilastation import menu
 from ventilastation.imagenes import strips
+from apps import gallery
+
 
 def update_over_the_air():
     import ota_update
     director.push(ota_update.Update())
 
+def make_me_a_planet(strip):
+    planet = sprites.Sprite()
+    planet.set_strip(strip)
+    planet.set_perspective(0)
+    planet.set_x(0)
+    planet.set_y(255)
+    return planet
+
+
 class GamesMenu(menu.Menu):
     OPTIONS = [
         ('vyruss', strips.other.menu, 0, 64),
         #('bembi', strips.other.pollitos, 0, 64),
-        ('laupalav', strips.other.pollitos, 0, 64),
+        ('gallery', strips.other.pollitos, 0, 64),
         ('vladfarty', strips.other.menu, 2, 64),
         #('credits', strips.other.menu, 3, 64),
         #('ventap', strips.other.menu, 4, 64),
@@ -23,9 +34,13 @@ class GamesMenu(menu.Menu):
     ]
 
     def on_enter(self):
+        self.boot_screen = make_me_a_planet(strips.other.ventilastation)
         super(GamesMenu, self).on_enter()
         self.animation_frames = 0
         self.pollitos = self.sprites[1]
+        self.boot_screen.set_frame(0)
+        self.call_later(1500, self.boot_screen.disable)
+
 
     def on_option_pressed(self, option_index):
         option_pressed = self.options[option_index]
@@ -42,9 +57,8 @@ class GamesMenu(menu.Menu):
             from apps import bembi
             director.push(bembi.Bembidiona())
             raise StopIteration()
-        if option_pressed[0] == 'laupalav':
-            from apps import laupalav
-            director.push(laupalav.LauraPalavecino())
+        if option_pressed[0] == 'slideshow':
+            director.push(gallery.Gallery())
             raise StopIteration()
         if option_pressed[0] == 'ventap':
             from apps import ventap
@@ -76,6 +90,9 @@ class GamesMenu(menu.Menu):
             return True
             
     def step(self):
+        if director.timedout:
+            director.push(gallery.Gallery())
+
         if not self.check_debugmode():
             super(GamesMenu, self).step()
 
@@ -94,6 +111,7 @@ def main():
     for n, strip in enumerate(imagenes.all_strips):
         sprites.set_imagestrip(n, strip)
     director.push(GamesMenu())
+    director.push(gallery.Gallery())
     director.run()
 
 if __name__ == '__main__':

@@ -39,16 +39,53 @@ class TimedScene(Scene):
 
     def scene_step(self):
         super().scene_step()
+        b = director.is_pressed(director.BUTTON_B)
+        c = director.is_pressed(director.BUTTON_C)
+        if director.was_pressed(director.BUTTON_A) and b and c:
+            director.pop()
+
         left = director.is_pressed(director.JOY_LEFT)
         right = director.is_pressed(director.JOY_RIGHT)
-        if director.was_pressed(director.BUTTON_A) and left and right:
+        if left and right:
             director.pop()
+            from apps import ventilagon_game
+            director.push(ventilagon_game.VentilagonGame())
+            Gallery.farty_step = 0
+            
         if director.was_pressed(director.BUTTON_D):
             director.pop()
             raise StopIteration()
 
     def finish_scene(self):
         director.pop()
+
+
+class Gallery(Scene):
+    def __init__(self):
+        super().__init__()
+        Gallery.farty_step = 0
+
+    def on_enter(self):
+        if not director.was_pressed(director.BUTTON_D):
+            self.next_scene()
+        else:
+            director.pop()
+            raise StopIteration()
+
+    def step(self):
+        if director.was_pressed(director.BUTTON_D):
+            director.pop()
+            raise StopIteration()
+
+    def next_scene(self):
+        new_scene_class = scenes[Gallery.farty_step]
+        if new_scene_class:
+            director.push(new_scene_class())
+            Gallery.farty_step = (Gallery.farty_step + 1) % len(scenes)
+        else:
+            director.pop()
+            raise StopIteration()
+
 
 
 class Chanimation(TimedScene):
@@ -126,34 +163,6 @@ class Chanijump(TimedScene):
     def step(self):
         self.n += 1
         self.update_pic()
-
-
-class Slideshow(Scene):
-    def __init__(self):
-        super().__init__()
-        self.farty_step = 0
-
-    def on_enter(self):
-        if not director.was_pressed(director.BUTTON_D):
-            self.next_scene()
-        else:
-            director.pop()
-            raise StopIteration()
-
-    def step(self):
-        if director.was_pressed(director.BUTTON_D):
-            director.pop()
-            raise StopIteration()
-
-    def next_scene(self):
-        new_scene_class = scenes[self.farty_step]
-        if new_scene_class:
-            director.push(new_scene_class())
-            self.farty_step = (self.farty_step + 1) % len(scenes)
-        else:
-            director.pop()
-            raise StopIteration()
-
 
 class DancingLions(TimedScene):
     duration = 5000 + 1500
