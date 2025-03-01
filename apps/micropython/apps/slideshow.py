@@ -392,12 +392,59 @@ class Bembidiona(TimedScene):
         self.pollitos.set_frame(pf)
 
 
+char_width = 9
+char_height = 12
+display_len = 12
+
+class TextDisplay:
+    def __init__(self, y):
+        self.chars = []
+        for n in range(display_len):
+            s = Sprite()
+            s.set_strip(strips.vladfarty.vga_cp437)
+            s.set_x((256 -n * char_width) % 256)
+            s.set_y(y)
+            s.set_frame(10)
+            s.set_perspective(2)
+            self.chars.append(s)
+
+        self.set_value("")
+
+    def set_value(self, value):
+        for n in range(len(self.chars)):
+            self.chars[n].set_frame(0)
+        for n, l in enumerate(value):
+            v = ord(l)# - 0x30
+            self.chars[n].set_frame(v)
+
+
+
+
+class Label(TimedScene):
+    duration = 1500
+
+    def on_enter(self):
+        self.label = TextDisplay(2)
+        self.label.set_value(self.label_text)
+
+
+def label(text):
+    class TempLabel(Label):
+        label_text = text
+    return TempLabel
+
+
 scenes = [
     Bambi,
     PlacaBambi,
+    label("Laura P."),
     Rose,
+    label("Laura P."),
     DancingLions,
+    label("Mer G."),
     Chanimation,
     Chanijump,
+    label("Chame"),
     Bembidiona,
+    label("Paula W."),
 ]
