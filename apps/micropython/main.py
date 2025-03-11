@@ -57,7 +57,7 @@ class GamesMenu(menu.Menu):
             from apps import bembi
             director.push(bembi.Bembidiona())
             raise StopIteration()
-        if option_pressed[0] == 'slideshow':
+        if option_pressed[0] == 'gallery':
             director.push(gallery.Gallery())
             raise StopIteration()
         if option_pressed[0] == 'ventap':
