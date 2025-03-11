@@ -48,6 +48,11 @@ void ventilagon_exit() {
 
 bool boton_cw = false;
 bool boton_ccw = false;
+bool is_idle = false;
+
+bool ventilagon_is_idle() {
+  return is_idle;
+}
 
 char inChar = 0;
 

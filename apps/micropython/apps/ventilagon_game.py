@@ -1,4 +1,7 @@
-import ventilagon
+try:
+    import ventilagon
+except ImportError:
+    from ventilastation import fake_ventilagon as ventilagon
 from ventilastation.director import director
 from ventilastation.scene import Scene
 try:
@@ -28,7 +31,7 @@ class VentilagonGame(Scene):
             self.last_buttons = buttons
             ventilagon.received(buttons)
 
-        if director.was_pressed(director.BUTTON_D) or director.timedout:
+        if director.was_pressed(director.BUTTON_D) or (director.timedout and ventilagon.is_idle()):
             director.pop()
             raise StopIteration()
 

@@ -152,8 +152,8 @@ class PygletEngine():
 
                 boton = joystick.buttons[0] or joystick.buttons[1] or joystick.buttons[2] or joystick.buttons[3] # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
 
-                accel = joystick.z > 0 or keys[key.PAGEUP]
-                decel = joystick.rz > 0 or keys[key.PAGEDOWN]
+                accel = joystick.z > 0 or keys[key.PAGEUP] or keys[key.P]
+                decel = joystick.rz > 0 or keys[key.PAGEDOWN] or keys[key.O]
 
                 try:
                     reset = reset or joystick.buttons[8]
@@ -172,8 +172,8 @@ class PygletEngine():
                 down = keys[key.DOWN] or keys[key.S]
 
                 boton = keys[key.SPACE]
-                accel = keys[key.PAGEUP]
-                decel = keys[key.PAGEDOWN]
+                accel = keys[key.PAGEUP] or keys[key.P]
+                decel = keys[key.PAGEDOWN] or keys[key.O]
 
             val = (left << 0 | right << 1 | up << 2 | down << 3 | boton << 4 |
                     accel << 5 | decel << 6 | reset << 7)

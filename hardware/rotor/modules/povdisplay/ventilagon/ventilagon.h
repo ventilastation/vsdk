@@ -121,6 +121,7 @@ extern bool boton_ccw;
 extern int nave_pos;
 extern void serial_send(const char* line);
 extern int queued_steps;
+extern bool is_idle;
 
 extern QueueHandle_t queue_received;
 extern QueueHandle_t queue_sending;
@@ -131,6 +132,7 @@ void ventilagon_init();
 void ventilagon_enter();
 void ventilagon_loop();
 void ventilagon_exit();
+bool ventilagon_is_idle();
 
 extern uint32_t* extra_buf;
 extern uint32_t* pixels0;

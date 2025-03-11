@@ -78,6 +78,63 @@ other_images = image_group(
     ]
 )
 
+laupalav_images = image_group(
+    folder = "laupalav",
+    stripes = [
+        fullscreen("placa.png", palette=10),
+        fullscreen("bambi01b.png", palette=10),
+        fullscreen("bambi02b.png", palette=10),
+        fullscreen("bambi03b.png", palette=10),
+        fullscreen("bambi04b.png", palette=10),
+        fullscreen("fondoA00.png", palette=9),
+        fullscreen("fondoB01.png", palette=9),
+        fullscreen("fondoC02.png", palette=9),
+        fullscreen("fondoD03.png", palette=9),
+        fullscreen("fondoA04.png", palette=9),
+        fullscreen("fondoB05.png", palette=9),
+        fullscreen("fondoC06.png", palette=9),
+        fullscreen("fondoD07.png", palette=9),
+        fullscreen("fondoA08.png", palette=9),
+        fullscreen("fondoB09.png", palette=9),
+        fullscreen("fondoC10.png", palette=9),
+        fullscreen("fondoD11.png", palette=9),
+        fullscreen("fondoA12.png", palette=9),
+        fullscreen("fondoB13.png", palette=9),
+        fullscreen("fondoC14.png", palette=9),
+        fullscreen("fondoD15.png", palette=9),
+        fullscreen("fondoA16.png", palette=9),
+        fullscreen("fondoB17.png", palette=9),
+        fullscreen("fondoC18.png", palette=9),
+        fullscreen("fondoD19.png", palette=9),
+        fullscreen("fondoA20.png", palette=9),
+        fullscreen("fondoB21.png", palette=9),
+        fullscreen("fondoC22.png", palette=9),
+        fullscreen("fondoD23.png", palette=9),
+        fullscreen("frenteA00.png", palette=9),
+        fullscreen("frenteB01.png", palette=9),
+        fullscreen("frenteC02.png", palette=9),
+        fullscreen("frenteD03.png", palette=9),
+        fullscreen("frenteA04.png", palette=9),
+        fullscreen("frenteB05.png", palette=9),
+        fullscreen("frenteC06.png", palette=9),
+        fullscreen("frenteD07.png", palette=9),
+        fullscreen("frenteA08.png", palette=9),
+        fullscreen("frenteB09.png", palette=9),
+        fullscreen("frenteC10.png", palette=9),
+        fullscreen("frenteD11.png", palette=9),
+        fullscreen("frenteA12.png", palette=9),
+        fullscreen("frenteB13.png", palette=9),
+        fullscreen("frenteC14.png", palette=9),
+        fullscreen("frenteD15.png", palette=9),
+        fullscreen("rose01.png", palette=11),
+        fullscreen("rose02.png", palette=11),
+        fullscreen("rose03.png", palette=11),
+        fullscreen("rose04.png", palette=11),
+        fullscreen("rose05.png", palette=11),
+        fullscreen("rose06.png", palette=11),
+    ]
+)
+
 unused_images = image_group(
     folder = "unused",
     stripes = [
@@ -104,6 +161,7 @@ all_images = {}
 all_images.update(vyruss_images)
 all_images.update(vladfarty_images)
 all_images.update(other_images)
+all_images.update(laupalav_images)
 #all_images.update(unused_images)
 
 

@@ -14,6 +14,9 @@ const uint8_t TRANSPARENT = 0xFF;
 uint8_t deepspace[ROWS];
 sprite_obj_t* sprites[NUM_SPRITES];
 extern const uint8_t intensidades[PIXELS][256];
+extern uint8_t brillos[PIXELS];
+extern uint8_t intensidades_por_led[PIXELS];
+int gamma_mode;
 
 uint32_t* palette_pal;
 const ImageStrip* image_stripes[NUM_IMAGES];
@@ -82,10 +85,18 @@ int get_visible_column(int sprite_x, int sprite_width, int render_column) {
 void render(int column, uint32_t* pixels) {
   inline void set_pixel(uint8_t n, uint32_t color) {
     if (n < PIXELS) {
-      pixels[n] = 0xff |
-        intensidades[n][(color & 0xff000000) >> 24] << 24 |
-        intensidades[n][(color & 0x00ff0000) >> 16] << 16 |
-        intensidades[n][(color & 0x0000ff00) >>  8] <<  8;
+      if (gamma_mode == 0) {
+        pixels[n] = 0xff |
+          intensidades[n][(color & 0xff000000) >> 24] << 24 |
+          intensidades[n][(color & 0x00ff0000) >> 16] << 16 |
+          intensidades[n][(color & 0x0000ff00) >>  8] <<  8;
+      } else if (gamma_mode == 1) {
+        int alt_n = intensidades_por_led[n];
+        pixels[n] = (brillos[n] & 0x1f) | 0xe0 |
+          intensidades[alt_n][(color & 0xff000000) >> 24] << 24 |
+          intensidades[alt_n][(color & 0x00ff0000) >> 16] << 16 |
+          intensidades[alt_n][(color & 0x0000ff00) >>  8] <<  8;
+      }
     }
   }
 

@@ -8,12 +8,14 @@ from ventilastation import sprites
 import gc
 
 DEBUG = False
-INPUT_TIMEOUT = 62 * 1000  # 62 segundos de inactividad, volver al menu
+INPUT_TIMEOUT = 15 * 1000  # 62 segundos de inactividad, volver al menu
 
 from ventilastation import povdisplay
 from ventilastation import imagenes
 PIXELS = 54
 povdisplay.init(PIXELS, imagenes.palette_pal)
+povdisplay.set_gamma_mode(1)
+
 
 try:
     from ventilastation.povdisplay import update
