@@ -135,6 +135,20 @@ laupalav_images = image_group(
     ]
 )
 
+milalhhl_images = image_group(
+    folder = "milalhhl",
+    stripes = [
+        # fullscreen("chery1.png", palette=12),
+        # fullscreen("chery2.png", palette=12),
+        fullscreen("patru1.png", palette=12),
+        fullscreen("patru2.png", palette=12),
+        fullscreen("fiat1.png", palette=12),
+        #fullscreen("fiat2.png", palette=12),
+        #fullscreen("mix1.png", palette=12),
+        #fullscreen("peugeot1.png", palette=12),
+    ]
+)
+
 unused_images = image_group(
     folder = "unused",
     stripes = [
@@ -162,6 +176,7 @@ all_images.update(vyruss_images)
 all_images.update(vladfarty_images)
 all_images.update(other_images)
 all_images.update(laupalav_images)
+all_images.update(milalhhl_images)
 #all_images.update(unused_images)
 
 
