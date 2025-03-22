@@ -25,11 +25,11 @@ def make_me_a_planet(strip):
 class GamesMenu(menu.Menu):
     OPTIONS = [
         ('vyruss', strips.other.menu, 0, 64),
-        #('bembi', strips.other.pollitos, 0, 64),
-        ('gallery', strips.other.pollitos, 0, 64),
-        ('vladfarty', strips.other.menu, 2, 64),
+        ('bembi', strips.other.pollitos, 0, 64),
+        #('gallery', strips.other.pollitos, 0, 64),
+        #('vladfarty', strips.other.menu, 2, 64),
         #('credits', strips.other.menu, 3, 64),
-        #('ventap', strips.other.menu, 4, 64),
+        ('ventap', strips.other.menu, 4, 64),
         ('ventilagon', strips.other.menu, 1, 64),
     ]
 

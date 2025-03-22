@@ -380,22 +380,22 @@ class Rose(TimedScene):
 
 
 class MilaLHHL(TimedScene):
-    duration = 30000
+    duration = 15000
 
     def on_enter(self):
         self.animation_frames = 0
 
         carcer_sprites = build_sprites([
-            strips.milalhhl.patru1,
+            # strips.milalhhl.patru1,
             strips.milalhhl.patru2,
-            strips.milalhhl.fiat1,
+            # strips.milalhhl.fiat1,
             # strips.milalhhl.fiat2,
             # strips.milalhhl.mix1,
             # strips.milalhhl.peugeot1,
         ])
         carcer_anim = build_animation(carcer_sprites, [
-            0, 1, 2,
-            #3, 4, 5
+            0, # 1, 2,
+            # 3, 4, 5
          ])
         self.carcer = lambda frame: carcer_anim[(frame // 120) % len(carcer_anim)]
 
@@ -493,10 +493,10 @@ def label(text):
 scenes = [
     MilaLHHL,
     label("Milagros A."),
-    Bambi,
-    PlacaBambi,
+    #Bambi,
+    #PlacaBambi,
     label("Laura P."),
-    Rose,
+    #Rose,
     label("Laura P."),
     DancingLions,
     label("Mer G."),
