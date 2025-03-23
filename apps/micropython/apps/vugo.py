@@ -85,6 +85,14 @@ class VugoGame(Scene):
                 sb.set_perspective(1)
                 sb.set_frame(x * 2 + randrange(2))
 
+        self.nube = Sprite()
+        self.nube.set_strip(strips.vugo.nube8bit)
+        self.nube.set_perspective(2)
+        self.nube.set_x(0)
+        self.nube.set_y(3)
+        self.nube.set_frame(x * 2 + randrange(2))
+        self.nube_pos = 0
+
         self.fondo = make_me_a_planet(strips.vugo.bluesky)
         self.fondo.set_y(255)
         self.fondo.set_frame(0)
@@ -98,7 +106,6 @@ class VugoGame(Scene):
         for gnr in self.grass_n_rocks:
             if 4 < gnr.y() < 16 and gnr.frame() < 2:
                 gnr_x = gnr.x()
-                print(gnr_x, TILE_WIDTH, vugo_x, MONCHITO_WIDTH)
                 if intersects(gnr_x, TILE_WIDTH, vugo_x, MONCHITO_WIDTH):
                     return True
 
@@ -128,6 +135,7 @@ class VugoGame(Scene):
             else:
                 bush.set_y(DAMERO_ROWS * (TILE_HEIGHT-1))
 
+
     def step(self):
 
         # mf = (self.animation_frames // 3) % 6
@@ -151,6 +159,8 @@ class VugoGame(Scene):
         self.monchito_pos = self.monchito_pos - (self.monchito_pos - self.walking_towards) // 4
         self.monchito.set_x(self.monchito_pos - MONCHITO_DISPLAY_SHIFT)
 
+        self.nube_pos += 1
+        self.nube.set_x(self.nube_pos // 8)
 
         if self.is_monchito_chocado():
             self.running = False
