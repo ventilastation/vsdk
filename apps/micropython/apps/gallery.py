@@ -79,6 +79,7 @@ class Gallery(Scene):
 
     def next_scene(self):
         new_scene_class = scenes[Gallery.farty_step]
+        print(new_scene_class)
         if new_scene_class:
             director.push(new_scene_class())
             Gallery.farty_step = (Gallery.farty_step + 1) % len(scenes)
@@ -490,19 +491,51 @@ def label(text):
     return TempLabel
 
 
+class Pyformances(TimedScene):
+    duration = 4000 + 3000
+
+    def on_enter(self):
+        self.n0 = make_me_a_planet(strips.other.pyformances_n0)
+        self.n0.set_y(0)
+        self.n0.disable()
+        self.title = make_me_a_planet(strips.other.pyformances_py)
+        self.title.set_y(100)
+        self.title.set_frame(0)
+        self.n = 0
+        self.call_later(self.duration - 3000, self.start_title)
+        self.increment = 2
+
+    def start_title(self):
+        self.increment = -5
+        self.n0.set_y(100)
+        self.n0.set_frame(0)
+        self.n0.set_y(255)
+
+    def step(self):
+        new_y = self.title.y() + self.increment
+        if 0 < new_y < 256:
+            self.title.set_y(new_y)
+        #self.title.set_x(vibratto[self.n % tablelen]//4-24)
+        self.n += 1
+        lionhead_size = self.title.y()
+        # if 10 < lionhead_size < 200:
+        #self.n0.set_y(lionhead_size + 10)
+
+
 scenes = [
-    MilaLHHL,
-    label("Milagros A."),
-    #Bambi,
-    #PlacaBambi,
-    label("Laura P."),
-    #Rose,
-    label("Laura P."),
-    DancingLions,
-    label("Mer G."),
-    Chanimation,
-    Chanijump,
-    label("Chame"),
-    Bembidiona,
-    label("Paula W."),
+    Pyformances,
+#    MilaLHHL,
+    # label("Milagros A."),
+    # #Bambi,
+    # #PlacaBambi,
+    # label("Laura P."),
+    # #Rose,
+    # label("Laura P."),
+    # DancingLions,
+    # label("Mer G."),
+    # Chanimation,
+    # Chanijump,
+    # label("Chame"),
+    # Bembidiona,
+    # label("Paula W."),
 ]

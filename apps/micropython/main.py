@@ -7,6 +7,7 @@ from ventilastation import sprites
 from ventilastation import menu
 from ventilastation.imagenes import strips
 from apps import gallery
+from apps import vugo
 
 
 def update_over_the_air():
@@ -111,7 +112,7 @@ def main():
     for n, strip in enumerate(imagenes.all_strips):
         sprites.set_imagestrip(n, strip)
     director.push(GamesMenu())
-    director.push(gallery.Gallery())
+    director.push(vugo.VugoGame())
     director.run()
 
 if __name__ == '__main__':

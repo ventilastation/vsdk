@@ -74,7 +74,18 @@ other_images = image_group(
         fullscreen("ventilastation.png"),
         fullscreen("doom.png", palette=8),
         fullscreen("sves.png"),
-        fullscreen("bembi.png", palette=1)
+        fullscreen("bembi.png", palette=1),
+        fullscreen("pyformances_n0.png", palette=0),
+        fullscreen("pyformances_py.png", palette=0),
+    ]
+)
+
+vugo_images = image_group(
+    folder = "vugo",
+    stripes = [
+        strip("moregrass.png", frames=4, palette=6),
+        strip("monchito_runs.png", frames=4, palette=6),
+        strip("mario_runs.png", frames=6, palette=6),
     ]
 )
 
@@ -177,6 +188,7 @@ all_images.update(vladfarty_images)
 all_images.update(other_images)
 #all_images.update(laupalav_images)
 all_images.update(milalhhl_images)
+all_images.update(vugo_images)
 #all_images.update(unused_images)
 
 
