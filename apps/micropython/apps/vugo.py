@@ -39,6 +39,18 @@ class VugoGame(Scene):
         # self.mario.set_frame(0)
         # self.mario.set_perspective(2)
 
+        self.grass_n_rocks = []
+        for n in range(15):
+            x = randrange(DAMERO_COLS)
+            y = randrange(DAMERO_ROWS)
+            gnr = Sprite()
+            self.grass_n_rocks.append(gnr)
+            gnr.set_strip(strips.vugo.obstacles)
+            gnr.set_x(COLS_CENTERS[x] - TILE_WIDTH // 2)
+            gnr.set_y(y * (TILE_HEIGHT-1))
+            gnr.set_perspective(1)
+            gnr.set_frame(randrange(4))
+
         self.fondos = {}
         for x in range(DAMERO_COLS):
             for y in range(DAMERO_ROWS):
@@ -48,7 +60,7 @@ class VugoGame(Scene):
                 sf.set_x(COLS_CENTERS[x] - TILE_WIDTH // 2)
                 sf.set_y(y * (TILE_HEIGHT-1))
                 sf.set_perspective(1)
-                sf.set_frame(randrange(4))
+                sf.set_frame(randrange(3))
 
         # self.fondo = make_me_a_planet(strips.vyruss.tierra)
         # self.fondo.set_y(255)
@@ -71,6 +83,15 @@ class VugoGame(Scene):
                 f.set_y(fy-1)
             else:
                 f.set_y(DAMERO_ROWS * (TILE_HEIGHT-1))
+
+        for gnr in self.grass_n_rocks:
+            gy = gnr.y()
+            if (gy > 0):
+                gnr.set_y(gy-1)
+            else:
+                gnr.set_y(DAMERO_ROWS * (TILE_HEIGHT-1))
+                gnr.set_x(COLS_CENTERS[randrange(3)] - TILE_WIDTH // 2)
+                gnr.set_frame(randrange(4))
 
 
         if director.was_pressed(director.JOY_RIGHT):
