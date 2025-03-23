@@ -17,10 +17,17 @@ DAMERO_ROWS = 12
 TILE_WIDTH = 30
 TILE_HEIGHT = 16
 MONCHITO_HALFWIDTH = 7
+MONCHITO_WIDTH = 14
 
 COLS_CENTERS = [int(TILE_WIDTH * (c - DAMERO_COLS/2 + 0.5) ) for c in range(DAMERO_COLS)]
 BUSH_COLS = [45, -105]
 MONCHITO_DISPLAY_SHIFT = int(MONCHITO_HALFWIDTH)
+
+def intersects(x1, w1, x2, w2):
+    delta = min(x1, x2)
+    x1 = (x1 - delta + 128) % 256
+    x2 = (x2 - delta + 128) % 256
+    return x1 < x2 + w2 and x1 + w1 > x2
 
 
 class VugoGame(Scene):
@@ -49,9 +56,12 @@ class VugoGame(Scene):
             self.grass_n_rocks.append(gnr)
             gnr.set_strip(strips.vugo.obstacles)
             gnr.set_x(COLS_CENTERS[x] - TILE_WIDTH // 2)
-            gnr.set_y(y * (TILE_HEIGHT-1) + 6)
+            gnr.set_y(y * (TILE_HEIGHT-1) + 4 + randrange(8))
             gnr.set_perspective(1)
-            gnr.set_frame(randrange(4))
+            if y < DAMERO_ROWS // 2:
+                gnr.set_frame(randrange(2) + 2)
+            else:
+                gnr.set_frame(randrange(4))
 
         self.fondos = {}
         for x in range(DAMERO_COLS):
@@ -83,8 +93,16 @@ class VugoGame(Scene):
         self.monchito_pos = self.walking_towards
         self.running = True
 
-    def verificar_colisiones(self):
-        pass
+    def is_monchito_chocado(self):
+        vugo_x = (self.monchito_pos - MONCHITO_DISPLAY_SHIFT + 256) % 256
+        for gnr in self.grass_n_rocks:
+            if 4 < gnr.y() < 16 and gnr.frame() < 2:
+                gnr_x = gnr.x()
+                print(gnr_x, TILE_WIDTH, vugo_x, MONCHITO_WIDTH)
+                if intersects(gnr_x, TILE_WIDTH, vugo_x, MONCHITO_WIDTH):
+                    return True
+
+        return False
 
     def animar_paisaje(self):
         for f in self.fondos.values():
@@ -115,12 +133,6 @@ class VugoGame(Scene):
         # mf = (self.animation_frames // 3) % 6
         # self.mario.set_frame(mf)
 
-        if self.running:
-            self.running_frame += 1
-            pf = (self.running_frame // 4) % 4
-            self.monchito.set_frame(pf)
-            self.animar_paisaje()
-
         if director.was_pressed(director.JOY_RIGHT):
             self.walking_towards = COLS_CENTERS[0]
 
@@ -130,10 +142,21 @@ class VugoGame(Scene):
         if director.was_pressed(director.JOY_LEFT):
             self.walking_towards = COLS_CENTERS[2]
 
+        if self.running:
+            self.running_frame += 1
+            pf = (self.running_frame // 4) % 4
+            self.monchito.set_frame(pf)
+            self.animar_paisaje()
+
         self.monchito_pos = self.monchito_pos - (self.monchito_pos - self.walking_towards) // 4
         self.monchito.set_x(self.monchito_pos - MONCHITO_DISPLAY_SHIFT)
 
-        self.verificar_colisiones()
+
+        if self.is_monchito_chocado():
+            self.running = False
+        else:
+            self.running = True
+            # FIXME
 
         if director.was_pressed(director.BUTTON_D): # or director.timedout:
             self.finished()
