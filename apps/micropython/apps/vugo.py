@@ -19,7 +19,9 @@ TILE_HEIGHT = 16
 MONCHITO_HALFWIDTH = 7
 
 COLS_CENTERS = [int(TILE_WIDTH * (c - DAMERO_COLS/2 + 0.5) ) for c in range(DAMERO_COLS)]
+BUSH_COLS = [45, -105]
 MONCHITO_DISPLAY_SHIFT = int(MONCHITO_HALFWIDTH)
+
 
 class VugoGame(Scene):
 
@@ -30,7 +32,7 @@ class VugoGame(Scene):
         self.monchito.set_strip(strips.vugo.monchito_runs)
         self.monchito.set_frame(0)
         self.monchito.set_perspective(2)
-        self.animation_frames = 0
+        self.running_frame = 0
 
         # self.mario = Sprite()
         # self.mario.set_x(15)
@@ -47,7 +49,7 @@ class VugoGame(Scene):
             self.grass_n_rocks.append(gnr)
             gnr.set_strip(strips.vugo.obstacles)
             gnr.set_x(COLS_CENTERS[x] - TILE_WIDTH // 2)
-            gnr.set_y(y * (TILE_HEIGHT-1))
+            gnr.set_y(y * (TILE_HEIGHT-1) + 6)
             gnr.set_perspective(1)
             gnr.set_frame(randrange(4))
 
@@ -62,21 +64,29 @@ class VugoGame(Scene):
                 sf.set_perspective(1)
                 sf.set_frame(randrange(3))
 
-        # self.fondo = make_me_a_planet(strips.vyruss.tierra)
-        # self.fondo.set_y(255)
-        # self.fondo.set_frame(0)
+        self.bushes = []
+        for y in range(DAMERO_ROWS):
+            for x in range(2):
+                sb = Sprite()
+                self.bushes.append(sb)
+                sb.set_strip(strips.vugo.bushes)
+                sb.set_x(BUSH_COLS[x])
+                sb.set_y(y * (TILE_HEIGHT-1))
+                sb.set_perspective(1)
+                sb.set_frame(x * 2 + randrange(2))
+
+        self.fondo = make_me_a_planet(strips.vugo.bluesky)
+        self.fondo.set_y(255)
+        self.fondo.set_frame(0)
         director.music_play(b"other/piostart")
         self.walking_towards = 0
         self.monchito_pos = self.walking_towards
+        self.running = True
 
-    def step(self):
-        self.animation_frames += 1
-        pf = (self.animation_frames // 4) % 4
-        self.monchito.set_frame(pf)
+    def verificar_colisiones(self):
+        pass
 
-        # mf = (self.animation_frames // 3) % 6
-        # self.mario.set_frame(mf)
-
+    def animar_paisaje(self):
         for f in self.fondos.values():
             fy = f.y()
             if (fy > 0):
@@ -93,6 +103,23 @@ class VugoGame(Scene):
                 gnr.set_x(COLS_CENTERS[randrange(3)] - TILE_WIDTH // 2)
                 gnr.set_frame(randrange(4))
 
+        for bush in self.bushes:
+            by = bush.y()
+            if (by > 0):
+                bush.set_y(by-1)
+            else:
+                bush.set_y(DAMERO_ROWS * (TILE_HEIGHT-1))
+
+    def step(self):
+
+        # mf = (self.animation_frames // 3) % 6
+        # self.mario.set_frame(mf)
+
+        if self.running:
+            self.running_frame += 1
+            pf = (self.running_frame // 4) % 4
+            self.monchito.set_frame(pf)
+            self.animar_paisaje()
 
         if director.was_pressed(director.JOY_RIGHT):
             self.walking_towards = COLS_CENTERS[0]
@@ -105,6 +132,8 @@ class VugoGame(Scene):
 
         self.monchito_pos = self.monchito_pos - (self.monchito_pos - self.walking_towards) // 4
         self.monchito.set_x(self.monchito_pos - MONCHITO_DISPLAY_SHIFT)
+
+        self.verificar_colisiones()
 
         if director.was_pressed(director.BUTTON_D): # or director.timedout:
             self.finished()

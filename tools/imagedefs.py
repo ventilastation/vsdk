@@ -86,6 +86,8 @@ vugo_images = image_group(
         strip("moregrass.png", frames=4, palette=6),
         strip("monchito_runs.png", frames=4, palette=6),
         strip("obstacles.png", frames=4, palette=6),
+        strip("bushes.png", frames=4, palette=6),
+        fullscreen("bluesky.png", palette=6),
     ]
 )
 
