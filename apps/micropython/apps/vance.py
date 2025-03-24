@@ -70,7 +70,7 @@ class VanceGame(Scene):
 
     def on_enter(self):
         director.music_play("vance/505")
-        file = open("../vance_songs/505-S2-HIDDEN.txt", "r")
+        file = open("../vance_songs/505.txt", "r")
         
         self.beats =  []
         for line in file.readlines():

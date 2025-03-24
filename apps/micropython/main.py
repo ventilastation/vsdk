@@ -7,7 +7,6 @@ from ventilastation import sprites
 from ventilastation import menu
 from ventilastation.imagenes import strips
 from apps import gallery
-from apps import vugo
 
 
 def update_over_the_air():
@@ -77,8 +76,12 @@ class GamesMenu(menu.Menu):
             director.push(ventilagon_game.VentilagonGame())
             raise StopIteration()
         if option_pressed[0] == 'vugo':
-            from apps import ventap
+            from apps import vugo
             director.push(vugo.VugoGame())
+            raise StopIteration()
+        if option_pressed[0] == 'vance':
+            from apps import vance
+            director.push(vance.VanceGame())
             raise StopIteration()
 
 
