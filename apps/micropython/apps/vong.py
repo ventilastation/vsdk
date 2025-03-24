@@ -120,6 +120,11 @@ class VongGame(Scene):
             if player1_down and player2_up:
                 self.pelota.dir = 1
 
+        if director.was_pressed(director.BUTTON_D) or director.timedout:
+            director.pop()
+            raise StopIteration()
+
+
     def rebote_y(self, barra):
         if barra == self.player1.sprite:
             diferencia = (barra.y() - self.pelota.sprite.y() + 4) * -1
