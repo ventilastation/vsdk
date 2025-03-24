@@ -49,7 +49,7 @@ class VugoGame(Scene):
         # self.mario.set_perspective(2)
 
         self.grass_n_rocks = []
-        for n in range(15):
+        for n in range(8):
             x = randrange(DAMERO_COLS)
             y = randrange(DAMERO_ROWS)
             gnr = Sprite()
@@ -58,10 +58,9 @@ class VugoGame(Scene):
             gnr.set_x(COLS_CENTERS[x] - TILE_WIDTH // 2)
             gnr.set_y(y * (TILE_HEIGHT-1) + 4 + randrange(8))
             gnr.set_perspective(1)
-            if y < DAMERO_ROWS // 2:
-                gnr.set_frame(randrange(2) + 2)
-            else:
-                gnr.set_frame(randrange(4))
+            if y > DAMERO_ROWS // 2:
+                gnr.set_frame(randrange(2))
+
 
         self.fondos = {}
         for x in range(DAMERO_COLS):
@@ -126,7 +125,7 @@ class VugoGame(Scene):
             else:
                 gnr.set_y(DAMERO_ROWS * (TILE_HEIGHT-1))
                 gnr.set_x(COLS_CENTERS[randrange(3)] - TILE_WIDTH // 2)
-                gnr.set_frame(randrange(4))
+                gnr.set_frame(randrange(2))
 
         for bush in self.bushes:
             by = bush.y()
