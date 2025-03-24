@@ -195,6 +195,15 @@ unused_images = image_group(
     ]
 )
 
+vong_images  = image_group(
+    folder="other",stripes=[
+        strip("barra.png", frames=1),
+        strip("ball.png", frames=1),
+        strip("barra_punto.png", frames=1)
+    ]
+)
+
+
 all_images = {}
 all_images.update(vyruss_images)
 all_images.update(vladfarty_images)
@@ -203,6 +212,7 @@ all_images.update(other_images)
 all_images.update(milalhhl_images)
 all_images.update(vance_images)
 all_images.update(vugo_images)
+all_images.update(vong_images)
 #all_images.update(unused_images)
 
 

@@ -83,6 +83,10 @@ class GamesMenu(menu.Menu):
             from apps import vance
             director.push(vance.VanceGame())
             raise StopIteration()
+        if option_pressed[0] == 'vong':
+            from apps import vong
+            director.push(vong.VongGame())
+            raise StopIteration()
 
 
 
