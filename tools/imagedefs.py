@@ -66,7 +66,7 @@ vladfarty_images = image_group(
 other_images = image_group(
     folder = "other",
     stripes = [
-        strip("menu.png", frames=5),
+        strip("menu.png", frames=8),
         strip("credits.png", frames=32),
         strip("pollitos.png", frames=5, palette=1),
         strip("debug_arxels.png", frames=7),
