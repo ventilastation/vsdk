@@ -165,7 +165,7 @@ milalhhl_images = image_group(
         # fullscreen("chery1.png", palette=12),
         # fullscreen("chery2.png", palette=12),
         # fullscreen("patru1.png", palette=12),
-        fullscreen("patru2.png", palette=12),
+        fullscreen("patru2.png", palette=9),
         # fullscreen("fiat1.png", palette=12),
         #fullscreen("fiat2.png", palette=12),
         #fullscreen("mix1.png", palette=12),
@@ -199,7 +199,7 @@ all_images = {}
 all_images.update(vyruss_images)
 all_images.update(vladfarty_images)
 all_images.update(other_images)
-# all_images.update(laupalav_images)
+#all_images.update(laupalav_images)
 all_images.update(milalhhl_images)
 all_images.update(vance_images)
 all_images.update(vugo_images)
