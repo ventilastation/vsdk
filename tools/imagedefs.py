@@ -31,6 +31,16 @@ vyruss_images = image_group(
     ]
 )
 
+vance_images = image_group(
+    folder = "vance",
+    stripes = [
+        strip("borde_azul.png", frames=2),
+        strip("borde_rojo.png", frames=2),
+        strip("flecha_azul.png", frames=1),
+        strip("flecha_roja.png", frames=1),
+    ]
+)
+
 vladfarty_images = image_group(
     folder = "vladfarty",
     stripes = [
@@ -177,6 +187,7 @@ all_images.update(vladfarty_images)
 all_images.update(other_images)
 all_images.update(laupalav_images)
 all_images.update(milalhhl_images)
+all_images.update(vance_images)
 #all_images.update(unused_images)
 
 
