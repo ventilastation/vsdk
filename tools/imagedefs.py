@@ -12,6 +12,15 @@ def strip(filename, frames=1, palette=0):
 def fullscreen(filename, radius=54, palette=0):
     return filename, dict(frames=1, radius=radius, palette=palette, process="reproject")
 
+
+vong_images  = image_group(
+    folder="other",stripes=[
+        strip("barra.png", frames=1),
+        strip("ball.png", frames=1),
+        strip("barra_punto.png", frames=1)
+    ]
+)
+
 # width, height, frames, palette
 vyruss_images = image_group(
     folder = "vyruss",
@@ -177,6 +186,7 @@ all_images.update(vladfarty_images)
 all_images.update(other_images)
 all_images.update(laupalav_images)
 all_images.update(milalhhl_images)
+all_images.update(vong_images)
 #all_images.update(unused_images)
 
 

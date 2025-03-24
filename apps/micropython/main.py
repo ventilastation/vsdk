@@ -7,6 +7,7 @@ from ventilastation import sprites
 from ventilastation import menu
 from ventilastation.imagenes import strips
 from apps import gallery
+from apps import vong
 
 
 def update_over_the_air():
@@ -27,10 +28,11 @@ class GamesMenu(menu.Menu):
         ('vyruss', strips.other.menu, 0, 64),
         #('bembi', strips.other.pollitos, 0, 64),
         ('gallery', strips.other.pollitos, 0, 64),
-        ('vladfarty', strips.other.menu, 2, 64),
+        #('vladfarty', strips.other.menu, 2, 64),
         #('credits', strips.other.menu, 3, 64),
         #('ventap', strips.other.menu, 4, 64),
         ('ventilagon', strips.other.menu, 1, 64),
+        ('vong', strips.other.menu, 4, 64)
     ]
 
     def on_enter(self):
@@ -72,6 +74,9 @@ class GamesMenu(menu.Menu):
             from apps import ventilagon_game
             director.push(ventilagon_game.VentilagonGame())
             raise StopIteration()
+        if option_pressed[0] == 'vong':
+            from apps import vong
+            director.push(vong.VongGame())
 
     def check_debugmode(self):
         if (director.is_pressed(director.JOY_UP)
@@ -111,7 +116,7 @@ def main():
     for n, strip in enumerate(imagenes.all_strips):
         sprites.set_imagestrip(n, strip)
     director.push(GamesMenu())
-    director.push(gallery.Gallery())
+    director.push(vong.VongGame())
     director.run()
 
 if __name__ == '__main__':
