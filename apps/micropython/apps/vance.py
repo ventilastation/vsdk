@@ -14,7 +14,7 @@ class ScoreBoard:
         for n in range(9):
             s = Sprite()
             s.set_strip(strips.vyruss.numerals)
-            s.set_x(110 + n * 4)
+            s.set_x(120 + n * 4)
             s.set_y(0)
             s.set_frame(10)
             s.set_perspective(2)
@@ -49,11 +49,25 @@ class Arrow(Sprite):
         self.set_y(255)
         self.set_frame(6)
         self.disable()
+        self.end_time = 0
 
 def get_first_free_arrow(arrows, direction):
     for arrow in arrows:
         if arrow.direction == direction and arrow.is_disabled:
             return arrow
+
+class ScoreLabel(Sprite):
+    
+    def __init__(self, direction):
+        super().__init__()
+
+        self.set_x(64*(direction)+18)
+        self.set_y(0)
+        self.set_perspective(2)
+        self.set_frame(1)
+        self.disable()
+        self.set_strip(strips.vance.scores)
+        self.end_time = 0
 
 
 class VanceGame(Scene):
@@ -80,6 +94,8 @@ class VanceGame(Scene):
                 self.bpms = float(line.split("=")[-1].replace("\n", ""))
             elif "OFFSET" in line:
                 self.offset = float(line.split("=")[-1].replace("\n", ""))
+            elif "LENGTH" in line:
+                self.length = float(line.split("=")[-1].replace("\n", ""))
             else:
                 self.beats.append(line.replace("\n", ""))
                 
@@ -92,6 +108,8 @@ class VanceGame(Scene):
         self.bars[1].set_strip(strips.vance.borde_rojo)
         self.bars[2].set_strip(strips.vance.borde_rojo)
         self.bars[3].set_strip(strips.vance.borde_azul)
+
+        self.score_labels = [ScoreLabel(direction) for direction in range(4)]
 
         for i, bar in enumerate(self.bars):
             bar.set_y(5)
@@ -107,14 +125,24 @@ class VanceGame(Scene):
                 self.arrows.append(new_arrow)
 
         self.start_time = utime.ticks_ms()
-        self.time_per_beat = 60 / self.bpms
+        self.time_per_beat = 1#(self.bpms / 178)
         self.last_beat_time = 0
         self.beat_counter = 0
 
     def step(self):
-        actual_time = utime.ticks_diff(utime.ticks_ms(),self.start_time) / 1000 # should be in secs.
 
-        if self.beat_counter < len(self.beats):
+        actual_time = utime.ticks_diff(utime.ticks_ms(),self.start_time) / 1000 # should be in secs.
+        
+        for arrow in self.arrows:
+            if arrow.end_time < actual_time:
+                arrow.disable()
+                arrow.is_disabled = True
+
+        for score_label in self.score_labels:
+            if score_label.end_time < actual_time:
+                score_label.disable()
+
+        if self.beat_counter < len(self.beats) :
             if actual_time >= self.last_beat_time + self.time_per_beat:
 
                 beat = self.beats[self.beat_counter]
@@ -124,13 +152,16 @@ class VanceGame(Scene):
                     if int(tile) > 0 and j != 2:
                         direction = j if j < 2 else j - 1
                         new_arrow = get_first_free_arrow(self.arrows, direction)
-                        new_arrow.is_disabled = False
-                        new_arrow.set_frame(0)
-                        new_arrow.set_y(0)
-                        self.last_beat_time = actual_time
+                        if new_arrow:
+                            new_arrow.is_disabled = False
+                            new_arrow.set_frame(0)
+                            new_arrow.set_y(0)
+                            new_arrow.end_time = 9999999
+                            self.last_beat_time = actual_time
 
         for arrow in self.arrows:
-            arrow.set_y(arrow.y() - 2)
+            if not arrow.is_disabled:
+                arrow.set_y(arrow.y() - 2)
 
         for i, arrow in enumerate(self.arrows):
             if director.is_pressed(arrow.button):
@@ -138,19 +169,39 @@ class VanceGame(Scene):
             else:
                 arrow.bar.set_frame(1)
 
-            if arrow.y() < 1:
-                arrow.disable()
-                arrow.is_disabled = True
+            if arrow.y() < 1 and not arrow.is_disabled:
 
-            if arrow.y() < 30 and director.was_pressed(arrow.button):
-                self.score += 1
+                arrow.end_time = actual_time
+
+                self.score_labels[arrow.direction].set_frame(0)
+                self.score_labels[arrow.direction].end_time = actual_time + 0.75
+
+
+
+
+            if director.was_pressed(arrow.button) and not arrow.is_disabled and arrow.y() in range(8, 26): 
+
+                if arrow.y() in range(14, 18):
+                    self.score += 3
+                    self.score_labels[arrow.direction].set_frame(2)
+
+                elif arrow.y() in range(8, 26):
+                    self.score += 1
+                    self.score_labels[arrow.direction].set_frame(1)
+
+                self.score_labels[arrow.direction].end_time = actual_time + 1
                 self.scoreboard.setscore(self.score)
-                arrow.disable()
 
-        if director.was_pressed(director.BUTTON_D):
+                arrow.end_time = actual_time + 0.1
+
+                arrow.set_frame(1)
+                
+
+        if director.was_pressed(director.BUTTON_D) or actual_time > self.length + 2:
             self.finished()
 
         self.step_counter +=1
+
 
 
     def finished(self):

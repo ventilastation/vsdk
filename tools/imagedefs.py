@@ -31,16 +31,6 @@ vyruss_images = image_group(
     ]
 )
 
-vance_images = image_group(
-    folder = "vance",
-    stripes = [
-        strip("borde_azul.png", frames=2),
-        strip("borde_rojo.png", frames=2),
-        strip("flecha_azul.png", frames=1),
-        strip("flecha_roja.png", frames=1),
-    ]
-)
-
 vladfarty_images = image_group(
     folder = "vladfarty",
     stripes = [
@@ -95,7 +85,7 @@ vugo_images = image_group(
     stripes = [
         strip("moregrass.png", frames=4, palette=6),
         strip("monchito_runs.png", frames=4, palette=6),
-        strip("obstacles.png", frames=2, palette=6),
+        strip("obstacles.png", frames=4, palette=6),
         strip("bushes.png", frames=4, palette=6),
         strip("nube8bit.png", frames=1, palette=6),
         fullscreen("bluesky.png", palette=6),
@@ -159,6 +149,17 @@ laupalav_images = image_group(
     ]
 )
 
+vance_images = image_group(
+    folder = "vance",
+    stripes = [
+        strip("borde_azul.png", frames=2),
+        strip("borde_rojo.png", frames=2),
+        strip("flecha_azul.png", frames=2),
+        strip("flecha_roja.png", frames=2),
+        strip("scores.png", frames=3)
+    ]
+)
+
 milalhhl_images = image_group(
     folder = "milalhhl",
     stripes = [
@@ -210,8 +211,8 @@ all_images.update(vladfarty_images)
 all_images.update(other_images)
 #all_images.update(laupalav_images)
 all_images.update(milalhhl_images)
-all_images.update(vance_images)
 all_images.update(vugo_images)
+all_images.update(vance_images)
 all_images.update(vong_images)
 #all_images.update(unused_images)
 
