@@ -66,7 +66,7 @@ vladfarty_images = image_group(
 other_images = image_group(
     folder = "other",
     stripes = [
-        strip("menu.png", frames=5),
+        strip("menu.png", frames=8),
         strip("credits.png", frames=32),
         strip("pollitos.png", frames=5, palette=1),
         strip("debug_arxels.png", frames=7),
@@ -74,7 +74,21 @@ other_images = image_group(
         fullscreen("ventilastation.png"),
         fullscreen("doom.png", palette=8),
         fullscreen("sves.png"),
-        fullscreen("bembi.png", palette=1)
+        fullscreen("bembi.png", palette=1),
+        fullscreen("pyformances_n0.png", palette=0),
+        fullscreen("pyformances_py.png", palette=0),
+    ]
+)
+
+vugo_images = image_group(
+    folder = "vugo",
+    stripes = [
+        strip("moregrass.png", frames=4, palette=6),
+        strip("monchito_runs.png", frames=4, palette=6),
+        strip("obstacles.png", frames=4, palette=6),
+        strip("bushes.png", frames=4, palette=6),
+        strip("nube8bit.png", frames=1, palette=6),
+        fullscreen("bluesky.png", palette=6),
     ]
 )
 
@@ -135,14 +149,25 @@ laupalav_images = image_group(
     ]
 )
 
+vance_images = image_group(
+    folder = "vance",
+    stripes = [
+        strip("borde_azul.png", frames=2),
+        strip("borde_rojo.png", frames=2),
+        strip("flecha_azul.png", frames=2),
+        strip("flecha_roja.png", frames=2),
+        strip("scores.png", frames=3)
+    ]
+)
+
 milalhhl_images = image_group(
     folder = "milalhhl",
     stripes = [
         # fullscreen("chery1.png", palette=12),
         # fullscreen("chery2.png", palette=12),
-        fullscreen("patru1.png", palette=12),
-        fullscreen("patru2.png", palette=12),
-        fullscreen("fiat1.png", palette=12),
+        # fullscreen("patru1.png", palette=12),
+        fullscreen("patru2.png", palette=9),
+        # fullscreen("fiat1.png", palette=12),
         #fullscreen("fiat2.png", palette=12),
         #fullscreen("mix1.png", palette=12),
         #fullscreen("peugeot1.png", palette=12),
@@ -171,12 +196,24 @@ unused_images = image_group(
     ]
 )
 
+vong_images  = image_group(
+    folder="other",stripes=[
+        strip("barra.png", frames=1),
+        strip("ball.png", frames=1),
+        strip("barra_punto.png", frames=1)
+    ]
+)
+
+
 all_images = {}
 all_images.update(vyruss_images)
 all_images.update(vladfarty_images)
 all_images.update(other_images)
-all_images.update(laupalav_images)
+#all_images.update(laupalav_images)
 all_images.update(milalhhl_images)
+all_images.update(vugo_images)
+all_images.update(vance_images)
+all_images.update(vong_images)
 #all_images.update(unused_images)
 
 

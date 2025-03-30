@@ -43,7 +43,7 @@ class Ventap(Scene):
         self.nubareda.reiniciar()
 
     def step(self):
-        self.bola.set_x(self.bola.x() + 3)
+        self.bola.set_x(self.bola.x() + 5)
 
         if director.was_pressed(director.BUTTON_A):
             nub_x = self.nubareda.x
