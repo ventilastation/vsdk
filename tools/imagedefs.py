@@ -140,12 +140,12 @@ laupalav_images = image_group(
         fullscreen("frenteB13.png", palette=9),
         fullscreen("frenteC14.png", palette=9),
         fullscreen("frenteD15.png", palette=9),
-        fullscreen("rose01.png", palette=11),
-        fullscreen("rose02.png", palette=11),
-        fullscreen("rose03.png", palette=11),
-        fullscreen("rose04.png", palette=11),
-        fullscreen("rose05.png", palette=11),
-        fullscreen("rose06.png", palette=11),
+        # fullscreen("rose01.png", palette=11),
+        # fullscreen("rose02.png", palette=11),
+        # fullscreen("rose03.png", palette=11),
+        # fullscreen("rose04.png", palette=11),
+        # fullscreen("rose05.png", palette=11),
+        # fullscreen("rose06.png", palette=11),
     ]
 )
 
@@ -209,7 +209,7 @@ all_images = {}
 all_images.update(vyruss_images)
 all_images.update(vladfarty_images)
 all_images.update(other_images)
-#all_images.update(laupalav_images)
+all_images.update(laupalav_images)
 all_images.update(milalhhl_images)
 all_images.update(vugo_images)
 all_images.update(vance_images)

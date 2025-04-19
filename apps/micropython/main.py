@@ -24,25 +24,25 @@ def make_me_a_planet(strip):
 
 class GamesMenu(menu.Menu):
     OPTIONS = [
-        # ('vyruss', strips.other.menu, 0, 64),
-        ('vance', strips.other.menu, 5, 64),
+        ('vyruss', strips.other.menu, 0, 64),
+        #('bembi', strips.other.pollitos, 0, 64),
         ('gallery', strips.other.pollitos, 0, 64),
+        ('vance', strips.other.menu, 5, 64),
         ('vong', strips.other.menu, 6, 64),
         ('vugo', strips.other.menu, 7, 64),
-        #('bembi', strips.other.pollitos, 0, 64),
-        #('vladfarty', strips.other.menu, 2, 64),
-        #('credits', strips.other.menu, 3, 64),
-        # ('ventap', strips.other.menu, 4, 64),
-        #('ventilagon', strips.other.menu, 1, 64),
+        ('vladfarty', strips.other.menu, 2, 64),
+        ('credits', strips.other.menu, 3, 64),
+        ('ventap', strips.other.menu, 4, 64),
+        ('ventilagon', strips.other.menu, 1, 64),
     ]
 
     def on_enter(self):
-        self.boot_screen = make_me_a_planet(strips.other.ventilastation)
         super(GamesMenu, self).on_enter()
         self.animation_frames = 0
         self.pollitos = self.sprites[1]
-        self.boot_screen.set_frame(0)
-        self.call_later(1500, self.boot_screen.disable)
+        # self.boot_screen = make_me_a_planet(strips.other.ventilastation)
+        # self.boot_screen.set_frame(0)
+        # self.call_later(1500, self.boot_screen.disable)
 
 
     def on_option_pressed(self, option_index):

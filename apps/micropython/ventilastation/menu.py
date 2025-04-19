@@ -14,29 +14,28 @@ class Menu(Scene):
 
     def on_enter(self):
         self.sprites = []
-        accumulated_width = 0
-        for option_id, strip_id, frame, width in self.options:
+        self.y_step = 180 // len(self.options)
+        for n, (option_id, strip_id, frame, width) in enumerate(self.options):
             sprite = Sprite()
-            sprite.set_x(256 - 32 + accumulated_width)
-            sprite.set_y(0)
-            sprite.set_perspective(2)
+            sprite.set_x(-32)
+            sprite.set_y(int(n * self.y_step))
+            sprite.set_perspective(1)
             sprite.set_strip(strip_id)
             sprite.set_frame(frame)
-            accumulated_width += sprite.width()
 
             self.sprites.append(sprite)
 
     def step(self):
-        if director.was_pressed(director.JOY_RIGHT):
+        if director.was_pressed(director.JOY_DOWN):
             director.sound_play(b'vyruss/shoot3')
             self.selected_index -= 1
             if self.selected_index == -1:
-                self.selected_index = len(self.options) - 1
-        if director.was_pressed(director.JOY_LEFT):
+                self.selected_index = 0
+        if director.was_pressed(director.JOY_UP):
             director.sound_play(b'vyruss/shoot3')
             self.selected_index += 1
             if self.selected_index > len(self.options) - 1:
-                self.selected_index = 0
+                self.selected_index = len(self.options) - 1
         if director.was_pressed(director.BUTTON_A):
             director.sound_play(b'vyruss/shoot1')
             try:
@@ -46,18 +45,19 @@ class Menu(Scene):
             except Exception as e:
                 sys.print_exception(e)
 
-        # option[3] has the width
-        offset = sum([option[3]
-                      for option_index, option in enumerate(self.options)
-                      if option_index < self.selected_index])
-        offset += int(self.options[self.selected_index][3] / 2)
-
-        start_x = 0
-        accumulated_width = 0
-        for option_index, sprite in enumerate(self.sprites):
-            sprite.set_x(start_x + accumulated_width - offset)
-            sprite.set_y(0)
-            accumulated_width += self.options[option_index][3]  # option width
+        for n, sprite in enumerate(self.sprites):
+            #sprite.set_x(start_x + accumulated_width - offset)
+            if n == self.selected_index:
+                sprite.set_y(0)
+                sprite.set_perspective(2)
+            else:
+                curr_y = sprite.y()
+                dest_y = int((n - self.selected_index) * self.y_step + 16) % 256
+                y = curr_y - (curr_y - dest_y) // 4
+                sprite.set_y(y)
+                sprite.set_perspective(1)
+            
+            #accumulated_width += self.options[option_index][3]  # option width
 
     def on_option_pressed(self, option_index):
         print('pressed:', option_index)
