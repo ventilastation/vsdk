@@ -3,57 +3,62 @@ import os
 import signal
 import time
 
-from gmqtt import Client as MQTTClient
-
 import config
-import http.client
-import urllib.parse
 import struct
 import socket
 import threading
 from pygletengine import imagenes, palette, spritedata, playsound, playmusic
 
-sock = None
-sockfile = None
-#sock.setblocking(False)
+class ConnectionBase:
+    def __init__(self):
+        self.sock = None
+        self.sockfile = None
+        
+    def read(self, *args, **kwargs):
+        return self.sockfile.read(*args, **kwargs)
 
-STOP = None
+    def readline(self):
+        return self.sockfile.readline()
+    
+    def close(self):
+        if self.sock:
+            self.sock.close()
+
+class ConnIP(ConnectionBase):
+    def setup(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((config.SERVER_IP, config.SERVER_PORT))
+        self.sockfile = self.sock.makefile(mode="rb")
+    
+    def send(self, b):
+        if self.sock:
+            self.sock.send(b)            
+
+class ConnSerial(ConnectionBase):
+    def setup(self):
+        import serial
+        device = [f for f in os.listdir("/dev/") if f.startswith(config.SERIAL_DEVICE)][0]
+        self.sock = self.sockfile = serial.Serial("/dev/" + device, 115200)
+
+    def send(self, b):
+        if self.sockfile:
+            self.sockfile.write(b)
+
+class ConnWinNamedPipe(ConnectionBase):
+    pass
+
 looping = True
-mqtt_client = None
 
-influx_host = "ventilastation.local:8086"
-influx_url = "/write?" + urllib.parse.urlencode({'db': "ventilastation", 'precision': 'ns'})
-
-def send_telemetry(body):
-    conn = http.client.HTTPConnection(influx_host)
-    conn.request("POST", influx_url, body=body, headers={})
-    response = conn.getresponse()
-    if int(response.status) // 100 != 2:
-        print("Sending failed: %s, %s: %s" % ( response.status,
-        response.reason, body))
-
-def send_velocidad(rpm, fps):
-    body = "velocidad rpm=%f,fps=%f\n" % (rpm, fps)
-    send_telemetry(body)
-    if mqtt_client:
-        try:
-            mqtt_client.publish('fan_speed', "rpm=%d" % rpm)
-        except Exception as err:
-            print("cannot publish in mqtt:", err)
+if config.USE_IP:
+    conn = ConnIP()
+else:
+    conn = ConnSerial()
 
 def waitconnect():
     print("conectando...")
     while looping:
         try:
-            global sock, sockfile
-            if config.USE_IP:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.connect((config.SERVER_IP, config.SERVER_PORT))
-                sockfile = sock.makefile(mode="rb")
-            else:
-                import serial
-                device = [f for f in os.listdir("/dev/") if f.startswith(config.SERIAL_DEVICE)][0]
-                sock = sockfile = serial.Serial("/dev/" + device, 115200)
+            conn.setup()
             return
         except socket.error as err:
             print(err)
@@ -67,7 +72,7 @@ def receive_loop():
     waitconnect()
     while looping:
         try:
-            l = sockfile.readline()
+            l = conn.readline()
 
             l = l.strip()
             if not l:
@@ -76,10 +81,10 @@ def receive_loop():
             command, *args = l.split()
 
             if command == b"sprites":
-                spritedata[:] = sockfile.read(5*100)
+                spritedata[:] = conn.read(5*100)
 
             if command == b"pal":
-                palette[:] = sockfile.read(1024)
+                palette[:] = conn.read(1024)
 
             if command == b"sound":
                 playsound(b" ".join(args))
@@ -95,11 +100,11 @@ def receive_loop():
 
             if command == b"imagestrip":
                 length, slot = args
-                imagenes.all_strips[int(slot.decode())] = sockfile.read(int(length))
+                imagenes.all_strips[int(slot.decode())] = conn.read(int(length))
 
             if command == b"debug":
                 length = 32 * 16
-                data = sockfile.read(length)
+                data = conn.read(length)
 
                 readings = []
                 for now, duration in struct.iter_unpack("qq", data):
@@ -116,7 +121,7 @@ def receive_loop():
                     avg_rpm = sum(readings) / len(readings)
                     avg_fps = avg_rpm / 30
                     print("average %.2f rpm %.2f fps" % (avg_rpm, avg_fps))
-                    send_velocidad(avg_rpm, avg_fps)
+                    #send_velocidad(avg_rpm, avg_fps)
                 #print(struct.unpack("q"*32*2, data))
 
 
@@ -126,16 +131,14 @@ def receive_loop():
 
         except Exception as err:
             print(err)
-            if sock:
-                sock.close()
+            conn.close()
             waitconnect()
 
 
 def shutdown():
     global looping
     looping = False
-    if sock:
-        sock.close()
+    conn.close()
 
 receive_thread = threading.Thread(target=receive_loop)
 receive_thread.daemon = True
@@ -143,102 +146,10 @@ receive_thread.start()
 
 def send(b):
     try:
-        if config.USE_IP:
-            if sock:
-                sock.send(b)
-        else:
-            if sockfile:
-                sockfile.write(b)
+        conn.send(b)
     except socket.error as err:
         print(err)
 
-def on_connect(client, flags, rc, properties):
-    global mqtt_client
-    mqtt_client = client
-    print('Connected')
-    client.subscribe('fan_debug', qos=0)
-    client.subscribe('sound_play', qos=0)
-    client.subscribe('music_play', qos=0)
-    client.subscribe('temperatura', qos=0)
-    client.subscribe('joystick_leds', qos=0)
-    client.subscribe('start_fan', qos=0)
-    client.subscribe('stop_fan', qos=0)
-
-last_time_seen = 0
-
-def on_message(client, topic, payload, qos, properties):
-    global last_time_seen
-
-    if topic == "sprites":
-        assert len(payload) == 256
-        spritedata[:] = payload
-
-    if topic == "pal":
-        assert len(payload) == 1024
-        palette[:] = payload
-
-    if topic == "imagestrip":
-        imagenes.all_strips[int(slot.decode())] = payload
-
-    if topic == "audio_play":
-        #playsound(payload)
-        pass
-
-    if topic == "fan_debug":
-        print(topic, payload)
-        rpm = -1
-        for now, duration in struct.iter_unpack("qq", payload):
-            if now > last_time_seen:
-                last_time_seen = now
-                rpm, fps = 1000000 / duration * 60, (1000000/duration)*2
-                print(now, duration, "(%.2f rpm, %.2f fps)" % (rpm, fps))
-                send_velocidad(rpm, fps)
-        if rpm == -1:
-            last_time_seen = 0
-            rpm = 0
-        print('fan_speed', "rpm=%d" % rpm)
-        client.publish('fan_speed', "rpm=%d" % rpm)
-
-    if topic == "temperatura":
-        send_telemetry("%s %s" % (topic, payload.decode().strip()))
-        print(payload)
-
-def on_subscribe(client, mid, qos):
-    print('SUBSCRIBED to', mid)
-
-def on_disconnect(client, packet, exc=None):
-    global mqtt_client
-    mqtt_client = None
-    print('Disconnected')
-
-async def main():
-    global STOP
-    STOP = asyncio.Event()
-
-    client = MQTTClient("raspi-eventos")
-    client.on_connect = on_connect
-    client.on_message = on_message
-    client.on_disconnect = on_disconnect
-    client.on_subscribe = on_subscribe
-
-    await client.connect("ventilastation.local")
-    await STOP.wait()
-
-def mqtt_loop():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(main())
-
-def shutdown():
-    #STOP.set()
-    global looping
-    looping = False
-    if sock:
-        sock.close()
-
-#mqtt_thread = threading.Thread(target=mqtt_loop)
-#mqtt_thread.daemon = True
-#mqtt_thread.start()
 
 try:
     import serial
