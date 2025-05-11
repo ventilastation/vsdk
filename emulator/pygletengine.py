@@ -293,12 +293,21 @@ class PygletEngine():
             while sound_queue:
                 command, name = sound_queue.pop()
                 if command == "sound":
-                    sounds[name].play()
+                    s = sounds.get(name)
+                    if s:
+                        s.play()
+                    else:
+                        print("WARNING: sound not found", name)
                 elif command == "music":
                     if self.music_player:
                         self.music_player.pause()
                     if name != b"off":
-                        self.music_player = sounds[name].play()
+
+                        s = sounds.get(name)
+                        if s:
+                            self.music_player = s.play()
+                        else:
+                            print("WARNING: music not found", name)
             return
             "FIXME"
             for n in range(6):

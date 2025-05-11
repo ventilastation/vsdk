@@ -1,4 +1,4 @@
-from ventilastation import comms
+from ventilastation.director import comms
 import uctypes
 from urandom import randrange
 
