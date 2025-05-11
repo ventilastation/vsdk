@@ -1,7 +1,6 @@
+import platform
 import config
 import pyglet
-# Force using OpenAL since pulse crashes
-pyglet.options['audio'] = ('openal', 'silent')
 import math
 import random
 import os
@@ -11,8 +10,9 @@ from pyglet.window import key
 from struct import pack, unpack
 from deepspace import deepspace
 
-
-
+if platform.system() != "Windows":
+    # Force using OpenAL since pulse crashes
+    pyglet.options['audio'] = ('openal', 'silent')
 
 # preload all sounds
 sounds = {}
@@ -23,10 +23,9 @@ for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
     for fn in files:
         if fn.endswith(".mp3"):
             fullname = os.path.join(dirpath, fn)
-            fn = fullname[len(SOUNDS_FOLDER)+1:-4]
+            fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
             sounds[bytes(fn, "latin1")] = pyglet.media.load(fullname, streaming=False)
             print(fn)
-
 
 sound_queue = []
 def playsound(name):
