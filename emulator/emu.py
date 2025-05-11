@@ -13,7 +13,7 @@ led_count = 54
 display = False if "--no-display" in sys.argv else True
 
 UPY_ROOT = "../apps/micropython"
-UPY_EXEC = "z:/micropython.exe" if platform.system() == "Windows" else "micropython"
+UPY_EXEC = "micropython.exe" if platform.system() == "Windows" else "micropython"
 
 try:
     if display:
