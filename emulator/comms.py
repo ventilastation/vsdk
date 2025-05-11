@@ -1,7 +1,9 @@
 import asyncio
 import os
+import platform
 import signal
 import time
+import traceback
 
 import config
 import struct
@@ -45,17 +47,66 @@ class ConnSerial(ConnectionBase):
             self.sockfile.write(b)
 
 class ConnWinNamedPipe(ConnectionBase):
-    pass
+    alreadysetup = False
+    def setup(self):
+        if self.alreadysetup:
+            return
+        import win32pipe
+
+        self.pipe = win32pipe.CreateNamedPipe(
+            r'\\.\pipe\ventilastation-emu', 
+            win32pipe.PIPE_ACCESS_DUPLEX, 
+            win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT, 
+            1, 65536 * 8, 65536 * 8, 0, None
+        )
+
+        self.buffer = b""
+        self.alreadysetup = True
+
+    def send(self, b):
+        import win32file
+        win32file.WriteFile(self.pipe, b)
+
+    def read(self, numbytes):
+        import win32file
+        while len(self.buffer) < numbytes:
+            result, data = win32file.ReadFile(self.pipe, 65536, None)
+            self.buffer += data
+        ret, self.buffer = self.buffer[:numbytes], self.buffer[numbytes:]
+        return ret
+
+    def readline(self):
+        import win32file
+        while b"\n" not in self.buffer:
+            result, data = win32file.ReadFile(self.pipe, 65536, None)
+            # print("readfile", result, repr(data))
+            if not data:
+                break
+            self.buffer += data
+        try:
+            if b"\n" in self.buffer:
+                ret, self.buffer = self.buffer.split(b"\n", 1)
+                # print("RECEIVED LINE:", ret)
+                return ret
+            else:
+                # print("NO NEWLINE, BUFFER WAS:", self.buffer)
+                return b""
+        except:
+            print(traceback.format_exc())
+            print("BUFFER WAS:", self.buffer)
+            raise
 
 looping = True
 
-if config.USE_IP:
+if platform.system() == "Windows":
+    conn = ConnWinNamedPipe()
+elif config.USE_IP:
     conn = ConnIP()
 else:
     conn = ConnSerial()
 
 def waitconnect():
-    print("conectando...")
+    # print("conectando...")
     while looping:
         try:
             conn.setup()
@@ -73,7 +124,7 @@ def receive_loop():
     while looping:
         try:
             l = conn.readline()
-
+            # print("EMU GOT:", repr(l))
             l = l.strip()
             if not l:
                 continue
@@ -99,8 +150,11 @@ def receive_loop():
                 playmusic("off")
 
             if command == b"imagestrip":
-                length, slot = args
-                imagenes.all_strips[int(slot.decode())] = conn.read(int(length))
+                slot, length = args
+                # print("RECEIVING IMAGESTRIP", command, slot, length)
+                slot_number = int(slot.decode())
+                # print("decoded es:", slot_number)
+                imagenes.all_strips[slot_number] = conn.read(int(length))
 
             if command == b"debug":
                 length = 32 * 16
@@ -130,7 +184,7 @@ def receive_loop():
             waitconnect()
 
         except Exception as err:
-            print(err)
+            print(traceback.format_exc())
             conn.close()
             waitconnect()
 
@@ -168,7 +222,7 @@ try:
         arduino.write(arduino_commands.get(command, b" "))
 
 except Exception as e:
-    print(e)
+    print("NOTE: Super Ventilagon base - Arduino not detected")
 
     def arduino_send(_):
         pass

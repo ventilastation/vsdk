@@ -1,9 +1,13 @@
 import utime
 
 try:
-    from ventilastation import serialcomms as comms
-except Exception:
-    from ventilastation import comms
+    from ventilastation import wincomms as comms
+except Exception as e:
+    print(e)
+    try:
+        from ventilastation import serialcomms as comms
+    except Exception:
+        from ventilastation import comms
 from ventilastation import sprites
 import gc
 
