@@ -4,11 +4,6 @@ except ImportError:
     from ventilastation import fake_ventilagon as ventilagon
 from ventilastation.director import director
 from ventilastation.scene import Scene
-try:
-    import ventilastation.serialcomms as comms
-except Exception:
-    import ventilastation.comms
-
 
 class VentilagonGame(Scene):
     def on_enter(self):
@@ -18,7 +13,7 @@ class VentilagonGame(Scene):
     def sending_loop(self):
         sending = ventilagon.sending()
         while sending:
-            comms.send(sending)
+            director.comms.send(sending)
             sending = ventilagon.sending()
 
     def on_exit(self):
