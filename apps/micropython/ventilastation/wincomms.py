@@ -1,5 +1,5 @@
 from os import set_blocking
-import sys
+import sys, utime
 
 pipe=open(r'\\.\pipe\ventilastation-emu', "b+")
 set_blocking(pipe.fileno(), False)
@@ -12,16 +12,11 @@ def receive(bufsize):
     except:
         return ""
 
-counter = 0
-
 def send(line, data=b""):
-    global counter
-    try:
-        pipe.write(line + "\n")
-        if data:
-            pipe.write(data)
-        # print("SENT", line, "+", len(data), "bytes")
-        counter += 1
-    except Exception as e:
-        print("COUNTER, ERROR, line, datalen", counter, e, line, len(data))
-        sys.print_exception(e)
+    while True:
+        try:
+            pipe.write(line + "\n" + data)
+            return
+        except Exception as e:
+            print("Buffer full, retrying", line, len(data))
+            utime.sleep_ms(10)
