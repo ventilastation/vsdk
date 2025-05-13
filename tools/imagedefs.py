@@ -140,12 +140,12 @@ laupalav_images = image_group(
         fullscreen("frenteB13.png", palette=9),
         fullscreen("frenteC14.png", palette=9),
         fullscreen("frenteD15.png", palette=9),
-        # fullscreen("rose01.png", palette=11),
-        # fullscreen("rose02.png", palette=11),
-        # fullscreen("rose03.png", palette=11),
-        # fullscreen("rose04.png", palette=11),
-        # fullscreen("rose05.png", palette=11),
-        # fullscreen("rose06.png", palette=11),
+        fullscreen("rose01.png", palette=11),
+        fullscreen("rose02.png", palette=11),
+        fullscreen("rose03.png", palette=11),
+        fullscreen("rose04.png", palette=11),
+        fullscreen("rose05.png", palette=11),
+        fullscreen("rose06.png", palette=11),
     ]
 )
 
