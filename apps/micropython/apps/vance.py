@@ -83,21 +83,20 @@ class VanceGame(Scene):
     }
 
     def on_enter(self):
-        director.music_play("vance/505")
         file = open("apps/vance_songs/505.txt", "r")
         
         self.beats =  []
         for line in file.readlines():
             if "SONG_NAME" in line:
-                self.song_name = line.split("=")[-1].replace("\n", "")
+                self.song_name = line.split("=")[-1].strip()
             elif "BPMS" in line:
-                self.bpms = float(line.split("=")[-1].replace("\n", ""))
+                self.bpms = float(line.split("=")[-1].strip())
             elif "OFFSET" in line:
-                self.offset = float(line.split("=")[-1].replace("\n", ""))
+                self.offset = float(line.split("=")[-1].strip())
             elif "LENGTH" in line:
-                self.length = float(line.split("=")[-1].replace("\n", ""))
+                self.length = float(line.split("=")[-1].strip())
             else:
-                self.beats.append(line.replace("\n", ""))
+                self.beats.append(line.strip())
                 
 
         self.scoreboard = ScoreBoard()
@@ -124,6 +123,7 @@ class VanceGame(Scene):
                 new_arrow = Arrow(self.buttons[direction], direction, self.bars[direction])
                 self.arrows.append(new_arrow)
 
+        director.music_play("vance/505")
         self.start_time = utime.ticks_ms()
         self.time_per_beat = 1#(self.bpms / 178)
         self.last_beat_time = 0

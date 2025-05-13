@@ -70,7 +70,10 @@ class ConnWinNamedPipe(ConnectionBase):
     def read(self, numbytes):
         import win32file
         while len(self.buffer) < numbytes:
-            result, data = win32file.ReadFile(self.pipe, 65536, None)
+            try:
+                result, data = win32file.ReadFile(self.pipe, 65536, None)
+            except:
+                data = b""
             self.buffer += data
         ret, self.buffer = self.buffer[:numbytes], self.buffer[numbytes:]
         return ret
@@ -78,7 +81,10 @@ class ConnWinNamedPipe(ConnectionBase):
     def readline(self):
         import win32file
         while b"\n" not in self.buffer:
-            result, data = win32file.ReadFile(self.pipe, 65536, None)
+            try:
+                result, data = win32file.ReadFile(self.pipe, 65536, None)
+            except:
+                data = b""
             # print("readfile", result, repr(data))
             if not data:
                 break
