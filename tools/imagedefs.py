@@ -77,6 +77,7 @@ other_images = image_group(
         fullscreen("bembi.png", palette=1),
         fullscreen("pyformances_n0.png", palette=0),
         fullscreen("pyformances_py.png", palette=0),
+        fullscreen("menatwork.png", radius=40),
     ]
 )
 
@@ -192,7 +193,6 @@ unused_images = image_group(
         strip("crawling.png"),
 
         fullscreen("yourgame.png"),
-        fullscreen("menatwork.png", radius=40),
     ]
 )
 
