@@ -224,7 +224,7 @@ try:
     }
 
     def arduino_send(command):
-        print("arduino, sending", command)
+        # print("arduino, sending", command)
         arduino.write(arduino_commands.get(command, b" "))
 
 except Exception as e:

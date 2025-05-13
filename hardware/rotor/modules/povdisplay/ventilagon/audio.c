@@ -41,8 +41,8 @@ ventilagono.wav
 
 void serial_send(const char* text) {
   xQueueSend(queue_sending, &text, 0);
-  printf("serial sending... (%p) ", text);
-  printf("%s\n", text);
+  // printf("serial sending... (%p) ", text);
+  // printf("%s\n", text);
 }
 
 void audio_play(const char* command) {

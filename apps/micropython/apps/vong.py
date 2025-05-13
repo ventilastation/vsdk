@@ -92,7 +92,7 @@ class VongGame(Scene):
                 self.puntos[0] += 1
             else:
                 self.puntos[1] += 1         
-            print(self.puntos)       
+            # print(self.puntos)       
             
 
     def process_input(self):
@@ -130,7 +130,7 @@ class VongGame(Scene):
             diferencia = (barra.y() - self.pelota.sprite.y() + 4) * -1
         if barra == self.player2.sprite:
             diferencia = (barra.y() - self.pelota.sprite.y() + 4) * -1
-        print(diferencia)
+        # print(diferencia)
         self.pelota.speed_y += diferencia / 2
 
         

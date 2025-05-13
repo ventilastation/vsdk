@@ -116,15 +116,16 @@ class TimedScene(Scene):
         super().__init__()
         self.scene_start = utime.ticks_ms()
         if self.duration:
-            print("Scene starting: ", self.__class__.__name__,
-              " starts (ms): ", self.scene_start,
-              " will end: ", utime.ticks_add(self.scene_start, self.duration))
+            # print("Scene starting: ", self.__class__.__name__,
+            #   " starts (ms): ", self.scene_start,
+            #   " will end: ", utime.ticks_add(self.scene_start, self.duration))
             self.call_later(self.duration, self.finish_scene)
 
     def on_exit(self):
-        print("Scene finished: ", self.__class__.__name__,
-              " duration (ms): ", utime.ticks_diff(utime.ticks_ms(), self.scene_start),
-              " current time: ", utime.ticks_ms())
+        # print("Scene finished: ", self.__class__.__name__,
+        #       " duration (ms): ", utime.ticks_diff(utime.ticks_ms(), self.scene_start),
+        #       " current time: ", utime.ticks_ms())
+        pass
 
     def scene_step(self):
         super().scene_step()
@@ -137,7 +138,7 @@ class TimedScene(Scene):
             raise StopIteration()
 
     def finish_scene(self):
-        print("Later called to finish scene, current time: ", utime.ticks_ms())
+        # print("Later called to finish scene, current time: ", utime.ticks_ms())
         director.pop()
 
 

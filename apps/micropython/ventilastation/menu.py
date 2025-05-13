@@ -60,4 +60,5 @@ class Menu(Scene):
             #accumulated_width += self.options[option_index][3]  # option width
 
     def on_option_pressed(self, option_index):
-        print('pressed:', option_index)
+        # print('pressed:', option_index)
+        pass

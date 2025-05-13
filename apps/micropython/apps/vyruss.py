@@ -347,7 +347,8 @@ class StateDefeated(FleetState):
 
 class StateResetting(FleetState):
     def setup(self):
-        print("restarting state")
+        # print("restarting state")
+        pass
 
     def step(self):
         StateResetting.next_state = StateEntering
@@ -388,7 +389,7 @@ class StateEntering(FleetState):
     next_state = StateAttacking
 
     def setup(self):
-        print("setupando")
+        # print("setupando")
         self.phase = 0
         self.steps = 0
         self.groups = []
