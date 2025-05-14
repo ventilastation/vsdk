@@ -3,7 +3,6 @@ import utime
 try:
     from ventilastation import wincomms as comms
 except Exception as e:
-    # print(e)
     try:
         from ventilastation import serialcomms as comms
     except Exception:

@@ -7,7 +7,6 @@ set_blocking(pipe.fileno(), False)
 def receive(bufsize):
     try:
         got = pipe.read(bufsize)
-        # print("UPY GOT:", repr(got))
         return got
     except:
         return ""

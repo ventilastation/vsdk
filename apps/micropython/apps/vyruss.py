@@ -239,7 +239,6 @@ class VyrusGame(Scene):
         self.state.step()
         if self.laser.enabled:
             self.laser.step()
-            #print("everyone", self.everyone)
             hit = self.laser.collision(self.everyone)
             if hit:
                 self.laser.finish()
@@ -347,7 +346,6 @@ class StateDefeated(FleetState):
 
 class StateResetting(FleetState):
     def setup(self):
-        # print("restarting state")
         pass
 
     def step(self):
@@ -389,7 +387,6 @@ class StateEntering(FleetState):
     next_state = StateAttacking
 
     def setup(self):
-        # print("setupando")
         self.phase = 0
         self.steps = 0
         self.groups = []

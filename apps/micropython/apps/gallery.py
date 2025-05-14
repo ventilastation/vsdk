@@ -79,7 +79,6 @@ class Gallery(Scene):
 
     def next_scene(self):
         new_scene_class = scenes[Gallery.farty_step]
-        # print(new_scene_class)
         if new_scene_class:
             director.push(new_scene_class())
             Gallery.farty_step = (Gallery.farty_step + 1) % len(scenes)

@@ -85,17 +85,14 @@ class ConnWinNamedPipe(ConnectionBase):
                 result, data = win32file.ReadFile(self.pipe, 65536, None)
             except:
                 data = b""
-            # print("readfile", result, repr(data))
             if not data:
                 break
             self.buffer += data
         try:
             if b"\n" in self.buffer:
                 ret, self.buffer = self.buffer.split(b"\n", 1)
-                # print("RECEIVED LINE:", ret)
                 return ret
             else:
-                # print("NO NEWLINE, BUFFER WAS:", self.buffer)
                 return b""
         except:
             print(traceback.format_exc())
@@ -112,7 +109,6 @@ else:
     conn = ConnSerial()
 
 def waitconnect():
-    # print("conectando...")
     while looping:
         try:
             conn.setup()
@@ -130,7 +126,6 @@ def receive_loop():
     while looping:
         try:
             l = conn.readline()
-            # print("EMU GOT:", repr(l))
             l = l.strip()
             if not l:
                 continue
@@ -157,9 +152,7 @@ def receive_loop():
 
             if command == b"imagestrip":
                 slot, length = args
-                # print("RECEIVING IMAGESTRIP", command, slot, length)
                 slot_number = int(slot.decode())
-                # print("decoded es:", slot_number)
                 imagenes.all_strips[slot_number] = conn.read(int(length))
 
             if command == b"debug":
