@@ -1,14 +1,24 @@
 import utime
+import sys
 
 
 class Scene:
     keep_music = False
+    images_module = None
 
     def __init__(self):
         self.pending_calls = []
 
+    def load_images(self):
+        if self.images_module:
+            full_modulename = "apps.images." + self.images_module
+            module = __import__(full_modulename, globals, locals, [self.images_module])
+            self.strips = module.strips.__dict__[self.images_module]
+            if full_modulename in sys.modules:
+                del sys.modules[full_modulename]
+
     def on_enter(self):
-        pass
+        self.load_images()
 
     def on_exit(self):
         pass

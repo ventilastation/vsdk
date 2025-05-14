@@ -8,6 +8,20 @@ from ventilastation import menu
 from ventilastation.imagenes import strips
 from apps import gallery
 
+MAIN_MENU_OPTIONS = [
+    ('vugo', strips.other.menu, 7, 64),
+    ('gallery', strips.other.pollitos, 0, 64),
+    ('vyruss', strips.other.menu, 0, 64),
+    #('bembi', strips.other.pollitos, 0, 64),
+    ('vance', strips.other.menu, 5, 64),
+    ('vong', strips.other.menu, 6, 64),
+    ('vladfarty', strips.other.menu, 2, 64),
+    ('credits', strips.other.menu, 3, 64),
+    ('ventap', strips.other.menu, 4, 64),
+    ('ventilagon', strips.other.menu, 1, 64),
+]
+
+
 
 def update_over_the_air():
     import ota_update
@@ -21,20 +35,15 @@ def make_me_a_planet(strip):
     planet.set_y(255)
     return planet
 
+def load_app(modulename):
+    full_modulename = "apps." + modulename
+    module = __import__(full_modulename, globals, locals, [modulename])
+    main_scene = module.main()
+    director.push(main_scene)
+    if full_modulename in sys.modules:
+        del sys.modules[full_modulename]
 
 class GamesMenu(menu.Menu):
-    OPTIONS = [
-        ('vyruss', strips.other.menu, 0, 64),
-        #('bembi', strips.other.pollitos, 0, 64),
-        ('gallery', strips.other.pollitos, 0, 64),
-        ('vance', strips.other.menu, 5, 64),
-        ('vong', strips.other.menu, 6, 64),
-        ('vugo', strips.other.menu, 7, 64),
-        ('vladfarty', strips.other.menu, 2, 64),
-        ('credits', strips.other.menu, 3, 64),
-        ('ventap', strips.other.menu, 4, 64),
-        ('ventilagon', strips.other.menu, 1, 64),
-    ]
 
     def on_enter(self):
         super(GamesMenu, self).on_enter()
@@ -76,8 +85,7 @@ class GamesMenu(menu.Menu):
             director.push(ventilagon_game.VentilagonGame())
             raise StopIteration()
         if option_pressed[0] == 'vugo':
-            from apps import vugo
-            director.push(vugo.VugoGame())
+            load_app("vugo")
             raise StopIteration()
         if option_pressed[0] == 'vance':
             from apps import vance
@@ -127,7 +135,7 @@ def main():
     # init images
     for n, strip in enumerate(imagenes.all_strips):
         sprites.set_imagestrip(n, strip)
-    director.push(GamesMenu())
+    director.push(GamesMenu(MAIN_MENU_OPTIONS))
     director.run()
 
 if __name__ == '__main__':

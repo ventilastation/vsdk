@@ -5,11 +5,12 @@ from ventilastation.sprites import Sprite, reset_sprites
 
 
 class Menu(Scene):
-    OPTIONS = []  # option id, strip id, frame, width
 
-    def __init__(self, selected_index=0):
+    def __init__(self, options, selected_index=0):
+        """Where options is a list of: (option id, strip id, frame, width)"""
+
         super(Menu, self).__init__()
-        self.options = self.OPTIONS[:]
+        self.options = options[:]
         self.selected_index = selected_index
 
     def on_enter(self):
