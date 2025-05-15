@@ -4,7 +4,6 @@ import pyglet
 import math
 import random
 import os
-import imagenes
 from pyglet.gl import *
 from pyglet.window import key
 from struct import pack, unpack
@@ -16,6 +15,8 @@ if platform.system() != "Windows":
 
 # preload all sounds
 sounds = {}
+
+all_strips = {}
 
 SOUNDS_FOLDER = "../apps/sounds"
 
@@ -98,9 +99,13 @@ def ungamma(values, gamma=2.5, offset=0.5):
         d.append(i)
     return bytes(d)
 
-palette = ungamma(change_colors(imagenes.palette_pal))
-upalette = unpack_palette(palette)
+palette = []
+upalette = []
 
+def set_palettes(paldata):
+    global palette, upalette
+    palette = ungamma(change_colors(paldata))
+    upalette = unpack_palette(palette)
 
 class PygletEngine():
     def __init__(self, led_count, keyhandler, enable_display=True):
@@ -218,7 +223,9 @@ class PygletEngine():
                 if frame == 255:
                     continue
 
-                strip = imagenes.all_strips[image]
+                strip = all_strips.get(image)
+                if not strip:
+                    continue
                 w, h, total_frames, pal = unpack("BBBB", strip[0:4])
                 pal_base = 256 * pal
                 if w == 255: w = 256 # caso especial, para los planetas
@@ -278,8 +285,11 @@ class PygletEngine():
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
             for column in range(256):
                 limit = len(self.vertex_list.colors)
-                self.vertex_list.colors[:] = render(column)[0:limit]
-                self.vertex_list.draw(GL_QUADS)
+                try:
+                    self.vertex_list.colors[:] = render(column)[0:limit]
+                    self.vertex_list.draw(GL_QUADS)
+                except:
+                    pass
                 glRotatef(angle, 0, 0, 1)
             glDisable(texture.target)
             glRotatef(180, 0, 0, 1)

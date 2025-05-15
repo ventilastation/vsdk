@@ -1,8 +1,7 @@
 from urandom import choice, randrange, seed
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-from ventilastation.imagenes import strips
 from time import sleep
 import re
 import utime
@@ -13,7 +12,7 @@ class ScoreBoard:
         self.chars = []
         for n in range(9):
             s = Sprite()
-            s.set_strip(strips.vyruss.numerals)
+            s.set_strip(stripes["numerals.png"])
             s.set_x(120 + n * 4)
             s.set_y(0)
             s.set_frame(10)
@@ -30,10 +29,10 @@ class ScoreBoard:
 class Arrow(Sprite):
     
     arrow_colors = {
-        0 : strips.vance.flecha_azul, 
-        1 : strips.vance.flecha_roja, 
-        2 : strips.vance.flecha_roja, 
-        3 : strips.vance.flecha_azul
+        0 : "flecha_azul.png", 
+        1 : "flecha_roja.png", 
+        2 : "flecha_roja.png", 
+        3 : "flecha_azul.png",
     }
     
     def __init__(self, button, direction, bar):
@@ -44,7 +43,7 @@ class Arrow(Sprite):
         self.bar = bar
         self.is_disabled = True
 
-        self.set_strip(self.arrow_colors[direction]) # maybe super!
+        self.set_strip(stripes[self.arrow_colors[direction]]) # maybe super!
         self.set_x(64*(direction+1)-32)
         self.set_y(255)
         self.set_frame(6)
@@ -66,23 +65,18 @@ class ScoreLabel(Sprite):
         self.set_perspective(2)
         self.set_frame(1)
         self.disable()
-        self.set_strip(strips.vance.scores)
+        self.set_strip(stripes["scores.png"])
         self.end_time = 0
 
 
 class VanceGame(Scene):
+    stripes_rom = "vance"
 
     step_counter = 0
     beats = []
 
-    arrow_colors = {
-        0 : strips.vance.flecha_azul, 
-        1 : strips.vance.flecha_roja, 
-        2 : strips.vance.flecha_roja, 
-        3 : strips.vance.flecha_azul
-    }
-
     def on_enter(self):
+        super(VanceGame, self).on_enter()
         file = open("apps/vance_songs/505.txt", "r")
         
         self.beats =  []
@@ -103,10 +97,10 @@ class VanceGame(Scene):
         self.score = 0
 
         self.bars = [Sprite() for _ in range(4)]
-        self.bars[0].set_strip(strips.vance.borde_azul)
-        self.bars[1].set_strip(strips.vance.borde_rojo)
-        self.bars[2].set_strip(strips.vance.borde_rojo)
-        self.bars[3].set_strip(strips.vance.borde_azul)
+        self.bars[0].set_strip(stripes["borde_azul.png"])
+        self.bars[1].set_strip(stripes["borde_rojo.png"])
+        self.bars[2].set_strip(stripes["borde_rojo.png"])
+        self.bars[3].set_strip(stripes["borde_azul.png"])
 
         self.score_labels = [ScoreLabel(direction) for direction in range(4)]
 
@@ -208,3 +202,6 @@ class VanceGame(Scene):
         director.pop()
         raise StopIteration()
 
+
+def main():
+    return VanceGame()

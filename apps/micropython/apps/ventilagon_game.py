@@ -7,6 +7,7 @@ from ventilastation.scene import Scene
 
 class VentilagonGame(Scene):
     def on_enter(self):
+        super(VentilagonGame, self).on_enter()
         ventilagon.enter()
         self.last_buttons = None
 
@@ -31,3 +32,7 @@ class VentilagonGame(Scene):
             raise StopIteration()
 
         self.sending_loop()
+
+
+def main():
+    return VentilagonGame()

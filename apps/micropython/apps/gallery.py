@@ -11,9 +11,8 @@
 # - bembi + pollitos
 # - paula w
 import utime
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
-from ventilastation.imagenes import strips
 from ventilastation.sprites import Sprite, reset_sprites
 
 vibratto = [20, 20, 20, 20, 20, 21, 21, 22, 22, 23, 24, 25, 26, 26, 27, 27, 28, 28, 28, 28, 28, 27, 27, 26, 26, 25, 24, 23, 22, 22, 21, 21]
@@ -21,7 +20,7 @@ tablelen = len(vibratto)
 
 def make_me_a_planet(strip):
     planet = Sprite()
-    planet.set_strip(strip)
+    planet.set_strip(stripes[strip])
     planet.set_perspective(0)
     planet.set_x(0)
     planet.set_y(255)
@@ -66,6 +65,7 @@ class Gallery(Scene):
         Gallery.farty_step = 0
 
     def on_enter(self):
+        super(Gallery, self).on_enter()
         if not director.was_pressed(director.BUTTON_D):
             self.next_scene()
         else:
@@ -79,7 +79,6 @@ class Gallery(Scene):
 
     def next_scene(self):
         new_scene_class = scenes[Gallery.farty_step]
-        # print(new_scene_class)
         if new_scene_class:
             director.push(new_scene_class())
             Gallery.farty_step = (Gallery.farty_step + 1) % len(scenes)
@@ -90,14 +89,16 @@ class Gallery(Scene):
 
 
 class Chanimation(TimedScene):
+    stripes_rom = "vladfarty"
     duration = 15000
     CHAMEPICS = 7
     ANIMATE_SPEED = 15
 
     def on_enter(self):
+        super(Chanimation, self).on_enter()
         self.chame_pics = []
         for f in chanimation_frames:
-            chp = make_me_a_planet(f)
+            chp = make_me_a_planet(stripes[f])
             self.chame_pics.append(chp)
             chp.set_y(255)
         self.n = 0
@@ -119,33 +120,34 @@ class Chanimation(TimedScene):
         self.update_pic()
 
 
-vf = strips.vladfarty
 chanimation_frames = [
-    vf.chanime01,
-    vf.chanime02,
-    vf.chanime03,
-    vf.chanime04,
-    vf.chanime05,
-    vf.chanime06,
-    vf.chanime07,
-]    
+    "chanime01.png",
+    "chanime02.png",
+    "chanime03.png",
+    "chanime04.png",
+    "chanime05.png",
+    "chanime06.png",
+    "chanime07.png",
+]
 
 chanijump_frames = [
-    vf.salto01,
-    vf.salto02,
-    vf.salto03,
-    vf.salto04,
-    vf.salto05,
-    vf.salto06,
+    "salto01.png",
+    "salto02.png",
+    "salto03.png",
+    "salto04.png",
+    "salto05.png",
+    "salto06.png",
 ]
 
 class Chanijump(TimedScene):
+    stripes_rom = "vladfarty"
     duration = 5000
     CHAMEPICS = 6
     ANIMATE_SPEED = 5
     order = [0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0]
 
     def on_enter(self):
+        super(Chanijump, self).on_enter()
         self.chame_pics = []
         for f in chanijump_frames:
             chp = make_me_a_planet(f)
@@ -166,13 +168,15 @@ class Chanijump(TimedScene):
         self.update_pic()
 
 class DancingLions(TimedScene):
+    stripes_rom = "vladfarty"
     duration = 5000 + 1500
 
     def on_enter(self):
-        self.farty_lionhead = make_me_a_planet(strips.vladfarty.farty_lionhead)
+        super(DancingLions, self).on_enter()
+        self.farty_lionhead = make_me_a_planet("farty_lionhead.png")
         self.farty_lionhead.set_y(0)
         self.farty_lionhead.disable()
-        self.farty_lion = make_me_a_planet(strips.vladfarty.farty_lion)
+        self.farty_lion = make_me_a_planet("farty_lion.png")
         self.farty_lion.set_y(100)
         self.farty_lion.set_frame(0)
         self.n = 0
@@ -203,71 +207,73 @@ def build_animation(sprites, order):
     return [sprites[n] for n in order]
 
 class Bambi(TimedScene):
-    duration = 15000
+    stripes_rom = "laupalav"
+    duration = 1500
 
     def on_enter(self):
+        super(Bambi, self).on_enter()
         self.animation_frames = 0
 
         frente_sprites = build_sprites([
-            strips.laupalav.frenteA00,
-            strips.laupalav.frenteB01,
-            strips.laupalav.frenteC02,
-            strips.laupalav.frenteD03,
-            strips.laupalav.frenteA04,
-            strips.laupalav.frenteB05,
-            strips.laupalav.frenteC06,
-            strips.laupalav.frenteD07,
-            strips.laupalav.frenteA08,
-            strips.laupalav.frenteB09,
-            strips.laupalav.frenteC10,
-            strips.laupalav.frenteD11,
-            strips.laupalav.frenteA12,
-            strips.laupalav.frenteB13,
-            strips.laupalav.frenteC14,
-            strips.laupalav.frenteD15,
+            "frenteA00.png",
+            "frenteB01.png",
+            "frenteC02.png",
+            "frenteD03.png",
+            "frenteA04.png",
+            "frenteB05.png",
+            "frenteC06.png",
+            "frenteD07.png",
+            "frenteA08.png",
+            "frenteB09.png",
+            "frenteC10.png",
+            "frenteD11.png",
+            "frenteA12.png",
+            "frenteB13.png",
+            "frenteC14.png",
+            "frenteD15.png",
         ])
 
-        frente_anim = build_animation(frente_sprites, range(16))
+        frente_anim = build_animation(frente_sprites, range(len(frente_sprites)))
         self.frente = lambda frame: frente_anim[(frame // 5) % len(frente_anim)]
 
         bambi_sprites = build_sprites([
-            strips.laupalav.bambi01b,
-            strips.laupalav.bambi02b,
-            strips.laupalav.bambi03b,
-            strips.laupalav.bambi04b,
+            "bambi01b.png",
+            "bambi02b.png",
+            "bambi03b.png",
+            "bambi04b.png",
         ])
 
         bambi_anim = build_animation(bambi_sprites, [0, 0, 1, 1, 2, 2, 3, 3])
         self.bambi = lambda frame: bambi_anim[(frame // 4) % len(bambi_anim)]
 
         fondo_sprites = build_sprites([
-            strips.laupalav.fondoA00,
-            strips.laupalav.fondoB01,
-            strips.laupalav.fondoC02,
-            strips.laupalav.fondoD03,
-            strips.laupalav.fondoA04,
-            strips.laupalav.fondoB05,
-            strips.laupalav.fondoC06,
-            strips.laupalav.fondoD07,
-            strips.laupalav.fondoA08,
-            strips.laupalav.fondoB09,
-            strips.laupalav.fondoC10,
-            strips.laupalav.fondoD11,
-            strips.laupalav.fondoA12,
-            strips.laupalav.fondoB13,
-            strips.laupalav.fondoC14,
-            strips.laupalav.fondoD15,
-            strips.laupalav.fondoA16,
-            strips.laupalav.fondoB17,
-            strips.laupalav.fondoC18,
-            strips.laupalav.fondoD19,
-            strips.laupalav.fondoA20,
-            strips.laupalav.fondoB21,
-            strips.laupalav.fondoC22,
-            strips.laupalav.fondoD23,
+            "fondoA00.png",
+            "fondoB01.png",
+            "fondoC02.png",
+            "fondoD03.png",
+            "fondoA04.png",
+            "fondoB05.png",
+            "fondoC06.png",
+            "fondoD07.png",
+            "fondoA08.png",
+            "fondoB09.png",
+            "fondoC10.png",
+            "fondoD11.png",
+            "fondoA12.png",
+            "fondoB13.png",
+            "fondoC14.png",
+            "fondoD15.png",
+            "fondoA16.png",
+            "fondoB17.png",
+            "fondoC18.png",
+            "fondoD19.png",
+            "fondoA20.png",
+            "fondoB21.png",
+            "fondoC22.png",
+            "fondoD23.png",
         ])
 
-        fondo_anim = build_animation(fondo_sprites, range(24))
+        fondo_anim = build_animation(fondo_sprites, range(len(fondo_sprites)))
         self.fondo = lambda frame: fondo_anim[(frame // 6) % len(fondo_anim)]
 
         self.animations = [
@@ -298,13 +304,15 @@ class Bambi(TimedScene):
 
 
 class PlacaBambi(TimedScene):
+    stripes_rom = "laupalav"
     duration = 3000
 
     def on_enter(self):
+        super(PlacaBambi, self).on_enter()
         self.animation_frames = 0
 
         placa_sprites = build_sprites([
-            strips.laupalav.placa
+            "placa.png"
         ])
         placa_anim = build_animation(placa_sprites, [0])
         self.placa = lambda _: placa_anim[0]
@@ -336,18 +344,20 @@ class PlacaBambi(TimedScene):
         self.current_sprites = new_sprites
 
 class Rose(TimedScene):
+    stripes_rom = "laupalav"
     duration = 10000
 
     def on_enter(self):
+        super(Rose, self).on_enter()
         self.animation_frames = 0
 
         rose_sprites = build_sprites([
-            strips.laupalav.rose01,
-            strips.laupalav.rose02,
-            strips.laupalav.rose03,
-            strips.laupalav.rose04,
-            strips.laupalav.rose05,
-            strips.laupalav.rose06,
+            "rose01.png",
+            "rose02.png",
+            "rose03.png",
+            "rose04.png",
+            "rose05.png",
+            "rose06.png",
         ])
         rose_anim = build_animation(rose_sprites, [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0, 0, 0])
         self.rose = lambda frame: rose_anim[(frame // 4) % len(rose_anim)]
@@ -381,22 +391,24 @@ class Rose(TimedScene):
 
 
 class MilaLHHL(TimedScene):
+    stripes_rom = "milalhhl"
     duration = 15000
 
     def on_enter(self):
+        super(MilaLHHL, self).on_enter()
         self.animation_frames = 0
 
         carcer_sprites = build_sprites([
-            # strips.milalhhl.patru1,
-            strips.milalhhl.patru2,
-            # strips.milalhhl.fiat1,
-            # strips.milalhhl.fiat2,
-            # strips.milalhhl.mix1,
-            # strips.milalhhl.peugeot1,
+            "patru1.png",
+            "patru2.png",
+            "fiat1.png",
+            "fiat2.png",
+            "mix1.png",
+            "peugeot1.png",
         ])
         carcer_anim = build_animation(carcer_sprites, [
-            0, # 1, 2,
-            # 3, 4, 5
+            0, 1, 2,
+            3, 4, 5
          ])
         self.carcer = lambda frame: carcer_anim[(frame // 120) % len(carcer_anim)]
 
@@ -428,18 +440,20 @@ class MilaLHHL(TimedScene):
 
 
 class Bembidiona(TimedScene):
+    stripes_rom = "other"
     duration = 10000
 
     def on_enter(self):
+        super(Bembidiona, self).on_enter()
         self.pollitos = Sprite()
         self.pollitos.set_x(-32)
         self.pollitos.set_y(0)
-        self.pollitos.set_strip(strips.other.pollitos)
+        self.pollitos.set_strip(stripes["pollitos.png"])
         self.pollitos.set_frame(0)
         self.pollitos.set_perspective(2)
         self.animation_frames = 0
 
-        self.jere = make_me_a_planet(strips.other.bembi)
+        self.jere = make_me_a_planet("bembi.png")
         self.jere.set_y(255)
         self.jere.set_frame(0)
 
@@ -458,7 +472,7 @@ class TextDisplay:
         self.chars = []
         for n in range(display_len):
             s = Sprite()
-            s.set_strip(strips.vladfarty.vga_cp437)
+            s.set_strip(stripes["vga_cp437.png"])
             s.set_x((256 -n * char_width) % 256)
             s.set_y(y)
             s.set_frame(10)
@@ -478,9 +492,11 @@ class TextDisplay:
 
 
 class Label(TimedScene):
+    stripes_rom = "vladfarty"
     duration = 1500
 
     def on_enter(self):
+        super(Label, self).on_enter()
         self.label = TextDisplay(2)
         self.label.set_value(self.label_text)
 
@@ -492,13 +508,15 @@ def label(text):
 
 
 class Pyformances(TimedScene):
+    stripes_rom = "other"
     duration = 4000 + 3000
 
     def on_enter(self):
-        self.n0 = make_me_a_planet(strips.other.pyformances_n0)
+        super(Pyformances, self).on_enter()
+        self.n0 = make_me_a_planet("pyformances_n0.png")
         self.n0.set_y(0)
         self.n0.disable()
-        self.title = make_me_a_planet(strips.other.pyformances_py)
+        self.title = make_me_a_planet("pyformances_py.png")
         self.title.set_y(100)
         self.title.set_frame(0)
         self.n = 0
@@ -539,3 +557,6 @@ scenes = [
     Bembidiona,
     label("Paula W."),
 ]
+
+def main():
+    return Gallery()

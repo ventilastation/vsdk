@@ -1,16 +1,15 @@
 # This module is used by the emulator.
 # For the time being, Super Ventilagon is only implemented on real hardware
 
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.sprites import Sprite
-from ventilastation.imagenes import strips
 
 work = None
 
 def enter():
     global work
     work = Sprite()
-    work.set_strip(strips.other.menatwork)
+    work.set_strip(stripes["menatwork.png"])
     work.set_perspective(0)
     work.set_x(0)
     work.set_y(0)

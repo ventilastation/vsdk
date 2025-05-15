@@ -1,26 +1,28 @@
 import sys
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite, reset_sprites
 
 
 class Menu(Scene):
-    OPTIONS = []  # option id, strip id, frame, width
 
-    def __init__(self, selected_index=0):
+    def __init__(self, options, selected_index=0):
+        """Where options is a list of: (option id, strip id, frame, width)"""
+
         super(Menu, self).__init__()
-        self.options = self.OPTIONS[:]
+        self.options = options[:]
         self.selected_index = selected_index
 
     def on_enter(self):
+        super(Menu, self).on_enter()
         self.sprites = []
         self.y_step = 180 // len(self.options)
-        for n, (option_id, strip_id, frame, width) in enumerate(self.options):
+        for n, (option_id, strip_name, frame, width) in enumerate(self.options):
             sprite = Sprite()
             sprite.set_x(-32)
             sprite.set_y(int(n * self.y_step))
             sprite.set_perspective(1)
-            sprite.set_strip(strip_id)
+            sprite.set_strip(stripes[strip_name])
             sprite.set_frame(frame)
 
             self.sprites.append(sprite)

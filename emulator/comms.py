@@ -9,7 +9,7 @@ import config
 import struct
 import socket
 import threading
-from pygletengine import imagenes, palette, spritedata, playsound, playmusic
+from pygletengine import all_strips, set_palettes, spritedata, playsound, playmusic
 
 class ConnectionBase:
     def __init__(self):
@@ -85,17 +85,14 @@ class ConnWinNamedPipe(ConnectionBase):
                 result, data = win32file.ReadFile(self.pipe, 65536, None)
             except:
                 data = b""
-            # print("readfile", result, repr(data))
             if not data:
                 break
             self.buffer += data
         try:
             if b"\n" in self.buffer:
                 ret, self.buffer = self.buffer.split(b"\n", 1)
-                # print("RECEIVED LINE:", ret)
                 return ret
             else:
-                # print("NO NEWLINE, BUFFER WAS:", self.buffer)
                 return b""
         except:
             print(traceback.format_exc())
@@ -112,7 +109,6 @@ else:
     conn = ConnSerial()
 
 def waitconnect():
-    # print("conectando...")
     while looping:
         try:
             conn.setup()
@@ -130,18 +126,20 @@ def receive_loop():
     while looping:
         try:
             l = conn.readline()
-            # print("EMU GOT:", repr(l))
             l = l.strip()
             if not l:
                 continue
 
             command, *args = l.split()
 
+            # print("RECEIVED", command, args)
+
             if command == b"sprites":
                 spritedata[:] = conn.read(5*100)
 
-            if command == b"pal":
-                palette[:] = conn.read(1024)
+            if command == b"palette":
+                paldata = conn.read(1024 * int(args[0]))
+                set_palettes(paldata)
 
             if command == b"sound":
                 playsound(b" ".join(args))
@@ -156,11 +154,10 @@ def receive_loop():
                 playmusic("off")
 
             if command == b"imagestrip":
+                # print("RECEIVED imagestrip", args)
                 slot, length = args
-                # print("RECEIVING IMAGESTRIP", command, slot, length)
                 slot_number = int(slot.decode())
-                # print("decoded es:", slot_number)
-                imagenes.all_strips[slot_number] = conn.read(int(length))
+                all_strips[slot_number] = conn.read(int(length))
 
             if command == b"debug":
                 length = 32 * 16

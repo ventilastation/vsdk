@@ -1,7 +1,6 @@
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-from ventilastation.imagenes import strips
 
 SPEED = 4
 TITLE_DELAYS = 3000
@@ -10,7 +9,7 @@ END_OF_TITLES = 583
 
 def make_me_a_planet(strip):
     planet = Sprite()
-    planet.set_strip(strip)
+    planet.set_strip(stripes[strip])
     planet.set_perspective(0)
     planet.set_x(0)
     planet.set_y(255)
@@ -23,10 +22,11 @@ class Credits(Scene):
         director.music_play("other/credits")
 
     def on_enter(self):
-        self.vs = make_me_a_planet(strips.other.ventilastation)
+        super(Credits, self).on_enter()
+        self.vs = make_me_a_planet("ventilastation.png")
         self.vs.set_frame(0)
-        self.te = make_me_a_planet(strips.other.tecno_estructuras)
-        self.sves = make_me_a_planet(strips.other.sves)
+        self.te = make_me_a_planet("tecno_estructuras.png")
+        self.sves = make_me_a_planet("sves.png")
         self.counter = 0
         self.y = 0
         self.sprites = []
@@ -34,7 +34,7 @@ class Credits(Scene):
             sprite = Sprite()
             sprite.set_x(256 - 32)
             sprite.set_y(0)
-            sprite.set_strip(strips.other.credits)
+            sprite.set_strip(stripes["credits.png"])
             sprite.set_perspective(1)
             sprite.set_frame(n)
             self.sprites.append(sprite)
@@ -87,3 +87,6 @@ class Credits(Scene):
     def finished(self):
         director.pop()
         raise StopIteration()
+
+def main():
+    return Credits()
