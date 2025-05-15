@@ -2,20 +2,18 @@ from urandom import choice, randrange, seed
 import utime
 import gc
 
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite, reset_sprites
-from ventilastation.imagenes import strips
-
 from apps import credits
 
 
 LEVELS = [
     # oleadas, planeta, disparos_simultaneos
-    (2, strips.vyruss.saturno, 3),
-    (3, strips.vyruss.jupiter, 4),
-    (4, strips.vyruss.marte, 6),
-    (5, strips.vyruss.tierra, 8),
+    (2, "saturno.png", 3),
+    (3, "jupiter.png", 4),
+    (4, "marte.png", 6),
+    (5, "tierra.png", 8),
 ]
 
 MAX_BOMBS = max(l[2] for l in LEVELS)
@@ -91,7 +89,7 @@ class ScoreBoard:
         self.chars = []
         for n in range(9):
             s = Sprite()
-            s.set_strip(strips.vyruss.numerals)
+            s.set_strip(stripes["numerals.png"])
             s.set_x(110 + n * 4)
             s.set_y(0)
             s.set_frame(10)
@@ -119,7 +117,7 @@ class StarfleetState:
         self.game_over_sprite.set_x(256-32)
         self.game_over_sprite.set_y(0)
         self.game_over_sprite.set_perspective(2)
-        self.game_over_sprite.set_strip(strips.vyruss.gameover)
+        self.game_over_sprite.set_strip(stripes["gameover.png"])
 
         self.fighters = [StarFighter() for n in range(3)]
         self.destroyed = []
@@ -167,11 +165,14 @@ class StarfleetState:
         #     self.fighter.accel(accel, decel)
 
 class VyrusGame(Scene):
+    stripes_rom = "vyruss"
+
     def __init__(self):
         super(VyrusGame, self).__init__()
         seed(utime.ticks_ms())
 
     def on_enter(self):
+        super(VyrusGame, self).on_enter()
         self.scoreboard = ScoreBoard()
         self.hiscore = 0
         self.starfleet = StarfleetState(self)
@@ -182,7 +183,7 @@ class VyrusGame(Scene):
         total_buddies = MAX_GROUPS * BADDIES_PER_GROUP
         self.all_baddies = [Baddie() for _ in range(total_buddies)]
         self.all_bombs = [Bomb() for _ in range(MAX_BOMBS)]
-        self.planet = make_me_a_planet(strips.vyruss.saturno)
+        self.planet = make_me_a_planet(stripes["saturno.png"])
         self.used_baddie = 0
         self.start_level()
 
@@ -192,7 +193,7 @@ class VyrusGame(Scene):
         self.unfired_bombs = self.all_bombs[0:unfired_bombs]
         self.starfleet.fighter.reset()
         self.planet.disable()
-        self.planet.set_strip(planet_strip)
+        self.planet.set_strip(stripes[planet_strip])
         self.used_baddie = 0
         self.everyone = []
         self.explosions = []
@@ -463,7 +464,7 @@ class StateEntering(FleetState):
 
 
 class Explodable(Sprite):
-    explosion_strip = strips.vyruss.explosion
+    explosion_strip = "explosion.png"
     explosion_steps = 5
 
     def __init__(self):
@@ -482,7 +483,7 @@ class Explodable(Sprite):
         # es necesario calcular el centro antes de cambiar el strip
         center_x = self.x() + self.width() // 2
         center_y = self.y() + self.height() // 2
-        self.set_strip(self.explosion_strip)
+        self.set_strip(stripes[self.explosion_strip])
         self.set_x(center_x - self.width() // 2)
         self.set_y(center_y - self.height() // 2)
         # recién ahora arranca el contador de frames
@@ -504,7 +505,7 @@ class Explodable(Sprite):
 
 
 class StarFighter(Explodable):
-    explosion_strip = strips.vyruss.explosion_nave
+    explosion_strip = "explosion_nave.png"
     explosion_steps = 4
 
     BLINK_RATE = int(30.0 * 1.5)
@@ -523,7 +524,7 @@ class StarFighter(Explodable):
         super().reset()
         self.set_x(256-8)
         self.set_y(16)
-        self.set_strip(strips.vyruss.ll9)
+        self.set_strip(stripes["ll9.png"])
         self.frame_counter = -1
         self.step = self.starship_step
 
@@ -555,7 +556,7 @@ class StarFighter(Explodable):
 class Baddie(Explodable):
     def reset(self, base_frame):
         super().reset()
-        self.set_strip(strips.vyruss.galaga)
+        self.set_strip(stripes["galaga.png"])
         self.base_frame = base_frame
         self.frame_step = 0
         self.step = self.baddie_step
@@ -577,7 +578,7 @@ class Baddie(Explodable):
 class Laser(Sprite):
     def __init__(self):
         super().__init__()
-        self.set_strip(strips.vyruss.disparo)
+        self.set_strip(stripes["disparo.png"])
         self.enabled = False
 
     def fire(self, starfighter):
@@ -601,7 +602,7 @@ class Laser(Sprite):
 class Bomb(Sprite):
     def __init__(self):
         super().__init__()
-        self.set_strip(strips.vyruss.disparo)
+        self.set_strip(stripes["disparo.png"])
         self.enabled = False
 
     def fire(self, baddie):
@@ -694,3 +695,6 @@ class Hover(Movement):
 
 class Chase(Movement):
     pass
+
+def main():
+    return VyrusGame()

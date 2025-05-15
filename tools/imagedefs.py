@@ -12,7 +12,6 @@ def strip(filename, frames=1, palette=0):
 def fullscreen(filename, radius=54, palette=0):
     return filename, dict(frames=1, radius=radius, palette=palette, process="reproject")
 
-# width, height, frames, palette
 vyruss_images = image_group(
     folder = "vyruss",
     stripes = [

@@ -66,8 +66,7 @@ class GamesMenu(menu.Menu):
     def on_option_pressed(self, option_index):
         option_pressed = self.options[option_index]
         if option_pressed[0] == 'vyruss':
-            from apps import vyruss
-            director.push(vyruss.VyrusGame())
+            load_app("vyruss")
             raise StopIteration()
         if option_pressed[0] == 'credits':
             from apps import credits

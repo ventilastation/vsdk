@@ -1,9 +1,7 @@
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 from urandom import choice, randrange, seed
-
-print("loading VUGO")
 
 def make_me_a_planet(strip):
     planet = Sprite()
@@ -40,7 +38,7 @@ class VugoGame(Scene):
         self.monchito = Sprite()
         self.monchito.set_x(-32)
         self.monchito.set_y(0)
-        self.monchito.set_strip(self.stripes["monchito_runs.png"])
+        self.monchito.set_strip(stripes["monchito_runs.png"])
         self.monchito.set_frame(0)
         self.monchito.set_perspective(2)
         self.running_frame = 0
@@ -58,7 +56,7 @@ class VugoGame(Scene):
             y = randrange(DAMERO_ROWS)
             gnr = Sprite()
             self.grass_n_rocks.append(gnr)
-            gnr.set_strip(self.stripes["obstacles.png"])
+            gnr.set_strip(stripes["obstacles.png"])
             gnr.set_x(COLS_CENTERS[x] - TILE_WIDTH // 2)
             gnr.set_y(y * (TILE_HEIGHT-1) + 4 + randrange(8))
             gnr.set_perspective(1)
@@ -71,7 +69,7 @@ class VugoGame(Scene):
             for y in range(DAMERO_ROWS):
                 sf = Sprite()
                 self.fondos[(x,y)] = sf 
-                sf.set_strip(self.stripes["moregrass.png"])
+                sf.set_strip(stripes["moregrass.png"])
                 sf.set_x(COLS_CENTERS[x] - TILE_WIDTH // 2)
                 sf.set_y(y * (TILE_HEIGHT-1))
                 sf.set_perspective(1)
@@ -82,21 +80,21 @@ class VugoGame(Scene):
             for x in range(2):
                 sb = Sprite()
                 self.bushes.append(sb)
-                sb.set_strip(self.stripes["bushes.png"])
+                sb.set_strip(stripes["bushes.png"])
                 sb.set_x(BUSH_COLS[x])
                 sb.set_y(y * (TILE_HEIGHT-1))
                 sb.set_perspective(1)
                 sb.set_frame(x * 2 + randrange(2))
 
         self.nube = Sprite()
-        self.nube.set_strip(self.stripes["nube8bit.png"])
+        self.nube.set_strip(stripes["nube8bit.png"])
         self.nube.set_perspective(2)
         self.nube.set_x(0)
         self.nube.set_y(3)
         self.nube.set_frame(x * 2 + randrange(2))
         self.nube_pos = 0
 
-        self.fondo = make_me_a_planet(self.stripes["bluesky.png"])
+        self.fondo = make_me_a_planet(stripes["bluesky.png"])
         self.fondo.set_y(255)
         self.fondo.set_frame(0)
         director.music_play(b"other/piostart")

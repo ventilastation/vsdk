@@ -9,6 +9,8 @@ except Exception as e:
         from ventilastation import comms
 from ventilastation import sprites
 import gc
+import struct
+
 
 DEBUG = False
 INPUT_TIMEOUT = 15 * 1000  # 62 segundos de inactividad, volver al menu
@@ -24,6 +26,7 @@ try:
 except ImportError:
     update = lambda: None
 
+stripes = {}
 
 class Director:
     JOY_LEFT = 1
@@ -41,6 +44,8 @@ class Director:
         self.last_buttons = 0
         self.last_player_action = utime.ticks_ms()
         self.timedout = False
+        self.rom_data = None
+
         gc.disable()
         sprites.reset_sprites()
 
@@ -81,7 +86,31 @@ class Director:
 
     def report_traceback(self, content):
         comms.send(b"traceback %d"%len(content), content)
+
+    def load_rom(self, filename):
+        self.romdata = memoryview(open(filename, "rb").read())
+        stripes.clear()
+        num_stripes, num_palettes = struct.unpack("<HH", self.romdata)
+        offsets = struct.unpack_from("<%dL%dL" % (num_stripes, num_palettes), self.romdata, 4)
+        stripes_offsets = offsets[:num_stripes]
+        palette_offsets = offsets[num_stripes:]
         
+        povdisplay.set_palettes(self.romdata[palette_offsets[0]:])
+
+        for n, off in enumerate(stripes_offsets):
+            filename_len = struct.unpack_from("B", self.romdata, off)[0]
+            filename, w, h, frames, pal = struct.unpack_from("%dsBBBB" % filename_len, self.romdata, off + 1)
+            
+            # special case
+            if w == 255:
+                w = 256
+
+            image_data = off + 1 + filename_len
+            sprites.set_imagestrip(n, self.romdata[image_data:image_data + w*h*frames + 4])
+            stripes[filename.decode('utf-8')] = n
+
+
+
     def run(self):
         while True:
             scene = self.scene_stack[-1]
