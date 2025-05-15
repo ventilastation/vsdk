@@ -2,7 +2,6 @@ from urandom import choice, randrange, seed
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-from ventilastation.imagenes import strips
 
 NUBES_POR_NUBAREDA = 8
 

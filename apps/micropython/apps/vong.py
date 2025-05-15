@@ -5,7 +5,6 @@ import gc
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite, reset_sprites
-from ventilastation.imagenes import strips
 
 #    """
 #       128

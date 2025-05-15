@@ -1,7 +1,6 @@
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-from ventilastation.imagenes import strips
 from ventilastation import povdisplay
 
 def make_me_a_planet(strip):
@@ -22,7 +21,7 @@ class TextDisplay:
         self.chars = []
         for n in range(display_len):
             s = Sprite()
-            s.set_strip(strips.vladfarty.rainbow437)
+            s.set_strip(stripes["rainbow437.png"])
             s.set_x((256 -n * char_width + (display_len * char_width) // 2) % 256)
             s.set_y(y)
             s.set_frame(10)
@@ -39,6 +38,7 @@ class TextDisplay:
             self.chars[n].set_frame(v)
 
 class DebugMode(Scene):
+    stripes_rom = "other"
 
     def on_enter(self):
         self.rpm_display = TextDisplay(char_height * 2 + 2)
@@ -48,7 +48,7 @@ class DebugMode(Scene):
         self.arxel_sprites = []
         for n in range(8):
             s = Sprite()
-            s.set_strip(strips.other.debug_arxels)
+            s.set_strip(stripes["debug_arxels.png"])
             s.set_x(32*n)
             s.set_y(0)
             s.set_frame(0)
@@ -104,3 +104,7 @@ class DebugMode(Scene):
     def finished(self):
         director.pop()
         raise StopIteration()
+
+
+def main():
+    return DebugMode()

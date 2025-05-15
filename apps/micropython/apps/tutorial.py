@@ -1,7 +1,6 @@
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-from ventilastation.imagenes import strips
 from ventilastation import povdisplay
 
 
@@ -14,7 +13,7 @@ class TextDisplay:
         self.chars = []
         for n in range(display_len):
             s = Sprite()
-            s.set_strip(strips.vladfarty.rainbow437)
+            s.set_strip(stripes["rainbow437.png"])
             s.set_x((256 -n * char_width + (display_len * char_width) // 2) % 256)
             s.set_y(y)
             s.set_frame(10)
@@ -31,13 +30,14 @@ class TextDisplay:
             self.chars[n].set_frame(v)
 
 class Tutorial(Scene):
+    stripes_rom = "other"
 
     def on_enter(self):
         self.display = TextDisplay(0)
         self.display.set_value("Tutorial!")
 
         self.planeta = Sprite()
-        self.planeta.set_strip(strips.other.bembi)
+        self.planeta.set_strip(stripes["bembi.png"])
         self.planeta.set_perspective(0)
         self.planeta.set_x(0)
         self.planeta.set_y(255)
@@ -45,7 +45,7 @@ class Tutorial(Scene):
         #self.planeta.name = "Planeta"   # does not work on the sprite C module
 
         self.doom = Sprite()
-        self.doom.set_strip(strips.other.doom)
+        self.doom.set_strip(stripes["doom.png"])
         self.doom.set_perspective(0)
         self.doom.set_x(0)
         self.doom.set_y(255)
@@ -53,7 +53,7 @@ class Tutorial(Scene):
         #self.planeta.name = "Planeta"   # does not work on the sprite C module
 
         self.bicho = Sprite()
-        self.bicho.set_strip(strips.vyruss.galaga)
+        self.bicho.set_strip(stripes["galaga.png"])
         self.bicho.set_perspective(1)
         self.bicho.set_x(-32)
         self.bicho.set_y(16)
@@ -61,7 +61,7 @@ class Tutorial(Scene):
         #self.bicho.name = "Bicho"
 
         self.cartel = Sprite()
-        self.cartel.set_strip(strips.vyruss.gameover)
+        self.cartel.set_strip(stripes["gameover.png"])
         self.cartel.set_perspective(2)
         self.cartel.set_x(256-32)
         self.cartel.set_y(16)
@@ -141,3 +141,7 @@ class Tutorial(Scene):
     def finished(self):
         director.pop()
         raise StopIteration()
+
+
+def main():
+    return Tutorial()

@@ -1,16 +1,7 @@
-from ventilastation.director import director, PIXELS
+from ventilastation.director import director, PIXELS, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-from ventilastation.imagenes import strips
 from ventilastation import povdisplay
-
-def make_me_a_planet(strip):
-    planet = Sprite()
-    planet.set_strip(strip)
-    planet.set_perspective(0)
-    planet.set_x(0)
-    planet.set_y(255)
-    return planet
 
 
 char_width = 9
@@ -22,7 +13,7 @@ class TextDisplay:
         self.chars = []
         for n in range(display_len):
             s = Sprite()
-            s.set_strip(strips.vladfarty.vga_cp437)
+            s.set_strip(stripes["vga_cp437.png"])
             s.set_x((256 -n * char_width + (display_len * char_width) // 2) % 256)
             s.set_y(y)
             s.set_frame(10)
@@ -39,15 +30,14 @@ class TextDisplay:
             self.chars[n].set_frame(v)
 
 
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-from ventilastation.imagenes import strips
 import uctypes
 
-def make_me_a_planet(strip):
+def make_me_a_planet(strip_name):
     planet = Sprite()
-    planet.set_strip(strip)
+    planet.set_strip(stripes[strip_name])
     planet.set_perspective(0)
     planet.set_x(0)
     planet.set_y(255)
@@ -60,70 +50,72 @@ def build_animation(sprites, order):
     return [sprites[n] for n in order]
 
 class Calibrate(Scene):
+    stripes_rom = "laupalav"
 
     def on_enter(self):
+        super(Calibrate, self).on_enter()
         self.display = TextDisplay(0)
         self.display.set_value("Calibrate!")
 
         self.animation_frames = 0
 
         frente_sprites = build_sprites([
-            strips.laupalav.frenteA00,
-            strips.laupalav.frenteB01,
-            strips.laupalav.frenteC02,
-            strips.laupalav.frenteD03,
-            strips.laupalav.frenteA04,
-            strips.laupalav.frenteB05,
-            strips.laupalav.frenteC06,
-            strips.laupalav.frenteD07,
-            strips.laupalav.frenteA08,
-            strips.laupalav.frenteB09,
-            strips.laupalav.frenteC10,
-            strips.laupalav.frenteD11,
-            strips.laupalav.frenteA12,
-            strips.laupalav.frenteB13,
-            strips.laupalav.frenteC14,
-            strips.laupalav.frenteD15,
+            "frenteA00.png",
+            "frenteB01.png",
+            "frenteC02.png",
+            "frenteD03.png",
+            "frenteA04.png",
+            "frenteB05.png",
+            "frenteC06.png",
+            "frenteD07.png",
+            "frenteA08.png",
+            "frenteB09.png",
+            "frenteC10.png",
+            "frenteD11.png",
+            "frenteA12.png",
+            "frenteB13.png",
+            "frenteC14.png",
+            "frenteD15.png",
         ])
 
         frente_anim = build_animation(frente_sprites, range(16))
         self.frente = lambda frame: frente_anim[(frame // 5) % len(frente_anim)]
 
         bambi_sprites = build_sprites([
-            strips.laupalav.bambi01b,
-            strips.laupalav.bambi02b,
-            strips.laupalav.bambi03b,
-            strips.laupalav.bambi04b,
+            "bambi01b.png",
+            "bambi02b.png",
+            "bambi03b.png",
+            "bambi04b.png",
         ])
 
         bambi_anim = build_animation(bambi_sprites, [0, 0, 1, 1, 2, 2, 3, 3])
         self.bambi = lambda frame: bambi_anim[(frame // 4) % len(bambi_anim)]
 
         fondo_sprites = build_sprites([
-            strips.laupalav.fondoA00,
-            strips.laupalav.fondoB01,
-            strips.laupalav.fondoC02,
-            strips.laupalav.fondoD03,
-            strips.laupalav.fondoA04,
-            strips.laupalav.fondoB05,
-            strips.laupalav.fondoC06,
-            strips.laupalav.fondoD07,
-            strips.laupalav.fondoA08,
-            strips.laupalav.fondoB09,
-            strips.laupalav.fondoC10,
-            strips.laupalav.fondoD11,
-            strips.laupalav.fondoA12,
-            strips.laupalav.fondoB13,
-            strips.laupalav.fondoC14,
-            strips.laupalav.fondoD15,
-            strips.laupalav.fondoA16,
-            strips.laupalav.fondoB17,
-            strips.laupalav.fondoC18,
-            strips.laupalav.fondoD19,
-            strips.laupalav.fondoA20,
-            strips.laupalav.fondoB21,
-            strips.laupalav.fondoC22,
-            strips.laupalav.fondoD23,
+            "fondoA00.png",
+            "fondoB01.png",
+            "fondoC02.png",
+            "fondoD03.png",
+            "fondoA04.png",
+            "fondoB05.png",
+            "fondoC06.png",
+            "fondoD07.png",
+            "fondoA08.png",
+            "fondoB09.png",
+            "fondoC10.png",
+            "fondoD11.png",
+            "fondoA12.png",
+            "fondoB13.png",
+            "fondoC14.png",
+            "fondoD15.png",
+            "fondoA16.png",
+            "fondoB17.png",
+            "fondoC18.png",
+            "fondoD19.png",
+            "fondoA20.png",
+            "fondoB21.png",
+            "fondoC22.png",
+            "fondoD23.png",
         ])
 
         fondo_anim = build_animation(fondo_sprites, range(24))
@@ -204,3 +196,6 @@ class Calibrate(Scene):
         director.pop()
         raise StopIteration()
 
+
+def main():
+    return Calibrate()
