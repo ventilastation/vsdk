@@ -9,7 +9,7 @@ import config
 import struct
 import socket
 import threading
-from pygletengine import imagenes, palette, spritedata, playsound, playmusic
+from pygletengine import all_strips, set_palettes, spritedata, playsound, playmusic
 
 class ConnectionBase:
     def __init__(self):
@@ -132,11 +132,14 @@ def receive_loop():
 
             command, *args = l.split()
 
+            # print("RECEIVED", command, args)
+
             if command == b"sprites":
                 spritedata[:] = conn.read(5*100)
 
-            if command == b"pal":
-                palette[:] = conn.read(1024)
+            if command == b"palette":
+                paldata = conn.read(1024 * int(args[0]))
+                set_palettes(paldata)
 
             if command == b"sound":
                 playsound(b" ".join(args))
@@ -151,9 +154,10 @@ def receive_loop():
                 playmusic("off")
 
             if command == b"imagestrip":
+                # print("RECEIVED imagestrip", args)
                 slot, length = args
                 slot_number = int(slot.decode())
-                imagenes.all_strips[slot_number] = conn.read(int(length))
+                all_strips[slot_number] = conn.read(int(length))
 
             if command == b"debug":
                 length = 32 * 16

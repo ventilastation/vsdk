@@ -209,24 +209,24 @@ class Bambi(TimedScene):
 
         frente_sprites = build_sprites([
             strips.laupalav.frenteA00,
-            strips.laupalav.frenteB01,
-            strips.laupalav.frenteC02,
-            strips.laupalav.frenteD03,
-            strips.laupalav.frenteA04,
-            strips.laupalav.frenteB05,
-            strips.laupalav.frenteC06,
-            strips.laupalav.frenteD07,
-            strips.laupalav.frenteA08,
-            strips.laupalav.frenteB09,
-            strips.laupalav.frenteC10,
-            strips.laupalav.frenteD11,
-            strips.laupalav.frenteA12,
-            strips.laupalav.frenteB13,
-            strips.laupalav.frenteC14,
-            strips.laupalav.frenteD15,
+            # strips.laupalav.frenteB01,
+            # strips.laupalav.frenteC02,
+            # strips.laupalav.frenteD03,
+            # strips.laupalav.frenteA04,
+            # strips.laupalav.frenteB05,
+            # strips.laupalav.frenteC06,
+            # strips.laupalav.frenteD07,
+            # strips.laupalav.frenteA08,
+            # strips.laupalav.frenteB09,
+            # strips.laupalav.frenteC10,
+            # strips.laupalav.frenteD11,
+            # strips.laupalav.frenteA12,
+            # strips.laupalav.frenteB13,
+            # strips.laupalav.frenteC14,
+            # strips.laupalav.frenteD15,
         ])
 
-        frente_anim = build_animation(frente_sprites, range(16))
+        frente_anim = build_animation(frente_sprites, range(len(frente_sprites)))
         self.frente = lambda frame: frente_anim[(frame // 5) % len(frente_anim)]
 
         bambi_sprites = build_sprites([
@@ -241,32 +241,32 @@ class Bambi(TimedScene):
 
         fondo_sprites = build_sprites([
             strips.laupalav.fondoA00,
-            strips.laupalav.fondoB01,
-            strips.laupalav.fondoC02,
-            strips.laupalav.fondoD03,
-            strips.laupalav.fondoA04,
-            strips.laupalav.fondoB05,
-            strips.laupalav.fondoC06,
-            strips.laupalav.fondoD07,
-            strips.laupalav.fondoA08,
-            strips.laupalav.fondoB09,
-            strips.laupalav.fondoC10,
-            strips.laupalav.fondoD11,
-            strips.laupalav.fondoA12,
-            strips.laupalav.fondoB13,
-            strips.laupalav.fondoC14,
-            strips.laupalav.fondoD15,
-            strips.laupalav.fondoA16,
-            strips.laupalav.fondoB17,
-            strips.laupalav.fondoC18,
-            strips.laupalav.fondoD19,
-            strips.laupalav.fondoA20,
-            strips.laupalav.fondoB21,
-            strips.laupalav.fondoC22,
-            strips.laupalav.fondoD23,
+            # strips.laupalav.fondoB01,
+            # strips.laupalav.fondoC02,
+            # strips.laupalav.fondoD03,
+            # strips.laupalav.fondoA04,
+            # strips.laupalav.fondoB05,
+            # strips.laupalav.fondoC06,
+            # strips.laupalav.fondoD07,
+            # strips.laupalav.fondoA08,
+            # strips.laupalav.fondoB09,
+            # strips.laupalav.fondoC10,
+            # strips.laupalav.fondoD11,
+            # strips.laupalav.fondoA12,
+            # strips.laupalav.fondoB13,
+            # strips.laupalav.fondoC14,
+            # strips.laupalav.fondoD15,
+            # strips.laupalav.fondoA16,
+            # strips.laupalav.fondoB17,
+            # strips.laupalav.fondoC18,
+            # strips.laupalav.fondoD19,
+            # strips.laupalav.fondoA20,
+            # strips.laupalav.fondoB21,
+            # strips.laupalav.fondoC22,
+            # strips.laupalav.fondoD23,
         ])
 
-        fondo_anim = build_animation(fondo_sprites, range(24))
+        fondo_anim = build_animation(fondo_sprites, range(len(fondo_sprites)))
         self.fondo = lambda frame: fondo_anim[(frame // 6) % len(fondo_anim)]
 
         self.animations = [

@@ -5,6 +5,7 @@ from ventilastation.director import director
 from ventilastation import imagenes
 from ventilastation import sprites
 from ventilastation import menu
+from ventilastation import povdisplay
 from ventilastation.imagenes import strips
 from apps import gallery
 
@@ -45,10 +46,18 @@ def load_app(modulename):
 
 class GamesMenu(menu.Menu):
 
+    def setup_images(self):
+        povdisplay.set_palettes(imagenes.palette_pal)
+        for n, strip in enumerate(imagenes.all_strips):
+            sprites.set_imagestrip(n, strip)
+
     def on_enter(self):
+        print("enter the game menu")
         super(GamesMenu, self).on_enter()
         self.animation_frames = 0
         self.pollitos = self.sprites[1]
+        self.setup_images()
+
         # self.boot_screen = make_me_a_planet(strips.other.ventilastation)
         # self.boot_screen.set_frame(0)
         # self.call_later(1500, self.boot_screen.disable)
@@ -132,9 +141,9 @@ class GamesMenu(menu.Menu):
 
 def main():
     # init images
-    for n, strip in enumerate(imagenes.all_strips):
-        sprites.set_imagestrip(n, strip)
-    director.push(GamesMenu(MAIN_MENU_OPTIONS))
+    menu = GamesMenu(MAIN_MENU_OPTIONS)
+    menu.call_later(700, menu.setup_images)
+    director.push(menu)
     director.run()
 
 if __name__ == '__main__':

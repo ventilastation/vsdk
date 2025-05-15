@@ -1,6 +1,8 @@
 import utime
 import sys
 
+from ventilastation import sprites
+from ventilastation import povdisplay
 
 class Scene:
     keep_music = False
@@ -14,8 +16,14 @@ class Scene:
             full_modulename = "apps.images." + self.images_module
             module = __import__(full_modulename, globals, locals, [self.images_module])
             self.strips = module.strips.__dict__[self.images_module]
+
+            povdisplay.set_palettes(module.palette_pal)
+            for n, strip in enumerate(module.all_strips):
+                sprites.set_imagestrip(n, strip)
+
             if full_modulename in sys.modules:
                 del sys.modules[full_modulename]
+
 
     def on_enter(self):
         self.load_images()

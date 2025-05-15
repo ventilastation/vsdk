@@ -5,8 +5,11 @@ from urandom import randrange
 sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
 stripes = {}
 
-def init(num_pixels, palette):
-    comms.send(b"palette", palette)
+def init(num_pixels):
+    pass
+
+def set_palettes(palette):
+    comms.send(b"palette %d" % (len(palette)/ 1024),  palette)
 
 def getaddress(sprite_num):
     return uctypes.addressof(sprite_data) + sprite_num * 5

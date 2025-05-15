@@ -20,12 +20,12 @@ palette_pal = b'\xff\xff\xff\xff\xff\xff\xea\xff\xff\xfa\xfa\xfa\xff\xf4\xf4\xf4
 
 class strips:
     class vugo:
-        moregrass = 99
-        monchito_runs = 100
-        obstacles = 101
-        bushes = 102
-        nube8bit = 103
-        bluesky = 104
+        moregrass = 0
+        monchito_runs = 1
+        obstacles = 2
+        bushes = 3
+        nube8bit = 4
+        bluesky = 5
 
 
 all_strips = [

@@ -199,9 +199,8 @@ void coreTask( void * pvParameters ){
 }
 
 
-static mp_obj_t povdisplay_init(mp_obj_t num_pixels, mp_obj_t palette) {
+static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
     spi_init(mp_obj_get_int(num_pixels));
-    palette_pal = (uint32_t *) mp_obj_str_get_str(palette);
     //printf("Micropython running on core %d\n", xPortGetCoreID());
     ventilagon_init();
     //printf("pixels0: %p\n", pixels0);
@@ -220,7 +219,15 @@ static mp_obj_t povdisplay_init(mp_obj_t num_pixels, mp_obj_t palette) {
     gamma_mode = 0;
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_2(povdisplay_init_obj, povdisplay_init);
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_init_obj, povdisplay_init);
+
+// ------------------------------
+
+static mp_obj_t povdisplay_set_palettes(mp_obj_t palette) {
+    palette_pal = (uint32_t *) mp_obj_str_get_str(palette);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_palettes_obj, povdisplay_set_palettes);
 
 // ------------------------------
 
@@ -257,6 +264,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_last_turn_duration_obj, povdisplay_l
 static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR___name__), MP_OBJ_NEW_QSTR(MP_QSTR_vshw_povdisplay) },
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_palettes), (mp_obj_t)&povdisplay_set_palettes_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_gamma_mode), (mp_obj_t)&povdisplay_set_gamma_mode_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_last_turn_duration), (mp_obj_t)&povdisplay_last_turn_duration_obj },
