@@ -208,7 +208,7 @@ def build_animation(sprites, order):
 
 class Bambi(TimedScene):
     stripes_rom = "laupalav"
-    duration = 1500
+    duration = 15000
 
     def on_enter(self):
         super(Bambi, self).on_enter()
