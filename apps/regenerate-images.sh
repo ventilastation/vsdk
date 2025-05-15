@@ -1,7 +1,8 @@
 cd ..
 . .venv/bin/activate
 cd tools
-python generate_images.py > ../emulator/imagenes.py
-python generate_strips.py  >> ../emulator/imagenes.py
-mpy-cross ../emulator/imagenes.py -o ../apps/micropython/ventilastation/imagenes.mpy
-echo "Updated emulator/imagenes.py and apps/micropython/ventilastation/imagenes.mpy"
+python generate_roms.py
+# python generate_images.py > ../tools/.workdir/imagenes.py
+# python generate_strips.py  >> ../tools/.workdir/imagenes.py
+# mpy-cross ../tools/.workdir/imagenes.py -o ../apps/micropython/ventilastation/imagenes.mpy
+# echo "Updated apps/micropython/ventilastation/imagenes.mpy"
