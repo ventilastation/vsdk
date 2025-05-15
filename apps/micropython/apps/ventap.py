@@ -1,5 +1,5 @@
 from urandom import choice, randrange, seed
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 from ventilastation.imagenes import strips
@@ -11,7 +11,7 @@ class Nubareda:
     def __init__(self):
         self.nubareda = [Sprite() for n in range(NUBES_POR_NUBAREDA)]
         for nube in self.nubareda:
-            nube.set_strip(strips.vyruss.explosion)
+            nube.set_strip(stripes["explosion.png"])
             nube.set_y(16)
 
     def reiniciar(self):
@@ -31,12 +31,14 @@ def make_me_a_planet(strip):
     return planet
 
 class Ventap(Scene):
+    stripes_rom = "vyruss"
 
     def on_enter(self):
+        super(Ventap, self).on_enter()
         self.bola = Sprite()
         self.bola.set_x(0)
         self.bola.set_y(16)
-        self.bola.set_strip(strips.vyruss.galaga)
+        self.bola.set_strip(stripes["galaga.png"])
         self.bola.set_frame(6)
 
         self.nubareda = Nubareda()
@@ -62,3 +64,7 @@ class Ventap(Scene):
     def finished(self):
         director.pop()
         raise StopIteration()
+
+
+def main():
+    return Ventap()

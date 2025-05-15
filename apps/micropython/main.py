@@ -80,8 +80,7 @@ class GamesMenu(menu.Menu):
             director.push(gallery.Gallery())
             raise StopIteration()
         if option_pressed[0] == 'ventap':
-            from apps import ventap
-            director.push(ventap.Ventap())
+            load_app("ventap")
             raise StopIteration()
         if option_pressed[0] == 'vladfarty':
             from apps import vladfarty
@@ -99,8 +98,7 @@ class GamesMenu(menu.Menu):
             director.push(vance.VanceGame())
             raise StopIteration()
         if option_pressed[0] == 'vong':
-            from apps import vong
-            director.push(vong.VongGame())
+            load_app("vong")
             raise StopIteration()
 
 

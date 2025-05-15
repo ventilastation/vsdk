@@ -2,7 +2,7 @@ from random import choice, randrange, seed
 import utime
 import gc
 
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite, reset_sprites
 from ventilastation.imagenes import strips
@@ -20,7 +20,7 @@ class Barra:
         self.sprite.set_x(x)
         self.sprite.set_y(y)
         self.sprite.set_perspective(1)
-        self.sprite.set_strip(strips.other.barra)
+        self.sprite.set_strip(stripes["barra.png"])
         self.sprite.set_frame(0)
         
 
@@ -30,7 +30,7 @@ class Pelota:
         self.sprite.set_x(x)
         self.sprite.set_y(y)
         self.sprite.set_perspective(1)
-        self.sprite.set_strip(strips.other.ball)
+        self.sprite.set_strip(stripes["ball.png"])
         self.sprite.set_frame(0) 
 
         self.speed = speed
@@ -64,15 +64,19 @@ class BarraPunto:
         self.sprite.set_x(x)
         self.sprite.set_y(y)
         self.sprite.set_perspective(1)
-        self.sprite.set_strip(strips.other.barra_punto)
+        self.sprite.set_strip(stripes["barra_punto.png"])
         self.sprite.set_frame(0) 
 
 class VongGame(Scene):
+    stripes_rom = "vong"
+
     def __init__(self):
         super(VongGame, self).__init__()
         seed(utime.ticks_ms())
         self.puntos = [0, 0]
+
     def on_enter(self):
+        super(VongGame, self).on_enter()
         self.pelota = Pelota(30,30,3)
         self.player1 = Barra(254,20)
         self.player2 = Barra(126,20)
@@ -133,4 +137,6 @@ class VongGame(Scene):
         # print(diferencia)
         self.pelota.speed_y += diferencia / 2
 
-        
+
+def main():
+    return VongGame()

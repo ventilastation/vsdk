@@ -12,24 +12,6 @@ def strip(filename, frames=1, palette=0):
 def fullscreen(filename, radius=54, palette=0):
     return filename, dict(frames=1, radius=radius, palette=palette, process="reproject")
 
-vyruss_images = image_group(
-    folder = "vyruss",
-    stripes = [
-        strip("disparo.png", frames=2),
-        strip("explosion.png", frames=5),
-        strip("explosion_nave.png", frames=4),
-        strip("galaga.png", frames=12),
-        strip("ll9.png", frames=4),
-        strip("gameover.png"),
-        strip("numerals.png", frames=12),
-
-        fullscreen("tierra.png", radius=25, palette=2),
-        fullscreen("marte.png", radius=25, palette=3),
-        fullscreen("jupiter.png", radius=25, palette=4),
-        fullscreen("saturno.png", radius=50, palette=5),
-    ]
-)
-
 vladfarty_images = image_group(
     folder = "vladfarty",
     stripes = [
@@ -183,24 +165,13 @@ unused_images = image_group(
     ]
 )
 
-vong_images  = image_group(
-    folder="other",stripes=[
-        strip("barra.png", frames=1),
-        strip("ball.png", frames=1),
-        strip("barra_punto.png", frames=1)
-    ]
-)
-
 
 all_images = {}
 all_images.update(other_images)
-all_images.update(vyruss_images)
 all_images.update(vladfarty_images)
 all_images.update(laupalav_images)
 all_images.update(milalhhl_images)
-all_images.update(vugo_images)
 all_images.update(vance_images)
-all_images.update(vong_images)
 #all_images.update(unused_images)
 
 
