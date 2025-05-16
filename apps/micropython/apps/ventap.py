@@ -10,8 +10,11 @@ class Nubareda:
     def __init__(self):
         self.nubareda = [Sprite() for n in range(NUBES_POR_NUBAREDA)]
         for nube in self.nubareda:
-            nube.set_strip(stripes["explosion.png"])
+            nube.set_strip(stripes["target.png"])
             nube.set_y(16)
+
+        self.planet = make_me_a_planet(stripes["fondo.png"])
+        self.planet.set_frame(0)
 
     def reiniciar(self):
         self.x = randrange(256 - 64)
@@ -26,18 +29,18 @@ def make_me_a_planet(strip):
     planet.set_strip(strip)
     planet.set_perspective(0)
     planet.set_x(0)
-    planet.set_y(0)
+    planet.set_y(255)
     return planet
 
 class Ventap(Scene):
-    stripes_rom = "vyruss"
+    stripes_rom = "ventap"
 
     def on_enter(self):
         super(Ventap, self).on_enter()
         self.bola = Sprite()
         self.bola.set_x(0)
         self.bola.set_y(16)
-        self.bola.set_strip(stripes["galaga.png"])
+        self.bola.set_strip(stripes["bola.png"])
         self.bola.set_frame(6)
 
         self.nubareda = Nubareda()

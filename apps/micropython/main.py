@@ -59,47 +59,10 @@ class GamesMenu(menu.Menu):
         # self.boot_screen.set_frame(0)
         # self.call_later(1500, self.boot_screen.disable)
 
-
     def on_option_pressed(self, option_index):
-        option_pressed = self.options[option_index]
-        if option_pressed[0] == 'vyruss':
-            load_app("vyruss")
-            raise StopIteration()
-        if option_pressed[0] == 'credits':
-            load_app("credits")
-            raise StopIteration()
-        if option_pressed[0] == 'gallery':
-            load_app("gallery")
-            raise StopIteration()
-        if option_pressed[0] == 'ventap':
-            load_app("ventap")
-            raise StopIteration()
-        if option_pressed[0] == 'vladfarty':
-            load_app("vladfarty")
-            raise StopIteration()
-        if option_pressed[0] == 'ventilagon_game':
-            load_app("ventilagon_game")
-            raise StopIteration()
-        if option_pressed[0] == 'vugo':
-            load_app("vugo")
-            raise StopIteration()
-        if option_pressed[0] == 'vance':
-            load_app("vance")
-            raise StopIteration()
-        if option_pressed[0] == 'vong':
-            load_app("vong")
-            raise StopIteration()
-        if option_pressed[0] == 'calibrate':
-            load_app("calibrate")
-            raise StopIteration()
-        if option_pressed[0] == 'tutorial':
-            load_app("tutorial")
-            raise StopIteration()
-        if option_pressed[0] == 'debugmode':
-            load_app("debugmode")
-            raise StopIteration()
-
-
+        app_chosen = self.options[option_index][0]
+        load_app(app_chosen)
+        raise StopIteration()
 
     def check_debugmode(self):
         if (director.is_pressed(director.JOY_UP)
