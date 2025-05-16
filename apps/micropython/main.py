@@ -13,11 +13,11 @@ MAIN_MENU_OPTIONS = [
     ('ventilagon_game', "menu.png", 1, 64),
     ('vance', "menu.png", 5, 64),
     ('vladfarty', "menu.png", 2, 64),
-    ('vugo', "menu.png", 7, 64),
     ('vong', "menu.png", 6, 64),
     ('ventap', "menu.png", 4, 64),
-    ('debugmode', "menu.png", 9, 64),
+    ('vugo', "menu.png", 7, 64),
     ('tutorial', "menu.png", 10, 64),
+    ('debugmode', "menu.png", 9, 64),
     ('calibrate', "menu.png", 8, 64),
     ('credits', "menu.png", 3, 64),
 ]
@@ -49,7 +49,11 @@ class GamesMenu(menu.Menu):
         super(GamesMenu, self).on_enter()
         print("enter the game menu")
         self.animation_frames = 0
-        self.pollitos = self.sprites[1]
+        try:
+            pollitos_index = [m[1] for m in MAIN_MENU_OPTIONS].index("pollitos.png")
+            self.pollitos = self.sprites[pollitos_index]
+        except ValueError:
+            self.pollitos = None
 
         # self.boot_screen = make_me_a_planet(strips.other.ventilastation)
         # self.boot_screen.set_frame(0)
@@ -127,9 +131,10 @@ class GamesMenu(menu.Menu):
                 pass
                 #update_over_the_air()
 
-            self.animation_frames += 1
-            pf = (self.animation_frames // 4) % 5
-            self.pollitos.set_frame(pf)
+            if self.pollitos:
+                self.animation_frames += 1
+                pf = (self.animation_frames // 4) % 5
+                self.pollitos.set_frame(pf)
 
 def main():
     # init images

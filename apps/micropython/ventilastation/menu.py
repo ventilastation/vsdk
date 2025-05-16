@@ -16,7 +16,7 @@ class Menu(Scene):
     def on_enter(self):
         super(Menu, self).on_enter()
         self.sprites = []
-        self.y_step = 180 // len(self.options)
+        self.y_step = 20 #250 // len(self.options)
         for n, (option_id, strip_name, frame, width) in enumerate(self.options):
             sprite = Sprite()
             sprite.set_x(-32)
@@ -54,8 +54,14 @@ class Menu(Scene):
                 sprite.set_perspective(2)
             else:
                 curr_y = sprite.y()
-                dest_y = int((n - self.selected_index) * self.y_step + 16) % 256
-                y = curr_y - (curr_y - dest_y) // 4
+                dest_y = int((n - self.selected_index) * self.y_step + 16)
+                if dest_y < 0:
+                    y = 255
+                else:
+                    if dest_y > 255:
+                        y = 255
+                    else:
+                        y = curr_y - (curr_y - dest_y) // 4
                 sprite.set_y(y)
                 sprite.set_perspective(1)
             
