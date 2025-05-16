@@ -7,7 +7,8 @@ Tested on Windows 10 - intel 64 bits
 
 ## Clone Ventilastation SDK repository
 ```
-mkdir ventilastation; cd ventilastation
+mkdir ventilastation
+cd ventilastation
 git clone https://github.com/ventilastation/vsdk
 cd vsdk
 ```
