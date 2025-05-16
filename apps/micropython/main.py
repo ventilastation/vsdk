@@ -8,17 +8,17 @@ from ventilastation import povdisplay
 from apps import gallery
 
 MAIN_MENU_OPTIONS = [
-    ('ventilagon_game', "menu.png", 1, 64),
-    ('gallery', "pollitos.png", 0, 64),
-    ('vugo', "menu.png", 7, 64),
     ('vyruss', "menu.png", 0, 64),
+    ('gallery', "pollitos.png", 0, 64),
+    ('ventilagon_game', "menu.png", 1, 64),
     ('vance', "menu.png", 5, 64),
-    ('vong', "menu.png", 6, 64),
     ('vladfarty', "menu.png", 2, 64),
-    ('calibrate', "menu.png", 8, 64),
-    ('tutorial', "menu.png", 10, 64),
-    ('debugmode', "menu.png", 9, 64),
+    ('vugo', "menu.png", 7, 64),
+    ('vong', "menu.png", 6, 64),
     ('ventap', "menu.png", 4, 64),
+    ('debugmode', "menu.png", 9, 64),
+    ('tutorial', "menu.png", 10, 64),
+    ('calibrate', "menu.png", 8, 64),
     ('credits', "menu.png", 3, 64),
 ]
 
@@ -73,8 +73,8 @@ class GamesMenu(menu.Menu):
         if option_pressed[0] == 'vladfarty':
             load_app("vladfarty")
             raise StopIteration()
-        if option_pressed[0] == 'ventilagon':
-            load_app(ventilagon_game)
+        if option_pressed[0] == 'ventilagon_game':
+            load_app("ventilagon_game")
             raise StopIteration()
         if option_pressed[0] == 'vugo':
             load_app("vugo")
