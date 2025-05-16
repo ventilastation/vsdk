@@ -2,7 +2,7 @@
 Tested on Windows 10 - intel 64 bits
 
 ## Install system dependencies
-* python > 3.13
+* Python > 3.13
 * git
 
 ## Clone Ventilastation SDK repository
