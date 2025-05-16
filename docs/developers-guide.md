@@ -18,7 +18,7 @@ In the Ventilastation repo there are a few folders that you'll need to identify,
 * `regenerate-images.sh` (or `.bat` under Windows) needs to be run every time you make a change in your images. It compiles the images into a `ROM` format that ventilastation and the emulator can understand.
 * `vs-emu.sh` (or `.bat`) is the script to start the emulator.
 
-## Part II: How to make a simple app
+## Part II: How to clone the simplest game
 
 Let's start by cloning a very simple game: `ventap`. In the repo find the `apps/micropython/apps` folder, and make a copy of the `ventap.py` file, into a new file called `mygame.py`:
 
@@ -36,7 +36,7 @@ mkdir apps/images/mygame
 cp apps/images/ventap/*.png apps/images/mygame
 ```
 
-Ventilastation cannot directly open PNG images, but in order to transform your assets into a format it can understand, you'll need a definition file. Create the file `apps/images/mygame/stripedefs.py` with the following content:
+Ventilastation cannot directly open PNG images, so in order to transform your assets into a format it can understand, you'll need a definition file. Create the file `apps/images/mygame/stripedefs.py` with the following content:
 ``` python
 stripes = [
     palettegroup(
@@ -55,5 +55,14 @@ regenerate-images.sh
 
 The above creates a ROM file in `apps/micropython/roms/mygame.rom`. We can reference it in our source code by changing the line `stripes_rom = "mygame"` in the `MyGame` class.
 
-## Part III: advanced topics
+Finally, to be able to start this app it needs to be added to the main menu.
+Add the following line to `main.py`:
+```
+    ('mygame', "mygame.png", 0),
+```
+
+## Part III: sprites
+(TODO)
+
+## Part IV: advanced topics
 (TODO)

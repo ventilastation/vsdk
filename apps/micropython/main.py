@@ -8,18 +8,19 @@ from ventilastation import povdisplay
 from apps import gallery
 
 MAIN_MENU_OPTIONS = [
-    ('vyruss', "menu.png", 0, 64),
-    ('gallery', "pollitos.png", 0, 64),
-    ('ventilagon_game', "menu.png", 1, 64),
-    ('vance', "menu.png", 5, 64),
-    ('vladfarty', "menu.png", 2, 64),
-    ('vong', "menu.png", 6, 64),
-    ('ventap', "menu.png", 4, 64),
-    ('vugo', "menu.png", 7, 64),
-    ('tutorial', "menu.png", 10, 64),
-    ('debugmode', "menu.png", 9, 64),
-    ('calibrate', "menu.png", 8, 64),
-    ('credits', "menu.png", 3, 64),
+#    ('mygame', "mygame.png", 0),
+    ('vyruss', "menu.png", 0),
+    ('gallery', "pollitos.png", 0),
+    ('ventilagon_game', "menu.png", 1),
+    ('vance', "menu.png", 5),
+    ('vladfarty', "menu.png", 2),
+    ('vong', "menu.png", 6),
+    ('ventap', "menu.png", 4),
+    ('vugo', "menu.png", 7),
+    ('tutorial', "menu.png", 10),
+    ('debugmode', "menu.png", 9),
+    ('calibrate', "menu.png", 8),
+    ('credits', "menu.png", 3),
 ]
 
 def update_over_the_air():
@@ -43,7 +44,7 @@ def load_app(modulename):
         del sys.modules[full_modulename]
 
 class GamesMenu(menu.Menu):
-    stripes_rom = "other"
+    stripes_rom = "menu"
 
     def on_enter(self):
         super(GamesMenu, self).on_enter()

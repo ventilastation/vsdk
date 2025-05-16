@@ -17,7 +17,7 @@ class Menu(Scene):
         super(Menu, self).on_enter()
         self.sprites = []
         self.y_step = 20 #250 // len(self.options)
-        for n, (option_id, strip_name, frame, width) in enumerate(self.options):
+        for n, (option_id, strip_name, frame) in enumerate(self.options):
             sprite = Sprite()
             sprite.set_x(-32)
             sprite.set_y(int(n * self.y_step))
@@ -48,7 +48,6 @@ class Menu(Scene):
                 sys.print_exception(e)
 
         for n, sprite in enumerate(self.sprites):
-            #sprite.set_x(start_x + accumulated_width - offset)
             if n == self.selected_index:
                 sprite.set_y(0)
                 sprite.set_perspective(2)
@@ -64,8 +63,6 @@ class Menu(Scene):
                         y = curr_y - (curr_y - dest_y) // 4
                 sprite.set_y(y)
                 sprite.set_perspective(1)
-            
-            #accumulated_width += self.options[option_index][3]  # option width
 
     def on_option_pressed(self, option_index):
         # print('pressed:', option_index)
