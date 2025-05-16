@@ -10,7 +10,7 @@ There are a few mechanical pieces needed to build Ventilastation:
 - 5 x 20mm M4 bolts
 - 2 x 25mm M5 tapered head screws
 
-![Ventilastation Mchanical Assembly](/docs/images/mechanicalAssembly.png)
+![Ventilastation Mechanical Assembly](/docs/images/mechanicalAssembly.png)
 
 All custom parts were designed with OnShape, and a model of all the parts plus its full assembly can be [browsed online](https://cad.onshape.com/documents/144b7488125d50c53e25b44a/w/fe42cb03011735274a08db6c/e/ad9868ebba5a1ec7c2a41ef0?renderMode=0&uiState=67effda339f27b01d99b0478).
 
