@@ -47,7 +47,7 @@ stripes = [
 ]
 ```
 
-Now you are ready to transform the images into the ROM format:
+Now you are ready to transform the images into the ROM format. If you ever add new images or change the existing files, you'll need to run this command again:
 
 ```
 regenerate-images.sh
