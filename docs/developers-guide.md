@@ -1,5 +1,8 @@
 # How to make games and apps for Ventilastation
 
+Ventilastation applications are built using the Micropython language.
+This is a version of the Python programming language, but optimized in its resource and memory usage so it is able to run on Microcontrollers like the ESP32 used by the Ventilastation fan blade.
+
 ## Part I: setup and overview
 
 ### Requirements: VSDK
@@ -11,7 +14,7 @@ In the Ventilastation repo there are a few folders that you'll need to identify,
 * `apps/micropython/apps` is the folder that will hold your code
 * `apps/images` is for your graphic assets
 * `apps/sounds` is for music and sound effects
-* `apps/micropython/roms` - images compiled by the `regenerate-images` script are put into this folder
+* `apps/micropython/roms` - images compiled by the `regenerate-images.sh` script are put into this folder
 * `apps/micropython/ventilastation` is a folder with system code
 
 ### VSDK repo, scripts
@@ -61,8 +64,40 @@ Add the following line to `main.py`:
     ('mygame', "mygame.png", 0),
 ```
 
-## Part III: sprites
+You can modify the file `mygame.png` used in the menu, in the `apps/images/menu` folder. 64x30 pixels is the right size for menu items.
+
+## Part III: Ventilastation display and Sprites
+The radial display of Ventilastation means that its pixels are not square, but instead are similar to tiny arcs. We call them "Arxels". Currently there are 54 LEDs from the center, and there are 256 circular steps where LEDs can change colors. All of this is handled in an optimized piece of C code, but as a game developer you should not worry about that.
+
+As a Ventilastation coder, you only interact with the display using `Sprites`. These are objects that Ventilastation can show and animate on its display.
+
+```
+from ventilastation.sprites import Sprite
+```
+
+Each Sprite object has the following properties:
+- X
+- Y
+- Perspective
+- Strip
+- Frame
+
+There are three "perspective modes" for sprites:
+- Mode 0: fullscreen images
+- Mode 1: perspective sprites 
+- Mode 2: non-perspective sprites
+
+### Mode 0: fullscreen images
 (TODO)
 
-## Part IV: advanced topics
+### Mode 1: perspective sprites 
+(TODO)
+
+### Mode 2: non-perspective sprites
+(TODO)
+
+## Part IV: Scenes and the director
+(TODO)
+
+## Part V: advanced topics
 (TODO)
