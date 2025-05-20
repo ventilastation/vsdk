@@ -148,6 +148,8 @@ class Ready(TimedScene):
     duration = 6000
 
     def on_enter(self):
+        super(Ready, self).on_enter()
+
         self.ready = Sprite()
         self.ready.set_strip(stripes["ready.png"])
         self.ready.set_perspective(2)
@@ -213,6 +215,7 @@ class Scroller(TimedScene):
         return [self.letter_class() for letter in range(25)]
 
     def on_enter(self):
+        super().on_enter()
         self.unused_letters = self.create_letters()
         self.visible_letters = []
         self.n = 0
@@ -283,6 +286,7 @@ class DancingLions(TimedScene):
     duration = 11960 + 1500
 
     def on_enter(self):
+        super().on_enter()
         self.farty_lionhead = make_me_a_planet(stripes["farty_lionhead.png"])
         self.farty_lionhead.set_y(0)
         self.farty_lionhead.disable()
@@ -338,6 +342,7 @@ class Chanimation(TimedScene):
     ANIMATE_SPEED = 15
 
     def on_enter(self):
+        super().on_enter()
         self.chame_pics = []
         for f in chanimation_frames:
             chp = make_me_a_planet(stripes[f])
@@ -369,6 +374,7 @@ class Chanijump(TimedScene):
     order = [0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0]
 
     def on_enter(self):
+        super().on_enter()
         self.chame_pics = []
         for f in chanijump_frames:
             chp = make_me_a_planet(stripes[f])
@@ -392,6 +398,7 @@ class OrchestraHit(TimedScene):
     duration = 1500
 
     def on_enter(self):
+        super().on_enter()
         director.sound_play(b"vladfarty/hit")
         director.music_off()
 
@@ -436,6 +443,7 @@ class Copyright(TimedScene):
     duration = 5000
 
     def on_enter(self):
+        super().on_enter()
         self.copyright = Sprite()
         self.copyright.disable()
         self.copyright.set_strip(stripes["copyright.png"])
@@ -540,6 +548,7 @@ class Kudowz(TimedScene):
     duration = 60000
 
     def on_enter(self):
+        super().on_enter()
         self.background = make_me_a_planet(stripes["vladfartylogo.png"])
         self.background.set_y(255)
         self.background.set_frame(0)

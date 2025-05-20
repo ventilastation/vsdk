@@ -6,6 +6,7 @@ UPGRADEABLES = "ota_update.py|main.py|director.py|scene.py|menu.py|vyruss.py|cre
 
 class Update(Scene):
     def on_enter(self):
+        super().on_enter()
         logo = self.logo = Sprite()
         logo.set_strip(14)
         logo.set_perspective(0)

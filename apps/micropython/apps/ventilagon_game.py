@@ -6,6 +6,8 @@ from ventilastation.director import director
 from ventilastation.scene import Scene
 
 class VentilagonGame(Scene):
+    stripes_rom = "other"
+
     def on_enter(self):
         super(VentilagonGame, self).on_enter()
         ventilagon.enter()

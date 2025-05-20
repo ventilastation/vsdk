@@ -33,6 +33,7 @@ class Tutorial(Scene):
     stripes_rom = "other"
 
     def on_enter(self):
+        super(Tutorial, self).on_enter()
         self.display = TextDisplay(0)
         self.display.set_value("Tutorial!")
 

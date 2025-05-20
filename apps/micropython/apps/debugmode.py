@@ -41,6 +41,7 @@ class DebugMode(Scene):
     stripes_rom = "other"
 
     def on_enter(self):
+        super(DebugMode, self).on_enter()
         self.rpm_display = TextDisplay(char_height * 2 + 2)
         self.us_display = TextDisplay(char_height + 2)
         self.fps_display = TextDisplay(2)

@@ -17,6 +17,7 @@ def make_me_a_planet(strip):
 
 
 class Credits(Scene):
+    stripes_rom = "other"
 
     def start_music(self):
         director.music_play("other/credits")
