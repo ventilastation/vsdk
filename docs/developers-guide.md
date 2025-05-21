@@ -84,6 +84,17 @@ If you need some action to happen later in the future, `Scene` provides a method
 
 ⚠️ *WARNING* ⚠️: it's advised to create all `Sprites` and other objects that will be used in the `on_enter()` method of your `Scene`, and to reuse them as much as possible. Do not create and release objects in the `step()` method, since for performance reasons the Garbage Collection only happens when entering or exiting `Scenes`.
 
+The `director` singleton also has the following constants and methods:
+
+- `JOY_LEFT`, `JOY_RIGHT`, `JOY_UP`, `JOY_DOWN`, `BUTTON_A`, `BUTTON_B`, `BUTTON_C`, `BUTTON_D` - Joystick constants
+- `is_pressed(button)` - True if the button or joy direction is currently pressed
+- `was_pressed(button)` - True if the button or joy direction is pressed but was not pressed last step
+- `was_released(button)` - True if the button or joy direction was pressed last step, but is no longer pressed right now
+
+- `sound_play(track)` - play this sound effect
+- `music_play(track)` - start playing this sound track, and remember it as the music track
+- `music_off()` - stop the current music track
+
 
 ## Part IV: Ventilastation display and Sprites
 
