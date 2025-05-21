@@ -87,9 +87,9 @@ If you need some action to happen later in the future, `Scene` provides a method
 
 ## Part IV: Ventilastation display and Sprites
 
-The radial display of Ventilastation means that its pixels are not square, but instead are similar to tiny arcs. We call them "Arxels". Currently there are 54 LEDs from the center, and there are 256 circular steps where LEDs can change colors. All of this is handled in an optimized piece of C code, but as a game developer you should not worry about that.
+The radial display of Ventilastation means that its pixels are not square, but instead are similar to tiny arcs. We call them "Arxels". Currently there are 54 LEDs from the center, and there are 256 circular steps where LEDs can change colors. All of this is handled in an optimized piece of C code, but all of this is already done, so you should not worry about that.
 
-As a Ventilastation coder, you will manipulate graphics using the `Sprite` class. These are up to 100 objects that Ventilastation can show and animate on its display.
+As a Ventilastation game developer, you will only handle graphics using the `Sprite` class. These are up to 100 objects that Ventilastation can show and animate on its display.
 
 In a given `Scene`, Sprites created first are always drawn on top of sprites created later, so it's very important to keep in mind the order in which you create the sprites.
 
@@ -97,11 +97,15 @@ In a given `Scene`, Sprites created first are always drawn on top of sprites cre
 from ventilastation.sprites import Sprite
 ```
 
-Each Sprite object has the following properties:
-- X, Y
-- Strip
-- Frame
-- Perspective
+Each Sprite object has the following methods:
+- X - `set_x()`, `x() -> int`
+- Y -  `set_y(int)`, `y() -> int`
+- Strip - `set_strip(strip_number: int)`
+- Frame - `set_frame(int)`, `frame() -> int`
+- Perspective `set_perspective(int)`, `perspective() -> int`
+- Width, Height - `width() -> int`, `height() -> int`
+- Collision detection - `collision([list of sprites]) -> target` returns the first sprite that collides from the list, or None if no sprite collides.
+- Hide sprite - `disable()`, call `set_frame(int)` to show it again.
 
 There are three "perspective modes" for sprites:
 - Mode 0: fullscreen images
