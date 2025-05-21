@@ -1,5 +1,5 @@
 # The ventilastation emulator
-The emulator allows you to build your game or application, and try it before uploading it to a real Ventilastation
+The emulator allows you to build your game or application, and try it before uploading it to a physical Ventilastation
 
 ## Installation
 - [Linux setup](/docs/emulator-setup.Linux.md)
