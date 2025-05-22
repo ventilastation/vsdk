@@ -113,10 +113,10 @@ Each Sprite object has the following methods:
 - Y -  `set_y(int)`, `y() -> int`
 - Strip - `set_strip(strip_number: int)`
 - Frame - `set_frame(int)`, `frame() -> int`
+- Hide sprite - `disable()`, call `set_frame(int)` to show it again.
 - Perspective `set_perspective(int)`, `perspective() -> int`
 - Width, Height - `width() -> int`, `height() -> int`
 - Collision detection - `collision([list of sprites]) -> target` returns the first sprite that collides from the list, or None if no sprite collides.
-- Hide sprite - `disable()`, call `set_frame(int)` to show it again.
 
 There are three "perspective modes" for sprites:
 - Mode 0: fullscreen images
@@ -148,5 +148,5 @@ The Y property goes from 0 at the outermost LED, to (54 - the sprite height) as 
 In order to submit your game to the Ventilastation project, please do it as a Github Pull Request.
 
 More detailed documentation about this process is available on Github itself:
-- [Fork a repository](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo
-- [Creating a pull request from a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/)proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
+- [Fork a repository](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
+- [Creating a pull request from a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
