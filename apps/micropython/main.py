@@ -8,14 +8,14 @@ from ventilastation import povdisplay
 from apps import gallery
 
 MAIN_MENU_OPTIONS = [
-#    ('mygame', "mygame.png", 0),
+    ('ventap', "menu.png", 4),
+    # ('uzumaki', "mygame.png", 0),
     ('vyruss', "menu.png", 0),
     ('gallery', "pollitos.png", 0),
     ('ventilagon_game', "menu.png", 1),
     ('vance', "menu.png", 5),
     ('vladfarty', "menu.png", 2),
     ('vong', "menu.png", 6),
-    ('ventap', "menu.png", 4),
     ('vugo', "menu.png", 7),
     ('tutorial', "menu.png", 10),
     ('debugmode', "menu.png", 9),
