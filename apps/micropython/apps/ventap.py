@@ -16,7 +16,7 @@ class Ventap(Scene):
                 pieza.set_x(i * 8)
                 pieza.set_y(16 + j * 8)
                 pieza.set_strip(stripes["ventilatris.png"])
-                pieza.set_frame(randrange(20))
+                pieza.set_frame(randrange(28))
                 self.piezas.append(pieza)
 
     def step(self):      
