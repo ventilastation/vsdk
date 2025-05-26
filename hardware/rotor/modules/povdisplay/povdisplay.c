@@ -198,8 +198,14 @@ void coreTask( void * pvParameters ){
     vTaskDelete(NULL);
 }
 
+bool already_initialized = false;
 
 static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
+    if (already_initialized) {
+        return mp_const_none;
+    }
+    already_initialized = true;
+
     spi_init(mp_obj_get_int(num_pixels));
     //printf("Micropython running on core %d\n", xPortGetCoreID());
     ventilagon_init();
@@ -224,7 +230,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_init_obj, povdisplay_init);
 // ------------------------------
 
 static mp_obj_t povdisplay_set_palettes(mp_obj_t palette) {
-    palette_pal = (uint32_t *) mp_obj_str_get_str(palette);
+    palette_pal = (uint32_t *) memoryview_data(palette);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_palettes_obj, povdisplay_set_palettes);
