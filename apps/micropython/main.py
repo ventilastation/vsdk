@@ -7,7 +7,7 @@ from ventilastation import menu
 from ventilastation import povdisplay
 
 MAIN_MENU_OPTIONS = [
-#    ('mygame', "mygame.png", 0),
+    ('uzumaki', "mygame.png", 0),
     ('vyruss', "menu.png", 0),
     ('gallery', "pollitos.png", 0),
     ('ventilagon_game', "menu.png", 1),
