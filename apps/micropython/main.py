@@ -9,6 +9,7 @@ from ventilastation import povdisplay
 MAIN_MENU_OPTIONS = [
     ('ventilatris', "menu.png", 4),
 #    ('mygame', "mygame.png", 0),
+    ('tvnel', "mygame.png", 0),
     ('mijuegui', "mygame.png", 0),
     ('uzumaki', "mygame.png", 0),
     ('vyruss', "menu.png", 0),
