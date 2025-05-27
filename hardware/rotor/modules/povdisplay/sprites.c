@@ -1,4 +1,5 @@
 #include "gpu.h"
+#include "py/objarray.h"
 
 // #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 // #include "esp_log.h"
@@ -7,6 +8,11 @@
 const mp_obj_type_t sprite_type;
 
 uint8_t sprite_num = 1;
+
+const char* memoryview_data(mp_obj_t mv_obj) {
+    mp_obj_array_t *mv = MP_OBJ_TO_PTR(mv_obj);
+    return ((char*)mv->items) + mv->free;
+}
 
 sprite_obj_t* to_sprite(mp_obj_t self_in) {
     mp_obj_instance_t *self = MP_OBJ_TO_PTR(self_in);
@@ -53,7 +59,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(reset_sprites_obj, reset_sprites);
 
 static mp_obj_t set_imagestrip(mp_obj_t strip_number, mp_obj_t strip_data) {
     int strip_nr = mp_obj_get_int(strip_number);
-    const char* strip_data_ptr = mp_obj_str_get_str(strip_data);
+    const char* strip_data_ptr = memoryview_data(strip_data);
     image_stripes[strip_nr % NUM_IMAGES] = (const ImageStrip*) strip_data_ptr;
     return mp_const_none;
 }

@@ -5,10 +5,11 @@ from ventilastation.director import director
 from ventilastation import sprites
 from ventilastation import menu
 from ventilastation import povdisplay
-from apps import gallery
 
 MAIN_MENU_OPTIONS = [
     ('ventilatris', "menu.png", 4),
+#    ('mygame', "mygame.png", 0),
+    ('mijuegui', "mygame.png", 0),
     ('uzumaki', "mygame.png", 0),
     ('vyruss', "menu.png", 0),
     ('gallery', "pollitos.png", 0),
@@ -49,7 +50,6 @@ class GamesMenu(menu.Menu):
 
     def on_enter(self):
         super(GamesMenu, self).on_enter()
-        print("enter the game menu")
         self.animation_frames = 0
         try:
             pollitos_index = [m[1] for m in MAIN_MENU_OPTIONS].index("pollitos.png")
@@ -84,8 +84,8 @@ class GamesMenu(menu.Menu):
             
     def step(self):
         if director.timedout:
-            from apps import gallery
-            director.push(gallery.Gallery())
+            load_app("gallery")
+            raise StopIteration()
 
         if not self.check_debugmode():
             super(GamesMenu, self).step()
