@@ -3,8 +3,8 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
-class Ventilatris(Scene):
-    stripes_rom = "ventilatris"
+class Vortris(Scene):
+    stripes_rom = "vortris"
 
     def on_enter(self):
         super().on_enter()
@@ -15,7 +15,7 @@ class Ventilatris(Scene):
                 pieza = Sprite()
                 pieza.set_x(i * 8)
                 pieza.set_y(16 + j * 8)
-                pieza.set_strip(stripes["ventilatris.png"])
+                pieza.set_strip(stripes["vortris.png"])
                 pieza.set_frame(randrange(28))
                 self.piezas.append(pieza)
 
@@ -29,4 +29,4 @@ class Ventilatris(Scene):
 
 
 def main():
-    return Ventilatris()
+    return Vortris()

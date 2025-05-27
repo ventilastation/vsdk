@@ -4,5 +4,8 @@ stripes = [
         strip("mygame.png", frames=1),
         strip("tvnel.png", frames=1),
         strip("pollitos.png", frames=5),
+        strip("vortris.png"),
+        strip("mijuegui.png"),
+        strip("uzumaki.png"),
     ),
 ]
