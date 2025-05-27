@@ -64,8 +64,8 @@ class Bajando(Estado):
     strip = "ship-sprite-sym.png"
 
     def step(self):
-        self.entidad.Move(0, 1)
+        self.entidad.sprite.set_y(self.entidad.sprite.y() + 1)
 
         # TODO: detectar colisión con planeta
-        if self.entidad.Y() >= 128-25:
+        if self.entidad.sprite.y() >= 128-25:
             return Explotando

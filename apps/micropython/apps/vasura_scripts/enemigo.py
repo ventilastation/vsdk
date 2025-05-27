@@ -1,9 +1,10 @@
 from apps.vasura_scripts.estado import *
 from apps.vasura_scripts.nave import Nave
 
+from ventilastation.sprites import Sprite
 from ventilastation.director import director, stripes
 
-class Enemigo(Nave):
+class Enemigo():
     estado_inicial = None
 
     # PENSAR: hay que pasar la posición acá?
@@ -11,8 +12,10 @@ class Enemigo(Nave):
         self.scene = scene
 
         strip = self.estado_inicial.strip
-        super().__init__(stripes[strip])
-
+        self.sprite = Sprite()
+        self.sprite.set_strip(stripes[strip])
+        self.sprite.set_frame(0)
+        self.sprite.set_perspective(1)
         self.sprite.set_x(x)
         self.sprite.set_y(y)
 
