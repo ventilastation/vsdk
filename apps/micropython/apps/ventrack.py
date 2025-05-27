@@ -118,7 +118,7 @@ class Ventrack(Scene):
             self.contador_sonido +=1
         elif self.contador_sonido >= 4 and self.contador_sonido <8:
             director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
+            director.sound_play(b"ventrack/2") 
             self.contador_sonido +=1
         elif self.contador_sonido >= 8 and self.contador_sonido <12:
             director.sound_play(b"ventrack/1")
