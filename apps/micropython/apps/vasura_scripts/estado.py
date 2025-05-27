@@ -34,8 +34,8 @@ class Explotando(Estado):  # Anarquía
     def __init__(self, entidad):
         super().__init__(entidad)
 
-        clase = self.entidad.__class__.__name__.lower()
-        self.strip = f"{clase}_explotando.png"
+        # clase = self.entidad.__class__.__name__.lower()
+        # self.strip = f"{clase}_explotando.png"
         self.strip = "ship-sprite-sym.png"
 
 
