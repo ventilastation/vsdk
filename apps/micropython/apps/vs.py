@@ -163,9 +163,15 @@ class vs(Scene):
         self.menu  = Menu()
         self.items = Items()
         
-        self.money = 500
+        self.money = 10000
         self.money_counter = Numbers(x=165, y=8, len=5)
         self.money_counter.setnumbers(self.money)
+
+        self.road = Sprite()
+        self.road.set_strip(stripes["road.png"])
+        self.road.set_x(192)
+        self.road.set_y(16)
+        self.road.set_frame(0)
 
         self.placing_item = False
 
