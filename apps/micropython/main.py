@@ -9,6 +9,7 @@ from apps import gallery
 
 MAIN_MENU_OPTIONS = [
 #    ('mygame', "mygame.png", 0),
+    ('ventrack', "mygame.png", 0),
     ('vyruss', "menu.png", 0),
     ('gallery', "pollitos.png", 0),
     ('ventilagon_game', "menu.png", 1),
