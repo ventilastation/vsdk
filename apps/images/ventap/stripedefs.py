@@ -4,6 +4,6 @@ stripes = [
         strip("bola.png", frames=12),
     ),
     palettegroup(
-        fullscreen("fondo.png"),
+        fullscreen("fondo.png", radius=25),
     ),
 ]

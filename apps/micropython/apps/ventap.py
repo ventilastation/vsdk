@@ -62,3 +62,11 @@ class Ventap(Scene):
             
         if director.was_pressed(director.BUTTON_D):
             self.finished()
+
+    def finished(self):
+        director.pop()
+        raise StopIteration()
+
+
+def main():
+    return Ventap()
