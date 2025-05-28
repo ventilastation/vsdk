@@ -27,7 +27,7 @@ class Tvnel(Scene):
     
         if self.step_counter == 0:
             for w in self.walls:
-                new_y = w.y() - 1
+                new_y = w.y() - 3
                 if new_y < 8:
                     new_y = 8 * 12
                 w.set_y(new_y)
