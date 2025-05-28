@@ -19,7 +19,11 @@ class Vortris(Scene):
                 pieza.set_frame(randrange(28))
                 self.piezas.append(pieza)
 
-    def step(self):      
+    def step(self):
+
+        pieza = self.piezas[randrange(len(self.piezas))]
+        pieza.set_frame(randrange(28))
+
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
