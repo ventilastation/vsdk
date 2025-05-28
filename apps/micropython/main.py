@@ -8,6 +8,7 @@ from ventilastation import povdisplay
 
 MAIN_MENU_OPTIONS = [
     ('vortris', "vortris.png", 0),
+    ('vailableextreme', "vailableextreme.png", 0),
 #    ('mygame', "mygame.png", 0),
     ('tvnel', "tvnel.png", 0),
     ('uzumaki', "uzumaki.png", 0),
