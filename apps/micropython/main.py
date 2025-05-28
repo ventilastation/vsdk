@@ -9,7 +9,7 @@ from apps import gallery
 
 MAIN_MENU_OPTIONS = [
 #    ('mygame', "mygame.png", 0),
-    ('vyruss', "menu.png", 0),
+    ('tvnel', "tvnel.png", 0),
     ('gallery', "pollitos.png", 0),
     ('ventilagon_game', "menu.png", 1),
     ('vance', "menu.png", 5),
@@ -21,6 +21,7 @@ MAIN_MENU_OPTIONS = [
     ('debugmode', "menu.png", 9),
     ('calibrate', "menu.png", 8),
     ('credits', "menu.png", 3),
+    ('vyruss', "menu.png", 0),
 ]
 
 def update_over_the_air():
