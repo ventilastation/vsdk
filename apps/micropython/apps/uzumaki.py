@@ -43,6 +43,13 @@ class Uzumaki(Scene):
         for l in self.letters:
             l.step_out()
 
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+
+    def finished(self):
+        director.pop()
+        raise StopIteration()
+
 
 def main():
     return Uzumaki()

@@ -9,11 +9,11 @@ from ventilastation import povdisplay
 MAIN_MENU_OPTIONS = [
     ('vortris', "vortris.png", 0),
 #    ('mygame', "mygame.png", 0),
-    ('vasura_espacial', "menu.png", 0),
     ('tvnel', "tvnel.png", 0),
     ('mijuegui', "mijuegui.png", 0),
     ('uzumaki', "uzumaki.png", 0),
-    ('vyruss', "menu.png", 0),
+    ('vasura_espacial', "vasura_espacial.png", 0),
+    # ('vyruss', "menu.png", 0),
     ('gallery', "pollitos.png", 0),
     ('ventilagon_game', "menu.png", 1),
     ('vance', "menu.png", 5),
@@ -85,9 +85,9 @@ class GamesMenu(menu.Menu):
             return True
             
     def step(self):
-        if director.timedout:
-            load_app("gallery")
-            raise StopIteration()
+        # if director.timedout:
+        #     load_app("gallery")
+        #     raise StopIteration()
 
         if not self.check_debugmode():
             super(GamesMenu, self).step()

@@ -37,6 +37,12 @@ class VasuraEspacial(Scene):
         self.enemigo.step()
         [bala.step() for bala in self.balas_usadas]
 
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+
+    def finished(self):
+        director.pop()
+        raise StopIteration()
 
     def get_bala_libre(self):
         if not self.balas_libres:

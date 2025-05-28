@@ -7,5 +7,6 @@ stripes = [
         strip("vortris.png"),
         strip("mijuegui.png"),
         strip("uzumaki.png"),
+        strip("vasura_espacial.png"),
     ),
 ]
