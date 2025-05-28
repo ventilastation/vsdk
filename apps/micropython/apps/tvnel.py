@@ -12,9 +12,9 @@ class Tvnel(Scene):
         self.walls = []
         for n in range(12):
             wall = Sprite()
-            wall.set_perspective(0)
+            wall.set_perspective(1)
             wall.set_x(0)
-            wall.set_y(240-8*n)
+            wall.set_y(n*8 + 16)
             wall.set_strip(stripes["bricks.png"])
             wall.set_frame(0)
             self.walls.append(wall)
@@ -27,9 +27,9 @@ class Tvnel(Scene):
     
         if self.step_counter == 0:
             for w in self.walls:
-                new_y = w.y() + 1
-                if new_y > 240:
-                    new_y = 240 - 8 * 12
+                new_y = w.y() - 1
+                if new_y < 8:
+                    new_y = 8 * 12
                 w.set_y(new_y)
 
         if director.was_pressed(director.BUTTON_A):
