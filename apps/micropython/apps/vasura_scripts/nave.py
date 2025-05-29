@@ -47,7 +47,7 @@ class Nave():
         bala.reset()
 
         # TODO: aplicar orientación de la nave
-        x = self.X() + self.sprite.width()
+        x = self.X() 
         y = self.Y() - self.sprite.height() // 2 + bala.sprite.height() // 2
         bala.setPos(x, y)
         bala.setDirection(1)
@@ -62,6 +62,7 @@ class Bala():
         self.sprite.set_x(0)
         self.sprite.set_y(self.sprite.height())
         self.sprite.set_perspective(1)
+        self.sprite.set_frame(0)
         self.sprite.disable()
 
 
@@ -70,7 +71,7 @@ class Bala():
 
 
     def reset(self):
-        self.sprite.set_frame(1)
+        self.sprite.set_frame(0)
         director.sound_play("vasura_espacial/disparo")
 
 

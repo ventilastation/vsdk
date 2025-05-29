@@ -66,6 +66,14 @@ class Bajando(Estado):
     def step(self):
         self.entidad.sprite.set_y(self.entidad.sprite.y() + 1)
 
-        # TODO: detectar colisión con planeta
         if self.entidad.sprite.y() >= 128-25:
+            return Explotando
+
+        if self.entidad.sprite.collision([self.entidad.scene.nave.sprite]):
+            self.entidad.scene.muerte()
+            return Explotando
+
+        bala = self.entidad.sprite.collision([x.sprite for x in self.entidad.scene.balas_usadas])
+        if bala:
+            bala.disable()
             return Explotando

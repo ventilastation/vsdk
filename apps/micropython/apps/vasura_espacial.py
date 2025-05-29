@@ -52,6 +52,12 @@ class VasuraEspacial(Scene):
         self.balas_usadas.remove(bala)
         self.balas_libres.append(bala)
 
+    
+    def muerte(self):
+        self.nave.sprite.disable()
+        director.music_play("vasura_espacial/game_over")
+        self.finished()
+
 
     def finished(self):
         director.pop()
