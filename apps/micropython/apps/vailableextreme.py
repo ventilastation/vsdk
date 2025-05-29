@@ -12,6 +12,8 @@ SCORE_STATES = {
     "x": 3
 }
 
+BUTTON = director.JOY_DOWN
+
 MISS_LIMIT=(255,45)
 GOOD_LIMIT=(45,25)
 PERFECT_LIMIT=()
@@ -24,6 +26,7 @@ class CirclePart(Sprite):
         super().__init__()
         self.button = button
         self.set_perspective(1)
+        self.set_strip(stripes["borde_blanco.png"])
         self.set_x(64*i)
         self.set_y(y)
 
@@ -37,7 +40,7 @@ class ExpandingLine(CirclePart):
     def __init__(self,i,button,y):
         super().__init__(i,button,y)
         self.is_red = False
-        self.score_state = 0 #frame del score
+        self.score_state = 0
         self.order = 0
         self.set_frame(0)
 
@@ -47,8 +50,100 @@ class LimitScoreLine(CirclePart):
         self.set_strip(stripes["limite.png"])
         self.set_frame(0)
 
+class Circle:
+    def __init__(self,circle_part:CirclePart,button,y):
+        self.circle = [circle_part(i,button,y) for i in range(4)]
+        
+    def expand(self,speed,disabled_list):
+        for part in self.circle:
+            if part.y() > 1 and not self.circle in disabled_list:
+                part.set_y(part.y()-speed)
+            else:
+                part.set_y(255)
+
+    def limits(self,disabled_list,order_list):
+        state = 0
+        if self.circle in disabled_list:
+            return
+        
+        for part in self.circle:
+            py = part.y()
+
+            # y[255,40] MISS
+            if MISS_LIMIT[1] <= py <= MISS_LIMIT[0]:
+                state = self._detect_first(order_list,part,SCORE_STATES["miss"],0)
+
+
+            # y[40,25] GOOD
+            elif GOOD_LIMIT[1] <= py <= GOOD_LIMIT[0]:
+                state = self._detect_first(order_list,part,SCORE_STATES["good"],2)
+            
+            # y[25,1] animation score
+            elif ANIMATION_LIMIT[1] < py < ANIMATION_LIMIT[0]:
+                part.set_y(0)
+                if part.is_red:
+                    pass
+                else:
+                    state = SCORE_STATES["miss"]
+
+            # Delete quarter and order
+            elif py <= 1:
+                if part.order in order_list:
+                    order_list.remove(part.order)
+                if self.circle in disabled_list:
+                    disabled_list.append(self.circle)
+            
+        return state
+
+    @staticmethod
+    def _detect_first(order_list, part, state, frame):
+
+        if any(number < part.order for number in order_list):
+            part.set_frame(frame)
+            return
+        
+        if director.was_pressed(part.button):
+            part.set_y(1)
+        elif part.score_state not in (SCORE_STATES["good"], SCORE_STATES["perfect"], SCORE_STATES["x"]):
+            part.set_frame(frame)
+            return SCORE_STATES["x"] if part.is_red else state
+    
+    @staticmethod
+    def should_appear(beat,disabled_lines,enabled_lines,exit_order,order):
+        if beat:
+            for tile in beat:
+                if int(tile) > 0:
+                    # pop circle
+                    try:
+                        circle_object = disabled_lines.pop()
+                        if not circle_object in enabled_lines:
+                            enabled_lines.append(circle_object)
+
+                        # add queue
+                        order += 1
+                        exit_order.append(order)
+
+                        # Settea
+                        for i in circle_object.circle:
+                            i.order = order
+                            i.set_y(255)
+                            i.state = SCORE_STATES["miss"]
+                            if int(tile) == 1:
+                                i.is_red = False
+                                i.set_strip(stripes["borde_blanco.png"])
+                            elif int(tile) == 2:
+                                i.is_red = True
+                                i.set_strip(stripes["borde_rojo.png"])
+
+                        return order
+                    except:pass
+
 class Music:
-    def extract(self,filepath):
+    def __init__(self,filepath):
+        self.time_per_beat = 1
+        self.last_beat_time = 0
+        self.beat_counter = 0
+
         file = open(filepath, "r")
         self.beats =  []
         for line in file.readlines():
@@ -63,56 +158,23 @@ class Music:
             else:
                 self.beats.append(line.strip())
 
+    def beat(self,actual_time):
+        if self.beat_counter < len(self.beats):
+            if actual_time >= self.last_beat_time + self.time_per_beat:
 
-class VailableExtremeGame(Scene):
-    stripes_rom = "vailableextreme"
-
-    def on_enter(self):
-        super(VailableExtremeGame, self).on_enter()
-        
-        Music.extract(self,"apps/extreme_songs/test.txt")
-
-        director.music_play("vance/505")
-        self.start_time = utime.ticks_ms()
-        self.time_per_beat = 1
-        self.last_beat_time = 0
-        self.beat_counter = 0
-
-        self.buttons = [director.JOY_LEFT, director.JOY_UP, director.JOY_RIGHT,director.JOY_DOWN]
-
-        self.order = 0
-        self.exit_order=[]
-
-        # create n circles
-        self.enabled_lines = []
-        self.disabled_lines = [[ExpandingLine(i,self.buttons[3],255) for i in range(4)] for _ in range(10)]
-
-        # create limit
-        self.limit_good_line = [LimitScoreLine(i,self.buttons[3],25) for i in range(4)]
-
-        # create animation score
+                beat = self.beats[self.beat_counter]
+                self.beat_counter += 1
+                return beat
+    
+class Animation:
+    def __init__(self,cantidad):
         self.enabled_animations = []
-        self.disabled_animations = [[ScoreAnimation(i,self.buttons[3],ANIMATION_LIMIT[0]-1) for i in range(4)] for _ in range(7)]
+        self.disabled_animations = [[ScoreAnimation(i,BUTTON,ANIMATION_LIMIT[0]-1) for i in range(4)] for _ in range(cantidad)]
+        self.state_anterior = 0
 
-        self.score_state = 0
-
-    def set_score_animation(self):
-        for animation in self.disabled_animations:
-            try:
-                if director.was_pressed(self.buttons[3]):
-                    score = self.disabled_animations.pop()
-
-                    if not score in self.enabled_animations:
-                        self.enabled_animations.append(score)
-
-                    for i in score:
-                        i.set_frame(self.score_state)
-                        i.set_y(GOOD_LIMIT[1]-2)
-            except:pass
-
-    def score_animation(self):
+    def score(self,state):
         #Set
-        self.set_score_animation()
+        self._set_score_animation(state)
         
         #Move
         for animation in self.enabled_animations:
@@ -126,93 +188,66 @@ class VailableExtremeGame(Scene):
                     self.disabled_animations.append(animation)
                     quarter.disable()
                     quarter.set_y(GOOD_LIMIT[1]-2)
-             
+                
+    def _set_score_animation(self,state):
+        for animation in self.disabled_animations:
+            try:
+                if director.was_pressed(BUTTON) or (self.state_anterior == 1 and state == 0):
+                    score = self.disabled_animations.pop()
 
-    def detect_first(self, quarter, velocity, state, frame):
-        move = lambda: (
-            quarter.set_frame(frame),
-            quarter.set_y(quarter.y() - velocity)
-            )
+                    if not score in self.enabled_animations:
+                        self.enabled_animations.append(score)
 
-        if any(number < quarter.order for number in self.exit_order):
-            move()
-            return
+                    for i in score:
+                        i.set_frame(state)
+                        i.set_y(GOOD_LIMIT[1]-2)
+            except:pass
+
+        self.state_anterior = state
+
+class VailableExtremeGame(Scene):
+    stripes_rom = "vailableextreme"
+
+    def on_enter(self):
+        super(VailableExtremeGame, self).on_enter()
         
-        if director.was_pressed(quarter.button):
-            quarter.set_y(1)
-        elif quarter.state not in (SCORE_STATES["good"], SCORE_STATES["perfect"], SCORE_STATES["x"]):
-            self.score_state = SCORE_STATES["x"] if quarter.is_red else state
-            move()
+        self.music = Music("apps/extreme_songs/test.txt")
+        director.music_play("vance/505")
+        self.start_time = utime.ticks_ms()
 
 
-    def expand_line(self):
-        for circle in self.enabled_lines:
-            for quarter in circle:
-                if circle in self.disabled_lines:
-                    continue
+        self.order = 0
+        self.exit_order=[]
 
-                qy = quarter.y()
+        # create n circles
+        self.enabled_lines = []
+        self.disabled_lines = [Circle(ExpandingLine,BUTTON,255) for _ in range(3)]
 
-                # y[255,40] MISS
-                if GOOD_LIMIT[0] <= qy <= MISS_LIMIT[0]:
-                    self.detect_first(quarter,2,SCORE_STATES["miss"],0)
+        # create limit
+        self.limit_good_line = [LimitScoreLine(i,BUTTON,25) for i in range(4)]
 
-                # y[40,25] GOOD
-                elif GOOD_LIMIT[1] <= qy <= GOOD_LIMIT[0]:
-                    self.detect_first(quarter,2,SCORE_STATES["good"],2)
+        self.animation = Animation(7)
 
-                # y[25,1] animation score
-                elif ANIMATION_LIMIT[1] < qy < ANIMATION_LIMIT[0]:
-                    quarter.set_y(0)
-                    if quarter.is_red:
-                        pass
-                    else:
-                        self.score_state = SCORE_STATES["miss"]
-                        self.set_score_animation()
-
-                # Delete quarter and order
-                elif qy <= 1:
-                    self.exit_order.remove(quarter.order)
-                    self.disabled_lines.append(circle)
+        self.score_state = 4
 
     def step(self):
         actual_time = utime.ticks_diff(utime.ticks_ms(),self.start_time) / 1000
-        self.score_animation()
-        self.expand_line()
+
+        self.animation.score(self.score_state)
+
+        beat = self.music.beat(actual_time)
+
+        for circle in self.disabled_lines:
+            order = circle.should_appear(beat,self.disabled_lines,self.enabled_lines,self.exit_order,self.order)
+            if order: 
+                self.order = order 
+                break
         
+        for circle in self.enabled_lines:
+            self.score_state = circle.limits(self.disabled_lines,self.exit_order)
+            if not circle in self.disabled_lines: circle.expand(2,self.disabled_lines)
 
-        if self.beat_counter < len(self.beats):
-            if actual_time >= self.last_beat_time + self.time_per_beat:
-
-                beat = self.beats[self.beat_counter]
-                self.beat_counter += 1
-
-                for tile in beat:
-                    if int(tile) > 0:
-                        # pop circle
-                        try:
-                            circle = self.disabled_lines.pop()
-                            if not circle in self.enabled_lines:
-                                self.enabled_lines.append(circle)
-
-                            # add queue
-                            self.order += 1
-                            self.exit_order.append(self.order)
-
-                            # Settea
-                            for i in circle:
-                                i.order = self.order
-                                i.set_y(255)
-                                i.state = SCORE_STATES["miss"]
-                                if int(tile) == 1:
-                                    i.is_red = False
-                                    i.set_strip(stripes["borde_blanco.png"])
-                                elif int(tile) == 2:
-                                    i.is_red = True
-                                    i.set_strip(stripes["borde_rojo.png"])
-                        except:pass
-
-        
+    
 
     def finished(self):
         director.pop()
