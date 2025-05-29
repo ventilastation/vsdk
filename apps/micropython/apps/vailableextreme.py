@@ -151,34 +151,22 @@ class Circle:
 
 class Music:
     def __init__(self,filepath):
-        self.time_per_beat = 1
-        self.last_beat_time = 0
-        self.beat_counter = 0
-
+        self.anterior = 0
         file = open(filepath, "r")
-        self.beats =  []
-        for line in file.readlines():
-            if "SONG_NAME" in line:
-                self.song_name = line.split("=")[-1].strip()
-            elif "BPMS" in line:
-                self.bpms = float(line.split("=")[-1].strip())
-            elif "OFFSET" in line:
-                self.offset = float(line.split("=")[-1].strip())
-            elif "LENGTH" in line:
-                self.length = float(line.split("=")[-1].strip())
-            else:
-                self.beats.append(line.strip())
-
+        self.ms = {}
+        self.tipo = []
+        for line in file:
+            partes = line.strip().split('\t')
+            self.ms[int(partes[0])] = int(partes[1])
+            
+    
     def beat(self,actual_time):
-        if self.beat_counter < len(self.beats):
-            if actual_time >= self.last_beat_time + self.time_per_beat:
+        if int(actual_time) in self.ms and self.anterior != int(actual_time):
+            print(self.ms[actual_time])
+            self.anterior = actual_time
+            return self.ms[actual_time]
 
-                beat = self.beats[self.beat_counter]
-                self.beat_counter += 1
-                if int(beat) > 0:
-                    return beat
-                else:
-                    return
+
     
 class Animation:
     def __init__(self,cantidad):
@@ -224,7 +212,7 @@ class VailableExtremeGame(Scene):
     def on_enter(self):
         super(VailableExtremeGame, self).on_enter()
         
-        self.music = Music("apps/extreme_songs/test.txt")
+        self.music_test = Music("apps/extreme_songs/key_log.txt")
         director.music_play("vance/505")
         self.start_time = utime.ticks_ms()
 
@@ -245,10 +233,12 @@ class VailableExtremeGame(Scene):
         self.beat = 0
 
     def step(self):
-        actual_time = utime.ticks_diff(utime.ticks_ms(),self.start_time) / 1000
+        actual_time = utime.ticks_diff(utime.ticks_ms(), self.start_time)
+        redondeado = (actual_time // 50) * 50
 
         self.animation.score(self.score_state)
-        self.beat = self.music.beat(actual_time)
+        # self.beat = self.music.beat(actual_time)
+        self.beat = self.music_test.beat(redondeado)
 
         # circle management
         for circle in self.disabled_lines:
@@ -269,7 +259,7 @@ class VailableExtremeGame(Scene):
         # Automatic Animation score when passing pixel 25
         for obj in self.enabled_lines:
             for part in obj.circle:
-                if not any(number < part.order for number in self.exit_order) and part.y() == GOOD_LIMIT[1] and not part.is_red and not director.is_pressed(BUTTON):
+                if not any(number < part.order for number in self.exit_order) and part.y() == GOOD_LIMIT[1] and not part.is_red and not director.was_pressed(BUTTON):
                     self.score_state = SCORE_STATES["miss"]
                     self.animation._set_score_animation(self.score_state,True)
                     break
