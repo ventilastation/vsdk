@@ -180,6 +180,9 @@ class VailableExtremeGame(Scene):
         self.score_animation()
         self.expand_line()
         
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+       
 
         if self.beat_counter < len(self.beats):
             if actual_time >= self.last_beat_time + self.time_per_beat:

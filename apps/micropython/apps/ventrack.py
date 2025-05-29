@@ -109,7 +109,10 @@ class Ventrack(Scene):
             self.cursor.movX(-1)     
         if director.was_pressed(director.BUTTON_A):
             self.pasos[self.cursor.gridx].sel(self.cursor.gridy)
-            
+        
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+       
 
     def sonidito(self):
        ## director.sound_play(b"vyruss/shoot1")
