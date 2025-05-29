@@ -16,6 +16,7 @@ MAIN_MENU_OPTIONS = [
     ('mijuegui', "mijuegui.png", 0),
     ('tvnel', "tvnel.png", 0),
     ('tvnel_alecu', "tvnel_alecu.png", 0),
+    ('ventrack', "mygame.png", 0),
     ('vyruss', "menu.png", 0),
     ('gallery', "pollitos.png", 0),
     ('ventilagon_game', "menu.png", 1),
