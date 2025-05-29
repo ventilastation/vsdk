@@ -237,7 +237,7 @@ class VailableExtremeGame(Scene):
         self.disabled_lines = [Circle(ExpandingLine,BUTTON,255) for _ in range(10)]
 
         # create limit
-        self.limit_good_line = [LimitScoreLine(i,BUTTON,25) for i in range(4)]
+        self.limit_good_line = [LimitScoreLine(i,BUTTON,30) for i in range(4)]
 
         self.animation = Animation(7)
 
@@ -269,7 +269,7 @@ class VailableExtremeGame(Scene):
         # Automatic Animation score when passing pixel 25
         for obj in self.enabled_lines:
             for part in obj.circle:
-                if not any(number < part.order for number in self.exit_order) and part.y() == GOOD_LIMIT[1] and not part.is_red:
+                if not any(number < part.order for number in self.exit_order) and part.y() == GOOD_LIMIT[1] and not part.is_red and not director.is_pressed(BUTTON):
                     self.score_state = SCORE_STATES["miss"]
                     self.animation._set_score_animation(self.score_state,True)
                     break
