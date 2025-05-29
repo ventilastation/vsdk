@@ -51,9 +51,12 @@ class Menu(Scene):
             if n == self.selected_index:
                 sprite.set_y(0)
                 sprite.set_perspective(2)
+            elif n < self.selected_index:
+                sprite.set_y(255)
+                sprite.set_perspective(1)
             else:
                 curr_y = sprite.y()
-                dest_y = int((n - self.selected_index) * self.y_step + 16)
+                dest_y = int((n - self.selected_index) * self.y_step + 30)
                 if dest_y < 0:
                     y = 255
                 else:
