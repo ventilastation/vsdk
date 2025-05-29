@@ -53,16 +53,15 @@ class LimitScoreLine(CirclePart):
 class Circle:
     def __init__(self,circle_part:CirclePart,button,y):
         self.circle = [circle_part(i,button,y) for i in range(4)]
+        self.first = False
+        self.state = 0
         
-    def expand(self,speed,disabled_list):
+    def expand(self,speed):
         for part in self.circle:
-            if part.y() > 1 and not self.circle in disabled_list:
+            if part.y() > 1:
                 part.set_y(part.y()-speed)
-            else:
-                part.set_y(255)
 
     def limits(self,disabled_list,order_list):
-        state = 0
         if self.circle in disabled_list:
             return
         
@@ -71,12 +70,17 @@ class Circle:
 
             # y[255,40] MISS
             if MISS_LIMIT[1] <= py <= MISS_LIMIT[0]:
-                state = self._detect_first(order_list,part,SCORE_STATES["miss"],0)
-
+                if not any(number < part.order for number in order_list): self.first = True
+                s = self._detect_first(order_list,part,SCORE_STATES["miss"],0)
+                if s: self.state = s
 
             # y[40,25] GOOD
             elif GOOD_LIMIT[1] <= py <= GOOD_LIMIT[0]:
-                state = self._detect_first(order_list,part,SCORE_STATES["good"],2)
+                if not any(number < part.order for number in order_list): self.first = True
+                s = self._detect_first(order_list,part,SCORE_STATES["good"],2)
+                if s: self.state = s
+
+
             
             # y[25,1] animation score
             elif ANIMATION_LIMIT[1] < py < ANIMATION_LIMIT[0]:
@@ -84,16 +88,20 @@ class Circle:
                 if part.is_red:
                     pass
                 else:
-                    state = SCORE_STATES["miss"]
+                    self.state = SCORE_STATES["miss"]
 
             # Delete quarter and order
             elif py <= 1:
+                self.first = False
                 if part.order in order_list:
                     order_list.remove(part.order)
                 if self.circle in disabled_list:
                     disabled_list.append(self.circle)
             
-        return state
+        if self.first:
+            return self.state
+        else:
+            return
 
     @staticmethod
     def _detect_first(order_list, part, state, frame):
@@ -104,6 +112,7 @@ class Circle:
         
         if director.was_pressed(part.button):
             part.set_y(1)
+            return SCORE_STATES["x"] if part.is_red else state
         elif part.score_state not in (SCORE_STATES["good"], SCORE_STATES["perfect"], SCORE_STATES["x"]):
             part.set_frame(frame)
             return SCORE_STATES["x"] if part.is_red else state
@@ -170,11 +179,10 @@ class Animation:
     def __init__(self,cantidad):
         self.enabled_animations = []
         self.disabled_animations = [[ScoreAnimation(i,BUTTON,ANIMATION_LIMIT[0]-1) for i in range(4)] for _ in range(cantidad)]
-        self.state_anterior = 0
 
     def score(self,state):
         #Set
-        self._set_score_animation(state)
+        self._set_score_animation(state,False)
         
         #Move
         for animation in self.enabled_animations:
@@ -189,10 +197,10 @@ class Animation:
                     quarter.disable()
                     quarter.set_y(GOOD_LIMIT[1]-2)
                 
-    def _set_score_animation(self,state):
+    def _set_score_animation(self,state,auto):
         for animation in self.disabled_animations:
             try:
-                if director.was_pressed(BUTTON) or (self.state_anterior == 1 and state == 0):
+                if director.was_pressed(BUTTON) or auto:
                     score = self.disabled_animations.pop()
 
                     if not score in self.enabled_animations:
@@ -219,16 +227,16 @@ class VailableExtremeGame(Scene):
         self.order = 0
         self.exit_order=[]
 
-        # create n circles
+        # create circles
         self.enabled_lines = []
-        self.disabled_lines = [Circle(ExpandingLine,BUTTON,255) for _ in range(3)]
+        self.disabled_lines = [Circle(ExpandingLine,BUTTON,255) for _ in range(15)]
 
         # create limit
         self.limit_good_line = [LimitScoreLine(i,BUTTON,25) for i in range(4)]
 
         self.animation = Animation(7)
 
-        self.score_state = 4
+        self.score_state = 0
 
     def step(self):
         actual_time = utime.ticks_diff(utime.ticks_ms(),self.start_time) / 1000
@@ -237,15 +245,28 @@ class VailableExtremeGame(Scene):
 
         beat = self.music.beat(actual_time)
 
+        # circle management
         for circle in self.disabled_lines:
             order = circle.should_appear(beat,self.disabled_lines,self.enabled_lines,self.exit_order,self.order)
             if order: 
                 self.order = order 
                 break
         
+        # Boundary detection and circle movement
         for circle in self.enabled_lines:
-            self.score_state = circle.limits(self.disabled_lines,self.exit_order)
-            if not circle in self.disabled_lines: circle.expand(2,self.disabled_lines)
+            state = circle.limits(self.disabled_lines,self.exit_order)
+            if state != None: self.score_state = state
+            if not circle in self.disabled_lines: circle.expand(2)
+
+
+        # Automatic Animation score when passing pixel 25
+        for obj in self.enabled_lines:
+            for part in obj.circle:
+                if not any(number < part.order for number in self.exit_order) and part.y() == GOOD_LIMIT[1] and not part.is_red:
+                    self.score_state = SCORE_STATES["miss"]
+                    self.animation._set_score_animation(self.score_state,True)
+                    break
+
 
     
 
