@@ -10,5 +10,6 @@ stripes = [
         strip("vasura_espacial.png"),
         strip("vs.png"),
         strip("vailableextreme.png", frames=1),
+        strip("tvnel.png", frames=1),
     ),
 ]

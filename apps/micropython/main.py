@@ -10,11 +10,12 @@ MAIN_MENU_OPTIONS = [
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
 #    ('mygame', "mygame.png", 0),
-    ('tvnel_alecu', "tvnel_alecu.png", 0),
     ('uzumaki', "uzumaki.png", 0),
     ('vasura_espacial', "vasura_espacial.png", 0),
     ('vs', "vs.png", 0),
     ('mijuegui', "mijuegui.png", 0),
+    ('tvnel', "tvnel.png", 0),
+    ('tvnel_alecu', "tvnel_alecu.png", 0),
     ('vyruss', "menu.png", 0),
     ('gallery', "pollitos.png", 0),
     ('ventilagon_game', "menu.png", 1),
@@ -27,6 +28,7 @@ MAIN_MENU_OPTIONS = [
     ('debugmode', "menu.png", 9),
     ('calibrate', "menu.png", 8),
     ('credits', "menu.png", 3),
+    ('vyruss', "menu.png", 0),
 ]
 
 def update_over_the_air():
