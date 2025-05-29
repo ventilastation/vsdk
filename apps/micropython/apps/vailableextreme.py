@@ -4,6 +4,7 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 from time import sleep
 import utime
+import gc
 
 SCORE_STATES = {
     "miss" : 0, 
@@ -18,7 +19,6 @@ MISS_LIMIT=(255,45)
 GOOD_LIMIT=(45,25)
 PERFECT_LIMIT=()
 ANIMATION_LIMIT=(25,1)
-
 
 
 class CirclePart(Sprite):
@@ -162,11 +162,9 @@ class Music:
     
     def beat(self,actual_time):
         if int(actual_time) in self.ms and self.anterior != int(actual_time):
-            print(self.ms[actual_time])
+            # print(self.ms[actual_time])
             self.anterior = actual_time
             return self.ms[actual_time]
-
-
     
 class Animation:
     def __init__(self,cantidad):
@@ -206,16 +204,25 @@ class Animation:
 
         self.state_anterior = state
 
+
+
+
 class VailableExtremeGame(Scene):
     stripes_rom = "vailableextreme"
 
     def on_enter(self):
         super(VailableExtremeGame, self).on_enter()
+
+        self.figura = Sprite()
+        self.figura.set_strip(stripes["av_n1.png"])
+        self.figura.set_perspective(0)
+        self.figura.set_x(0)
+        self.figura.set_y(255)
+        self.figura.set_frame(0)
         
         self.music_test = Music("apps/extreme_songs/key_log.txt")
         director.music_play("vance/505")
         self.start_time = utime.ticks_ms()
-
 
         self.order = 0
         self.exit_order=[]
@@ -231,6 +238,8 @@ class VailableExtremeGame(Scene):
 
         self.score_state = 0
         self.beat = 0
+
+        self.contador = 1
 
     def step(self):
         actual_time = utime.ticks_diff(utime.ticks_ms(), self.start_time)
@@ -263,6 +272,21 @@ class VailableExtremeGame(Scene):
                     self.score_state = SCORE_STATES["miss"]
                     self.animation._set_score_animation(self.score_state,True)
                     break
+        
+        if director.was_pressed(BUTTON):
+            if self.contador < 3:
+                self.contador += 1
+            else:
+                self.contador = 1
+            self.figura.disable()
+            self.figura.set_strip(stripes[f"av_n{self.contador}.png"])
+            self.figura.set_perspective(0)
+            self.figura.set_x(0)
+            self.figura.set_y(255)
+            self.figura.set_frame(0)
+        
+        gc.collect()
+
 
     def finished(self):
         director.pop()
