@@ -1,6 +1,6 @@
 # Ventilastation Development Kit
 
-Ventilastation is a an open source electromechanical console for circular games, built with a large fan and a bar of LEDs.
+Ventilastation is a an open source electromechanical console for circular games, built with a large fan, a bar of LEDs and Micropython.
 
 <img width="40%" alt="image" src="https://github.com/user-attachments/assets/25be08fe-a0b5-4171-874c-5623d56633fa" />
 <img width="40%" alt="image" src="https://github.com/user-attachments/assets/4e18ef31-3a48-4196-8ebd-66cba60be72e" />
