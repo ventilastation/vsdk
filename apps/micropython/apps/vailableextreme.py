@@ -51,7 +51,7 @@ class LimitScoreLine(CirclePart):
         self.set_frame(0)
 
 class Circle:
-    def __init__(self,circle_part:CirclePart,button,y):
+    def __init__(self,circle_part:ExpandingLine,button,y):
         self.circle = [circle_part(i,button,y) for i in range(4)]
         self.first = False
         self.state = 0
@@ -95,8 +95,10 @@ class Circle:
                 self.first = False
                 if part.order in order_list:
                     order_list.remove(part.order)
-                if self.circle in disabled_list:
-                    disabled_list.append(self.circle)
+                if not self in disabled_list:
+                    disabled_list.append(self)
+                part.set_y(255)
+                part.disable()
             
         if self.first:
             return self.state
@@ -120,32 +122,33 @@ class Circle:
     @staticmethod
     def should_appear(beat,disabled_lines,enabled_lines,exit_order,order):
         if beat:
-            for tile in beat:
-                if int(tile) > 0:
-                    # pop circle
-                    try:
-                        circle_object = disabled_lines.pop()
-                        if not circle_object in enabled_lines:
-                            enabled_lines.append(circle_object)
+            if int(beat) > 0:
+                # pop circle
+                try:
+                    print(f"creando : {beat}")
+                    circle_object = disabled_lines.pop()
+                    if not circle_object in enabled_lines:
+                        enabled_lines.append(circle_object)
 
-                        # add queue
-                        order += 1
-                        exit_order.append(order)
+                    # add queue
+                    order += 1
+                    exit_order.append(order)
 
-                        # Settea
-                        for i in circle_object.circle:
-                            i.order = order
-                            i.set_y(255)
-                            i.state = SCORE_STATES["miss"]
-                            if int(tile) == 1:
-                                i.is_red = False
-                                i.set_strip(stripes["borde_blanco.png"])
-                            elif int(tile) == 2:
-                                i.is_red = True
-                                i.set_strip(stripes["borde_rojo.png"])
+                    # Settea
+                    for i in circle_object.circle:
+                        i.order = order
+                        i.set_y(255)
+                        i.state = SCORE_STATES["miss"]
+                        if int(beat) == 1:
+                            i.is_red = False
+                            i.set_strip(stripes["borde_blanco.png"])
+                        elif int(beat) == 2:
+                            i.is_red = True
+                            i.set_strip(stripes["borde_rojo.png"])
 
-                        return order
-                    except:pass
+                    return order
+                except:
+                    print("disabled_lines error : " + disabled_lines)
 
 class Music:
     def __init__(self,filepath):
@@ -173,7 +176,10 @@ class Music:
 
                 beat = self.beats[self.beat_counter]
                 self.beat_counter += 1
-                return beat
+                if int(beat) > 0:
+                    return beat
+                else:
+                    return
     
 class Animation:
     def __init__(self,cantidad):
@@ -229,7 +235,7 @@ class VailableExtremeGame(Scene):
 
         # create circles
         self.enabled_lines = []
-        self.disabled_lines = [Circle(ExpandingLine,BUTTON,255) for _ in range(15)]
+        self.disabled_lines = [Circle(ExpandingLine,BUTTON,255) for _ in range(10)]
 
         # create limit
         self.limit_good_line = [LimitScoreLine(i,BUTTON,25) for i in range(4)]
@@ -237,18 +243,18 @@ class VailableExtremeGame(Scene):
         self.animation = Animation(7)
 
         self.score_state = 0
+        self.beat = 0
 
     def step(self):
         actual_time = utime.ticks_diff(utime.ticks_ms(),self.start_time) / 1000
 
         self.animation.score(self.score_state)
-
-        beat = self.music.beat(actual_time)
+        self.beat = self.music.beat(actual_time)
 
         # circle management
         for circle in self.disabled_lines:
-            order = circle.should_appear(beat,self.disabled_lines,self.enabled_lines,self.exit_order,self.order)
-            if order: 
+            order = circle.should_appear(self.beat,self.disabled_lines,self.enabled_lines,self.exit_order,self.order)
+            if order:
                 self.order = order 
                 break
         
@@ -267,13 +273,9 @@ class VailableExtremeGame(Scene):
                     self.animation._set_score_animation(self.score_state,True)
                     break
 
-
-    
-
     def finished(self):
         director.pop()
         raise StopIteration()
-
 
 def main():
     return VailableExtremeGame()
