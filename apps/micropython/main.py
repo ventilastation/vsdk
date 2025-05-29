@@ -10,7 +10,7 @@ MAIN_MENU_OPTIONS = [
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
 #    ('mygame', "mygame.png", 0),
-    ('tvnel', "tvnel.png", 0),
+    ('tvnel_alecu', "tvnel_alecu.png", 0),
     ('uzumaki', "uzumaki.png", 0),
     ('vasura_espacial', "vasura_espacial.png", 0),
     ('vs', "vs.png", 0),

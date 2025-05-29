@@ -4,8 +4,8 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
 
-class Tvnel(Scene):
-    stripes_rom = "tvnel"
+class TvnelAlecu(Scene):
+    stripes_rom = "tvnel_alecu"
 
     def on_enter(self):
         super().on_enter()
@@ -44,4 +44,4 @@ class Tvnel(Scene):
 
 
 def main():
-    return Tvnel()
+    return TvnelAlecu()
