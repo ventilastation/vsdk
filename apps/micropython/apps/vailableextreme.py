@@ -56,29 +56,30 @@ class Circle:
         self.first = False
         self.state = 0
         
-    def expand(self,speed):
+    def expand(self,speed,disabled_list):
         for part in self.circle:
-            if part.y() > 1:
+            if part.y() > 1 and not self in disabled_list:
                 part.set_y(part.y()-speed)
 
     def limits(self,disabled_list,order_list):
-        if self.circle in disabled_list:
-            return
-        
         for part in self.circle:
+            if any(number < part.order for number in order_list):
+                self.first = False
+                return
+
             py = part.y()
 
             # y[255,40] MISS
             if MISS_LIMIT[1] <= py <= MISS_LIMIT[0]:
                 if not any(number < part.order for number in order_list): self.first = True
-                s = self._detect_first(order_list,part,SCORE_STATES["miss"],0)
-                if s: self.state = s
+                if self._detect_first(order_list,part,0):
+                    self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["miss"]
 
             # y[40,25] GOOD
             elif GOOD_LIMIT[1] <= py <= GOOD_LIMIT[0]:
                 if not any(number < part.order for number in order_list): self.first = True
-                s = self._detect_first(order_list,part,SCORE_STATES["good"],2)
-                if s: self.state = s
+                if self._detect_first(order_list,part,2):
+                    self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["good"]
 
 
             
@@ -99,25 +100,23 @@ class Circle:
                     disabled_list.append(self)
                 part.set_y(255)
                 part.disable()
-            
+        
         if self.first:
             return self.state
-        else:
-            return
 
     @staticmethod
-    def _detect_first(order_list, part, state, frame):
+    def _detect_first(order_list, part, frame):
 
         if any(number < part.order for number in order_list):
             part.set_frame(frame)
-            return
+            return False
         
         if director.was_pressed(part.button):
             part.set_y(1)
-            return SCORE_STATES["x"] if part.is_red else state
+            return True
         elif part.score_state not in (SCORE_STATES["good"], SCORE_STATES["perfect"], SCORE_STATES["x"]):
             part.set_frame(frame)
-            return SCORE_STATES["x"] if part.is_red else state
+            return True
     
     @staticmethod
     def should_appear(beat,disabled_lines,enabled_lines,exit_order,order):
@@ -125,7 +124,6 @@ class Circle:
             if int(beat) > 0:
                 # pop circle
                 try:
-                    print(f"creando : {beat}")
                     circle_object = disabled_lines.pop()
                     if not circle_object in enabled_lines:
                         enabled_lines.append(circle_object)
@@ -136,6 +134,7 @@ class Circle:
 
                     # Settea
                     for i in circle_object.circle:
+                        i.set_frame(0)
                         i.order = order
                         i.set_y(255)
                         i.state = SCORE_STATES["miss"]
@@ -257,12 +256,14 @@ class VailableExtremeGame(Scene):
             if order:
                 self.order = order 
                 break
+            
         
         # Boundary detection and circle movement
         for circle in self.enabled_lines:
-            state = circle.limits(self.disabled_lines,self.exit_order)
-            if state != None: self.score_state = state
-            if not circle in self.disabled_lines: circle.expand(2)
+            if not circle in self.disabled_lines: 
+                state = circle.limits(self.disabled_lines,self.exit_order)
+                if state != None: self.score_state = state
+                circle.expand(2,self.disabled_lines)
 
 
         # Automatic Animation score when passing pixel 25
