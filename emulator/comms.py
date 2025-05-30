@@ -131,8 +131,6 @@ def receive_loop():
                 continue
 
             command, *args = l.split()
-            print("received", command, args)
-
             # print("RECEIVED", command, args)
 
             if command == b"sprites":
