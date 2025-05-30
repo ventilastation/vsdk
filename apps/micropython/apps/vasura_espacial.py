@@ -3,8 +3,8 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
-from apps.vasura_scripts.nave import Nave, Bala
-from apps.vasura_scripts.enemigo import *
+from apps.vasura_scripts.entities.nave import Nave, Bala
+from apps.vasura_scripts.entities.enemigo import *
 from apps.vasura_scripts.entities.planeta import Planeta
 
 LIMITE_BALAS = 20
@@ -15,7 +15,7 @@ class VasuraEspacial(Scene):
     def on_enter(self):
         super(VasuraEspacial, self).on_enter()
 
-        self.nave = Nave(self, stripes["ship-sprite-asym-sheet.png"])
+        self.nave = Nave(self)
 
         self.planet = Planeta()
 
@@ -65,7 +65,7 @@ class VasuraEspacial(Scene):
 
     
     def muerte(self):
-        self.nave.sprite.disable()
+        self.nave.disable()
         director.music_play("vasura_espacial/game_over")
         self.finished()
 

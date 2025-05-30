@@ -1,23 +1,26 @@
+from apps.vasura_scripts.entities.entidad import *
+
 from apps.vasura_scripts.estado import *
-from apps.vasura_scripts.nave import Nave
 
 from ventilastation.sprites import Sprite
-from ventilastation.director import director, stripes
+from ventilastation.director import stripes
 
-class Enemigo():
-    estado_inicial = None
+class Enemigo(Entidad):
+    
+    estado_inicial : Estado = None
+    strip : str
+
 
     # PENSAR: hay que pasar la posición acá?
     def __init__(self, scene, x, y):
+        super().__init__(stripes[self.strip], x, y)
+        
         self.scene = scene
-
-        strip = self.estado_inicial.strip
-        self.sprite = Sprite()
-        self.sprite.set_strip(stripes[strip])
-        self.sprite.set_frame(0)
-        self.sprite.set_perspective(1)
-        self.sprite.set_x(x)
-        self.sprite.set_y(y)
+        
+        
+        self.set_perspective(1)
+        self.set_x(x)
+        self.set_y(y)
 
         self.estado = None
         self.reset()
@@ -47,3 +50,8 @@ class Enemigo():
 
 class Driller(Enemigo):
     estado_inicial = Bajando
+
+    def __init__(self, scene, x, y):
+        self.strip = "ship-sprite-sym.png"
+
+        super().__init__(scene, x, y)

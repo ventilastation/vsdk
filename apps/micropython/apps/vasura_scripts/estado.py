@@ -8,8 +8,8 @@ class Estado:
 
 
     def on_enter(self):
-        self.entidad.sprite.set_strip(stripes[self.strip])
-        self.entidad.sprite.set_frame(0)
+        #self.entidad.set_strip(stripes[self.strip])
+        self.entidad.set_frame(0)
 
 
     def step(self):
@@ -23,7 +23,7 @@ class Estado:
 
 class Deshabilitado(Estado):
     def on_enter(self):
-        self.entidad.sprite.disable()
+        self.entidad.disable()
 
 
 
@@ -52,9 +52,9 @@ class Explotando(Estado):  # Anarquía
 
         # Blink de ejemplo
         if (self.frames_left // 10) % 2:
-            self.entidad.sprite.disable()
+            self.entidad.disable()
         else:
-            self.entidad.sprite.set_frame(0)
+            self.entidad.set_frame(0)
 
 
 
@@ -62,11 +62,11 @@ class Vulnerable(Estado):
     def step(self):
         es_nave = self.entidad.__class__.__name__ == "Nave"
         if not es_nave:
-            if self.entidad.sprite.collision([self.entidad.scene.nave.sprite]):
+            if self.entidad.collision([self.entidad.scene.nave]):
                 self.entidad.scene.muerte()
                 return Explotando
 
-        bala = self.entidad.scene.get_colision_bala(self.entidad.sprite)
+        bala = self.entidad.scene.get_colision_bala(self.entidad)
         if bala:
             print("Bala impacta")
             print(bala)
@@ -78,16 +78,15 @@ class Vulnerable(Estado):
 
 
 class Bajando(Vulnerable):
-    strip = "ship-sprite-sym.png"
 
     def step(self):
         cambio = super().step()
         if cambio:
             return cambio
 
-        self.entidad.sprite.set_y(self.entidad.sprite.y() + 1)
+        self.entidad.set_y(self.entidad.y() + 1)
 
         # TODO: detectar bien el tamaño
-        if self.entidad.sprite.y() >= 128-25:
+        if self.entidad.y() >= 128-25:
             return Explotando
 
