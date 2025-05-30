@@ -1,7 +1,9 @@
 import config
+import sys
 import pyglet
 # Force using OpenAL since pulse crashes
 pyglet.options['audio'] = ('openal', 'silent')
+pyglet.options['vsync'] = "--no-display" not in sys.argv
 import math
 import random
 import os
@@ -11,8 +13,24 @@ from pyglet.window import key
 from struct import pack, unpack
 from deepspace import deepspace
 
+try:
+    # Botones de la base de Super Ventilagon
+    import RPi.GPIO as GPIO
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup([9,10], GPIO.IN, GPIO.PUD_UP)
 
+    def base_button_left():
+        return GPIO.input(9) == 0
+    
+    def base_button_right():
+        return GPIO.input(10) == 0
 
+except ImportError:
+    def base_button_left():
+        return False
+
+    def base_button_right():
+        return False
 
 # preload all sounds
 sounds = {}
@@ -21,14 +39,18 @@ SOUNDS_FOLDER = "../apps/sounds"
 
 for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
     for fn in files:
-        if fn.endswith(".mp3"):
+        if fn.endswith(".mp3.wav"):
             fullname = os.path.join(dirpath, fn)
-            fn = fullname[len(SOUNDS_FOLDER)+1:-4]
-            sounds[bytes(fn, "latin1")] = pyglet.media.load(fullname, streaming=False)
+            fn = fullname[len(SOUNDS_FOLDER)+1:-8]
             print(fn)
+            sounds[bytes(fn, "latin1")] = pyglet.media.load(fullname, streaming=False)
 
 
 sound_queue = []
+
+# startup sound
+sound_queue.append(("sound", bytes("ventilagon/audio/es/super ventilagon", "latin1")))
+
 def playsound(name):
     sound_queue.append(("sound", name))
 
@@ -41,8 +63,8 @@ spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 joysticks = pyglet.input.get_joysticks()
 print(joysticks)
 if joysticks:
-    import pdb
-    pdb.set_trace()
+    #import pdb
+    #pdb.set_trace()
     joystick = joysticks[0]
     joystick.open()
 else:
@@ -159,15 +181,15 @@ class PygletEngine():
                     reset = reset or joystick.buttons[8]
                 except:
                     reset = reset or joystick.buttons[7]
-                left = left or keys[key.LEFT] or keys[key.A]
-                right = right or keys[key.RIGHT] or keys[key.D]
+                left = left or keys[key.LEFT] or keys[key.A] or base_button_left()
+                right = right or keys[key.RIGHT] or keys[key.D] or base_button_right()
                 up = up or keys[key.UP] or keys[key.W]
                 down = down or keys[key.DOWN] or keys[key.S]
                 boton = boton or keys[key.SPACE]
 
             except Exception:
-                left = keys[key.LEFT] or keys[key.A]
-                right = keys[key.RIGHT] or keys[key.D]
+                left = keys[key.LEFT] or keys[key.A] or base_button_left()
+                right = keys[key.RIGHT] or keys[key.D] or base_button_right()
                 up = keys[key.UP] or keys[key.W]
                 down = keys[key.DOWN] or keys[key.S]
 
@@ -293,12 +315,20 @@ class PygletEngine():
             while sound_queue:
                 command, name = sound_queue.pop()
                 if command == "sound":
-                    sounds[name].play()
+                    s = sounds.get(name)
+                    if s:
+                        s.play()
+                    else:
+                        print("WARN: cannot find sound", name)
                 elif command == "music":
                     if self.music_player:
                         self.music_player.pause()
                     if name != b"off":
-                        self.music_player = sounds[name].play()
+                        m = sounds.get(name)
+                        if m:
+                            self.music_player = m.play()
+                        else:
+                            print("WARN: cannot find music", name)
             return
             "FIXME"
             for n in range(6):

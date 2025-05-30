@@ -4,4 +4,5 @@ pyglet<2; sys_platform == 'darwin'
 gmqtt
 pyserial
 pillow
-numpy
+RPi.GPIO
+#numpy

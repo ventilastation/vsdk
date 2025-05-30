@@ -74,30 +74,39 @@ def receive_loop():
                 continue
 
             command, *args = l.split()
+            print("received", command, args)
 
             if command == b"sprites":
                 spritedata[:] = sockfile.read(5*100)
 
-            if command == b"pal":
+            elif command == b"pal":
                 palette[:] = sockfile.read(1024)
 
-            if command == b"sound":
+            elif command == b"sound":
                 playsound(b" ".join(args))
 
-            if command == b"arduino":
+            elif command == b"arduino":
                 arduino_send(b" ".join(args))
 
-            if command == b"music":
+            elif command == b"music":
                 playmusic(b" ".join(args))
 
-            if command == b"musicstop":
+            elif command == b"musicstop":
                 playmusic("off")
 
-            if command == b"imagestrip":
+            elif command == b"imagestrip":
                 length, slot = args
                 imagenes.all_strips[int(slot.decode())] = sockfile.read(int(length))
+            elif command == b"traceback":
+                length = args[0]
+                tb = sockfile.read(int(length))
+                print("-------------------------------------")
+                print("Rotor traceback")
+                print("-------------------------------------")
+                print(tb.decode("utf-8"))
+                print("-------------------------------------")
 
-            if command == b"debug":
+            elif command == b"debug":
                 length = 32 * 16
                 data = sockfile.read(length)
 
@@ -118,6 +127,10 @@ def receive_loop():
                     print("average %.2f rpm %.2f fps" % (avg_rpm, avg_fps))
                     send_velocidad(avg_rpm, avg_fps)
                 #print(struct.unpack("q"*32*2, data))
+
+            else:
+                print(command, *args)
+
 
 
         except socket.error as err:
@@ -148,6 +161,7 @@ def send(b):
                 sock.send(b)
         else:
             if sockfile:
+                print("sending", b)
                 sockfile.write(b)
     except socket.error as err:
         print(err)
