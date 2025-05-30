@@ -66,7 +66,7 @@ class Vulnerable(Estado):
                 self.entidad.scene.muerte()
                 return Explotando
 
-        bala = self.entidad.scene.get_colision_bala(self.entidad)
+        bala : Bala = self.entidad.scene.get_colision_bala(self.entidad)
         if bala:
             print("Bala impacta")
             print(bala)

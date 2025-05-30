@@ -1,7 +1,7 @@
 from apps.vasura_scripts.entities.entidad import *
+from apps.vasura_scripts.entities.bala import *
 
-from ventilastation.sprites import Sprite
-from ventilastation.director import director, stripes
+from ventilastation.director import stripes, director
 
 from apps.vasura_scripts.estado import *
 
@@ -52,39 +52,8 @@ class Nave(Entidad):
         bala.reset()
 
         # TODO: aplicar orientación de la nave
-        print(f"Bala: {bala.sprite.width()}x{bala.sprite.height()}")
-        x = self.x() + bala.sprite.width() + 1
-        y = self.y() - self.height() // 2 + bala.sprite.height() // 2
+        print(f"Bala: {bala.width()}x{bala.height()}")
+        x = self.x() + bala.width() + 1
+        y = self.y() - self.height() // 2 + bala.height() // 2
         bala.setPos(x, y)
         bala.setDirection(1)
-
-
-
-class Bala():
-    def __init__(self, scene, strip):
-        self.scene = scene
-        self.sprite = Sprite()
-        self.sprite.set_strip(strip)
-        self.sprite.set_x(0)
-        self.sprite.set_y(self.sprite.height())
-        self.sprite.set_perspective(1)
-        self.sprite.set_frame(0)
-        self.sprite.disable()
-
-
-    def step(self):
-        self.sprite.set_x(self.sprite.x() + 5)
-
-
-    def reset(self):
-        self.sprite.set_frame(0)
-        director.sound_play("vasura_espacial/disparo")
-
-
-    def setPos(self, x,y):
-        self.sprite.set_x(x)
-        self.sprite.set_y(y)
-
-
-    def setDirection(self, direction):
-        pass

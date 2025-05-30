@@ -6,6 +6,7 @@ from ventilastation.sprites import Sprite
 from apps.vasura_scripts.entities.nave import Nave, Bala
 from apps.vasura_scripts.entities.enemigo import *
 from apps.vasura_scripts.entities.planeta import Planeta
+from apps.vasura_scripts.entities.bala import *
 
 LIMITE_BALAS = 20
 
@@ -23,7 +24,7 @@ class VasuraEspacial(Scene):
         self.enemigo = Driller(self, 50, 0)
 
         self.balas_libres = [
-            Bala(self, stripes["bala.png"]) 
+            Bala(self) 
             for _ in range(LIMITE_BALAS)
         ]
 
@@ -52,14 +53,14 @@ class VasuraEspacial(Scene):
         return bala
 
 
-    def get_colision_bala(self, sprite):
-        balas_sprites = [x.sprite for x in self.balas_usadas]
-        bala = sprite.collision(balas_sprites)
+    def get_colision_bala(self, entity):
+        balas_sprites = [x for x in self.balas_usadas]
+        bala = entity.collision(balas_sprites)
         if bala:
             return self.balas_usadas[balas_sprites.index(bala)]
 
     def liberar_bala(self, bala):
-        bala.sprite.disable()
+        bala.disable()
         self.balas_usadas.remove(bala)
         self.balas_libres.append(bala)
 
