@@ -5,4 +5,5 @@ pyglet<2
 gmqtt
 pyserial
 pillow
-numpy
+RPi.GPIO
+#numpy
