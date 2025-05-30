@@ -6,6 +6,8 @@ from time import sleep
 import utime
 import gc
 
+TIME_MODIFIER = 3400
+
 SCORE_STATES = {
     "miss" : 0, 
     "good" : 1, 
@@ -77,7 +79,8 @@ class Circle:
 
             # y[45,35] GOOD
             elif PERFECT_LIMIT[1] <= py <= PERFECT_LIMIT[0]:
-                if not any(number < part.order for number in order_list): self.first = True
+                if not any(number < part.order for number in order_list): 
+                    self.first = True
                 if self._detect_first(order_list,part,2):
                     self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["perfect"]
 
@@ -151,6 +154,7 @@ class Circle:
                             i.is_red = True
                             i.set_strip(stripes["borde_rojo.png"])
 
+                    print(f"----------------")
                     return order
                 except:
                     print("disabled_lines error : " + disabled_lines)
@@ -167,10 +171,11 @@ class Music:
             
     
     def beat(self,actual_time):
-        if int(actual_time) in self.ms and self.anterior != int(actual_time):
+        time = int(actual_time) + TIME_MODIFIER
+        if time in self.ms and self.anterior != time:
             # print(self.ms[actual_time])
-            self.anterior = actual_time
-            return self.ms[actual_time]
+            self.anterior = time
+            return self.ms[time]
     
 class Animation:
     def __init__(self,cantidad):
@@ -242,7 +247,7 @@ class Mode:
                 self.mode = 0
         return self.mode
 
-class Dancer:
+class Dancer:   
     def __init__(self):
         self.sprites_n = ["av_n1.png","av_n2.png","av_n3.png"]
         self.sprites_d = ["av_t1.png","av_t2.png","av_t3.png"]
@@ -290,7 +295,7 @@ class VailableExtremeGame(Scene):
 
     def on_enter(self):
         super(VailableExtremeGame, self).on_enter()
-
+    
         self.music_test = Music("apps/extreme_songs/electrochongo.txt")
         director.music_play("vailableextreme/electrochongo")
         self.start_time = utime.ticks_ms()
@@ -318,6 +323,7 @@ class VailableExtremeGame(Scene):
     def step(self):
         actual_time = utime.ticks_diff(utime.ticks_ms(), self.start_time)
         redondeado = (actual_time // 50) * 50
+        print(utime.ticks_diff(utime.ticks_ms(), self.start_time))
 
         self.animation.score(self.score_state)
 
