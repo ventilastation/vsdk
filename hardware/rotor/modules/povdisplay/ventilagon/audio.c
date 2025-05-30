@@ -30,7 +30,7 @@ maravilloso no lo puedo creer.wav
 pentagono.wav
 perdiste.wav
 sonaste.wav
-super ventilagon.wav
+superventilagon.wav
 tas chavo.wav
 triangulo.wav
 vamos.wav
@@ -52,7 +52,7 @@ void audio_play(const char* command) {
 }
 
 void audio_play_superventilagon() {
-  audio_play("sound ventilagon/audio/es/super ventilagon");
+  audio_play("sound ventilagon/audio/es/superventilagon");
 }
 
 void audio_play_crash() {
