@@ -48,7 +48,14 @@ class VasuraEspacial(Scene):
         return bala
 
 
+    def get_colision_bala(self, sprite):
+        balas_sprites = [x.sprite for x in self.balas_usadas]
+        bala = sprite.collision(balas_sprites)
+        if bala:
+            return self.balas_usadas[balas_sprites.index(bala)]
+
     def liberar_bala(self, bala):
+        bala.sprite.disable()
         self.balas_usadas.remove(bala)
         self.balas_libres.append(bala)
 
