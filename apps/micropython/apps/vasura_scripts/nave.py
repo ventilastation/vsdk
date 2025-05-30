@@ -1,6 +1,8 @@
 from ventilastation.sprites import Sprite
 from ventilastation.director import director
 
+from apps.vasura_scripts.estado import *
+
 class Nave():
 
     def __init__(self, scene, strip):
@@ -11,6 +13,7 @@ class Nave():
         self.sprite.set_y(self.sprite.height())
         self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
+        self.estado = Vulnerable(self)
 
     def ArtificialStep(self):
         target = [0, 0]
@@ -27,6 +30,7 @@ class Nave():
             self.disparar()
 
         self.Move(*target)
+        self.estado.step()
 
     def Move(self, x, y):
         self.sprite.set_x(self.sprite.x() + x)
@@ -47,7 +51,7 @@ class Nave():
         bala.reset()
 
         # TODO: aplicar orientación de la nave
-        x = self.X() + self.sprite.width()
+        x = self.X() + bala.sprite.width()
         y = self.Y() - self.sprite.height() // 2 + bala.sprite.height() // 2
         bala.setPos(x, y)
         bala.setDirection(1)
@@ -62,6 +66,7 @@ class Bala():
         self.sprite.set_x(0)
         self.sprite.set_y(self.sprite.height())
         self.sprite.set_perspective(1)
+        self.sprite.set_frame(0)
         self.sprite.disable()
 
 
@@ -70,7 +75,7 @@ class Bala():
 
 
     def reset(self):
-        self.sprite.set_frame(1)
+        self.sprite.set_frame(0)
         director.sound_play("vasura_espacial/disparo")
 
 
