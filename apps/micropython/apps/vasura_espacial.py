@@ -14,7 +14,7 @@ class VasuraEspacial(Scene):
     def on_enter(self):
         super(VasuraEspacial, self).on_enter()
 
-        self.nave = Nave(self, stripes["ship-sprite-asym.png"])
+        self.nave = Nave(self, stripes["ship-sprite-asym-sheet.png"])
 
         self.planet = Sprite()
         self.planet.set_strip(stripes["game-center.png"])

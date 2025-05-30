@@ -16,6 +16,7 @@ class Nave():
         self.estado = Vulnerable(self)
 
     def ArtificialStep(self):
+        self.estado.step()
         target = [0, 0]
         if director.is_pressed(director.JOY_LEFT):
             target[0] += 1
@@ -26,15 +27,14 @@ class Nave():
         if director.is_pressed(director.JOY_UP):
             target[1] += 1
         
+        self.Move(*target)
         if director.was_pressed(director.BUTTON_A):
             self.disparar()
 
-        self.Move(*target)
-        self.estado.step()
 
     def Move(self, x, y):
         self.sprite.set_x(self.sprite.x() + x)
-        self.sprite.set_y(max(min(self.sprite.y() + y, 128-25), 0))
+        self.sprite.set_y(max(min(self.sprite.y() + y, 128-25), self.sprite.height()))
 
     def X(self):
         return self.sprite.x()
@@ -51,7 +51,8 @@ class Nave():
         bala.reset()
 
         # TODO: aplicar orientación de la nave
-        x = self.X() + bala.sprite.width()
+        print(f"Bala: {bala.sprite.width()}x{bala.sprite.height()}")
+        x = self.X() + bala.sprite.width() + 1
         y = self.Y() - self.sprite.height() // 2 + bala.sprite.height() // 2
         bala.setPos(x, y)
         bala.setDirection(1)

@@ -87,6 +87,7 @@ class Bajando(Vulnerable):
 
         self.entidad.sprite.set_y(self.entidad.sprite.y() + 1)
 
+        # TODO: detectar bien el tamaño
         if self.entidad.sprite.y() >= 128-25:
             return Explotando
 
