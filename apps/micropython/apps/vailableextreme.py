@@ -291,8 +291,8 @@ class VailableExtremeGame(Scene):
     def on_enter(self):
         super(VailableExtremeGame, self).on_enter()
 
-        self.music_test = Music("apps/extreme_songs/key_log.txt")
-        director.music_play("vance/505")
+        self.music_test = Music("apps/extreme_songs/electrochongo.txt")
+        director.music_play("vailableextreme/electrochongo")
         self.start_time = utime.ticks_ms()
 
         self.order = 0
