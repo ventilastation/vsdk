@@ -1,9 +1,11 @@
 from ventilastation.director import director, stripes
+from apps.vasura_scripts.entities.entidad import *
 
 class Estado:
-    strip = None
+    strip : int = None
+    entidad : Entidad
 
-    def __init__(self, entidad):
+    def __init__(self, entidad : Entidad):
         self.entidad = entidad
 
 
@@ -84,7 +86,7 @@ class Bajando(Vulnerable):
         if cambio:
             return cambio
 
-        self.entidad.set_y(self.entidad.y() + 1)
+        self.entidad.mover(0, 1)
 
         # TODO: detectar bien el tamaño
         if self.entidad.y() >= 128-25:

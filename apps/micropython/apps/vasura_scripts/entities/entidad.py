@@ -14,3 +14,9 @@ class Entidad(Sprite):
     
     def step(self):
         pass
+
+    def mover(self, x, y):
+        self.set_x(self.x() + x)
+
+        #TODO screen wrapping opcional?
+        self.set_y(max(min(self.y() + y, 128-25), self.height()))

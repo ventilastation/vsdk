@@ -33,15 +33,10 @@ class Nave(Entidad):
         if director.is_pressed(director.JOY_UP):
             target[1] += 1
         
-        self.Move(*target)
+        self.mover(*target)
         
         if director.was_pressed(director.BUTTON_A):
             self.disparar()
-
-
-    def Move(self, x, y):
-        self.set_x(self.x() + x)
-        self.set_y(max(min(self.y() + y, 128-25), self.height()))
 
     
     def disparar(self):
