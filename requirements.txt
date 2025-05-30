@@ -5,5 +5,5 @@ pyglet<2
 gmqtt
 pyserial
 pillow
-RPi.GPIO
-#numpy
+RPi.GPIO; "Raspbian" in platform_version
+numpy; "Raspbian" not in platform_version
