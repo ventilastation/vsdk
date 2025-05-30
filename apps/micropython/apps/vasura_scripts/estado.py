@@ -1,11 +1,9 @@
-from apps.vasura_scripts.nave import Nave
-
 from ventilastation.director import director, stripes
 
 class Estado:
     strip = None
 
-    def __init__(self, entidad: Nave):
+    def __init__(self, entidad):
         self.entidad = entidad
 
 
@@ -60,12 +58,35 @@ class Explotando(Estado):  # Anarquía
 
 
 
-class Bajando(Estado):
+class Vulnerable(Estado):
+    def step(self):
+        es_nave = self.entidad.__class__.__name__ == "Nave"
+        if not es_nave:
+            if self.entidad.sprite.collision([self.entidad.scene.nave.sprite]):
+                self.entidad.scene.muerte()
+                return Explotando
+
+        bala = self.entidad.scene.get_colision_bala(self.entidad.sprite)
+        if bala:
+            print("Bala impacta")
+            print(bala)
+            self.entidad.scene.liberar_bala(bala)
+            if es_nave:
+                self.entidad.scene.muerte()
+            return Explotando
+
+
+
+class Bajando(Vulnerable):
     strip = "ship-sprite-sym.png"
 
     def step(self):
+        cambio = super().step()
+        if cambio:
+            return cambio
+
         self.entidad.sprite.set_y(self.entidad.sprite.y() + 1)
 
-        # TODO: detectar colisión con planeta
         if self.entidad.sprite.y() >= 128-25:
             return Explotando
+
