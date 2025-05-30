@@ -25,15 +25,6 @@ class Enemigo(Entidad):
         self.estado = None
         self.reset()
 
-    
-    def set_estado(self, estado):
-        if self.estado:
-            self.estado.on_exit()
-
-        print("Set Estado", estado.__name__)
-        self.estado = estado(entidad=self)
-        self.estado.on_enter()
-
 
     def reset(self):
         self.set_estado(self.estado_inicial)

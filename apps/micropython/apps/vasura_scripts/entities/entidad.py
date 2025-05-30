@@ -2,6 +2,8 @@ from ventilastation.sprites import Sprite
 
 class Entidad(Sprite):
 
+    estado : Estado = None
+
     def __init__(self, strip : int, x : int = 0, y : int = 0):
         super().__init__()
 
@@ -19,4 +21,14 @@ class Entidad(Sprite):
         self.set_x(self.x() + x)
 
         #TODO screen wrapping opcional?
+        #TODO el 25 ese es el radio de colisión del planeta. Moverlo a algún lado menos mocho.
         self.set_y(max(min(self.y() + y, 128-25), self.height()))
+
+    def set_estado(self, estado):
+        #TODO no transicionar al mismo estado en el que estas
+        
+        if self.estado:
+            self.estado.on_exit()
+
+        self.estado = estado(entidad=self)
+        self.estado.on_enter()

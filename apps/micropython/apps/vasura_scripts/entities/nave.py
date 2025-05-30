@@ -17,7 +17,7 @@ class Nave(Entidad):
         self.set_x(0)
         self.set_y(self.height())
     
-        self.estado = Vulnerable(self)
+        self.set_estado(Vulnerable)
 
     def ArtificialStep(self):
         self.estado.step()
@@ -46,9 +46,9 @@ class Nave(Entidad):
 
         bala.reset()
 
-        # TODO: aplicar orientación de la nave
-        print(f"Bala: {bala.width()}x{bala.height()}")
+        # TODO: aplicar orientación de la nave        
         x = self.x() + bala.width() + 1
         y = self.y() - self.height() // 2 + bala.height() // 2
+        
         bala.setPos(x, y)
         bala.setDirection(1)
