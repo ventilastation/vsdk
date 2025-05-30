@@ -9,6 +9,6 @@ stripes = [
         strip("ship-sprite-sym.png", frames = 1)
     ),
     palettegroup(
-        strip("bala.png", frames=2),
+        strip("bala.png", frames=1),
     ),
 ]
