@@ -20,7 +20,7 @@ MAIN_MENU_OPTIONS = [
     ('ventrack', "mijuegui.png", 0),
     # ('mygame', "mygame.png", 0),
     # PyCamp 2025
-    # ('vance', "menu.png", 5),
+    ('vance', "menu.png", 5),
     # ('vong', "menu.png", 6),
     # ('vugo', "menu.png", 7),
     # Gallery
