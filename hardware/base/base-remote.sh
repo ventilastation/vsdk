@@ -1,4 +1,7 @@
 cd `dirname "$0"`/../..
+cd apps/sounds
+make
+cd ../..
 . .venv/bin/activate
 cd emulator
 echo > /tmp/remote-out.log 2>/tmp/remote-err.log
