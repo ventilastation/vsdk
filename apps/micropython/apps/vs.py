@@ -1,4 +1,3 @@
-from urandom import choice, randrange, seed
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
@@ -9,7 +8,15 @@ from ventilastation.sprites import Sprite
 # 11 para las letras de las descripciones del menu -> hardcodeable
 # 3 para el precio de los items del menu           -> hardcodeable
 # 9 para los items en el tablero
-# = 33
+# 1 para el piso
+# 9 para las balas
+# 1 para el lolero de prueba
+# = 44
+
+
+# Dadas dos coordinadas en una matriz de tamaño 3x3 te dice qué indice es en un array tamaño 9
+def coords(i, j):
+    return i + j*3
 
 class Text:
     def __init__(self, x, y, len):
@@ -54,65 +61,162 @@ class Numbers:
                 v = ord(l) - 0x30
                 self.chars[n].set_frame(v)
 
+class Bullet(Sprite):
+    
+    def __init__(self):
+
+        super().__init__()
+        self.set_strip(stripes["vga_pc734.png"])
+        self.is_active = False
+        self.is_reloading = False
+        self.is_waiting_to_deactivate = False
+
+        self.initial_x = 0
+        # self.close_reach = None
+        # self.long_reach = None
+        # self.type = ""
+
+    def activate(self, type):
+        self.is_active = True
+        self.is_reloading = False
+        self.is_waiting_to_deactivate = False
+
+        self.type = type
+
+        if type == "Jabon":
+            self.close_reach = range(0, self.initial_x+1) # de la izquierda al centro
+            self.long_reach  = range(192, 256)            # del centro a la derecha
+        elif type == "Desodorante":
+            self.close_reach = range(0, self.initial_x+1)      # de la izquierda al centro
+            self.long_reach  = range(192+self.initial_x, 256)  # del centro a la derecha
+
+    def set_initial_x(self, x):
+        self.initial_x = x
+        self.set_x(x)
+
+    def deactivate(self):
+        self.disable()
+        self.set_x(self.initial_x)
+        self.is_active = False
+        self.type = ""
+
+    def reset(self):
+        if self.is_waiting_to_deactivate:
+            self.deactivate()
+        else:
+            self.disable()
+            self.set_x(self.initial_x)
+            self.is_reloading = True
+
+    def step(self, step_counter):
+
+        if self.is_active:
+            if self.is_reloading:
+                if step_counter % 30 == 0:
+                    self.is_reloading = False
+                    self.set_frame(6)
+            else:
+                if self.x() in self.close_reach or self.x() in self.long_reach:
+                    self.set_x(self.x()-1)
+                else:
+                    self.reset()
+
 class Item(Sprite): 
 
-    def __init__(self):
+    def __init__(self, bullet):
         super().__init__()
+
+        self.bullet = bullet
         self.set_strip(stripes["items.png"])
+        self.deactivate()
+     
+        self.hps    = [5, 25, 5, 5, 1]
+        self.types  = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
+
+    def se_ensucia(self, value, step_counter):
+        if step_counter % 20 == 0:
+            self.hp -= value
+            if self.hp <= 0:
+                self.deactivate()
+
+    def deactivate(self):
         self.disable()
+        self.is_active = False
+        self.bullet.is_waiting_to_deactivate = True
         self.active_frame = None
 
-    def is_actived(self):
-        return self.active_frame != None
-
-    def temporarily_set_frame(self, frame):
+    def temporarily_activate_item(self, frame):
         self.set_frame(frame)
 
-    def definitely_set_frame(self, frame):
+    def definitely_activate_item(self, frame):
         self.set_frame(frame)
         self.active_frame = frame
+        
+        self.is_active = True
+        self.bullet.is_waiting_to_deactivate = True
+
+        self.hp = self.hps[self.active_frame]
+        self.type = self.types[self.active_frame]
+
+        if self.type == "Jabon":
+            self.bullet.activate("Jabon")
+        elif self.type == "Desodorante":
+            self.bullet.activate("Desodorante")
 
     def restore_active_frame(self):
-        if self.is_actived():
+        if self.is_active:
             self.set_frame(self.active_frame)
         else:
             self.disable()
 
-class Items():
+class Lolero(Sprite):
 
     def __init__(self):
+        super().__init__()
+        self.set_strip(stripes["vga_pc734.png"])
+        self.revive()
+
+    def revive(self):
+        self.set_x(192)
+        self.set_y(18)
+        self.set_frame(254)
+        self.is_active = True
+        self.can_move = True
+        self.has_debuff = False
+        self.debuff_turns = 0
+        self.hp = 5
+        self.speed = 5
+
+    def se_baña(self, value):
+        self.hp -= value
+        if self.hp <= 0:
+            self.morite()
+
+    def se_realentiza(self):
+        self.speed = 20
+        self.debuff_turns = 3
+        self.has_debuff = True
+
+    def morite(self):
+        self.disable()
+        self.set_x(192) 
+        self.is_active = False
+        self.can_move = False
+        self.has_debuff = False
+    
+    def step(self, step_counter):
         
-        self.items = [[Item() for _ in range(3)] for _ in range(3)]
+        if self.debuff_turns <= 0:
+            self.speed = 5
+            self.has_debuff = False
 
-        for i in range(3):
-            for j in range(3):
-                self.items[i][j].set_x(48-i*16)
-                self.items[i][j].set_y(16+j*16)
+        if self.is_active and step_counter % self.speed == 0 :
 
-        self.i = 0
-        self.j = 0
+            if self.can_move:
+                self.set_x(self.x() + 1)
 
-        self.frame = None
-        self.temp_frame = None
-
-    def activate_item_at(self, frame, temp_frame, i, j):
-        self.i = i
-        self.j = j
-        self.frame = frame
-        self.temp_frame = temp_frame
-        self.items[self.i][self.j].temporarily_set_frame(self.temp_frame)
-
-    def move_focus_to(self, movement_i, movement_j):
-        self.items[self.i][self.j].restore_active_frame()
-        self.i = (self.i + movement_i) % 3
-        self.j = (self.j + movement_j) % 3
-        self.items[self.i][self.j].temporarily_set_frame(self.temp_frame)
-
-    def place_item(self):
-        self.items[self.i][self.j].definitely_set_frame(self.frame)
-        self.frame = None
-        self.temp_frame = None
-        
+            if self.has_debuff:
+                self.debuff_turns -= 1
 
 class Menu():
     def __init__(self):
@@ -131,7 +235,7 @@ class Menu():
 
         self.items[self.selected_id].set_y(self.selected_y)
         
-        self.items_name =  ["Jabon", "Cepillo", "Dispenser", "Desodorante", "Pasto"]
+        self.items_name =  ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
         self.items_price = [100, 200, 300, 400, 500]
 
         self.text  = Text(x=93, y=18, len=11)
@@ -155,17 +259,50 @@ class Menu():
         self.price.setnumbers(self.items_price[self.selected_id])
 
 class vs(Scene):
+
     stripes_rom = "vs"
+
+    def activate_item_at(self, i, j):
+        self.i = i
+        self.j = j
+        self.items[coords(i, j)].temporarily_activate_item(self.item_to_place + 5)
+
+    def move_focus_to(self, movement_i, movement_j):
+        self.items[coords(self.i, self.j)].restore_active_frame()
+        self.i = (self.i + movement_i) % 3
+        self.j = (self.j + movement_j) % 3
+        self.items[coords(self.i, self.j)].temporarily_activate_item(self.item_to_place + 5)
+
+    def place_item(self):
+        self.items[coords(self.i, self.j)].definitely_activate_item(self.item_to_place)
+        self.item_to_place = None
+
+    def add_money(self, value):
+        self.money = self.money + value
+        self.money_counter.setnumbers(self.money)
 
     def on_enter(self):
         super(vs, self).on_enter()
 
         self.menu  = Menu()
-        self.items = Items()
-        
-        self.money = 10000
+        self.bullets = [Bullet() for _ in range(9)]
+        self.items = [Item(self.bullets[id]) for id in range(9)]
+
+        for i in range(3):
+            for j in range(3):
+                self.items[coords(i, j)].set_x(48-i*16)
+                self.items[coords(i, j)].set_y(16+j*16)
+                self.bullets[coords(i, j)].set_initial_x(48-i*16)
+                self.bullets[coords(i, j)].set_y(16+j*16)  
+
+        self.i = 0
+        self.j = 0
+
+        self.loleros = [Lolero() for _ in range(1)]
+
+        self.money = 0
         self.money_counter = Numbers(x=165, y=8, len=5)
-        self.money_counter.setnumbers(self.money)
+        self.add_money(10000)
 
         self.road = Sprite()
         self.road.set_strip(stripes["road.png"])
@@ -173,31 +310,62 @@ class vs(Scene):
         self.road.set_y(16)
         self.road.set_frame(0)
 
-        self.placing_item = False
+        self.item_to_place = None
+        
+        self.step_counter = 0
+
 
     def step(self):
         
-        if director.was_pressed(director.BUTTON_D):
-            self.finished()
+        for bullet in self.bullets:
+            bullet.step(self.step_counter)
 
-        if self.placing_item:
+        for item in self.items:
+            if item.is_active:
+                if item.frame() == 2 and self.step_counter % 30 == 0:
+                    self.add_money(100)
+
+        for lolero in self.loleros:
+            if lolero.is_active:
+
+                lolero.can_move = True
+                bullet = lolero.collision(self.bullets)
+                if bullet:
+                    if bullet.is_active and not bullet.is_reloading:
+                        if bullet.type == "Jabon":
+                            lolero.se_baña(1)
+                        if bullet.type == "Desodorante":
+                            lolero.se_realentiza()
+                        bullet.reset()
+
+                item = lolero.collision(self.items)
+                if item:
+                    if item.is_active:
+                        lolero.can_move = False
+                        item.se_ensucia(1, self.step_counter)
+                        if item.type == "Tocar pasto":
+                            lolero.se_baña(10)
+                            item.deactivate()
+
+                lolero.step(self.step_counter)
+
+        if self.item_to_place != None:
 
             if director.was_pressed(director.JOY_RIGHT):
-                self.items.move_focus_to(1,0)
+                self.move_focus_to(1,0)
     
             if director.was_pressed(director.JOY_LEFT):
-                self.items.move_focus_to(-1,0)
+                self.move_focus_to(-1,0)
     
             if director.was_pressed(director.JOY_UP):
-                self.items.move_focus_to(0,1)
+                self.move_focus_to(0,1)
     
             if director.was_pressed(director.JOY_DOWN):
-                self.items.move_focus_to(0,-1)
+                self.move_focus_to(0,-1)
 
             if director.was_pressed(director.BUTTON_A):
-                self.items.place_item()
+                self.place_item()
                 self.menu.change_focused_item_frame(-5)
-                self.placing_item = False
 
         else:
 
@@ -216,16 +384,20 @@ class vs(Scene):
             if director.was_pressed(director.BUTTON_A):
                 id, name, price = self.menu.get_focused_item_info()
                 if self.money >= price:
-                    self.money = self.money - price
-                    self.money_counter.setnumbers(self.money)
-                    self.items.activate_item_at(frame=id, temp_frame=id+5, i=0, j=0)
+                    
+                    self.add_money(-price)
+                    self.item_to_place = id
+                    self.activate_item_at(0,0)
                     self.menu.change_focused_item_frame(5)
-                    self.placing_item = True
                     print("Compramos "  + name)
 
                 else:
                     print("No alcanza la plata")
-            
+        
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+
+        self.step_counter += 1
 
     def finished(self):
         director.pop()
