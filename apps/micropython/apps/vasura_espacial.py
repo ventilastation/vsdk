@@ -5,6 +5,7 @@ from ventilastation.sprites import Sprite
 
 from apps.vasura_scripts.nave import Nave, Bala
 from apps.vasura_scripts.enemigo import *
+from apps.vasura_scripts.entities.planeta import Planeta
 
 LIMITE_BALAS = 20
 
@@ -16,11 +17,8 @@ class VasuraEspacial(Scene):
 
         self.nave = Nave(self, stripes["ship-sprite-asym-sheet.png"])
 
-        self.planet = Sprite()
-        self.planet.set_strip(stripes["game-center.png"])
-        self.planet.set_perspective(0)
-        self.planet.set_frame(0)
-        self.planet.set_y(160)
+        self.planet = Planeta()
+
 
         self.enemigo = Driller(self, 50, 0)
 
