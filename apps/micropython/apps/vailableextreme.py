@@ -231,7 +231,10 @@ class Mode:
     
     def mangment(self):
         if self.score <= 5:
-            self.mode = -1
+            if self.score <= 0:
+                self.mode = -2
+            else:
+                self.mode = -1
         elif self.score >= 5:
             if self.contador_perfect >= 4:
                 self.mode = 1
@@ -244,6 +247,7 @@ class Dancer:
         self.sprites_n = ["av_n1.png","av_n2.png","av_n3.png"]
         self.sprites_d = ["av_t1.png","av_t2.png","av_t3.png"]
         self.sprites_p = ["av_f1.png","av_f2.png","av_f3.png"]
+        self.sprites_dead = "av_apunialado.png"
 
         self.dancer = Sprite()
         self.dancer.set_strip(stripes[self.sprites_n[0]])
@@ -265,12 +269,19 @@ class Dancer:
             sprite_list = self.sprites_n
         elif mode == 1:
             sprite_list = self.sprites_p
-
-        self.dancer.set_strip(stripes[sprite_list[self.count]])
-        self.dancer.set_perspective(0)
-        self.dancer.set_x(0)
-        self.dancer.set_y(255)
-        self.dancer.set_frame(0)
+        
+        if mode == -2:
+            self.dancer.set_strip(stripes[self.sprites_dead])
+            self.dancer.set_perspective(0)
+            self.dancer.set_x(0)
+            self.dancer.set_y(255)
+            self.dancer.set_frame(0)
+        else:
+            self.dancer.set_strip(stripes[sprite_list[self.count]])
+            self.dancer.set_perspective(0)
+            self.dancer.set_x(0)
+            self.dancer.set_y(255)
+            self.dancer.set_frame(0)
 
 
 
@@ -335,6 +346,7 @@ class VailableExtremeGame(Scene):
                     self.score_state = SCORE_STATES["miss"]
                     self.animation._set_score_animation(self.score_state,True)
                     self.mode.life(self.score_state,True)
+                    self.dancer.dance(self.mode.mangment())
                     break
         
         #Life
