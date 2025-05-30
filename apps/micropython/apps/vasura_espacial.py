@@ -3,12 +3,13 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
-from apps.vasura_scripts.entities.nave import Nave, Bala
+from apps.vasura_scripts.managers.balas_manager import *
+
+from apps.vasura_scripts.entities.nave import Nave
 from apps.vasura_scripts.entities.enemigo import *
 from apps.vasura_scripts.entities.planeta import Planeta
-from apps.vasura_scripts.entities.bala import *
 
-LIMITE_BALAS = 20
+
 
 class VasuraEspacial(Scene):
     stripes_rom = "vasura_espacial"
@@ -17,24 +18,17 @@ class VasuraEspacial(Scene):
         super(VasuraEspacial, self).on_enter()
 
         self.nave = Nave(self)
-
         self.planet = Planeta()
+        self.balas = BalasManager()
 
-
+        #Enemigo de prueba
         self.enemigo = Driller(self, 50, 0)
-
-        self.balas_libres = [
-            Bala(self) 
-            for _ in range(LIMITE_BALAS)
-        ]
-
-        self.balas_usadas = []
 
 
     def step(self):
         self.nave.ArtificialStep()
         self.enemigo.step()
-        [bala.step() for bala in self.balas_usadas]
+        self.balas.step()
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
@@ -42,27 +36,6 @@ class VasuraEspacial(Scene):
     def finished(self):
         director.pop()
         raise StopIteration()
-
-    def get_bala_libre(self):
-        if not self.balas_libres:
-            return None
-
-        bala = self.balas_libres.pop()
-        self.balas_usadas.append(bala)
-
-        return bala
-
-
-    def get_colision_bala(self, entity):
-        balas_sprites = [x for x in self.balas_usadas]
-        bala = entity.collision(balas_sprites)
-        if bala:
-            return self.balas_usadas[balas_sprites.index(bala)]
-
-    def liberar_bala(self, bala):
-        bala.disable()
-        self.balas_usadas.remove(bala)
-        self.balas_libres.append(bala)
 
     
     def muerte(self):

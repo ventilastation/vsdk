@@ -40,7 +40,8 @@ class Nave(Entidad):
 
     
     def disparar(self):
-        bala = self.scene.get_bala_libre()
+        bala = self.scene.balas.get_bala_libre()
+        
         if not bala:
             return
 

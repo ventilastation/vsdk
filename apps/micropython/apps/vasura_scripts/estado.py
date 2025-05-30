@@ -66,14 +66,17 @@ class Vulnerable(Estado):
         es_nave = self.entidad.__class__.__name__ == "Nave"
         if not es_nave:
             if self.entidad.collision([self.entidad.scene.nave]):
+
                 self.entidad.scene.muerte()
+                
                 return Explotando
 
-        bala : Bala = self.entidad.scene.get_colision_bala(self.entidad)
+        bala : Bala = self.entidad.scene.balas.get_bala_colisionando(self.entidad, True)
         if bala:
-            self.entidad.scene.liberar_bala(bala)
+
             if es_nave:
                 self.entidad.scene.muerte()
+
             return Explotando
 
 
