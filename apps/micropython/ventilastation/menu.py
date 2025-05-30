@@ -1,42 +1,43 @@
 import sys
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite, reset_sprites
 
 
 class Menu(Scene):
-    OPTIONS = []  # option id, strip id, frame, width
 
-    def __init__(self, selected_index=0):
+    def __init__(self, options, selected_index=0):
+        """Where options is a list of: (option id, strip id, frame, width)"""
+
         super(Menu, self).__init__()
-        self.options = self.OPTIONS[:]
+        self.options = options[:]
         self.selected_index = selected_index
 
     def on_enter(self):
+        super(Menu, self).on_enter()
         self.sprites = []
-        accumulated_width = 0
-        for option_id, strip_id, frame, width in self.options:
+        self.y_step = 20 #250 // len(self.options)
+        for n, (option_id, strip_name, frame) in enumerate(self.options):
             sprite = Sprite()
-            sprite.set_x(256 - 32 + accumulated_width)
-            sprite.set_y(0)
-            sprite.set_perspective(2)
-            sprite.set_strip(strip_id)
+            sprite.set_x(-32)
+            sprite.set_y(int(n * self.y_step))
+            sprite.set_perspective(1)
+            sprite.set_strip(stripes[strip_name])
             sprite.set_frame(frame)
-            accumulated_width += sprite.width()
 
             self.sprites.append(sprite)
 
     def step(self):
-        if director.was_pressed(director.JOY_RIGHT):
+        if director.was_pressed(director.JOY_DOWN):
             director.sound_play(b'vyruss/shoot3')
             self.selected_index -= 1
             if self.selected_index == -1:
-                self.selected_index = len(self.options) - 1
-        if director.was_pressed(director.JOY_LEFT):
+                self.selected_index = 0
+        if director.was_pressed(director.JOY_UP):
             director.sound_play(b'vyruss/shoot3')
             self.selected_index += 1
             if self.selected_index > len(self.options) - 1:
-                self.selected_index = 0
+                self.selected_index = len(self.options) - 1
         if director.was_pressed(director.BUTTON_A):
             director.sound_play(b'vyruss/shoot1')
             try:
@@ -46,18 +47,26 @@ class Menu(Scene):
             except Exception as e:
                 sys.print_exception(e)
 
-        # option[3] has the width
-        offset = sum([option[3]
-                      for option_index, option in enumerate(self.options)
-                      if option_index < self.selected_index])
-        offset += int(self.options[self.selected_index][3] / 2)
-
-        start_x = 0
-        accumulated_width = 0
-        for option_index, sprite in enumerate(self.sprites):
-            sprite.set_x(start_x + accumulated_width - offset)
-            sprite.set_y(0)
-            accumulated_width += self.options[option_index][3]  # option width
+        for n, sprite in enumerate(self.sprites):
+            if n == self.selected_index:
+                sprite.set_y(0)
+                sprite.set_perspective(2)
+            elif n < self.selected_index:
+                sprite.set_y(255)
+                sprite.set_perspective(1)
+            else:
+                curr_y = sprite.y()
+                dest_y = int((n - self.selected_index) * self.y_step + 30)
+                if dest_y < 0:
+                    y = 255
+                else:
+                    if dest_y > 255:
+                        y = 255
+                    else:
+                        y = curr_y - (curr_y - dest_y) // 4
+                sprite.set_y(y)
+                sprite.set_perspective(1)
 
     def on_option_pressed(self, option_index):
-        print('pressed:', option_index)
+        # print('pressed:', option_index)
+        pass

@@ -10,6 +10,7 @@ void resetting_setup() {
   audio_reset();
   serial_send("arduino reset");
   serial_send("arduino stop");
+  is_idle = false;
 }
 
 void resetting_loop() {

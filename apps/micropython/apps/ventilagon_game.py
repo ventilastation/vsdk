@@ -1,14 +1,15 @@
-import ventilagon
-from ventilastation.director import director
-from ventilastation.scene import Scene
 try:
-    import ventilastation.serialcomms as comms
+    import ventilagon
 except ImportError:
-    import ventilastation.comms
-
+    from ventilastation import fake_ventilagon as ventilagon
+from ventilastation.director import director, comms
+from ventilastation.scene import Scene
 
 class VentilagonGame(Scene):
+    stripes_rom = "other"
+
     def on_enter(self):
+        super(VentilagonGame, self).on_enter()
         ventilagon.enter()
         self.last_buttons = None
 
@@ -28,8 +29,12 @@ class VentilagonGame(Scene):
             self.last_buttons = buttons
             ventilagon.received(buttons)
 
-        if director.was_pressed(director.BUTTON_D) or director.timedout:
+        if director.was_pressed(director.BUTTON_D) or (director.timedout and ventilagon.is_idle()):
             director.pop()
             raise StopIteration()
 
         self.sending_loop()
+
+
+def main():
+    return VentilagonGame()

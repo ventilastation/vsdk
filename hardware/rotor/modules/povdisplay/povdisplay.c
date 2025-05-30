@@ -44,6 +44,8 @@ char* spi_buf;
 uint32_t* extra_buf;
 uint32_t* pixels0;
 uint32_t* pixels1;
+extern uint8_t brillos[PIXELS];
+extern uint8_t intensidades_por_led[PIXELS];
 
 int buf_size;
 bool ventilagon_active = false;
@@ -196,10 +198,16 @@ void coreTask( void * pvParameters ){
     vTaskDelete(NULL);
 }
 
+bool already_initialized = false;
 
-static mp_obj_t povdisplay_init(mp_obj_t num_pixels, mp_obj_t palette) {
+static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
+    ventilagon_exit();
+    if (already_initialized) {
+        return mp_const_none;
+    }
+    already_initialized = true;
+
     spi_init(mp_obj_get_int(num_pixels));
-    palette_pal = (uint32_t *) mp_obj_str_get_str(palette);
     //printf("Micropython running on core %d\n", xPortGetCoreID());
     ventilagon_init();
     //printf("pixels0: %p\n", pixels0);
@@ -215,13 +223,37 @@ static mp_obj_t povdisplay_init(mp_obj_t num_pixels, mp_obj_t palette) {
             NULL,       /* Task handle. */
             taskCore);  /* Core where the task should run */
     // printf("task created...\n");
+    gamma_mode = 0;
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_2(povdisplay_init_obj, povdisplay_init);
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_init_obj, povdisplay_init);
 
+// ------------------------------
+
+static mp_obj_t povdisplay_set_palettes(mp_obj_t palette) {
+    palette_pal = (uint32_t *) memoryview_data(palette);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_palettes_obj, povdisplay_set_palettes);
+
+// ------------------------------
+
+static mp_obj_t povdisplay_set_gamma_mode(mp_obj_t mode) {
+    gamma_mode = mp_obj_get_int(mode);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_gamma_mode_obj, povdisplay_set_gamma_mode);
+
+// ------------------------------
 static mp_obj_t povdisplay_getaddress(mp_obj_t sprite_num) {
     int num = mp_obj_get_int(sprite_num);
 #ifdef DEBUG_ROTATION
+    if (num == 997) {
+        return mp_obj_new_int((mp_int_t)(uintptr_t)brillos);
+    }
+    if (num == 998) {
+        return mp_obj_new_int((mp_int_t)(uintptr_t)intensidades_por_led);
+    }
     if (num == 999) {
         return mp_obj_new_int((mp_int_t)(uintptr_t)DEBUG_rotlog);
     }
@@ -239,6 +271,8 @@ static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_last_turn_duration_obj, povdisplay_l
 static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR___name__), MP_OBJ_NEW_QSTR(MP_QSTR_vshw_povdisplay) },
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_palettes), (mp_obj_t)&povdisplay_set_palettes_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_gamma_mode), (mp_obj_t)&povdisplay_set_gamma_mode_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_last_turn_duration), (mp_obj_t)&povdisplay_last_turn_duration_obj },
 };
@@ -286,6 +320,17 @@ static mp_obj_t ventilagon_ventilagon_sending(void) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_sending_obj, ventilagon_ventilagon_sending);
+
+static mp_obj_t ventilagon_ventilagon_is_idle(void) {
+    if (ventilagon_is_idle()) {
+        return mp_const_true;
+    } else {
+        return mp_const_false;
+    }
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(ventilagon_ventilagon_is_idle_obj, ventilagon_ventilagon_is_idle);
+
+
 // ------------------------------
 
 static const mp_map_elem_t ventilagon_globals_table[] = {
@@ -294,6 +339,7 @@ static const mp_map_elem_t ventilagon_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_exit), (mp_obj_t)&ventilagon_ventilagon_exit_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_received), (mp_obj_t)&ventilagon_ventilagon_received_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_sending), (mp_obj_t)&ventilagon_ventilagon_sending_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_is_idle), (mp_obj_t)&ventilagon_ventilagon_is_idle_obj },
 };
 
 static MP_DEFINE_CONST_DICT (

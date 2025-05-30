@@ -1,13 +1,14 @@
+import platform
 import config
 import sys
 import pyglet
 # Force using OpenAL since pulse crashes
 pyglet.options['audio'] = ('openal', 'silent')
 pyglet.options['vsync'] = "--no-display" not in sys.argv
+
 import math
 import random
 import os
-import imagenes
 from pyglet.gl import *
 from pyglet.window import key
 from struct import pack, unpack
@@ -32,19 +33,28 @@ except ImportError:
     def base_button_right():
         return False
 
+if platform.system() != "Windows":
+    # Force using OpenAL since pulse crashes
+    pyglet.options['audio'] = ('openal', 'silent')
+
 # preload all sounds
 sounds = {}
+
+all_strips = {}
 
 SOUNDS_FOLDER = "../apps/sounds"
 
 for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
     for fn in files:
-        if fn.endswith(".mp3.wav"):
+        if fn.endswith(".mp3"):
             fullname = os.path.join(dirpath, fn)
-            fn = fullname[len(SOUNDS_FOLDER)+1:-8]
+            fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
+            try:
+                sound = pyglet.media.load(fullname, streaming=False)
+            except:
+                sound = pyglet.media.load(fullname + ".wav", streaming=False)
             print(fn)
-            sounds[bytes(fn, "latin1")] = pyglet.media.load(fullname, streaming=False)
-
+            sounds[bytes(fn, "latin1")] = sound
 
 sound_queue = []
 
@@ -121,9 +131,13 @@ def ungamma(values, gamma=2.5, offset=0.5):
         d.append(i)
     return bytes(d)
 
-palette = ungamma(change_colors(imagenes.palette_pal))
-upalette = unpack_palette(palette)
+palette = []
+upalette = []
 
+def set_palettes(paldata):
+    global palette, upalette
+    palette = ungamma(change_colors(paldata))
+    upalette = unpack_palette(palette)
 
 class PygletEngine():
     def __init__(self, led_count, keyhandler, enable_display=True):
@@ -174,8 +188,8 @@ class PygletEngine():
 
                 boton = joystick.buttons[0] or joystick.buttons[1] or joystick.buttons[2] or joystick.buttons[3] # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
 
-                accel = joystick.z > 0 or keys[key.PAGEUP]
-                decel = joystick.rz > 0 or keys[key.PAGEDOWN]
+                accel = joystick.z > 0 or keys[key.PAGEUP] or keys[key.P]
+                decel = joystick.rz > 0 or keys[key.PAGEDOWN] or keys[key.O]
 
                 try:
                     reset = reset or joystick.buttons[8]
@@ -194,8 +208,8 @@ class PygletEngine():
                 down = keys[key.DOWN] or keys[key.S]
 
                 boton = keys[key.SPACE]
-                accel = keys[key.PAGEUP]
-                decel = keys[key.PAGEDOWN]
+                accel = keys[key.PAGEUP] or keys[key.P]
+                decel = keys[key.PAGEDOWN] or keys[key.O]
 
             val = (left << 0 | right << 1 | up << 2 | down << 3 | boton << 4 |
                     accel << 5 | decel << 6 | reset << 7)
@@ -241,7 +255,9 @@ class PygletEngine():
                 if frame == 255:
                     continue
 
-                strip = imagenes.all_strips[image]
+                strip = all_strips.get(image)
+                if not strip:
+                    continue
                 w, h, total_frames, pal = unpack("BBBB", strip[0:4])
                 pal_base = 256 * pal
                 if w == 255: w = 256 # caso especial, para los planetas
@@ -301,8 +317,11 @@ class PygletEngine():
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
             for column in range(256):
                 limit = len(self.vertex_list.colors)
-                self.vertex_list.colors[:] = render(column)[0:limit]
-                self.vertex_list.draw(GL_QUADS)
+                try:
+                    self.vertex_list.colors[:] = render(column)[0:limit]
+                    self.vertex_list.draw(GL_QUADS)
+                except:
+                    pass
                 glRotatef(angle, 0, 0, 1)
             glDisable(texture.target)
             glRotatef(180, 0, 0, 1)
@@ -319,16 +338,16 @@ class PygletEngine():
                     if s:
                         s.play()
                     else:
-                        print("WARN: cannot find sound", name)
+                        print("WARNING: sound not found:", name)
                 elif command == "music":
                     if self.music_player:
                         self.music_player.pause()
                     if name != b"off":
-                        m = sounds.get(name)
-                        if m:
-                            self.music_player = m.play()
+                        s = sounds.get(name)
+                        if s:
+                            self.music_player = s.play()
                         else:
-                            print("WARN: cannot find music", name)
+                            print("WARNING: music not found:", name)
             return
             "FIXME"
             for n in range(6):

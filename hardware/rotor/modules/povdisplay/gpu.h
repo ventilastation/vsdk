@@ -9,4 +9,9 @@
 
 #include "sprites.h"
 
+#define PIXELS 54
+
 extern uint32_t* palette_pal;
+extern int gamma_mode;
+
+const char* memoryview_data(mp_obj_t mv_obj);

@@ -6,6 +6,7 @@ void gameover_setup() {
   audio_play_game_over();
   serial_send("arduino attract");
   keys_pressed = (boton_cw || boton_ccw);
+  is_idle = true;
 }
 
 void gameover_loop() {
