@@ -59,7 +59,7 @@ for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
 sound_queue = []
 
 # startup sound
-sound_queue.append(("sound", bytes("ventilagon/audio/es/super ventilagon", "latin1")))
+sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin1")))
 
 def playsound(name):
     sound_queue.append(("sound", name))
