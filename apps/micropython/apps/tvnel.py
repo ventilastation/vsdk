@@ -5,8 +5,8 @@ from ventilastation.sprites import Sprite
 
 
 TUNNEL_COLS = 8
-#TUNNEL_ROWS = 11
-TUNNEL_ROWS = 5
+TUNNEL_ROWS = 11
+#TUNNEL_ROWS = 5
 TILE_WIDTH = 32
 TILE_HEIGHT = 16
 TUNNEL_START = 8;
@@ -29,10 +29,10 @@ class TvnelGame(Scene):
         
         self.monchito = Sprite()
         self.monchito.set_x(0)
-        self.monchito.set_y(0)
-        self.monchito.set_strip(stripes["monchito_runs.png"])
+        self.monchito.set_y(24)
+        self.monchito.set_strip(stripes["FallingTembac.png"])
         self.monchito.set_frame(0)
-        self.monchito.set_perspective(2)
+        self.monchito.set_perspective(1)
         self.running_frame = 0
         self.verSpeed = 2;
         self.horSpeed = 4;
@@ -55,7 +55,8 @@ class TvnelGame(Scene):
                 sf.set_frame(randrange(3))
                 
         self.fallSpeed = 1
-        
+        self.intermediateFramesFallSpeed = 4
+        self.intermediateFramesFallSpeedCounter = 0
     
     def animar_paisaje(self):
         for f in self.fondos.values():
@@ -69,33 +70,50 @@ class TvnelGame(Scene):
                 f.set_frame(randrange(3))
 
     def step(self):
-        self.animar_paisaje()
+        
+        if(self.intermediateFramesFallSpeedCounter > self.intermediateFramesFallSpeed):
+            self.animar_paisaje()
+            self.intermediateFramesFallSpeedCounter = 0
+        else:
+            self.intermediateFramesFallSpeedCounter += 1
+        
+        self.running_frame += 1
+        pf = (self.running_frame // 4) % 4
+        self.monchito.set_frame(pf)
         
         if director.is_pressed(director.JOY_UP):
-            #self.fallSpeed = 2
+            if(self.intermediateFramesFallSpeed > -2):
+                self.intermediateFramesFallSpeed -= 1
+                print(self.intermediateFramesFallSpeed);
+            
+        if director.is_pressed(director.JOY_DOWN):
+            if(self.intermediateFramesFallSpeed < 4):
+                self.intermediateFramesFallSpeed += 1
+                print(self.intermediateFramesFallSpeed);
+            
+        """
+        if director.is_pressed(director.JOY_UP):
             mony = self.monchito.y()
             #if(mony < 19):
-            if(mony < 40):
-                self.monchito.set_y(mony + self.verSpeed);
-                print(self.monchito.y() );
+            #if(mony < 40):
+            self.monchito.set_y(mony + self.verSpeed);
+            print(self.monchito.y() );
 
         if director.is_pressed(director.JOY_DOWN):
             #self.fallSpeed = 1
             mony = self.monchito.y()
-            if(mony > 0):
-                self.monchito.set_y(mony - self.verSpeed);
-                print(self.monchito.y() );
-                
+            #if(mony > 0):
+            self.monchito.set_y(mony - self.verSpeed);
+            print(self.monchito.y() );
+        """
+        
         if director.is_pressed(director.JOY_LEFT):
             monx = self.monchito.x()
-            self.monchito.set_x(monx - self.horSpeed);
-            print(self.monchito.x());
+            self.monchito.set_x(monx + self.horSpeed);
                 
         if director.is_pressed(director.JOY_RIGHT):
             monx = self.monchito.x()
-            self.monchito.set_x(monx + self.horSpeed);
-            print(self.monchito.x());
-           
+            self.monchito.set_x(monx - self.horSpeed);
 
         #Quits the scene
         if director.was_pressed(director.BUTTON_D):
