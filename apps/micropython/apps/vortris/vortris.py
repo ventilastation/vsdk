@@ -6,7 +6,7 @@ from ventilastation.sprites import Sprite
 COLS = 16
 ROWS = 12
 
-rotaciones = [
+ROTACIONES = [
     [ # S
         "0000"
         "0000"
@@ -141,8 +141,12 @@ class Pieza(Sprite):
         self.col = col
         self.row = row
         self.shape_id = shape_id
-        self.shape = SHAPES[shape_id]
-        self.color = COLORS[shape_id]
+        self.rotation = randrange(4)
+        self.show()
+    
+    def show(self):
+        self.set_x(self.col * 8 + 64)
+        self.set_y(self.row * 8)
         self.set_strip(stripes["vortris.png"])
         self.set_frame(self.shape_id * 4 + self.rotation)
 
@@ -150,25 +154,8 @@ class Pieza(Sprite):
         self.rotation = (self.rotation + 1) % 4
         self.show()
 
-
-class Tetromino:
-    def __init__(self, x, y, shape_id):
-        self.x = x
-        self.y = y
-        self.shape_id = shape_id
-        self.shape = SHAPES[shape_id]
-        self.color = COLORS[shape_id]
-
-    def rotate(self):
-        self.shape = rotate(self.shape)
-
-    def get_coords(self):
-        coords = []
-        for dy, row in enumerate(self.shape):
-            for dx, val in enumerate(row):
-                if val:
-                    coords.append((self.x + dx, self.y + dy))
-        return coords
+    def grilla_actual(self):
+        return ROTACIONES[self.shape_id][self.rotation]
 
 
 class Tablero:
@@ -181,11 +168,12 @@ class Tablero:
 
     def spawn(self):
         self.current = self.unused_pieces.pop()
-        self.current.reset(COLS // 2 - 2, 0, random.randint(0, 6))
-        if self.collision(self.current.get_coords()):
+        self.current.reset(COLS // 2 - 2, 0, randrange(7))
+        if self.collision(self.current.col, self.current.row, self.current.rotation):
             self.gameover = True
 
-    def collision(self, coords):
+    def collision(self, new_col, new_row, new_rotation):
+        return False
         for x, y in coords:
             if x < 0 or x >= COLS or y < 0 or y >= ROWS:
                 return True
@@ -209,18 +197,20 @@ class Tablero:
         self.board = new_board
 
     def move(self, dx, dy):
-        moved = Tetromino(self.current.x + dx, self.current.y + dy, self.current.shape_id)
-        moved.shape = self.current.shape
-        if not self.collision(moved.get_coords()):
-            self.current = moved
+        new_col = self.current.col + dx
+        new_row = self.current.row + dy
+        if not self.collision(new_col, new_row, self.current.rotation):
+            self.current.col = new_col
+            self.current.row = new_row
+            self.current.show()
             return True
         return False
 
     def rotate(self):
-        rotated = Tetromino(self.current.x, self.current.y, self.current.shape_id)
-        rotated.shape = rotate(self.current.shape)
-        if not self.collision(rotated.get_coords()):
-            self.current = rotated
+        new_rotation = (self.current.rotation + 1) % 4
+        if not self.collision(self.current.col, self.current.row, new_rotation):
+            self.current.rotation = new_rotation
+            self.current.show()
 
     def drop(self):
         if not self.move(0, 1):
@@ -235,6 +225,10 @@ class Vortris(Scene):
         self.game = Tablero()
 
     def step(self):
+        if self.game.gameover:
+            print("Game Over! Score:", self.game.score)
+            self.finished()
+
         if director.was_pressed(director.JOY_LEFT):
             self.game.move(-1, 0)
         if director.was_pressed(director.JOY_RIGHT):
