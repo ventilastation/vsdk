@@ -32,6 +32,10 @@ class Nave(Entidad):
             target[1] += -1
         if director.is_pressed(director.JOY_UP):
             target[1] += 1
+
+        direccion = target[0]
+        if direccion != 0:
+            self.set_direccion(direccion)
         
         self.mover(*target)
         
@@ -46,10 +50,13 @@ class Nave(Entidad):
             return
 
         bala.reset()
+        bala.set_direccion(self.direccion)
 
-        # TODO: aplicar orientación de la nave        
-        x = self.x() + bala.width() + 1
+        if self.direccion == 1:
+            x = self.x() + self.width()
+        elif self.direccion == -1:
+            x = self.x() - bala.width()
+
         y = self.y() + self.height() // 2 - bala.height() // 2
         
         bala.setPos(x, y)
-        bala.setDirection(1)

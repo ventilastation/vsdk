@@ -15,7 +15,7 @@ class Bala(Entidad):
 
 
     def step(self):
-        self.set_x(self.x() + 5)
+        self.set_x(self.x() + 5*self.direccion)
 
 
     def reset(self):
