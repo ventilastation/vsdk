@@ -9,24 +9,17 @@ class Enemigo(Entidad):
     estado_inicial : Estado = None
     strip : str
 
-
-    # TODO PENSAR: hay que pasar la posición acá?
-    def __init__(self, scene, x, y):
-        super().__init__(scene, stripes[self.strip], x, y)
+    def __init__(self, scene):
+        super().__init__(scene, stripes[self.strip])
         
         
         self.set_perspective(1)
-        self.set_x(x)
-        self.set_y(y)
 
-        self.estado = None
-        self.reset()
+        self.set_estado(Deshabilitado)
 
 
     def reset(self):
         self.set_estado(self.estado_inicial)
-        
-        # TODO: Spawn
 
 
     def step(self):
@@ -39,7 +32,7 @@ class Enemigo(Entidad):
 class Driller(Enemigo):
     estado_inicial = Bajando
 
-    def __init__(self, scene, x, y):
+    def __init__(self, scene):
         self.strip = "ship-sprite-sym.png"
 
-        super().__init__(scene, x, y)
+        super().__init__(scene)

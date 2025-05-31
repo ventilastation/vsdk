@@ -34,11 +34,6 @@ class Bala(Entidad):
         director.sound_play("vasura_espacial/disparo")
 
 
-    def setPos(self, x,y):
-        self.set_x(x)
-        self.set_y(y)
-
-
     def morir(self):
         self.tiempo_disparo = -1
 

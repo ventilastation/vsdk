@@ -23,6 +23,7 @@ class BalasManager():
         if not self.balas_libres:
             return None
 
+        #TODO kepasa si no quedan balas
         bala = self.balas_libres.pop()
         self.balas_usadas.append(bala)
 

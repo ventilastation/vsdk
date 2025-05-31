@@ -4,9 +4,9 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
 from apps.vasura_scripts.managers.balas_manager import *
+from apps.vasura_scripts.managers.enemigos_manager import *
 
 from apps.vasura_scripts.entities.nave import Nave
-from apps.vasura_scripts.entities.enemigo import *
 from apps.vasura_scripts.entities.planeta import Planeta
 
 
@@ -17,13 +17,6 @@ class VasuraEspacial(Scene):
     def on_enter(self):
         super(VasuraEspacial, self).on_enter()
 
-
-        #Enemigo de prueba
-        self.enemigos = [
-            Driller(self, 0, 0),
-            # Driller(self, 80, 30),
-            # Driller(self, 150, 0),
-        ]
         #Inicializar managers
         self.balas = BalasManager(self)
         self.enemigos = EnemigosManager(self)
@@ -33,10 +26,13 @@ class VasuraEspacial(Scene):
         self.planet = Planeta(self)
         self.planet.al_morir = self.muerte
 
+        self.enemigos.get()
+        
+
 
     def step(self):
         self.nave.ArtificialStep()
-        [x.step() for x in self.enemigos]
+        self.enemigos.step()
         self.balas.step()
 
         if director.was_pressed(director.BUTTON_D):
