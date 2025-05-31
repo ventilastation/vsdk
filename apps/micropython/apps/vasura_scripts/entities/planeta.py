@@ -29,5 +29,4 @@ class Planeta(Entidad):
 
 
     def get_borde_y(self):
-        print(self.alturas[self.index])
         return self.alturas[self.index]

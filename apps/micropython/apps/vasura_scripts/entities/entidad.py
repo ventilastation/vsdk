@@ -1,3 +1,4 @@
+from math import floor
 from ventilastation.sprites import Sprite
 
 class Entidad(Sprite):
@@ -13,19 +14,36 @@ class Entidad(Sprite):
 
         self.set_frame(0)
 
+        self.x_interno = x
+        self.y_interno = y
+
         self.set_x(x)
         self.set_y(y)
+
     
     def step(self):
         pass
 
-    def mover(self, x, y):
-        self.set_x(self.x() + x)
 
-        #TODO screen wrapping opcional?
-        self.set_y(max(min(self.y() + y, self.scene.planet.get_borde_y() - self.height()), self.height()))
-        self.set_y(self.y() + y)
-        print(self.__class__.__name__, self.y() + self.height())
+    def syncPos(self):
+        self.set_x(floor(self.x_interno))
+        self.set_y(floor(self.y_interno))
+
+
+    def setPos(self, x, y):
+        self.x_interno = x
+        self.y_interno = y
+        self.syncPos()
+
+
+    def mover(self, x, y):
+        self.x_interno += x 
+        self.x_interno %= 256
+
+        self.y_interno += y
+        self.y_interno = max(min(self.y_interno, self.scene.planet.get_borde_y() - self.height()), self.height())
+        self.syncPos()
+
 
     def set_estado(self, estado):
         #TODO no transicionar al mismo estado en el que estas

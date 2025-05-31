@@ -6,6 +6,8 @@ from ventilastation.director import stripes, director
 from apps.vasura_scripts.estado import *
 
 class NaveSana(Vulnerable):
+    velocidad = 1.5
+
     def on_enter(self):
         self.entidad.respawn()
 
@@ -25,8 +27,13 @@ class NaveSana(Vulnerable):
         direccion = target[0]
         if direccion != 0:
             self.entidad.set_direccion(direccion)
+
+        target[0] *= self.velocidad
+        target[1] *= self.velocidad
         
         self.entidad.mover(*target)
+
+        print(self.entidad.x_interno)
         
         if director.was_pressed(director.BUTTON_A):
             self.entidad.disparar()
@@ -82,5 +89,4 @@ class Nave(Entidad):
         self.set_estado(NaveExplotando)
 
     def respawn(self):
-        self.set_x(0)
-        self.set_y(60)
+        self.setPos(0, 60)
