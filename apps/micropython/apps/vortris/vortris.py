@@ -7,6 +7,8 @@ from .rotaciones import ROTACIONES
 COLS = 16
 ROWS = 18
 
+DEBUG = True
+
 class Pieza(Sprite):
     def reset(self, col, row, shape_id):
         self.col = col
@@ -32,14 +34,15 @@ class Pieza(Sprite):
 class Tablero:
     def __init__(self):
         self.unused_pieces = [Pieza() for _ in range(80)]
-        self.board = bytearray(COLS * ROWS)
+        self.board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
         self.score = 0
         self.gameover = False
         self.spawn()
 
     def spawn(self):
         self.current = self.unused_pieces.pop()
-        self.current.reset(COLS // 2 - 2, 2, randrange(7))
+        shape_id = randrange(7)
+        self.current.reset(COLS // 2 - 2, 2, shape_id)
         if self.collision(self.current.col, self.current.row, self.current.rotation):
             self.gameover = True
 
@@ -50,7 +53,7 @@ class Tablero:
                 if grilla_pieza[y*4+x] == "X":
                     if x + new_col < 0 or x + new_col >= COLS or y + new_row >= ROWS:
                         return True
-                    if y + new_row >= 0 and self.board[(new_row + y) * COLS + (new_col + x)]:
+                    if self.board[(new_row + y) - 1][(new_col + x) - 1]:
                         return True
         return False
 
@@ -59,12 +62,12 @@ class Tablero:
         for y in range(4):
             for x in range(4):
                 if grilla_pieza[y*4+x] == "X":
-                    if y + self.current.row >= 0:
-                        self.board[(self.current.row + y) * COLS + (self.current.col + x)] = 1
-        for row in range(ROWS):
-            for col in range(COLS):
-                print("X" if self.board[row * COLS + col] else "_", end='')
-            print()
+                    self.board[(y + self.current.row) - 1][(self.current.col + x) - 1] = self.current.shape_id + 1
+        if DEBUG:
+            for row in range(ROWS):
+                for col in range(COLS):
+                    print("X" if self.board[row][col] else "_", end='')
+                print()
         self.spawn()
 
     def clear_lines(self):
