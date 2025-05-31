@@ -64,11 +64,11 @@ class Vulnerable(Estado):
     #TODO mover esto a un lugar donde nos ahorremos el chequeo de tipos
     def step(self):
         es_nave = self.entidad.__class__.__name__ == "Nave"
-        if not es_nave:
-            if self.entidad.collision([self.entidad.scene.nave]):
 
-                self.entidad.scene.muerte()
-                
+        if not es_nave:
+            nave  = self.entidad.scene.nave
+            if self.entidad.collision([nave]):
+                nave.hit()
                 return Explotando
 
         bala : Bala = self.entidad.scene.balas.get_bala_colisionando(self.entidad, True)

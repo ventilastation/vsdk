@@ -23,9 +23,9 @@ class VasuraEspacial(Scene):
 
         #Enemigo de prueba
         self.enemigos = [
-            Driller(self, 50, 50),
-            Driller(self, 80, 30),
-            Driller(self, 150, 0),
+            Driller(self, 0, 0),
+            # Driller(self, 80, 30),
+            # Driller(self, 150, 0),
         ]
 
 
