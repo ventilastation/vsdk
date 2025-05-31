@@ -27,7 +27,7 @@ class Nave(Entidad):
         
     
     def disparar(self):
-        bala = self.balas.get_bala_libre()
+        bala = self.balas.get()
         
         if not bala:
             return

@@ -19,7 +19,7 @@ class BalasManager():
     def step(self):
         [bala.step() for bala in self.balas_usadas]
 
-    def get_bala_libre(self):
+    def get(self):
         if not self.balas_libres:
             return None
 
