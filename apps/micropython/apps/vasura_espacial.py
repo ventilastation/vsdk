@@ -27,6 +27,7 @@ class VasuraEspacial(Scene):
             # Driller(self, 80, 30),
             # Driller(self, 150, 0),
         ]
+        self.balas = BalasManager(self)
 
 
     def step(self):

@@ -1,24 +1,38 @@
 from apps.vasura_scripts.entities.entidad import *
+from apps.vasura_scripts.managers.balas_manager import *
 
 from ventilastation.director import stripes, director
 
+from time import time
+
+TIEMPO_VIDA_BALAS = 20
+VELOCIDAD_BALAS = 5
+
 class Bala(Entidad):
-    
-    def __init__(self, scene):
+    tiempo_disparo : float = -1
+    on_die : callable
+
+    def __init__(self, scene, on_die: callable):
         super().__init__(scene, stripes["bala.png"])
 
         self.set_perspective(1)
         
         self.set_y(self.height())
 
+        self.on_die = on_die
+
         self.disable()
 
 
     def step(self):
-        self.set_x(self.x() + 5*self.direccion)
+        self.set_x(self.x() + VELOCIDAD_BALAS * self.direccion)
+
+        if time() >= self.tiempo_disparo + TIEMPO_VIDA_BALAS:
+            self.on_die(self)
 
 
     def reset(self):
+        self.tiempo_disparo = time()
         self.set_frame(0)
         director.sound_play("vasura_espacial/disparo")
 

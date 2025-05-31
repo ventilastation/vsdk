@@ -7,9 +7,9 @@ class BalasManager():
     balas_libres : List[Bala] = list()
     balas_usadas : List[Bala] = list()
 
-    def __init__(self):
+    def __init__(self, scene):
         self.balas_libres = [
-            Bala(self) 
+            Bala(scene, self.liberar_bala) 
             for _ in range(LIMITE_BALAS)
         ]
 
