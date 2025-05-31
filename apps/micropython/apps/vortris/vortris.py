@@ -50,16 +50,21 @@ class Tablero:
                 if grilla_pieza[y*4+x] == "X":
                     if x + new_col < 0 or x + new_col >= COLS or y + new_row >= ROWS:
                         return True
-                    # if y + new_row >= 0 and self.board[(new_row + y) * COLS + (new_col + x)]:
-                    #     return True
+                    if y + new_row >= 0 and self.board[(new_row + y) * COLS + (new_col + x)]:
+                        return True
         return False
 
     def freeze(self):
         grilla_pieza = ROTACIONES[self.current.shape_id][self.current.rotation]
-        # for x, y in self.current.get_coords():
-        #     if y >= 0:
-        #         self.board[y][x] = self.current.color
-        # self.clear_lines()
+        for y in range(4):
+            for x in range(4):
+                if grilla_pieza[y*4+x] == "X":
+                    if y + self.current.row >= 0:
+                        self.board[(self.current.row + y) * COLS + (self.current.col + x)] = 1
+        for row in range(ROWS):
+            for col in range(COLS):
+                print("X" if self.board[row * COLS + col] else "_", end='')
+            print()
         self.spawn()
 
     def clear_lines(self):
