@@ -33,7 +33,7 @@ class Entidad(Sprite):
         self.set_y(floor(self.y_interno))
 
 
-    def setPos(self, x, y):
+    def set_position(self, x, y):
         self.x_interno = x
         self.y_interno = y
         self.syncPos()

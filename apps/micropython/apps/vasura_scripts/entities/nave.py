@@ -42,16 +42,17 @@ class Nave(Entidad):
 
         y = self.y() + self.height() // 2 - bala.height() // 2
         
-        bala.setPos(x, y)
+        bala.set_position(x, y)
 
 
     def hit(self):
         self.set_estado(NaveExplotando)
 
     def respawn(self):
-        self.setPos(0, 60)
+        self.set_position(0, 60)
 
 class NaveSana(Vulnerable):
+    #TODO mover velocidad a la clase de la nave
     velocidad :float = 1.5
 
     def on_enter(self):
