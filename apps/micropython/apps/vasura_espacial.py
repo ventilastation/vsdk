@@ -18,16 +18,20 @@ class VasuraEspacial(Scene):
         super(VasuraEspacial, self).on_enter()
 
         self.nave = Nave(self)
-        self.planet = Planeta()
+        self.planet = Planeta(self)
         self.balas = BalasManager()
 
         #Enemigo de prueba
-        self.enemigo = Driller(self, 50, 0)
+        self.enemigos = [
+            Driller(self, 50, 50),
+            Driller(self, 80, 30),
+            Driller(self, 150, 0),
+        ]
 
 
     def step(self):
         self.nave.ArtificialStep()
-        self.enemigo.step()
+        [x.step() for x in self.enemigos]
         self.balas.step()
 
         if director.was_pressed(director.BUTTON_D):

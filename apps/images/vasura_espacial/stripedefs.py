@@ -1,7 +1,9 @@
 stripes = [
 
     palettegroup(
-        fullscreen("game-center.png", radius=32)
+        fullscreen("game-center0.png", radius=32),
+        fullscreen("game-center1.png", radius=24),
+        fullscreen("game-center2.png", radius=16),
 
     ),
     palettegroup(

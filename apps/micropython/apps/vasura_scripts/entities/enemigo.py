@@ -13,9 +13,7 @@ class Enemigo(Entidad):
 
     # PENSAR: hay que pasar la posición acá?
     def __init__(self, scene, x, y):
-        super().__init__(stripes[self.strip], x, y)
-        
-        self.scene = scene
+        super().__init__(scene, stripes[self.strip], x, y)
         
         
         self.set_perspective(1)

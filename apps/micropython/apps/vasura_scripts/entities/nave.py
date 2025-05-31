@@ -8,7 +8,7 @@ from apps.vasura_scripts.estado import *
 class Nave(Entidad):
 
     def __init__(self, scene):
-        super().__init__(stripes["ship-sprite-asym-sheet.png"])
+        super().__init__(scene, stripes["ship-sprite-asym-sheet.png"])
 
         self.scene = scene
         
@@ -49,7 +49,7 @@ class Nave(Entidad):
 
         # TODO: aplicar orientación de la nave        
         x = self.x() + bala.width() + 1
-        y = self.y() - self.height() // 2 + bala.height() // 2
+        y = self.y() + self.height() // 2 - bala.height() // 2
         
         bala.setPos(x, y)
         bala.setDirection(1)

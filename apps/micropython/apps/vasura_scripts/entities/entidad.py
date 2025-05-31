@@ -4,8 +4,9 @@ class Entidad(Sprite):
 
     estado : Estado = None
 
-    def __init__(self, strip : int, x : int = 0, y : int = 0):
+    def __init__(self, scene, strip : int, x : int = 0, y : int = 0):
         super().__init__()
+        self.scene = scene
 
         self.set_strip(strip)
 
@@ -22,7 +23,9 @@ class Entidad(Sprite):
 
         #TODO screen wrapping opcional?
         #TODO el 25 ese es el radio de colisión del planeta. Moverlo a algún lado menos mocho.
-        self.set_y(max(min(self.y() + y, 128-25), self.height()))
+        self.set_y(max(min(self.y() + y, self.scene.planet.get_borde_y() - self.height()), self.height()))
+        self.set_y(self.y() + y)
+        print(self.__class__.__name__, self.y() + self.height())
 
     def set_estado(self, estado):
         #TODO no transicionar al mismo estado en el que estas

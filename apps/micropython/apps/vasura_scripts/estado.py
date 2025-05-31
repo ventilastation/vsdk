@@ -90,7 +90,7 @@ class Bajando(Vulnerable):
 
         self.entidad.mover(0, 1)
 
-        # TODO: detectar bien el tamaño
-        if self.entidad.y() >= 128-25:
+        if self.entidad.y() + self.entidad.height() >= self.entidad.scene.planet.get_borde_y():
+            self.entidad.scene.planet.hit()
             return Explotando
 

@@ -28,9 +28,7 @@ class BalasManager():
         return bala
 
     def get_bala_colisionando(self, entidad : Entidad, liberar : bool = False):
-        balas_sprites = [x for x in self.balas_usadas]
-        
-        bala = entidad.collision(balas_sprites)
+        bala = entidad.collision(self.balas_usadas)
         
         if bala:
             if (liberar):
