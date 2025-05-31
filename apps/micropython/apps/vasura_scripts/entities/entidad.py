@@ -4,6 +4,9 @@ from ventilastation.sprites import Sprite
 class Entidad(Sprite):
 
     estado : Estado = None
+    
+    #Eventos/callbacks
+    al_morir : callable
 
     def __init__(self, scene, strip : int, x : int = 0, y : int = 0):
         super().__init__()
@@ -56,7 +59,6 @@ class Entidad(Sprite):
 
 
     def set_direccion(self, direccion: int):
-        print("direccion", direccion)
         self.direccion = direccion
 
         # Sentido horario
@@ -64,3 +66,7 @@ class Entidad(Sprite):
             self.set_frame(0)
         elif direccion == -1:
             self.set_frame(1)
+
+    def morir(self):
+        if self.al_morir:
+            self.al_morir(self)

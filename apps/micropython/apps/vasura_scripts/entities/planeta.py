@@ -20,7 +20,7 @@ class Planeta(Entidad):
         self.index = 3 - self.vidas
 
         if self.vidas == 0:
-            self.scene.muerte()
+            self.morir()
             return 
         
         print(f"game-center{self.index}.png")

@@ -2,7 +2,6 @@ from apps.vasura_scripts.entities.entidad import *
 
 from apps.vasura_scripts.estado import *
 
-from ventilastation.sprites import Sprite
 from ventilastation.director import stripes
 
 class Enemigo(Entidad):
@@ -11,7 +10,7 @@ class Enemigo(Entidad):
     strip : str
 
 
-    # PENSAR: hay que pasar la posición acá?
+    # TODO PENSAR: hay que pasar la posición acá?
     def __init__(self, scene, x, y):
         super().__init__(scene, stripes[self.strip], x, y)
         

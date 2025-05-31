@@ -1,12 +1,58 @@
 from apps.vasura_scripts.entities.entidad import *
 from apps.vasura_scripts.entities.bala import *
+from apps.vasura_scripts.managers.balas_manager import *
 
 from ventilastation.director import stripes, director
 
 from apps.vasura_scripts.estado import *
 
+class Nave(Entidad):
+    balas : BalasManager = None
+
+    def __init__(self, scene, balas_manager:BalasManager):
+        super().__init__(scene, stripes["ship-sprite-asym-sheet.png"])
+
+        self.scene = scene
+        self.balas = balas_manager
+
+        self.set_perspective(1)
+        
+    
+        self.set_estado(NaveSana)
+
+    def ArtificialStep(self):
+        nuevo_estado = self.estado.step()
+        if nuevo_estado:
+            self.set_estado(nuevo_estado)
+        
+    
+    def disparar(self):
+        bala = self.balas.get_bala_libre()
+        
+        if not bala:
+            return
+
+        bala.reset()
+        bala.set_direccion(self.direccion)
+
+        if self.direccion == 1:
+            x = self.x() + self.width()
+        elif self.direccion == -1:
+            x = self.x() - bala.width()
+
+        y = self.y() + self.height() // 2 - bala.height() // 2
+        
+        bala.setPos(x, y)
+
+
+    def hit(self):
+        self.set_estado(NaveExplotando)
+
+    def respawn(self):
+        self.setPos(0, 60)
+
 class NaveSana(Vulnerable):
-    velocidad = 1.5
+    velocidad :float = 1.5
 
     def on_enter(self):
         self.entidad.respawn()
@@ -32,61 +78,12 @@ class NaveSana(Vulnerable):
         target[1] *= self.velocidad
         
         self.entidad.mover(*target)
-
-        print(self.entidad.x_interno)
         
         if director.was_pressed(director.BUTTON_A):
             self.entidad.disparar()
-
-
 
 class NaveExplotando(Explotando):
     def step(self):
         cambio = super().step()
         if cambio:
             return NaveSana
-
-
-
-class Nave(Entidad):
-
-    def __init__(self, scene):
-        super().__init__(scene, stripes["ship-sprite-asym-sheet.png"])
-
-        self.scene = scene
-        
-        self.set_perspective(1)
-        
-    
-        self.set_estado(NaveSana)
-
-    def ArtificialStep(self):
-        nuevo_estado = self.estado.step()
-        if nuevo_estado:
-            self.set_estado(nuevo_estado)
-        
-    
-    def disparar(self):
-        bala = self.scene.balas.get_bala_libre()
-        
-        if not bala:
-            return
-
-        bala.reset()
-        bala.set_direccion(self.direccion)
-
-        if self.direccion == 1:
-            x = self.x() + self.width()
-        elif self.direccion == -1:
-            x = self.x() - bala.width()
-
-        y = self.y() + self.height() // 2 - bala.height() // 2
-        
-        bala.setPos(x, y)
-
-
-    def hit(self):
-        self.set_estado(NaveExplotando)
-
-    def respawn(self):
-        self.setPos(0, 60)

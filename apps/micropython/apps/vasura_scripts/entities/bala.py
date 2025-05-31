@@ -10,16 +10,13 @@ VELOCIDAD_BALAS = 5
 
 class Bala(Entidad):
     tiempo_disparo : float = -1
-    on_die : callable
 
-    def __init__(self, scene, on_die: callable):
+    def __init__(self, scene):
         super().__init__(scene, stripes["bala.png"])
 
         self.set_perspective(1)
         
         self.set_y(self.height())
-
-        self.on_die = on_die
 
         self.disable()
 
@@ -28,7 +25,7 @@ class Bala(Entidad):
         self.set_x(self.x() + VELOCIDAD_BALAS * self.direccion)
 
         if time() >= self.tiempo_disparo + TIEMPO_VIDA_BALAS:
-            self.on_die(self)
+            self.al_morir(self)
 
 
     def reset(self):
@@ -42,5 +39,11 @@ class Bala(Entidad):
         self.set_y(y)
 
 
+    def morir(self):
+        self.tiempo_disparo = -1
+
+        super().morir()
+
+    #TODO cleanup
     def setDirection(self, direction):
         pass

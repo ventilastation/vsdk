@@ -17,9 +17,6 @@ class VasuraEspacial(Scene):
     def on_enter(self):
         super(VasuraEspacial, self).on_enter()
 
-        self.nave = Nave(self)
-        self.planet = Planeta(self)
-        self.balas = BalasManager()
 
         #Enemigo de prueba
         self.enemigos = [
@@ -27,7 +24,14 @@ class VasuraEspacial(Scene):
             # Driller(self, 80, 30),
             # Driller(self, 150, 0),
         ]
+        #Inicializar managers
         self.balas = BalasManager(self)
+        self.enemigos = EnemigosManager(self)
+
+        self.nave = Nave(self, self.balas)
+
+        self.planet = Planeta(self)
+        self.planet.al_morir = self.muerte
 
 
     def step(self):

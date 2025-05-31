@@ -8,10 +8,11 @@ class BalasManager():
     balas_usadas : List[Bala] = list()
 
     def __init__(self, scene):
-        self.balas_libres = [
-            Bala(scene, self.liberar_bala) 
-            for _ in range(LIMITE_BALAS)
-        ]
+        
+        for _ in range(LIMITE_BALAS):
+            b = Bala(scene)
+            b.al_morir = self.liberar_bala
+            self.balas_libres.append(b)
 
         self.balas_usadas = []
     
@@ -32,7 +33,7 @@ class BalasManager():
         
         if bala:
             if (liberar):
-                self.liberar_bala(bala)
+                bala.morir()
                 
             return bala
 
