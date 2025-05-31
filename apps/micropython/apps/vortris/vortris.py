@@ -2,139 +2,10 @@ from urandom import choice, randrange, seed
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
+from .rotaciones import ROTACIONES
 
 COLS = 16
-ROWS = 12
-
-ROTACIONES = [
-    [ # S
-        "0000"
-        "0000"
-        "0110"
-        "1100",
-        "0000"
-        "1000"
-        "1100"
-        "0100",
-        "0000"
-        "0000"
-        "0110"
-        "1100",
-        "0000"
-        "1000"
-        "1100"
-        "0100",
-    ],
-    [ # T
-        "0000"
-        "0000"
-        "0100"
-        "1110",
-        "0000"
-        "1000"
-        "1100"
-        "1000",
-        "0000"
-        "0000"
-        "1110"
-        "0100",
-        "0000"
-        "1100"
-        "1100"
-        "0100",
-    ],
-    [ # L
-        "0000"
-        "1000"
-        "1000"
-        "1100",
-        "0000"
-        "0000"
-        "0010"
-        "1110",
-        "0000"
-        "1100"
-        "0100"
-        "0100",
-        "0000"
-        "0000"
-        "1110"
-        "1000",
-    ],
-    [ # I
-        "1000"
-        "1000"
-        "1000"
-        "1000",
-        "0000"
-        "0000"
-        "0000"
-        "1111",
-        "1000"
-        "1000"
-        "1000"
-        "1000",
-        "0000"
-        "0000"
-        "0000"
-        "1111",
-    ],
-    [ # O
-        "0000"
-        "0000"
-        "1100"
-        "1100",
-        "0000"
-        "0000"
-        "1100"
-        "1100",
-        "0000"
-        "0000"
-        "1100"
-        "1100",
-        "0000"
-        "0000"
-        "1100"
-        "1100",
-    ],
-    [ # Z
-        "0000"
-        "0000"
-        "1100"
-        "0110",
-        "0000"
-        "0100"
-        "1100"
-        "1000",
-        "0000"
-        "0000"
-        "1100"
-        "0110",
-        "0000"
-        "0100"
-        "1100"
-        "1000",
-    ],
-    [ # J
-        "0000"
-        "0000"
-        "1000"
-        "1110",
-        "0000"
-        "0100"
-        "0100"
-        "1100",
-        "0000"
-        "0000"
-        "1110"
-        "0010",
-        "0000"
-        "1100"
-        "1000"
-        "1000",
-    ],
-]
-
+ROWS = 18
 
 class Pieza(Sprite):
     def reset(self, col, row, shape_id):
@@ -168,24 +39,27 @@ class Tablero:
 
     def spawn(self):
         self.current = self.unused_pieces.pop()
-        self.current.reset(COLS // 2 - 2, 0, randrange(7))
+        self.current.reset(COLS // 2 - 2, 2, randrange(7))
         if self.collision(self.current.col, self.current.row, self.current.rotation):
             self.gameover = True
 
     def collision(self, new_col, new_row, new_rotation):
-        return False
-        for x, y in coords:
-            if x < 0 or x >= COLS or y < 0 or y >= ROWS:
-                return True
-            if y >= 0 and self.board[y][x]:
-                return True
+        grilla_pieza = ROTACIONES[self.current.shape_id][new_rotation]
+        for y in range(4):
+            for x in range(4):
+                if grilla_pieza[y*4+x] == "X":
+                    if x + new_col < 0 or x + new_col >= COLS or y + new_row >= ROWS:
+                        return True
+                    # if y + new_row >= 0 and self.board[(new_row + y) * COLS + (new_col + x)]:
+                    #     return True
         return False
 
     def freeze(self):
-        for x, y in self.current.get_coords():
-            if y >= 0:
-                self.board[y][x] = self.current.color
-        self.clear_lines()
+        grilla_pieza = ROTACIONES[self.current.shape_id][self.current.rotation]
+        # for x, y in self.current.get_coords():
+        #     if y >= 0:
+        #         self.board[y][x] = self.current.color
+        # self.clear_lines()
         self.spawn()
 
     def clear_lines(self):
