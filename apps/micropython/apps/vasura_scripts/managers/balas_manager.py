@@ -4,12 +4,10 @@ from apps.vasura_scripts.entities.bala import *
 LIMITE_BALAS : int = 20
 
 class BalasManager():
-
-    balas_libres : List[Bala] = []
-    balas_usadas : List[Bala] = []
-
     def __init__(self, scene):
-        
+        self.balas_libres : List[Bala] = []
+        self.balas_usadas : List[Bala] = []
+
         for _ in range(LIMITE_BALAS):
             b = Bala(scene)
             b.al_morir.suscribir(self.liberar_bala)
@@ -38,3 +36,7 @@ class BalasManager():
     def liberar_bala(self, bala):
         self.balas_usadas.remove(bala)
         self.balas_libres.append(bala)
+    
+    def limpiar(self):
+        [e.limpiar_eventos() for e in self.balas_libres]
+        [e.limpiar_eventos() for e in self.balas_usadas]

@@ -20,3 +20,6 @@ class Evento:
             return
         
         self.suscriptores.remove(callback)
+    
+    def limpiar(self):
+        self.suscriptores = []

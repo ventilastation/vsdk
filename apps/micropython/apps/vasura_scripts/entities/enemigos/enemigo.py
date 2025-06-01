@@ -38,6 +38,10 @@ class Enemigo(Entidad):
 
         self.al_morir.disparar(self)
 
+    def limpiar_eventos(self):
+        self.al_colisionar_con_bala.limpiar()
+
+        super().limpiar_eventos()
 
 class Driller(Enemigo):
     estado_inicial = Bajando

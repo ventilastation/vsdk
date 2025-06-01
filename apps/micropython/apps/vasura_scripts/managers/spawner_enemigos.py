@@ -8,12 +8,9 @@ from math import floor
 INTERVALO_DE_SPAWN : float = 4
 
 class SpawnerEnemigos():
-    manager : EnemigosManager = None
-    
-    tiempo_siguiente_spawn : int = -1
-
     def __init__(self, manager:EnemigosManager):
-        self.manager = manager
+        self.manager : EnemigosManager = manager
+        self.tiempo_siguiente_spawn : int = -1
         
         seed(ticks_ms())
 

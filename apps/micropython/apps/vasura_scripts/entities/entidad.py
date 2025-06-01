@@ -76,3 +76,6 @@ class Entidad(Sprite):
 
     def morir(self, por_bala : bool = False):
         pass
+
+    def limpiar_eventos(self):
+        self.al_morir.limpiar()

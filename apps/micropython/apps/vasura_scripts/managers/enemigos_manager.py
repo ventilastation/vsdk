@@ -3,11 +3,10 @@ from apps.vasura_scripts.entities.enemigos.enemigo import *
 LIMITE_ENEMIGOS = 20
 
 class EnemigosManager():
-
-    enemigos_libres : List[Enemigo] = []
-    enemigos_spawneados : List[Enemigo] = []
-
     def __init__(self, scene):
+        self.enemigos_libres : List[Enemigo] = []
+        self.enemigos_spawneados : List[Enemigo] = []
+
         self.al_morir_enemigo : Evento = Evento()
 
         for _ in range(LIMITE_ENEMIGOS):
@@ -36,5 +35,12 @@ class EnemigosManager():
 
         self.enemigos_spawneados.remove(e)
         self.enemigos_libres.append(e)
+    
+    def limpiar(self):
+        [e.limpiar_eventos() for e in self.enemigos_libres]
+        [e.limpiar_eventos() for e in self.enemigos_spawneados]
+
+        self.enemigos_libres = []
+        self.enemigos_spawneados = []
 
     

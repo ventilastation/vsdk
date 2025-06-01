@@ -3,12 +3,12 @@ from apps.vasura_scripts.managers.gameplay_manager import *
 from ventilastation.director import stripes
 
 class Planeta(Entidad):
-    alturas = [115, 130, 140]
-    index : int = 0
-
     def __init__(self, scene):
         super().__init__(scene, stripes["game-center0.png"])
         
+        self.alturas = [115, 130, 140]
+        self.index : int = 0
+
         self.al_ser_golpeado : Evento = Evento()
 
         self.set_perspective(0)
@@ -19,6 +19,10 @@ class Planeta(Entidad):
     def hit(self):
         self.al_ser_golpeado.disparar()
         
+    def limpiar_eventos(self):
+        self.al_ser_golpeado.limpiar()
+        
+        super().limpiar_eventos()
 
     def al_perder_vida(self, vidas_restantes:int):
         self.index = VIDAS_INICIALES - vidas_restantes

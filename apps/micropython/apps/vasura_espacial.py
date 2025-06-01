@@ -50,8 +50,15 @@ class VasuraEspacial(Scene):
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
+    def on_exit(self):
+        self.nave.limpiar_eventos()
+        self.planet.limpiar_eventos()
+
+        self.enemigos.limpiar()
+        self.gameplay_manager.limpiar()
+        self.balas.limpiar()
+
     def finished(self):
-        #BUG hacer cleanup porque no se puede volver a entrar al juego
         director.pop()
         raise StopIteration()
 
@@ -59,11 +66,6 @@ class VasuraEspacial(Scene):
     def muerte(self):
         director.music_play("vasura_espacial/game_over")
         self.finished()
-
-
-    def finished(self):
-        director.pop()
-        raise StopIteration()
 
 
 def main():

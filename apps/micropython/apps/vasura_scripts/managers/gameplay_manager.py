@@ -8,17 +8,15 @@ VIDAS_INICIALES : int = 3
 TIEMPO_DE_RESPAWN : float = 3
 
 
-class GameplayManager():
-    
-    
-    #Estado
-    tiempo_respawn : float = -1
-    vidas_restantes : int = VIDAS_INICIALES
-    puntaje_actual : int = 0
-
+class GameplayManager():    
     def __init__(self, nave:Nave):
         #Dependencias
         self.nave : Nave = nave
+
+        #Estado
+        self.tiempo_respawn : float = -1
+        self.vidas_restantes : int = VIDAS_INICIALES
+        self.puntaje_actual : int = 0
 
         #Eventos
         self.al_perder_vida : Evento = Evento()
@@ -49,3 +47,7 @@ class GameplayManager():
     def respawnear_nave(self):
         self.tiempo_respawn = -1
         self.nave.respawn()
+    
+    def limpiar(self):
+        self.al_perder_vida.limpiar()
+        self.game_over.limpiar()
