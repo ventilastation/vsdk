@@ -31,7 +31,7 @@ class Enemigo(Entidad):
     def morir(self):
         self.set_estado(Deshabilitado)
 
-        [callback(self) for callback in self.al_morir]
+        self.notificar_muerte()
 
 
 class Driller(Enemigo):

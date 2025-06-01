@@ -51,8 +51,7 @@ class Nave(Entidad):
     
     def morir(self):
         self.set_estado(Deshabilitado)
-
-        [callback(self) for callback in self.al_morir]
+        self.notificar_muerte()
 
     def respawn(self):
         self.set_estado(NaveSana)

@@ -82,3 +82,6 @@ class Entidad(Sprite):
             return
 
         self.al_morir.append(callback)
+    
+    def notificar_muerte(self):
+        [callback(self) for callback in self.al_morir]
