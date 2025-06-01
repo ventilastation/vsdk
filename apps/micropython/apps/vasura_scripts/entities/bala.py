@@ -35,4 +35,4 @@ class Bala(Entidad):
         self.tiempo_de_muerte = -1
         self.disable()
         
-        self.notificar_muerte()
+        self.al_morir.disparar(self)

@@ -29,15 +29,14 @@ class VasuraEspacial(Scene):
 
         self.gameplay_manager = GameplayManager(self.nave)
 
-        self.planet.al_ser_golpeado = self.gameplay_manager.on_planet_hit
+        self.planet.al_ser_golpeado.suscribir(self.gameplay_manager.on_planet_hit)
         
-        self.gameplay_manager.suscribir_perder_vida(self.planet.al_perder_vida)
-        self.gameplay_manager.suscribir_perder_vida(lambda v: self.spawner.spawnear_enemigo() if v > 0 else False)
+        self.gameplay_manager.al_perder_vida.suscribir(self.planet.al_perder_vida)
 
-        self.gameplay_manager.suscribir_game_over(self.muerte)
+        self.gameplay_manager.game_over.suscribir(self.muerte)
 
         #BUG cuando un enemigo le pega al planeta se suman los puntos
-        #self.enemigos.al_morir_enemigo = self.gameplay_manager.al_morir_enemigo
+        #self.enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
 
         self.spawner.spawnear_enemigo()
 

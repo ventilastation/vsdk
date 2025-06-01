@@ -8,11 +8,11 @@ class EnemigosManager():
     enemigos_activos : List[Enemigo] = []
 
     def __init__(self, scene):
-        self.al_morir_enemigo : callable = None
+        self.al_morir_enemigo : Evento = Evento()
 
         for _ in range(LIMITE_ENEMIGOS):
             e = Driller(scene)
-            e.suscribir_muerte(self.reciclar_enemigo)
+            e.al_morir.suscribir(self.reciclar_enemigo)
 
             self.enemigos_inactivos.append(e)
 
@@ -35,7 +35,6 @@ class EnemigosManager():
         self.enemigos_activos.remove(e)
         self.enemigos_inactivos.append(e)
 
-        if self.al_morir_enemigo:
-            self.al_morir_enemigo(e)
+        self.al_morir_enemigo.disparar()
 
     

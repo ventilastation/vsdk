@@ -12,7 +12,7 @@ class BalasManager():
         
         for _ in range(LIMITE_BALAS):
             b = Bala(scene)
-            b.suscribir_muerte(self.liberar_bala)
+            b.al_morir.suscribir(self.liberar_bala)
             self.balas_libres.append(b)
     
     def step(self):

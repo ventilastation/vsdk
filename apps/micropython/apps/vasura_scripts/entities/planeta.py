@@ -9,7 +9,7 @@ class Planeta(Entidad):
     def __init__(self, scene):
         super().__init__(scene, stripes["game-center0.png"])
         
-        self.al_ser_golpeado : callable = None
+        self.al_ser_golpeado : Evento = Evento()
 
         self.set_perspective(0)
         self.set_y(170)
@@ -17,8 +17,7 @@ class Planeta(Entidad):
 
 
     def hit(self):
-        if self.al_ser_golpeado:
-            self.al_ser_golpeado()
+        self.al_ser_golpeado.disparar()
         
 
     def al_perder_vida(self, vidas_restantes:int):
