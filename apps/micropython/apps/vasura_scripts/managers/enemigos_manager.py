@@ -21,6 +21,8 @@ class EnemigosManager():
         #TODO kepasa si no quedan enemigos
 
         e.reset()
+
+        #TODO deshardcodear. Mover a una clase que se encargue del spawn?
         e.set_position(50, 0)
 
         self.enemigos_activos.append(e)
@@ -31,7 +33,7 @@ class EnemigosManager():
         e.set_estado(Deshabilitado)
 
         self.enemigos_activos.remove(e)
-        self.enemigos.inactivos.append(e)
+        self.enemigos_inactivos.append(e)
 
     def step(self):
         [e.step() for e in self.enemigos_activos]

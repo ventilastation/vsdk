@@ -27,7 +27,8 @@ class Enemigo(Entidad):
         if nuevo_estado:
             self.set_estado(nuevo_estado)
 
-
+    def hit(self):
+        self.set_estado(Explotando)
 
 class Driller(Enemigo):
     estado_inicial = Bajando

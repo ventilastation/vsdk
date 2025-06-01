@@ -17,14 +17,16 @@ class Nave(Entidad):
 
         self.set_perspective(1)
         
-    
         self.set_estado(NaveSana)
+        self.set_position(0, 50)
 
     def ArtificialStep(self):
         nuevo_estado = self.estado.step()
         if nuevo_estado:
             self.set_estado(nuevo_estado)
-        
+    
+    def hit(self):
+        self.morir()
     
     def disparar(self):
         bala = self.balas.get()
@@ -44,19 +46,15 @@ class Nave(Entidad):
         
         bala.set_position(x, y)
 
-
-    def hit(self):
-        self.set_estado(NaveExplotando)
-
     def respawn(self):
-        self.set_position(0, 60)
+        self.set_estado(NaveSana)
+        self.set_position(0, 50)
 
 class NaveSana(Vulnerable):
     #TODO mover velocidad a la clase de la nave
     velocidad :float = 1.5
-
     def on_enter(self):
-        self.entidad.respawn()
+        self.entidad.set_frame(0)
 
     def step(self):
         super().step()
@@ -82,9 +80,3 @@ class NaveSana(Vulnerable):
         
         if director.was_pressed(director.BUTTON_A):
             self.entidad.disparar()
-
-class NaveExplotando(Explotando):
-    def step(self):
-        cambio = super().step()
-        if cambio:
-            return NaveSana

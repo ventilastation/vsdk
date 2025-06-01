@@ -38,7 +38,3 @@ class Bala(Entidad):
         self.tiempo_disparo = -1
 
         super().morir()
-
-    #TODO cleanup
-    def setDirection(self, direction):
-        pass

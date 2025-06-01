@@ -1,12 +1,13 @@
 from math import floor
 from ventilastation.sprites import Sprite
+from apps.vasura_scripts.estado import *
 
 class Entidad(Sprite):
 
     estado : Estado = None
     
     #Eventos/callbacks
-    al_morir : callable
+    al_morir : callable = None
 
     def __init__(self, scene, strip : int, x : int = 0, y : int = 0):
         super().__init__()
@@ -28,7 +29,7 @@ class Entidad(Sprite):
         pass
 
 
-    def syncPos(self):
+    def round_position(self):
         self.set_x(floor(self.x_interno))
         self.set_y(floor(self.y_interno))
 
@@ -36,7 +37,7 @@ class Entidad(Sprite):
     def set_position(self, x, y):
         self.x_interno = x
         self.y_interno = y
-        self.syncPos()
+        self.round_position()
 
 
     def mover(self, x, y):
@@ -45,7 +46,7 @@ class Entidad(Sprite):
 
         self.y_interno += y
         self.y_interno = max(min(self.y_interno, self.scene.planet.get_borde_y() - self.height()), self.height())
-        self.syncPos()
+        self.round_position()
 
 
     def set_estado(self, estado):
@@ -67,6 +68,11 @@ class Entidad(Sprite):
         elif direccion == -1:
             self.set_frame(1)
 
+    def hit(self):
+        pass
+
     def morir(self):
+        self.set_estado(Deshabilitado)
+
         if self.al_morir:
             self.al_morir(self)
