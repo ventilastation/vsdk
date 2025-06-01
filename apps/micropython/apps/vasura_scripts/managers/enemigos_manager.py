@@ -1,4 +1,4 @@
-from apps.vasura_scripts.entities.enemigo import *
+from apps.vasura_scripts.entities.enemigos.enemigo import *
 
 LIMITE_ENEMIGOS = 20
 
@@ -17,16 +17,10 @@ class EnemigosManager():
             self.enemigos_inactivos.append(e)
 
     #TODO ver cómo manejar enemigos de distinto tipo
-    def get(self):
+    def get_enemigo(self):
         e : Enemigo = self.enemigos_inactivos.pop()
         
         #TODO kepasa si no quedan enemigos
-
-        e.reset()
-
-        #TODO deshardcodear. Mover a una clase que se encargue del spawn?
-        e.set_position(50, 0)
-
         self.enemigos_activos.append(e)
 
         return e

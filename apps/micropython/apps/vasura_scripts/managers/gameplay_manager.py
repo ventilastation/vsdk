@@ -1,7 +1,7 @@
 from time import time
 
 from apps.vasura_scripts.entities.nave import Nave
-from apps.vasura_scripts.entities.enemigo import *
+from apps.vasura_scripts.entities.enemigos.enemigo import *
 
 VIDAS_INICIALES : int = 3
 

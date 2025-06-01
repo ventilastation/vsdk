@@ -7,6 +7,8 @@ from apps.vasura_scripts.managers.balas_manager import *
 from apps.vasura_scripts.managers.enemigos_manager import *
 from apps.vasura_scripts.managers.gameplay_manager import *
 
+from apps.vasura_scripts.managers.spawner_enemigos import *
+
 from apps.vasura_scripts.entities.nave import Nave
 from apps.vasura_scripts.entities.planeta import Planeta
 
@@ -20,6 +22,7 @@ class VasuraEspacial(Scene):
 
         self.balas = BalasManager(self)
         self.enemigos = EnemigosManager(self)
+        self.spawner = SpawnerEnemigos(self.enemigos)
 
         self.nave = Nave(self, self.balas)
 
@@ -30,13 +33,13 @@ class VasuraEspacial(Scene):
         self.planet.al_ser_golpeado = self.gameplay_manager.on_planet_hit
         
         self.gameplay_manager.suscribir_perder_vida(self.planet.al_perder_vida)
-        self.gameplay_manager.suscribir_perder_vida(lambda _: self.enemigos.get())
+        self.gameplay_manager.suscribir_perder_vida(lambda v: self.spawner.spawnear_enemigo() if v > 0 else False)
 
         self.gameplay_manager.suscribir_game_over(self.finished)
 
         self.enemigos.al_morir_enemigo = self.gameplay_manager.al_morir_enemigo
 
-        self.enemigos.get()
+        self.spawner.spawnear_enemigo()
 
 
     def step(self):
