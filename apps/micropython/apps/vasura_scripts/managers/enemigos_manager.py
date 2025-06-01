@@ -4,8 +4,8 @@ LIMITE_ENEMIGOS = 20
 
 class EnemigosManager():
 
-    enemigos_inactivos : List[Enemigo] = []
-    enemigos_activos : List[Enemigo] = []
+    enemigos_libres : List[Enemigo] = []
+    enemigos_spawneados : List[Enemigo] = []
 
     def __init__(self, scene):
         self.al_morir_enemigo : Evento = Evento()
@@ -15,25 +15,26 @@ class EnemigosManager():
             e.al_morir.suscribir(self.reciclar_enemigo)
             e.al_colisionar_con_bala.suscribir(self.al_morir_enemigo.disparar)
 
-            self.enemigos_inactivos.append(e)
+            self.enemigos_libres.append(e)
 
     def step(self):
-        [e.step() for e in self.enemigos_activos]
+        [e.step() for e in self.enemigos_spawneados]
 
     #TODO ver cómo manejar enemigos de distinto tipo
     def get_enemigo(self):
-        e : Enemigo = self.enemigos_inactivos.pop()
-        
-        #TODO kepasa si no quedan enemigos
-        self.enemigos_activos.append(e)
+        if not self.enemigos_libres:
+            return None
+
+        e : Enemigo = self.enemigos_libres.pop()
+        self.enemigos_spawneados.append(e)
 
         return e
 
     def reciclar_enemigo(self, e:Enemigo):
-        if not e in self.enemigos_activos:
+        if not e in self.enemigos_spawneados:
             return
 
-        self.enemigos_activos.remove(e)
-        self.enemigos_inactivos.append(e)
+        self.enemigos_spawneados.remove(e)
+        self.enemigos_libres.append(e)
 
     

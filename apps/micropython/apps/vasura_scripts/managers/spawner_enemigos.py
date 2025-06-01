@@ -28,6 +28,9 @@ class SpawnerEnemigos():
     def spawnear_enemigo(self):
         e = self.manager.get_enemigo()
 
+        if not e:
+            return
+
         e.reset()
 
         e.set_position(randint(0, 254), 0)
