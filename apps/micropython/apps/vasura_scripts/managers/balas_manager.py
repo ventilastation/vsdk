@@ -11,6 +11,7 @@ class BalasManager():
         
         for _ in range(LIMITE_BALAS):
             b = Bala(scene)
+            b.suscribir_muerte(self.liberar_bala)
             self.balas_libres.append(b)
 
         self.balas_usadas = []
@@ -39,6 +40,3 @@ class BalasManager():
     def liberar_bala(self, bala):
         self.balas_usadas.remove(bala)
         self.balas_libres.append(bala)
-
-        bala.tiempo_disparo = -1
-        bala.disable()
