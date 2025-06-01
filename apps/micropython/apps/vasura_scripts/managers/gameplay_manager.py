@@ -1,4 +1,4 @@
-import utime
+from utime import ticks_ms, ticks_diff, ticks_add
 
 from apps.vasura_scripts.entities.nave import Nave
 from apps.vasura_scripts.entities.enemigos.enemigo import *
@@ -26,11 +26,11 @@ class GameplayManager():
         nave.suscribir_muerte(self.al_morir_nave)
     
     def step(self):
-        if self.tiempo_respawn != -1 and utime.ticks_diff(self.tiempo_respawn, utime.ticks_ms()) <= 0:
+        if self.tiempo_respawn != -1 and ticks_diff(self.tiempo_respawn, ticks_ms()) <= 0:
             self.respawnear_nave()
 
     def al_morir_nave(self, _):
-        self.tiempo_respawn = utime.ticks_add(utime.ticks_ms(), TIEMPO_DE_RESPAWN * 1000)
+        self.tiempo_respawn = ticks_add(ticks_ms(), TIEMPO_DE_RESPAWN * 1000)
     
     def on_planet_hit(self):
         self.vidas_restantes -= 1

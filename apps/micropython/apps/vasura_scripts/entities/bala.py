@@ -1,4 +1,4 @@
-import utime
+from utime import ticks_ms, ticks_diff, ticks_add
 
 from apps.vasura_scripts.entities.entidad import *
 from apps.vasura_scripts.managers.balas_manager import *
@@ -22,12 +22,12 @@ class Bala(Entidad):
     def step(self):
         self.mover(self.velocidad_x * self.direccion, 0)
 
-        if utime.ticks_diff(self.tiempo_de_muerte, utime.ticks_ms()) <= 0:
+        if ticks_diff(self.tiempo_de_muerte, ticks_ms()) <= 0:
             self.morir()
 
 
     def reset(self):
-        self.tiempo_de_muerte = utime.ticks_add(utime.ticks_ms(), TIEMPO_VIDA_BALAS * 1000)
+        self.tiempo_de_muerte = ticks_add(ticks_ms(), TIEMPO_VIDA_BALAS * 1000)
         self.set_frame(0)
         director.sound_play("vasura_espacial/disparo")
 

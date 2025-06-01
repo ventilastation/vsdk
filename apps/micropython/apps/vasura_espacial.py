@@ -1,4 +1,3 @@
-from urandom import choice, randrange, seed
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
@@ -35,7 +34,7 @@ class VasuraEspacial(Scene):
         self.gameplay_manager.suscribir_perder_vida(self.planet.al_perder_vida)
         self.gameplay_manager.suscribir_perder_vida(lambda v: self.spawner.spawnear_enemigo() if v > 0 else False)
 
-        self.gameplay_manager.suscribir_game_over(self.finished)
+        self.gameplay_manager.suscribir_game_over(self.muerte)
 
         #BUG cuando un enemigo le pega al planeta se suman los puntos
         #self.enemigos.al_morir_enemigo = self.gameplay_manager.al_morir_enemigo
@@ -54,13 +53,14 @@ class VasuraEspacial(Scene):
             self.finished()
 
     def finished(self):
+        #BUG hacer cleanup porque no se puede volver a entrar al juego
         director.pop()
         raise StopIteration()
 
     
     def muerte(self):
         director.music_play("vasura_espacial/game_over")
-        #self.finished()
+        self.finished()
 
 
     def finished(self):
