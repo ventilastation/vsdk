@@ -36,6 +36,8 @@ class Driller(Enemigo):
     estado_inicial = Bajando
 
     def __init__(self, scene):
+        self.velocidad_y = 0.5
+
         self.strip = "ship-sprite-sym.png"
         self.puntaje = 50
 

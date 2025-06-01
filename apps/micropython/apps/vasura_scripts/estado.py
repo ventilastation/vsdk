@@ -80,13 +80,12 @@ class Vulnerable(Estado):
 
 
 class Bajando(Vulnerable):
-
     def step(self):
         cambio = super().step()
         if cambio:
             return cambio
 
-        self.entidad.mover(0, 1)
+        self.entidad.mover(0, self.entidad.velocidad_y)
 
         if self.entidad.y() + self.entidad.height() >= self.entidad.scene.planet.get_borde_y():
             self.entidad.scene.planet.hit()

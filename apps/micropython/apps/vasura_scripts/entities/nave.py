@@ -17,6 +17,9 @@ class Nave(Entidad):
 
         self.set_perspective(1)
         
+        self.velocidad_x = 1.5
+        self.velocidad_y = 1.5
+
         self.set_estado(NaveSana)
         self.set_position(0, 50)
 
@@ -51,8 +54,6 @@ class Nave(Entidad):
         self.set_position(0, 50)
 
 class NaveSana(Vulnerable):
-    #TODO mover velocidad a la clase de la nave
-    velocidad :float = 1.5
     def on_enter(self):
         self.entidad.set_frame(0)
 
@@ -73,8 +74,8 @@ class NaveSana(Vulnerable):
         if direccion != 0:
             self.entidad.set_direccion(direccion)
 
-        target[0] *= self.velocidad
-        target[1] *= self.velocidad
+        target[0] *= self.entidad.velocidad_x
+        target[1] *= self.entidad.velocidad_y
         
         self.entidad.mover(*target)
         

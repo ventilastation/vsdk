@@ -6,13 +6,14 @@ from ventilastation.director import stripes, director
 from time import time
 
 TIEMPO_VIDA_BALAS = 20
-VELOCIDAD_BALAS = 5
 
 class Bala(Entidad):
     tiempo_disparo : float = -1
 
     def __init__(self, scene):
         super().__init__(scene, stripes["bala.png"])
+
+        self.velocidad_x = 5
 
         self.set_perspective(1)
         
@@ -22,7 +23,8 @@ class Bala(Entidad):
 
 
     def step(self):
-        self.set_x(self.x() + VELOCIDAD_BALAS * self.direccion)
+        
+        self.mover(self.velocidad_x * self.direccion, 0)
 
         if time() >= self.tiempo_disparo + TIEMPO_VIDA_BALAS:
             self.al_morir(self)

@@ -9,6 +9,9 @@ class Entidad(Sprite):
     #Eventos/callbacks
     al_morir : callable = None
 
+    velocidad_x : float = 0
+    velocidad_y : float = 0
+
     def __init__(self, scene, strip : int, x : int = 0, y : int = 0):
         super().__init__()
         self.scene = scene
