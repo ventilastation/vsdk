@@ -30,10 +30,10 @@ class BalasManager():
 
     def get_bala_colisionando(self, entidad : Entidad):
         bala = entidad.collision(self.balas_usadas)
-        
+
         if bala:
-            self.liberar_bala(bala)
-                
+            bala.morir()
+                    
             return bala
 
     def liberar_bala(self, bala):
