@@ -150,7 +150,7 @@ class Item(Sprite):
         self.hps    = [5, 25, 5, 5, 1]
         self.types  = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
         
-        self.strips = ["jabon.png", "pala.png", "burbujero2.png", "desodorante.png", "pasto.png"]
+        self.strips = ["jabon.png", "pala.png", "burbujero.png", "desodorante.png", "pasto.png"]
         self.frame_amounts = [4, 8, 2, 4, 2]
         self.frame_rates   = [5, 5, 5, 5, 5]
 
