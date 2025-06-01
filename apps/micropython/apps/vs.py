@@ -286,8 +286,8 @@ class Menu():
         self.items_description =  ["limpia nerds", "intocable", "da burbujas", "los espanta", "kabum!"]
         self.items_price       = [100, 200, 300, 400, 500]
 
-        self.text        = Text(x=93, y=18, len=11, sprite="vga_pc734.png",         invert=True)
-        self.stats       = Text(x=93, y=30, len=13, sprite="vga_pc734_verde.png",   invert=True)
+        self.text        = Text(x=93,   y=18, len=11, sprite="vga_pc734.png",         invert=True)
+        self.stats       = Text(x=93,   y=30, len=13, sprite="vga_pc734_verde.png",   invert=True)
         self.description = Text(x=64-9, y=27, len=13, sprite="vga_pc734_celeste.png", invert=False)
         self.price       = Numbers(x=72, y=21,  len=4)
         self.write_description()
