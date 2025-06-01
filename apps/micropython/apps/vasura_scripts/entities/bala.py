@@ -27,16 +27,10 @@ class Bala(Entidad):
         self.mover(self.velocidad_x * self.direccion, 0)
 
         if time() >= self.tiempo_disparo + TIEMPO_VIDA_BALAS:
-            self.al_morir(self)
+            self.morir()
 
 
     def reset(self):
         self.tiempo_disparo = time()
         self.set_frame(0)
         director.sound_play("vasura_espacial/disparo")
-
-
-    def morir(self):
-        self.tiempo_disparo = -1
-
-        super().morir()

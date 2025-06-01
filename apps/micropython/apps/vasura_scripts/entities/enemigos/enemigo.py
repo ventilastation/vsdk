@@ -14,7 +14,6 @@ class Enemigo(Entidad):
     def __init__(self, scene):
         super().__init__(scene, stripes[self.strip])
         
-        
         self.set_perspective(1)
 
         self.set_estado(Deshabilitado)
@@ -29,8 +28,11 @@ class Enemigo(Entidad):
         if nuevo_estado:
             self.set_estado(nuevo_estado)
 
-    def hit(self):
-        self.set_estado(Explotando)
+    def morir(self):
+        self.set_estado(Deshabilitado)
+
+        [callback(self) for callback in self.al_morir]
+
 
 class Driller(Enemigo):
     estado_inicial = Bajando

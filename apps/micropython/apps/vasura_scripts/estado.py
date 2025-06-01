@@ -54,7 +54,7 @@ class Explotando(Estado):  # Anarquía
 
         # Blink de ejemplo
         if (self.frames_left // 10) % 2:
-            self.entidad.morir()
+            self.entidad.disable()
         else:
             self.entidad.set_frame(0)
 
@@ -67,15 +67,20 @@ class Vulnerable(Estado):
 
         if not es_nave:
             nave  = self.entidad.scene.nave
+            
             if self.entidad.collision([nave]):
-                nave.morir()
-                return Explotando
+                print("Colision con nave: " + str(type(self.entidad)))
+                nave.hit()
+                self.entidad.morir()
+                
+                return None
 
-        bala : Bala = self.entidad.scene.balas.get_bala_colisionando(self.entidad, True)
+        bala : Bala = self.entidad.scene.balas.get_bala_colisionando(self.entidad)
         if bala:
-            self.entidad.hit()
+            print("Colision con bala: " + str(type(self.entidad)))
+            self.entidad.morir()
 
-            return Explotando
+            return None
 
 
 
@@ -89,5 +94,7 @@ class Bajando(Vulnerable):
 
         if self.entidad.y() + self.entidad.height() >= self.entidad.scene.planet.get_borde_y():
             self.entidad.scene.planet.hit()
-            return Explotando
+            self.entidad.morir()
+            
+            return None
 

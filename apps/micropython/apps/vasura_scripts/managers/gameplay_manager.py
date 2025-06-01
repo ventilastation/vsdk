@@ -5,7 +5,7 @@ from apps.vasura_scripts.entities.enemigos.enemigo import *
 
 VIDAS_INICIALES : int = 3
 
-TIEMPO_DE_RESPAWN : float = 5
+TIEMPO_DE_RESPAWN : float = 3
 
 
 class GameplayManager():
@@ -23,7 +23,7 @@ class GameplayManager():
 
     def __init__(self, nave:Nave):
         self.nave = nave
-        nave.al_morir = self.al_morir_nave
+        nave.suscribir_muerte(self.al_morir_nave)
     
     def step(self):
         #BUG creo que tarda mas tiempo del configurado pero nidea

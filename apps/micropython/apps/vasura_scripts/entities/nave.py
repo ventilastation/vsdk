@@ -48,6 +48,11 @@ class Nave(Entidad):
         y = self.y() + self.height() // 2 - bala.height() // 2
         
         bala.set_position(x, y)
+    
+    def morir(self):
+        self.set_estado(Deshabilitado)
+
+        [callback(self) for callback in self.al_morir]
 
     def respawn(self):
         self.set_estado(NaveSana)

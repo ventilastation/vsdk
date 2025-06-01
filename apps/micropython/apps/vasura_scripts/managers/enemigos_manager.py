@@ -7,14 +7,17 @@ class EnemigosManager():
     enemigos_inactivos : List[Enemigo] = list()
     enemigos_activos : List[Enemigo] = list()
 
-    al_morir_enemigo : callable
+    al_morir_enemigo : callable = None
 
     def __init__(self, scene):
         for _ in range(LIMITE_ENEMIGOS):
             e = Driller(scene)
-            e.al_morir = self.reciclar_enemigo
+            e.suscribir_muerte(self.reciclar_enemigo)
 
             self.enemigos_inactivos.append(e)
+
+    def step(self):
+        [e.step() for e in self.enemigos_activos]
 
     #TODO ver cómo manejar enemigos de distinto tipo
     def get_enemigo(self):
@@ -26,13 +29,15 @@ class EnemigosManager():
         return e
 
     def reciclar_enemigo(self, e:Enemigo):
-        if self.al_morir_enemigo:
-            self.al_morir_enemigo(e)
-
-        e.set_estado(Deshabilitado)
+        #BUG este metodo se llama cuando una bala le pega a la nave y nidea porkhe
+        if not e in self.enemigos_activos:
+            print("Remover enemigo: " + str(type(e)))
+            return
 
         self.enemigos_activos.remove(e)
         self.enemigos_inactivos.append(e)
 
-    def step(self):
-        [e.step() for e in self.enemigos_activos]
+        if self.al_morir_enemigo:
+            self.al_morir_enemigo(e)
+
+    

@@ -11,7 +11,6 @@ class BalasManager():
         
         for _ in range(LIMITE_BALAS):
             b = Bala(scene)
-            b.al_morir = self.liberar_bala
             self.balas_libres.append(b)
 
         self.balas_usadas = []
@@ -29,16 +28,17 @@ class BalasManager():
 
         return bala
 
-    def get_bala_colisionando(self, entidad : Entidad, liberar : bool = False):
+    def get_bala_colisionando(self, entidad : Entidad):
         bala = entidad.collision(self.balas_usadas)
         
         if bala:
-            if (liberar):
-                bala.morir()
+            self.liberar_bala(bala)
                 
             return bala
 
     def liberar_bala(self, bala):
-        bala.disable()
         self.balas_usadas.remove(bala)
         self.balas_libres.append(bala)
+
+        bala.tiempo_disparo = -1
+        bala.disable()

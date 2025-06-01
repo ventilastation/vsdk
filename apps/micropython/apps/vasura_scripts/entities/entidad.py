@@ -7,7 +7,7 @@ class Entidad(Sprite):
     estado : Estado = None
     
     #Eventos/callbacks
-    al_morir : callable = None
+    al_morir : List[callable] = list()
 
     velocidad_x : float = 0
     velocidad_y : float = 0
@@ -75,7 +75,10 @@ class Entidad(Sprite):
         pass
 
     def morir(self):
-        self.set_estado(Deshabilitado)
+        pass
+    
+    def suscribir_muerte(self, callback:callable):
+        if callback in self.al_morir or callable == None:
+            return
 
-        if self.al_morir:
-            self.al_morir(self)
+        self.al_morir.append(callback)
