@@ -35,8 +35,7 @@ class VasuraEspacial(Scene):
 
         self.gameplay_manager.game_over.suscribir(self.muerte)
 
-        #BUG cuando un enemigo le pega al planeta se suman los puntos
-        #self.enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
+        self.enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
 
         self.spawner.spawnear_enemigo()
 

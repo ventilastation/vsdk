@@ -49,7 +49,7 @@ class Nave(Entidad):
         
         bala.set_position(x, y)
     
-    def morir(self):
+    def morir(self, por_bala : bool = False):
         self.set_estado(Deshabilitado)
         self.al_morir.disparar(self)
 

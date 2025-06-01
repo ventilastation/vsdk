@@ -74,5 +74,5 @@ class Entidad(Sprite):
     def hit(self):
         pass
 
-    def morir(self):
+    def morir(self, por_bala : bool = False):
         pass

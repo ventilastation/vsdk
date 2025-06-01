@@ -13,6 +13,7 @@ class EnemigosManager():
         for _ in range(LIMITE_ENEMIGOS):
             e = Driller(scene)
             e.al_morir.suscribir(self.reciclar_enemigo)
+            e.al_colisionar_con_bala.suscribir(self.al_morir_enemigo.disparar)
 
             self.enemigos_inactivos.append(e)
 
@@ -34,7 +35,5 @@ class EnemigosManager():
 
         self.enemigos_activos.remove(e)
         self.enemigos_inactivos.append(e)
-
-        self.al_morir_enemigo.disparar()
 
     

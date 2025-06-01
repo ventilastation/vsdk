@@ -14,6 +14,8 @@ class Enemigo(Entidad):
     def __init__(self, scene):
         super().__init__(scene, stripes[self.strip])
         
+        self.al_colisionar_con_bala : Evento = Evento()
+
         self.set_perspective(1)
 
         self.set_estado(Deshabilitado)
@@ -28,8 +30,11 @@ class Enemigo(Entidad):
         if nuevo_estado:
             self.set_estado(nuevo_estado)
 
-    def morir(self):
+    def morir(self, por_bala : bool = False):
         self.set_estado(Deshabilitado)
+
+        if por_bala:
+            self.al_colisionar_con_bala.disparar(self)
 
         self.al_morir.disparar(self)
 

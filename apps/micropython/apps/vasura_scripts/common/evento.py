@@ -1,4 +1,4 @@
-class Evento(object):
+class Evento:
     
     def __init__(self):
         self.suscriptores : List[callable] = []
