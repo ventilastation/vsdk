@@ -29,9 +29,7 @@ class EnemigosManager():
         return e
 
     def reciclar_enemigo(self, e:Enemigo):
-        #BUG este metodo se llama cuando una bala le pega a la nave y nidea porkhe
         if not e in self.enemigos_activos:
-            print("Remover enemigo: " + str(type(e)))
             return
 
         self.enemigos_activos.remove(e)

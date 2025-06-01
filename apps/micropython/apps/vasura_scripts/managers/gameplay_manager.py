@@ -26,7 +26,6 @@ class GameplayManager():
         nave.suscribir_muerte(self.al_morir_nave)
     
     def step(self):
-        #BUG creo que tarda mas tiempo del configurado pero nidea
         if self.tiempo_respawn != -1 and utime.ticks_diff(self.tiempo_respawn, utime.ticks_ms()) <= 0:
             self.respawnear_nave()
 
