@@ -5,6 +5,7 @@ from ventilastation.sprites import Sprite
 # Contador de sprites:
 # 5 para cada item del menu
 # 5 para el contador de monedas
+# 11 para las letras de los nombres del menu       -> hardcodeable
 # 11 para las letras de las descripciones del menu -> hardcodeable
 # 3 para el precio de los items del menu           -> hardcodeable
 # 9 para los items en el tablero
@@ -19,14 +20,18 @@ def coords(i, j):
     return i + j*3
 
 class Text:
-    def __init__(self, x, y, len):
+    def __init__(self, x, y, len, sprite, invert):
         self.chars = []
         self.len = len
+        self.invert = invert
 
         for n in range(len):
             s = Sprite()
-            s.set_strip(stripes["vga_pc734.png"])
-            s.set_x(x + n * 8)
+            s.set_strip(stripes[sprite])
+            if self.invert:
+                s.set_x(x + n * 8)
+            else:
+                s.set_x(x - n * 8)
             s.set_y(y)
             s.set_frame(0)
             s.set_perspective(2)
@@ -37,12 +42,24 @@ class Text:
     def setletters(self, text):
         for n, l in enumerate('{message: <{width}}'.format(message=text, width=self.len)):
             if n < len(self.chars):  
-                self.chars[n].set_frame(255-ord(l))
+                self.chars[n].disable()
+                if self.invert:
+                    self.chars[n].set_frame(255-ord(l))
+                else:
+                    self.chars[n].set_frame(ord(l))
 
 class Numbers:
     def __init__(self, x, y, len):
         self.chars = []
         self.len = len
+
+        self.burbujita = Sprite()
+        self.burbujita.set_strip(stripes["burbujita.png"])
+        self.burbujita.set_frame(0)
+        self.burbujita.set_x(x - 4)
+        self.burbujita.set_y(y)
+        self.burbujita.set_perspective(2)
+
         for n in range(len):
             s = Sprite()
             s.set_strip(stripes["numerals.png"])
@@ -51,7 +68,7 @@ class Numbers:
             s.set_frame(10)
             s.set_perspective(2)
             self.chars.append(s)
-
+        
         self.setnumbers(0)
 
     def setnumbers(self, value):
@@ -133,7 +150,7 @@ class Item(Sprite):
         self.hps    = [5, 25, 5, 5, 1]
         self.types  = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
         
-        self.strips = ["jabon.png", "pala.png", "burbujero.png", "desodorante.png", "pasto.png"]
+        self.strips = ["jabon.png", "pala.png", "burbujero2.png", "desodorante.png", "pasto.png"]
         self.frame_amounts = [4, 8, 2, 4, 2]
         self.frame_rates   = [5, 5, 5, 5, 5]
 
@@ -262,11 +279,17 @@ class Menu():
 
         self.items[self.selected_id].set_y(self.selected_y)
         
-        self.items_name =  ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
-        self.items_price = [100, 200, 300, 400, 500]
+        #self.hps    = [5, 25, 5, 5, 1]
+        
+        self.items_name        =  ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
+        self.items_stats       =  ["atk  1 HP 30", "atk  0 HP 25", "atk  0 HP  5", "atk  0 HP  5", "atk 10 HP  1"]
+        self.items_description =  ["limpia nerds", "intocable", "da burbujas", "los espanta", "kabum!"]
+        self.items_price       = [100, 200, 300, 400, 500]
 
-        self.text  = Text(x=93, y=18, len=11)
-        self.price = Numbers(x=72, y=21, len=4)
+        self.text        = Text(x=93, y=18, len=11, sprite="vga_pc734.png",         invert=True)
+        self.stats       = Text(x=93, y=30, len=13, sprite="vga_pc734_verde.png",   invert=True)
+        self.description = Text(x=64-9, y=27, len=13, sprite="vga_pc734_celeste.png", invert=False)
+        self.price       = Numbers(x=72, y=21,  len=4)
         self.write_description()
 
     def move_focus_to(self, direction):
@@ -284,6 +307,8 @@ class Menu():
     def write_description(self):
         self.text.setletters(self.items_name[self.selected_id])
         self.price.setnumbers(self.items_price[self.selected_id])
+        self.stats.setletters(self.items_description[self.selected_id])
+        self.description.setletters(self.items_stats[self.selected_id])
 
 class vs(Scene):
 
