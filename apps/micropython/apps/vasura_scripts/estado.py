@@ -69,7 +69,6 @@ class Vulnerable(Estado):
             nave  = self.entidad.scene.nave
             
             if self.entidad.collision([nave]):
-                print("Colision con nave: " + str(type(self.entidad)))
                 nave.hit()
                 self.entidad.morir()
                 
@@ -77,7 +76,6 @@ class Vulnerable(Estado):
 
         bala : Bala = self.entidad.scene.balas.get_bala_colisionando(self.entidad)
         if bala:
-            print("Colision con bala: " + str(type(self.entidad)))
             self.entidad.morir()
 
             return None
