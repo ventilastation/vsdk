@@ -4,12 +4,12 @@ LIMITE_ENEMIGOS = 20
 
 class EnemigosManager():
 
-    enemigos_inactivos : List[Enemigo] = list()
-    enemigos_activos : List[Enemigo] = list()
-
+    enemigos_inactivos : List[Enemigo] = []
+    enemigos_activos : List[Enemigo] = []
 
     def __init__(self, scene):
         self.al_morir_enemigo : callable = None
+
         for _ in range(LIMITE_ENEMIGOS):
             e = Driller(scene)
             e.suscribir_muerte(self.reciclar_enemigo)

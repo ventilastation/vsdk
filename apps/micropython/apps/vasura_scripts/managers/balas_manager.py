@@ -5,8 +5,8 @@ LIMITE_BALAS : int = 20
 
 class BalasManager():
 
-    balas_libres : List[Bala] = list()
-    balas_usadas : List[Bala] = list()
+    balas_libres : List[Bala] = []
+    balas_usadas : List[Bala] = []
 
     def __init__(self, scene):
         
