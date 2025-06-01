@@ -24,9 +24,17 @@ class VasuraEspacial(Scene):
         self.nave = Nave(self, self.balas)
 
         self.planet = Planeta(self)
-        self.planet.al_morir = self.muerte
 
         self.gameplay_manager = GameplayManager(self.nave)
+
+        self.planet.al_ser_golpeado = self.gameplay_manager.on_planet_hit
+        
+        self.gameplay_manager.suscribir_perder_vida(self.planet.al_perder_vida)
+        self.gameplay_manager.suscribir_perder_vida(lambda _: self.enemigos.get())
+
+        self.gameplay_manager.suscribir_game_over(self.finished)
+
+        self.enemigos.get()
 
 
     def step(self):
