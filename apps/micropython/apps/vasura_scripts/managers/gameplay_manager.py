@@ -1,6 +1,7 @@
 from time import time
 
 from apps.vasura_scripts.entities.nave import Nave
+from apps.vasura_scripts.entities.enemigo import *
 
 VIDAS_INICIALES : int = 3
 
@@ -8,10 +9,15 @@ TIEMPO_DE_RESPAWN : float = 5
 
 
 class GameplayManager():
+    #Dependencias
     nave : Nave = None
+    
+    #Estado
     tiempo_de_muerte : float = -1
     vidas_restantes : int = VIDAS_INICIALES
+    puntaje_actual : int = 0
 
+    #Eventos
     al_perder_vida : List[callable] = list()
     al_perder : List[callable] = list()
 
@@ -36,6 +42,11 @@ class GameplayManager():
         else:
             for i in range(len(self.al_perder_vida)):
                 self.al_perder_vida[i](self.vidas_restantes)
+
+    def al_morir_enemigo(self, e:Enemigo):
+        self.puntaje_actual += e.puntaje
+
+        print("Puntaje actualizado: " + str(self.puntaje_actual))
 
     def suscribir_perder_vida(self, callback:callable):
         self.al_perder_vida.append(callback)

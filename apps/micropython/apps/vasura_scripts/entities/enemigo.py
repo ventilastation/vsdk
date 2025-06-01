@@ -6,6 +6,8 @@ from ventilastation.director import stripes
 
 class Enemigo(Entidad):
     
+    puntaje : int = 0
+    
     estado_inicial : Estado = None
     strip : str
 
@@ -35,5 +37,6 @@ class Driller(Enemigo):
 
     def __init__(self, scene):
         self.strip = "ship-sprite-sym.png"
+        self.puntaje = 50
 
         super().__init__(scene)

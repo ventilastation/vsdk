@@ -34,6 +34,8 @@ class VasuraEspacial(Scene):
 
         self.gameplay_manager.suscribir_game_over(self.finished)
 
+        self.enemigos.al_morir_enemigo = self.gameplay_manager.al_morir_enemigo
+
         self.enemigos.get()
 
 

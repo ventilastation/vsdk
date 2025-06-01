@@ -7,6 +7,8 @@ class EnemigosManager():
     enemigos_inactivos : List[Enemigo] = list()
     enemigos_activos : List[Enemigo] = list()
 
+    al_morir_enemigo : callable
+
     def __init__(self, scene):
         for _ in range(LIMITE_ENEMIGOS):
             e = Driller(scene)
@@ -30,6 +32,9 @@ class EnemigosManager():
         return e
 
     def reciclar_enemigo(self, e:Enemigo):
+        if self.al_morir_enemigo:
+            self.al_morir_enemigo(e)
+
         e.set_estado(Deshabilitado)
 
         self.enemigos_activos.remove(e)
