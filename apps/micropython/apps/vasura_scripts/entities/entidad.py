@@ -3,17 +3,16 @@ from ventilastation.sprites import Sprite
 from apps.vasura_scripts.estado import *
 
 class Entidad(Sprite):
-
     estado : Estado = None
-    
-    #Eventos/callbacks
-    al_morir : List[callable] = list()
 
     velocidad_x : float = 0
     velocidad_y : float = 0
 
     def __init__(self, scene, strip : int, x : int = 0, y : int = 0):
         super().__init__()
+        #Eventos/callbacks
+        self.al_morir : List[callable] = []
+
         self.scene = scene
         self.set_direccion(1)
 
@@ -78,7 +77,7 @@ class Entidad(Sprite):
         pass
     
     def suscribir_muerte(self, callback:callable):
-        if callback in self.al_morir or callable == None:
+        if callback in self.al_morir or callback == None:
             return
 
         self.al_morir.append(callback)

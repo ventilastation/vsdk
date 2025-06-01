@@ -1,3 +1,4 @@
+from apps.vasura_scripts.entities.entidad import *
 from apps.vasura_scripts.entities.bala import *
 
 LIMITE_BALAS : int = 20
@@ -13,8 +14,6 @@ class BalasManager():
             b = Bala(scene)
             b.suscribir_muerte(self.liberar_bala)
             self.balas_libres.append(b)
-
-        self.balas_usadas = []
     
     def step(self):
         [bala.step() for bala in self.balas_usadas]

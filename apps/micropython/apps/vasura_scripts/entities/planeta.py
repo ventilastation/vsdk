@@ -4,12 +4,13 @@ from ventilastation.director import stripes
 
 class Planeta(Entidad):
     alturas = [115, 130, 140]
-
-    al_ser_golpeado : callable = None
     index : int = 0
 
     def __init__(self, scene):
         super().__init__(scene, stripes["game-center0.png"])
+        
+        self.al_ser_golpeado : callable = None
+
         self.set_perspective(0)
         self.set_y(170)
         self.set_frame(self.index)

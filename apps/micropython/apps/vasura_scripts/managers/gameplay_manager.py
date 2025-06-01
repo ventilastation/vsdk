@@ -1,4 +1,4 @@
-from time import time
+import utime
 
 from apps.vasura_scripts.entities.nave import Nave
 from apps.vasura_scripts.entities.enemigos.enemigo import *
@@ -13,25 +13,25 @@ class GameplayManager():
     nave : Nave = None
     
     #Estado
-    tiempo_de_muerte : float = -1
+    tiempo_respawn : float = -1
     vidas_restantes : int = VIDAS_INICIALES
     puntaje_actual : int = 0
 
-    #Eventos
-    al_perder_vida : List[callable] = list()
-    al_perder : List[callable] = list()
-
     def __init__(self, nave:Nave):
+        #Eventos
+        self.al_perder_vida : List[callable] = []
+        self.al_perder : List[callable] = []
+
         self.nave = nave
         nave.suscribir_muerte(self.al_morir_nave)
     
     def step(self):
         #BUG creo que tarda mas tiempo del configurado pero nidea
-        if self.tiempo_de_muerte != -1 and time() >= self.tiempo_de_muerte + TIEMPO_DE_RESPAWN:
+        if self.tiempo_respawn != -1 and utime.ticks_diff(self.tiempo_respawn, utime.ticks_ms()) <= 0:
             self.respawnear_nave()
 
     def al_morir_nave(self, _):
-        self.tiempo_de_muerte = time()
+        self.tiempo_respawn = utime.ticks_add(utime.ticks_ms(), TIEMPO_DE_RESPAWN * 1000)
     
     def on_planet_hit(self):
         self.vidas_restantes -= 1
@@ -55,5 +55,5 @@ class GameplayManager():
         self.al_perder.append(callback)
 
     def respawnear_nave(self):
-        self.tiempo_de_muerte = -1
+        self.tiempo_respawn = -1
         self.nave.respawn()
