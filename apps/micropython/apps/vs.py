@@ -108,18 +108,17 @@ class Bullet(Sprite):
             self.set_x(self.initial_x)
             self.is_reloading = True
 
-    def step(self, step_counter):
-
+    def shoot(self):
         if self.is_active:
-            if self.is_reloading:
-                if step_counter % 30 == 0:
-                    self.is_reloading = False
-                    self.set_frame(6)
+            self.is_reloading = False
+            self.set_frame(6)
+
+    def step(self):
+        if self.is_active and not self.is_reloading:
+            if self.x() in self.close_reach or self.x() in self.long_reach:
+                self.set_x(self.x()-1)
             else:
-                if self.x() in self.close_reach or self.x() in self.long_reach:
-                    self.set_x(self.x()-1)
-                else:
-                    self.reset()
+                self.reset()
 
 class Item(Sprite): 
 
@@ -129,9 +128,14 @@ class Item(Sprite):
         self.bullet = bullet
         self.set_strip(stripes["items.png"])
         self.deactivate()
-     
+
+    
         self.hps    = [5, 25, 5, 5, 1]
         self.types  = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
+        
+        self.strips = ["jabon.png", "pala.png", "burbujero.png", "desodorante.png", "pasto.png"]
+        self.frame_amounts = [4, 8, 2, 4, 2]
+        self.frame_rates   = [5, 5, 5, 5, 5]
 
     def se_ensucia(self, value, step_counter):
         if step_counter % 20 == 0:
@@ -147,11 +151,17 @@ class Item(Sprite):
 
     def temporarily_activate_item(self, frame):
         self.set_frame(frame)
+        self.set_strip(stripes["items.png"])
+
 
     def definitely_activate_item(self, frame):
         self.set_frame(frame)
         self.active_frame = frame
-        
+
+        self.set_strip(stripes[self.strips[frame]])
+        self.frame_amount = self.frame_amounts[frame]
+        self.frame_rate   = self.frame_rates[frame]
+
         self.is_active = True
         self.bullet.is_waiting_to_deactivate = True
 
@@ -164,22 +174,38 @@ class Item(Sprite):
             self.bullet.activate("Desodorante")
 
     def restore_active_frame(self):
+
         if self.is_active:
             self.set_frame(self.active_frame)
+            self.set_strip(stripes[self.strips[self.active_frame]])
         else:
             self.disable()
+    
+    def step(self, step_counter):
+        
+        if self.bullet.is_active:
+            if self.bullet.is_reloading:
+                    
+                if self.frame() == self.frame_amount-1:
+                    self.bullet.shoot()
+                self.set_frame((self.frame() + 1) % self.frame_amount)
+                
+        else:
+            if step_counter % self.frame_rate == 0:
+                self.set_frame((self.frame() + 1) % self.frame_amount)
+
 
 class Lolero(Sprite):
 
     def __init__(self):
         super().__init__()
-        self.set_strip(stripes["vga_pc734.png"])
+        self.set_strip(stripes["lolero.png"])
         self.revive()
 
     def revive(self):
         self.set_x(192)
         self.set_y(18)
-        self.set_frame(254)
+        self.set_frame(0)
         self.is_active = True
         self.can_move = True
         self.has_debuff = False
@@ -214,6 +240,7 @@ class Lolero(Sprite):
 
             if self.can_move:
                 self.set_x(self.x() + 1)
+                self.set_frame((self.frame() + 1) % 4)
 
             if self.has_debuff:
                 self.debuff_turns -= 1
@@ -265,17 +292,20 @@ class vs(Scene):
     def activate_item_at(self, i, j):
         self.i = i
         self.j = j
-        self.items[coords(i, j)].temporarily_activate_item(self.item_to_place + 5)
+        self.selection_item.set_frame(self.item_to_place + 5)
+        self.selection_item.set_x(48-i*16)
+        self.selection_item.set_y(16+j*16)
 
     def move_focus_to(self, movement_i, movement_j):
-        self.items[coords(self.i, self.j)].restore_active_frame()
         self.i = (self.i + movement_i) % 3
         self.j = (self.j + movement_j) % 3
-        self.items[coords(self.i, self.j)].temporarily_activate_item(self.item_to_place + 5)
+        self.selection_item.set_x(48-self.i*16)
+        self.selection_item.set_y(16+self.j*16)
 
     def place_item(self):
         self.items[coords(self.i, self.j)].definitely_activate_item(self.item_to_place)
         self.item_to_place = None
+        self.selection_item.disable()
 
     def add_money(self, value):
         self.money = self.money + value
@@ -283,6 +313,10 @@ class vs(Scene):
 
     def on_enter(self):
         super(vs, self).on_enter()
+  
+        self.selection_item = Sprite()
+        self.selection_item.set_strip(stripes["items.png"])
+        self.selection_item.disable()
 
         self.menu  = Menu()
         self.bullets = [Bullet() for _ in range(9)]
@@ -314,15 +348,15 @@ class vs(Scene):
         
         self.step_counter = 0
 
-
     def step(self):
         
         for bullet in self.bullets:
-            bullet.step(self.step_counter)
+            bullet.step()
 
         for item in self.items:
             if item.is_active:
-                if item.frame() == 2 and self.step_counter % 30 == 0:
+                item.step(self.step_counter)
+                if item.type == "Burbujero" and self.step_counter % 30 == 0:
                     self.add_money(100)
 
         for lolero in self.loleros:
@@ -388,6 +422,7 @@ class vs(Scene):
                     self.add_money(-price)
                     self.item_to_place = id
                     self.activate_item_at(0,0)
+
                     self.menu.change_focused_item_frame(5)
                     print("Compramos "  + name)
 
