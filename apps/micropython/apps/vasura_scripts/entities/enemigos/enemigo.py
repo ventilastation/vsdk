@@ -30,13 +30,17 @@ class Enemigo(Entidad):
         if nuevo_estado:
             self.set_estado(nuevo_estado)
 
-    def morir(self, por_bala : bool = False):
+
+    def hit(self):
+        self.al_colisionar_con_bala.disparar(self)
+        self.morir()
+            
+
+    def morir(self):
         self.set_estado(Deshabilitado)
 
-        if por_bala:
-            self.al_colisionar_con_bala.disparar(self)
-
         self.al_morir.disparar(self)
+
 
     def limpiar_eventos(self):
         self.al_colisionar_con_bala.limpiar()

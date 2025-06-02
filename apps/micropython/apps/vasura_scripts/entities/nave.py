@@ -47,14 +47,17 @@ class Nave(Entidad):
         
         bala.set_position(x, y)
     
-    def morir(self, por_bala : bool = False):
+    def morir(self):
         self.set_estado(Deshabilitado)
         self.al_morir.disparar(self)
 
     def respawn(self):
         self.set_estado(NaveSana)
         self.set_position(0, 50)
-
+    
+    def procesar_input(self):
+        pass
+ 
 class NaveSana(Vulnerable):
     def on_enter(self):
         self.entidad.set_frame(0)
