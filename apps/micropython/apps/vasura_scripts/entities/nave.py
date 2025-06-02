@@ -7,13 +7,11 @@ from ventilastation.director import stripes, director
 from apps.vasura_scripts.estado import *
 
 class Nave(Entidad):
-    balas : BalasManager = None
-
     def __init__(self, scene, balas_manager:BalasManager):
         super().__init__(scene, stripes["ship-sprite-asym-sheet.png"])
 
         self.scene = scene
-        self.balas = balas_manager
+        self.balas : BalasManager = balas_manager
 
         self.set_perspective(1)
         
@@ -23,7 +21,7 @@ class Nave(Entidad):
         self.set_estado(NaveSana)
         self.set_position(0, 50)
 
-    def ArtificialStep(self):
+    def step(self):
         nuevo_estado = self.estado.step()
         if nuevo_estado:
             self.set_estado(nuevo_estado)

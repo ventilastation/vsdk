@@ -19,33 +19,35 @@ class VasuraEspacial(Scene):
     def on_enter(self):
         super(VasuraEspacial, self).on_enter()
 
-        self.balas = BalasManager(self)
-        self.enemigos = EnemigosManager(self)
-        self.spawner = SpawnerEnemigos(self.enemigos)
-
-        self.nave = Nave(self, self.balas)
-
+        #Inicializacion
         self.planet = Planeta(self)
 
+        self.manager_balas = BalasManager(self)
+        self.manager_enemigos = EnemigosManager(self)
+        self.spawner_enemigos = SpawnerEnemigos(self.manager_enemigos)
+        
+        self.nave = Nave(self, self.manager_balas)
+        
         self.gameplay_manager = GameplayManager(self.nave)
 
+        #Suscripciones a eventos
         self.planet.al_ser_golpeado.suscribir(self.gameplay_manager.on_planet_hit)
         
         self.gameplay_manager.al_perder_vida.suscribir(self.planet.al_perder_vida)
-
         self.gameplay_manager.game_over.suscribir(self.muerte)
 
-        self.enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
+        self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
 
-        self.spawner.spawnear_enemigo()
+        #TODO Probablemente esta secuencia cambie.
+        self.spawner_enemigos.spawnear_enemigo()
 
 
     def step(self):
-        self.nave.ArtificialStep()
-        self.enemigos.step()
-        self.balas.step()
+        self.nave.step()
+        self.manager_enemigos.step()
+        self.manager_balas.step()
         self.gameplay_manager.step()
-        self.spawner.step()
+        self.spawner_enemigos.step()
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
@@ -54,9 +56,9 @@ class VasuraEspacial(Scene):
         self.nave.limpiar_eventos()
         self.planet.limpiar_eventos()
 
-        self.enemigos.limpiar()
+        self.manager_enemigos.limpiar()
         self.gameplay_manager.limpiar()
-        self.balas.limpiar()
+        self.manager_balas.limpiar()
 
     def finished(self):
         director.pop()

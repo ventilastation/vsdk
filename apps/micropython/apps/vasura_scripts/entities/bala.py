@@ -1,7 +1,6 @@
 from utime import ticks_ms, ticks_diff, ticks_add
 
 from apps.vasura_scripts.entities.entidad import *
-from apps.vasura_scripts.managers.balas_manager import *
 
 from ventilastation.director import stripes, director
 

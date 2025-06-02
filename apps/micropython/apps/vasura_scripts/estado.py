@@ -74,7 +74,7 @@ class Vulnerable(Estado):
                 
                 return None
 
-        bala : Bala = self.entidad.scene.balas.get_bala_colisionando(self.entidad)
+        bala : Bala = self.entidad.scene.manager_balas.get_bala_colisionando(self.entidad)
         if bala:
             self.entidad.morir(True)
 
