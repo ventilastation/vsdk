@@ -2,8 +2,7 @@ import platform
 import config
 import sys
 import pyglet
-# Force using OpenAL since pulse crashes
-pyglet.options['audio'] = ('openal', 'silent')
+
 pyglet.options['vsync'] = "--no-display" not in sys.argv
 
 import math

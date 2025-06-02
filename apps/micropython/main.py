@@ -16,8 +16,9 @@ MAIN_MENU_OPTIONS = [
     ('vasura_espacial', "vasura_espacial.png", 0),
     ('vs', "vs.png", 0),
     ('tvnel', "tvnel.png", 0),
-    # ('tvnel_alecu', "tvnel_alecu.png", 0),
     ('ventrack', "mijuegui.png", 0),
+    ('oraculo', "oraculo.png", 0),
+    # ('tvnel_alecu', "tvnel_alecu.png", 0),
     # ('mygame', "mygame.png", 0),
     # PyCamp 2025
     ('vance', "menu.png", 5),

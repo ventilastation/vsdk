@@ -201,8 +201,8 @@ void coreTask( void * pvParameters ){
 bool already_initialized = false;
 
 static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
-    ventilagon_exit();
     if (already_initialized) {
+        ventilagon_exit();
         return mp_const_none;
     }
     already_initialized = true;
