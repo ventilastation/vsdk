@@ -90,7 +90,7 @@ class VanceGame(Scene):
         super(VanceGame, self).on_enter()
 
         with open(f"./apps/vance_songs/{song}.json", 'r') as file:
-            self.beats = ujson.load(file)s
+            self.beats = ujson.load(file)
 
         self.length = self.beats["length"]
 
@@ -159,7 +159,7 @@ class VanceGame(Scene):
 
         if self.beat_counter < self.length:
 
-            if actual_time > (self.beats[str(self.beat_counter)]["time"] - 3.64): #- 3.84)  :
+            if actual_time > (self.beats[str(self.beat_counter)]["time"] - 0.03 * (255-16) / 2):
                 
                 self.beat_counter += 1
     

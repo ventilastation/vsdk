@@ -1,27 +1,40 @@
 import io
 import sys
+import utime
 
 from ventilastation.director import director
 from ventilastation import sprites
 from ventilastation import menu
 from ventilastation import povdisplay
-from apps import gallery
+from ventilastation.shuffler import shuffled
 
 MAIN_MENU_OPTIONS = [
-#    ('mygame', "mygame.png", 0),
-    ('vs', "pollitos.png", 0),
-    ('vyruss', "menu.png", 0),
-    ('gallery', "pollitos.png", 0),
-    ('ventilagon_game', "menu.png", 1),
-    ('vance', "menu.png", 5),
-    ('vladfarty', "menu.png", 2),
-    ('vong', "menu.png", 6),
-    ('ventap', "menu.png", 4),
-    ('vugo', "menu.png", 7),
-    ('tutorial', "menu.png", 10),
-    ('debugmode', "menu.png", 9),
-    ('calibrate', "menu.png", 8),
-    ('credits', "menu.png", 3),
+    # 1er Jam 2025
+    ('vortris', "vortris.png", 0),
+    ('vailableextreme', "vailableextreme.png", 0),
+    ('uzumaki', "uzumaki.png", 0),
+    ('vasura_espacial', "vasura_espacial.png", 0),
+    ('vs', "vs.png", 0),
+    ('tvnel', "tvnel.png", 0),
+    # ('tvnel_alecu', "tvnel_alecu.png", 0),
+    ('ventrack', "mijuegui.png", 0),
+    # ('mygame', "mygame.png", 0),
+    # PyCamp 2025
+    # ('vance', "menu.png", 5),
+    # ('vong', "menu.png", 6),
+    # ('vugo', "menu.png", 7),
+    # Gallery
+    # ('gallery', "pollitos.png", 0),
+    # Flash Party 2023
+    # ('vladfarty', "menu.png", 2),
+    # Original content
+    # ('vyruss', "menu.png", 0),
+    # ('ventilagon_game', "menu.png", 1),
+    # ('ventap', "menu.png", 4),
+    # ('tutorial', "menu.png", 10),
+    # ('debugmode', "menu.png", 9),
+    # ('calibrate', "menu.png", 8),
+    # ('credits', "menu.png", 3),
 ]
 
 def update_over_the_air():
@@ -46,13 +59,27 @@ def load_app(modulename):
 
 class GamesMenu(menu.Menu):
     stripes_rom = "menu"
+    def __init__(self, options, selected_index=0):
+        super().__init__(options, selected_index)
+        self.shuffle_options()
+
+    def shuffle_options(self):
+        if self.needs_shuffling():
+            self.options = shuffled(self.options)
+            self.last_shuffle = utime.ticks_ms()
+
+    def needs_shuffling(self):
+        return False
+        return utime.ticks_diff(utime.ticks_ms(), self.last_shuffle) > 60000
 
     def on_enter(self):
+        self.shuffle_options()
+
         super(GamesMenu, self).on_enter()
-        print("enter the game menu")
+
         self.animation_frames = 0
         try:
-            pollitos_index = [m[1] for m in MAIN_MENU_OPTIONS].index("pollitos.png")
+            pollitos_index = [m[1] for m in self.options].index("pollitos.png")
             self.pollitos = self.sprites[pollitos_index]
         except ValueError:
             self.pollitos = None
@@ -83,9 +110,9 @@ class GamesMenu(menu.Menu):
             return True
             
     def step(self):
-        if director.timedout:
-            from apps import gallery
-            director.push(gallery.Gallery())
+        # if director.timedout:
+        #     load_app("gallery")
+        #     raise StopIteration()
 
         if not self.check_debugmode():
             super(GamesMenu, self).step()

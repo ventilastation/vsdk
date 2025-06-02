@@ -2,7 +2,7 @@ try:
     import ventilagon
 except ImportError:
     from ventilastation import fake_ventilagon as ventilagon
-from ventilastation.director import director
+from ventilastation.director import director, comms
 from ventilastation.scene import Scene
 
 class VentilagonGame(Scene):
@@ -16,7 +16,7 @@ class VentilagonGame(Scene):
     def sending_loop(self):
         sending = ventilagon.sending()
         while sending:
-            director.comms.send(sending)
+            comms.send(sending)
             sending = ventilagon.sending()
 
     def on_exit(self):
