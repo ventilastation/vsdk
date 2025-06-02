@@ -22,6 +22,7 @@ class Enemigo(Entidad):
 
 
     def reset(self):
+        self.set_strip(stripes[self.strip])
         self.set_estado(self.estado_inicial)
 
 
@@ -33,7 +34,8 @@ class Enemigo(Entidad):
 
     def hit(self):
         self.al_colisionar_con_bala.disparar(self)
-        self.morir()
+        
+        self.set_estado(Explotando)
             
 
     def morir(self):

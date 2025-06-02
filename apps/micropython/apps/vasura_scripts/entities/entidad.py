@@ -53,7 +53,8 @@ class Entidad(Sprite):
 
 
     def set_estado(self, estado):
-        #TODO no transicionar al mismo estado en el que estas
+        if isinstance(self.estado, estado):
+            return
         
         if self.estado:
             self.estado.on_exit()

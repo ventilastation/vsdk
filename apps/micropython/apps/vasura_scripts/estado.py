@@ -45,7 +45,6 @@ class Explotando(Estado):  # Anarquía
         center_y = self.entidad.y() + self.entidad.height() // 2
         
         self.entidad.set_strip(stripes[self.strip])
-    
 
         new_x = center_x - self.entidad.width() // 2
         new_y = center_y - self.entidad.height() // 2
@@ -72,15 +71,14 @@ class Vulnerable(Estado):
             
             if self.entidad.collision([nave]):
                 nave.hit()
-                self.entidad.morir()
                 
-                return None
+                return Explotando
 
         bala : Bala = self.entidad.scene.manager_balas.get_bala_colisionando(self.entidad)
         if bala:
             self.entidad.hit()
 
-            return None
+            return Explotando
 
 
 
@@ -94,7 +92,6 @@ class Bajando(Vulnerable):
 
         if self.entidad.y() + self.entidad.height() >= self.entidad.scene.planet.get_borde_y():
             self.entidad.scene.planet.hit()
-            self.entidad.morir()
             
-            return None
+            return Explotando
 
