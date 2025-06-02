@@ -1,8 +1,8 @@
 from apps.vasura_scripts.entities.enemigos.enemigo import *
-from apps.vasura_scripts.managers.enemigos_manager import *
+from apps.vasura_scripts.managers.enemigos_manager import TIPOS_DE_ENEMIGO, EnemigosManager
 
 from utime import ticks_ms, ticks_diff, ticks_add
-from urandom import randint, seed
+from urandom import randint, seed, choice
 from math import floor
 
 INTERVALO_DE_SPAWN : float = 4
@@ -21,9 +21,8 @@ class SpawnerEnemigos():
         if ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0:
             self.spawnear_enemigo()
 
-    #TODO soporte para distintos tipos de enemigos
     def spawnear_enemigo(self):
-        e = self.manager.get_enemigo()
+        e = self.manager.get_enemigo(choice(TIPOS_DE_ENEMIGO))
 
         if not e:
             return
