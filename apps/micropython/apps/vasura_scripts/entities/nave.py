@@ -7,7 +7,8 @@ from ventilastation.director import stripes, director
 from apps.vasura_scripts.estado import *
 
 class Nave(Entidad):
-    def __init__(self, scene, balas_manager:BalasManager):
+
+    def __init__(self, scene, balas_manager: BalasManager):
         super().__init__(scene, stripes["ship-sprite-asym-sheet.png"])
 
         self.scene = scene
@@ -54,10 +55,11 @@ class Nave(Entidad):
     def respawn(self):
         self.set_estado(NaveSana)
         self.set_position(0, 50)
-    
+   
     def procesar_input(self):
         pass
- 
+
+
 class NaveSana(Vulnerable):
     def on_enter(self):
         self.entidad.set_frame(0)

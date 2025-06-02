@@ -1,4 +1,5 @@
 from apps.vasura_scripts.entities.enemigos.enemigo import *
+from urandom import randint
 
 LIMITE_ENEMIGOS = 20
 
@@ -8,12 +9,13 @@ class EnemigosManager():
         self.enemigos_spawneados : List[Enemigo] = []
 
         self.al_morir_enemigo : Evento = Evento()
+        tipos = [Driller, Chiller, Bully]
 
         for _ in range(LIMITE_ENEMIGOS):
-            e = Driller(scene)
+            tipo = tipos[randint(0,2)]
+            e = tipo(scene)
             e.al_morir.suscribir(self.reciclar_enemigo)
             e.al_colisionar_con_bala.suscribir(self.al_morir_enemigo.disparar)
-
             self.enemigos_libres.append(e)
 
     def step(self):

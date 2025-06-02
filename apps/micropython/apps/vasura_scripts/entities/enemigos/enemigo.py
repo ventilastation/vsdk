@@ -53,7 +53,31 @@ class Driller(Enemigo):
     def __init__(self, scene):
         self.velocidad_y = 0.5
 
-        self.strip = "ship-sprite-sym.png"
+        self.strip = "driller-sheet.png"
+        self.puntaje = 50
+
+        super().__init__(scene)
+
+
+class Chiller(Enemigo):
+    estado_inicial = Bajando
+
+    def __init__(self, scene):
+        self.velocidad_y = 0.5
+
+        self.strip = "chiller-sheet.png"
+        self.puntaje = 50
+
+        super().__init__(scene)
+
+
+class Bully(Enemigo):
+    estado_inicial = Bajando
+
+    def __init__(self, scene):
+        self.velocidad_y = 0.5
+
+        self.strip = "bully-sheet.png"
         self.puntaje = 50
 
         super().__init__(scene)

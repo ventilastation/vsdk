@@ -8,7 +8,12 @@ stripes = [
     ),
     palettegroup(
         strip("ship-sprite-asym-sheet.png", frames = 2),
-        strip("ship-sprite-sym.png", frames = 1),
+    ),
+    palettegroup(
+        strip("driller-sheet.png", frames=7),
+        strip("chiller-sheet.png", frames=6),
+        strip("bully-sheet.png", frames=5),
+
     ),
     palettegroup(
         strip("bala.png", frames=2),
