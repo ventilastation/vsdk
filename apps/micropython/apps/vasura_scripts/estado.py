@@ -30,33 +30,35 @@ class Deshabilitado(Estado):
 
 
 class Explotando(Estado):  # Anarquía
-
     def __init__(self, entidad):
         super().__init__(entidad)
-
-        # clase = self.entidad.__class__.__name__.lower()
-        # self.strip = f"{clase}_explotando.png"
-        self.strip = "ship-sprite-sym.png"
-
+        self.strip = "explosion.png"
+        self.total_frames = 6
 
     def on_enter(self):
         super().on_enter()
-        director.sound_play("vasura_espacial/explosion_enemigo")
-        self.frames_left = 90
+        #director.sound_play("vasura_espacial/explosiodn_enemigo")
+        
+        self.entidad.disable()
 
+        center_x = self.entidad.x() + self.entidad.width() // 2
+        center_y = self.entidad.y() + self.entidad.height() // 2
+        
+        self.entidad.set_strip(stripes[self.strip])
+    
+
+        new_x = center_x - self.entidad.width() // 2
+        new_y = center_y - self.entidad.height() // 2
+
+        self.entidad.set_position(new_x, new_y)
+
+        self.entidad.set_frame(0)
 
     def step(self):
-        self.frames_left -= 1
+        self.entidad.set_frame(self.entidad.frame() + 1)
 
-        # Muerte
-        if self.frames_left == 0:
-            return Deshabilitado
-
-        # Blink de ejemplo
-        if (self.frames_left // 10) % 2:
-            self.entidad.disable()
-        else:
-            self.entidad.set_frame(0)
+        if self.entidad.frame() == self.total_frames:
+            self.entidad.morir()
 
 
 

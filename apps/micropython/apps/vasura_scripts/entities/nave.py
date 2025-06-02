@@ -28,7 +28,7 @@ class Nave(Entidad):
             self.set_estado(nuevo_estado)
     
     def hit(self):
-        self.morir()
+        self.set_estado(Explotando)
     
     def disparar(self):
         bala = self.balas.get()
@@ -49,8 +49,8 @@ class Nave(Entidad):
         bala.set_position(x, y)
     
     def morir(self):
-        self.set_estado(Deshabilitado)
         self.al_morir.disparar(self)
+        self.set_estado(Deshabilitado)
 
     def respawn(self):
         self.set_estado(NaveSana)
@@ -62,6 +62,7 @@ class Nave(Entidad):
 
 class NaveSana(Vulnerable):
     def on_enter(self):
+        self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
         self.entidad.set_frame(0)
 
     def step(self):

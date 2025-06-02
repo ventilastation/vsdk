@@ -18,4 +18,7 @@ stripes = [
     palettegroup(
         strip("bala.png", frames=2),
     ),
+    palettegroup(
+        strip("explosion.png", frames=6),
+    ),
 ]
