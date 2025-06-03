@@ -2,6 +2,7 @@ from ventilastation.director import director, stripes
 from apps.vasura_scripts.entities.entidad import *
 
 from math import sqrt
+from urandom import choice
 
 class Estado:
     strip : int = None
@@ -12,7 +13,6 @@ class Estado:
 
 
     def on_enter(self):
-        #self.entidad.set_strip(stripes[self.strip])
         self.entidad.set_frame(0)
 
 
@@ -96,6 +96,40 @@ class Bajando(Vulnerable):
             self.entidad.scene.planet.hit()
             
             return Explotando
+
+
+class ChillerBajando(Bajando):
+    def on_enter(self):
+        super().on_enter()
+        self.frames_left = 30
+        self.entidad.set_direccion(choice([-1 ,1]))
+
+    def step(self):
+        cambio = super().step()
+        if cambio:
+            return cambio
+        
+        self.frames_left -= 1
+        if self.frames_left == 0:
+            return Orbitando
+
+
+class Orbitando(Vulnerable):
+    def on_enter(self):
+        super().on_enter()
+        self.frames_left = 128
+
+    def step(self):
+        cambio = super().step()
+        if cambio:
+            return cambio
+
+        self.frames_left -= 1
+        if self.frames_left == 0:
+            return ChillerBajando
+
+        e = self.entidad
+        self.entidad.mover(e.velocidad_x * e.direccion, 0)
 
 
 
