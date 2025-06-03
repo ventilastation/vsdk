@@ -1,5 +1,4 @@
 from apps.vasura_scripts.entities.enemigos.enemigo import *
-from urandom import randint
 
 LIMITE_ENEMIGOS = 21
 TIPOS_DE_ENEMIGO = [Driller, Chiller, Bully]
@@ -73,6 +72,14 @@ class ContainerEnemigos:
     def get_all_of_type(self, tipo):
         return self.enemigos[tipo]
     
+    def is_empty(self):
+        for key in self.enemigos:
+            if self.enemigos[key]:
+                return False
+            
+        
+        return True
+
     def clear(self):
         for key in self.enemigos:
             [e.limpiar_eventos() for e in self.enemigos[key]]

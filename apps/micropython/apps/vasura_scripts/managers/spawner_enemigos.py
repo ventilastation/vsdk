@@ -10,7 +10,25 @@ from math import floor
 class SpawnerEnemigos():
     def __init__(self, manager: EnemigosManager):
         self.manager : EnemigosManager = manager
-        self.comportamiento : ComportamientoSpawn = SpawnRandomIncremental(**comportamiento_test)
+        self.comportamiento_fallback : ComportamientoSpawn = SpawnRandomIncremental(**comportamiento_test)
+
+        waves = [
+            WaveEnemigos(4, [
+                #Tipo, cantidad, override de tiempo hasta siguiente spawn (0 para el default de la wave)
+                (Driller, 1, 0),
+                (Bully, 3, 2),
+                (Driller, 1, 0.1),
+                (Driller, 1, 2),
+                (Bully,   1, 0.1)
+            ]),
+            WaveEnemigos(1, [
+                (Driller, 3, 0),
+                (Bully,   1, 0),
+                (Chiller, 1, 0)
+            ])
+        ]
+
+        self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves, manager.enemigos_spawneados.is_empty)
                 
         seed(ticks_ms())
 
@@ -24,7 +42,12 @@ class SpawnerEnemigos():
         tipo = self.comportamiento.get_siguiente_enemigo()
         
         if not tipo:
-            return
+            if self.comportamiento.terminado:
+                self.comportamiento = self.comportamiento_fallback
+
+                tipo = self.comportamiento.get_siguiente_enemigo()
+            else: 
+                return
 
         if tipo == Chiller:
             enemigos = []
@@ -53,7 +76,7 @@ class SpawnerEnemigos():
 
 class ComportamientoSpawn:
     def __init__(self):
-        self.prendido = True
+        self.terminado = False
     
     def deberia_spawnear(self):
         return False
@@ -75,7 +98,7 @@ class SpawnRandomIntervaloFijo(ComportamientoSpawn):
         return choice(TIPOS_DE_ENEMIGO)
 
     def deberia_spawnear(self):
-        return self.prendido and ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
+        return not self.terminado and ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
 
 
 class SpawnRandomIncremental(ComportamientoSpawn):
@@ -130,7 +153,7 @@ class SpawnRandomIncremental(ComportamientoSpawn):
         return None
 
     def deberia_spawnear(self):
-        return self.prendido and ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
+        return not self.terminado and ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
 
     def validar_tabla(self, tabla):
         suma = 0
@@ -151,20 +174,66 @@ class SpawnRandomIncremental(ComportamientoSpawn):
                         encontrado = True
 
 
-class SpawnPorWaves(ComportamientoSpawn):
-    """""""""
-    - Los enemigos spawnean en waves configuradas a mano (level design)
-    - Cada wave tiene un spawn rate de enemigos
-    - Las waves se ejecutan secuencialmente
-    - Hasta que no matás a todos los enemigos de una wave no empieza la siguiente
-    - Cuando las teriminás todas las waves que haya, el juego entra en "modo infinito" con alguna de las otras dos opciones.
-    """""""""
+class WaveEnemigos:
+    def __init__(self, intervalo: float, pasos:List[(Enemigo, int, float)]):
+        self.id = id
 
-    def __init__(self):
+        self.intervalo_spawn : float = floor(intervalo * 1000)
+        self.pasos = []
+        self.terminada : bool = False
+
+        pasos.reverse()
+        for tipo_enemigo, cantidad, override_intervalo in pasos:
+            t = floor(override_intervalo * 1000) if override_intervalo else self.intervalo_spawn
+
+            self.pasos.append((tipo_enemigo, cantidad, t))
+
+    def get_siguiente_paso(self):
+        if self.terminada:
+            return
+
+        p = self.pasos.pop()
+
+        if not self.pasos:
+            self.terminada = True
+        
+        return p
+
+class SpawnPorWaves(ComportamientoSpawn):
+    def __init__(self, waves:List[WaveEnemigos], no_quedan_enemigos:callable):
         super().__init__()
-    
+        self.tiempo_siguiente_spawn : int = -1
+        self.waves : List[WaveEnemigos] = waves
+        self.waves.reverse()
+
+        self.wave_actual : WaveEnemigos = self.waves.pop()
+        
+        self.tipo_enemigo_actual = None
+        self.enemigos_restantes_paso : int = 0
+        self.intervalo_spawn_actual : int = -1
+
+        self.no_quedan_enemigos : callable = no_quedan_enemigos
+
     def get_siguiente_enemigo(self):
-        pass
+        if self.wave_actual.terminada:
+            if not self.waves:
+                self.terminado = True
+                
+                return None
+            
+            self.wave_actual = self.waves.pop()
+        
+        if self.enemigos_restantes_paso == 0:
+            self.tipo_enemigo_actual, self.enemigos_restantes_paso, self.intervalo_spawn_actual = self.wave_actual.get_siguiente_paso()
+        
+        self.enemigos_restantes_paso -= 1
+        self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), self.intervalo_spawn_actual)
+
+        return self.tipo_enemigo_actual
+
 
     def deberia_spawnear(self):
-        pass
+        spawn_timeout = ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
+
+        return not self.terminado and (self.no_quedan_enemigos() if self.wave_actual.terminada else spawn_timeout)
+        
