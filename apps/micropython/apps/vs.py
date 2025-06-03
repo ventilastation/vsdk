@@ -55,9 +55,11 @@ class Text:
                 self.chars[n].set_frame(255-ord(l))
 
 class Numbers:
+
     def __init__(self, x, y, len, label=None, label_width=0, sprite="yellow_numerals.png"):
         self.chars = []
         self.len = len
+        self.hidden_digits = []
 
         if label:
             self.label = Sprite()
@@ -78,10 +80,21 @@ class Numbers:
         
         self.setnumbers(0)
 
+    def set_label(self, label):
+        self.label.set_strip(stripes[label])
+
+    def hide_digits(self, digits):
+        self.hidden_digits = digits
+        for i in digits:
+            self.chars[i].disable()
+
+    def show_digits(self, digits):
+        self.hidden_digits = list(set(self.hidden_digits) - set(digits))
+
     def setnumbers(self, value):
         format_string = f"%0{self.len}d"
         for n, l in enumerate(format_string % value):
-            if n < len(self.chars):
+            if n < len(self.chars) and n not in self.hidden_digits:
                 v = ord(l) - 0x30
                 self.chars[n].set_frame(v)
 
@@ -108,12 +121,12 @@ class Bullet(Sprite):
 
         if type == "Jabon":
             self.close_reach = range(0, self.initial_x+1) # de la izquierda al centro
-            self.long_reach  = range(192, 256)            # del centro a la derecha
+            self.long_reach  = range(194, 256)            # del centro a la derecha
             self.frame = 0
 
         elif type == "Desodorante":
             self.close_reach = range(0, self.initial_x+1)      # de la izquierda al centro
-            self.long_reach  = range(192+self.initial_x, 256)  # del centro a la derecha
+            self.long_reach  = range(194+self.initial_x, 256)  # del centro a la derecha
             self.frame = 1
 
     def set_initial_x(self, x):
@@ -259,13 +272,32 @@ class Lolero(Sprite):
 
 class Menu():
 
+    def next_mode(self):
+
+        if self.mode == "items":
+            self.mode = "nerds"
+            self.price.set_label("spd.png")
+            self.price.hide_digits([0, 1])
+            for item in self.items:
+                item.set_strip(stripes["sdren.png"])
+        else:
+            self.mode = "items"
+            self.price.set_label("burbujita.png")
+            self.price.show_digits([0, 1])
+            for item in self.items:
+                item.set_strip(stripes["smeti.png"])
+
+        self.write_description()
+
     def __init__(self):
 
         self.selected_id    = 0
         
         self.y          = 20
         self.selected_y = 16
-        
+
+        self.mode = "items"
+
         self.items = [Sprite() for _ in range(5)]
         for i, item in enumerate(self.items):
             item.set_strip(stripes["smeti.png"])
@@ -275,19 +307,25 @@ class Menu():
 
         self.items[self.selected_id].set_y(self.selected_y)
                 
-        self.items_name        =  ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
-        self.items_description =  ["limpia nerds", "intocable", "da burbujas", "los espanta", "kabum!"]
+        self.items_name        = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
+        self.items_description = ["limpia nerds", "intocable", "da burbujas", "los espanta", "kabum!"]
         self.items_price       = [100, 200, 300, 400, 500]
-        self.hps = [5, 25, 5, 5,  1]
-        self.atks = [1,  0, 0, 0, 10]
-        
+        self.items_hps         = [5, 25, 5, 5,  1]
+        self.items_atks        = [1,  0, 0, 0, 10]
+
+        self.nerd_name        = ["Lolero", "Fedora guy", "Otaku runner", "furrito", "???"]
+        self.nerd_description = ["no se ducha", "m'lady...", "datebayo!", "rawr! XD", "???"]
+        self.nerd_speed       = [20, 10, 50, 20, 0]
+        self.nerd_hps         = [5, 5, 5, 10,  0]
+        self.nerd_atks        = [1,  1, 1, 1,  0]
+
         # self.items_stats       =  ["ATK 01 HP 05", "ATK 00 HP 25", "ATK 00 HP 05", "ATK 00 HP 05", "ATK 10 HP 01"]
 
-        self.text        = Text(x=96,    y=14, len=11, sprite="letras_sirg.png")
-        self.description = Text(x=96,    y=26, len=12, sprite="letras_edrev.png")
-        self.price       = Numbers(x=72, y=8,  len=4,  label="burbujita.png",        label_width=4)
-        self.hp          = Numbers(x=72, y=14, len=2,  label="hp.png" ,              label_width=12)
-        self.atk         = Numbers(x=72, y=20, len=2,  label="atk.png",              label_width=12)
+        self.text        = Text(x=94,    y=14, len=13, sprite="letras_sirg.png")
+        self.description = Text(x=94,    y=26, len=12, sprite="letras_edrev.png")
+        self.price       = Numbers(x=70, y=8,  len=4,  label="burbujita.png",        label_width=4)
+        self.hp          = Numbers(x=70, y=14, len=2,  label="hp.png" ,              label_width=12)
+        self.atk         = Numbers(x=70, y=20, len=2,  label="atk.png",              label_width=12)
 
         self.write_description()
     
@@ -304,13 +342,20 @@ class Menu():
         self.items[self.selected_id].set_frame(self.items[self.selected_id].frame() + i)
 
     def write_description(self):
-        self.text.setletters(self.items_name[self.selected_id])
-        self.description.setletters(self.items_description[self.selected_id])
-        self.price.setnumbers(self.items_price[self.selected_id])
-        self.hp.setnumbers(self.hps[self.selected_id])
-        self.atk.setnumbers(self.atks[self.selected_id])
-        #     self.stats.setletters(self.items_stats[self.selected_id])
 
+        if self.mode == "items":
+            self.text.setletters(self.items_name[self.selected_id])
+            self.description.setletters(self.items_description[self.selected_id])
+            self.price.setnumbers(self.items_price[self.selected_id])
+            self.hp.setnumbers(self.items_hps[self.selected_id])
+            self.atk.setnumbers(self.items_atks[self.selected_id])
+        else: 
+            self.text.setletters(self.nerd_name[self.selected_id])
+            self.description.setletters(self.nerd_description[self.selected_id])
+            self.price.setnumbers(self.nerd_speed[self.selected_id])
+            self.hp.setnumbers(self.nerd_hps[self.selected_id])
+            self.atk.setnumbers(self.nerd_atks[self.selected_id])
+            
 class vs(Scene):
 
     stripes_rom = "vs"
@@ -434,25 +479,30 @@ class vs(Scene):
             if director.was_pressed(director.JOY_LEFT):
                 self.menu.move_focus_to(-1)
 
-            # if director.was_pressed(director.JOY_UP):
-                # Quizás up y down puedan cambiar la descripcion del item
+            if director.was_pressed(director.JOY_UP):
+                #Quizás up y down puedan cambiar la descripcion del item
+                self.menu.next_mode()
+                #self.menu.set_mode("items")
 
-            # if director.was_pressed(director.JOY_DOWN):
+            if director.was_pressed(director.JOY_DOWN):
                 # Quizás up y down puedan cambiar la descripcion del item
+                self.menu.next_mode()
+                #self.menu.set_mode("nerds")
 
             if director.was_pressed(director.BUTTON_A):
-                id, name, price = self.menu.get_focused_item_info()
-                if self.money >= price:
+                if self.menu.mode == "items":
+                    id, name, price = self.menu.get_focused_item_info()
+                    if self.money >= price:
                     
-                    self.add_money(-price)
-                    self.purchased_item_id = id
-                    self.temporarily_place_item(0,0)
+                        self.add_money(-price)
+                        self.purchased_item_id = id
+                        self.temporarily_place_item(0,0)
 
-                    self.menu.change_focused_item_frame(5)
-                    print("Compramos "  + name)
+                        self.menu.change_focused_item_frame(5)
+                        print("Compramos "  + name)
 
-                else:
-                    print("No alcanza la plata")
+                    else:
+                        print("No alcanza la plata")
         
         if director.was_pressed(director.BUTTON_D):
             self.finished()

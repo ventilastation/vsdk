@@ -5,11 +5,14 @@ stripes = [
         strip("letras_celeste.png",  frames=256),
         strip("items.png",           frames=10),
         strip("smeti.png",           frames=10),
+        strip("sdren.png",           frames=10),
         strip("yellow_numerals.png", frames=10),
         strip("white_numerals.png",  frames=10),
         strip("road.png",            frames=1),
         strip("lolero.png",          frames=4),
         strip("fedora.png",          frames=8),
+        strip("naruto_runner.png",   frames=11),
+        strip("furry.png",           frames=4),
         strip("burbujero.png",       frames=2),
         strip("desodorante.png",     frames=4),
         strip("jabon.png",           frames=4),
@@ -18,6 +21,7 @@ stripes = [
         strip("burbujita.png",       frames=1),
         strip("hp.png",              frames=1),
         strip("atk.png",             frames=1),
+        strip("spd.png",             frames=1),
         strip("balas.png",           frames=2),
     )
 ]
