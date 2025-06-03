@@ -152,6 +152,7 @@ class Tablero:
             print("*"*10)
             print(f"Num. of steps of the vortex: {steps}")
             print(f"Last row's status: {last_row}")
+            print(f"Scores points? {all([x > 0 for x in last_row])}")
             print("*"*10)
 
         if all([x > 0 for x in last_row]):
