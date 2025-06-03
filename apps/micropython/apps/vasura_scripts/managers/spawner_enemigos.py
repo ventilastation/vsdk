@@ -14,7 +14,7 @@ class SpawnerEnemigos():
 
 
     def step(self):
-        if self.comportamiento.prendido and self.comportamiento.deberia_spawnear():
+        if self.comportamiento.deberia_spawnear():
             self.spawnear_enemigo()
 
 
@@ -48,7 +48,7 @@ class SpawnerEnemigos():
 
 class ComportamientoSpawn:
     def __init__(self):
-        pass
+        self.prendido = True
     
     def step(self):
         pass
@@ -66,7 +66,6 @@ class RandomSpawnIntervaloFijo(ComportamientoSpawn):
 
         self.intervalo_spawn : float = tiempo
         self.tiempo_siguiente_spawn : int = -1
-        self.prendido = True
 
     def get_siguiente_enemigo(self):
         self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(self.intervalo_spawn * 1000))
@@ -74,5 +73,5 @@ class RandomSpawnIntervaloFijo(ComportamientoSpawn):
         return choice(TIPOS_DE_ENEMIGO)
 
     def deberia_spawnear(self):
-        return ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
+        return self.prendido and ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
 
