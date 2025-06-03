@@ -1,21 +1,16 @@
 from apps.vasura_scripts.entities.enemigos.enemigo import *
 from apps.vasura_scripts.managers.enemigos_manager import TIPOS_DE_ENEMIGO, EnemigosManager
+from apps.vasura_scripts.managers.tablas import comportamiento_test
 
 from utime import ticks_ms, ticks_diff, ticks_add
 from urandom import randint, seed, choice
 from math import floor
 
+
 class SpawnerEnemigos():
-    def __init__(self, manager:EnemigosManager):
+    def __init__(self, manager: EnemigosManager):
         self.manager : EnemigosManager = manager
-
-        tabla_spawn = [
-            (0, 60),
-            (1, 10),
-            (2, 30)
-        ]
-
-        self.comportamiento : ComportamientoSpawn = SpawnRandomIncremental(2.5, 0.5, 6, 0.75, 0.05, 0.1, tabla_spawn)
+        self.comportamiento : ComportamientoSpawn = SpawnRandomIncremental(**comportamiento_test)
                 
         seed(ticks_ms())
 
@@ -60,9 +55,6 @@ class ComportamientoSpawn:
     def __init__(self):
         self.prendido = True
     
-    def step(self):
-        pass
-
     def deberia_spawnear(self):
         return False
     
@@ -107,6 +99,7 @@ class SpawnRandomIncremental(ComportamientoSpawn):
 
         self.tiempo_siguiente_spawn : int = -1
     
+
     def get_siguiente_enemigo(self):
         self.piso_tiempo -= self.step_piso
 
@@ -132,7 +125,7 @@ class SpawnRandomIncremental(ComportamientoSpawn):
             porcentaje_acumulado += entrada[1]
 
             if roll < porcentaje_acumulado:
-                return TIPOS_DE_ENEMIGO[entrada[0]]
+                return entrada[0]
 
         return None
 
