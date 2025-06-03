@@ -41,11 +41,8 @@ class EnemigosManager():
         self.enemigos_libres.append(e)
     
     def limpiar(self):
-        [e.limpiar_eventos() for e in self.enemigos_libres]
-        [e.limpiar_eventos() for e in self.enemigos_spawneados]
-
-        self.enemigos_libres = None
-        self.enemigos_spawneados = None
+        self.enemigos_libres.clear()
+        self.enemigos_spawneados.clear()
 
     
 class ContainerEnemigos:
@@ -75,3 +72,8 @@ class ContainerEnemigos:
 
     def get_all_of_type(self, tipo):
         return self.enemigos[tipo]
+    
+    def clear(self):
+        for key in self.enemigos:
+            [e.limpiar_eventos() for e in self.enemigos[key]]
+            self.enemigos[key] = []
