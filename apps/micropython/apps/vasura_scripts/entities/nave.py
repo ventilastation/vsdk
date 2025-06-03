@@ -53,6 +53,7 @@ class Nave(Entidad):
         self.set_estado(Deshabilitado)
 
     def respawn(self):
+        self.set_direccion(1)
         self.set_estado(NaveSana)
         self.set_position(0, 50)
    
