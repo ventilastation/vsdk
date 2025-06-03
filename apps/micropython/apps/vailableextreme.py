@@ -286,8 +286,6 @@ class Dancer:
         if mode == -3:
             sprite_list = self.sprites_dead
             self.count += 1
-            if self.count == 5:
-                return True
         else:
             if self.count < 2:
                 self.count += 1
@@ -308,6 +306,9 @@ class Dancer:
                 self.dancer.set_y(255)
                 self.dancer.set_frame(0)
         except:pass
+
+        if mode == -3:
+            return True
 
 
 class VailableExtremeGame(Scene):
@@ -382,6 +383,7 @@ class VailableExtremeGame(Scene):
                     self.cronometrer = redondeado + 4000
                     self.stop = True
             else:
+                self.dancer.dance(-3)
                 self.score_state = SCORE_STATES["miss"]
             self.animation.set_score(self.score_state,True)
         
