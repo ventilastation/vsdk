@@ -40,6 +40,22 @@ def coords(i, j):
 
 level = [ (0, 2, 0), (60, 0, 1), (120, 0, 2)]
 
+item_names         = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
+item_descriptions  = ["limpia nerds", "intocable", "da burbujas", "los espanta", "kabum!"]
+item_prices        = [100, 200, 200, 400, 500]
+item_hps           = [5, 25, 5, 5,  1]
+item_atks          = [1,  0, 0, 0, 10]        
+item_frame_amount  = [4, 8, 2, 4, 2]
+item_frame_rate    = [3, 5, 30, 3, 5]
+
+nerd_names        = ["Lolero", "Fedora guy", "Otaku runner", "furrito", "???"]
+nerd_descriptions = ["no se ducha", "m'lady...", "datebayo!", "rawr! XD", "???"]
+nerd_hps          = [5, 5, 3, 10,  0]
+nerd_atks         = [1, 1, 1,  1,  0]
+nerd_speeds       = [ 5,  5,  2,  5, 50]
+nerd_speeds_user  = [50/x for x in nerd_speeds]
+nerd_frame_amount = [4, 4, 11, 4,  0]
+
 class Text:
     def __init__(self, x, y, len, sprite):
         self.chars = []
@@ -202,11 +218,6 @@ class Item(Sprite):
 
         self.strips = ["jabon.png", "pala.png", "burbujero.png", "desodorante.png", "pasto.png"]
         
-        self.frame_amounts = [4, 8, 2, 4, 2]
-        self.frame_rates   = [3, 5, 30, 3, 5]
-        self.types         = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
-        self.hps           = [5, 25, 5, 5, 1]
-        
     def se_ensucia(self, value, step_counter):
         if step_counter % 20 == 0:
             self.hp -= value
@@ -225,10 +236,10 @@ class Item(Sprite):
 
         self.set_strip(stripes[self.strips[id]])
 
-        self.frame_amount = self.frame_amounts[id]
-        self.frame_rate   = self.frame_rates[id]
-        self.type         = self.types[id]
-        self.hp           = self.hps[id]
+        self.frame_amount = item_frame_amount[id]
+        self.frame_rate   = item_frame_rate[id]
+        self.type         = item_names[id]
+        self.hp           = item_hps[id]
 
         self.is_active = True
         self.bullet.is_waiting_to_deactivate = True
@@ -264,8 +275,11 @@ class Item(Sprite):
 
 class Lolero(Sprite):
 
-    def __init__(self):
+    def __init__(self, index):
         super().__init__()
+        self.frame_amount  = nerd_frame_amount[index]
+        self.initial_hp    = nerd_hps[index]
+        self.initial_speed = nerd_speeds[index]
         self.morite()
         
     def activate(self, j):
@@ -315,44 +329,13 @@ class Lolero(Sprite):
 class Brian(Lolero):
 
     def __init__(self):
-        self.frame_amount = 4
-        self.initial_hp = 5
-        self.initial_speed = 5
-        super().__init__()
+        super().__init__(0)
         self.set_strip(stripes["lolero.png"])
-
-class NarutoRunner(Lolero):
-
-    def __init__(self):
-        self.frame_amount = 11
-        self.initial_hp = 3
-        self.initial_speed = 2
-        super().__init__()
-        self.set_strip(stripes["naruto_runner.png"])
-       
-class Furro(Lolero):
-
-    def __init__(self):
-        self.frame_amount = 4
-        self.initial_hp    = 5
-        self.initial_speed = 5
-        super().__init__()
-        self.set_strip(stripes["furry.png"])
-    
-    def step(self, step_counter):
-
-        if step_counter % 100 == 0:
-            self.set_y((self.y()) % 48 + 16)
-
-        super().step(step_counter)
 
 class FedoraGuy(Lolero):
 
     def __init__(self):
-        self.frame_amount = 4
-        self.initial_hp    = 5
-        self.initial_speed = 5
-        super().__init__()
+        super().__init__(1)
         self.set_strip(stripes["fedora.png"])
 
     def step(self, step_counter):
@@ -364,6 +347,27 @@ class FedoraGuy(Lolero):
                 self.set_frame(self.frame()+1)
         else:
             super().step(step_counter)
+
+class NarutoRunner(Lolero):
+
+    def __init__(self):
+        super().__init__(2)
+        self.set_strip(stripes["naruto_runner.png"])
+       
+class Furro(Lolero):
+
+    def __init__(self):
+        super().__init__(3)
+        self.set_strip(stripes["furry.png"])
+    
+    def step(self, step_counter):
+
+        if step_counter % 100 == 0:
+            self.set_y((self.y()) % 48 + 16)
+
+        super().step(step_counter)
+
+
 
 
 
@@ -379,19 +383,20 @@ class Menu():
 
     def next_mode(self):
 
-        if self.mode == "items":
-            self.mode = "nerds"
+        if self.showing_items:
+            # Menu ahora muestra nerds
             self.price.set_label("spd.png")
             self.price.hide_digits([0, 1])
             for item in self.items:
                 item.set_strip(stripes["sdren.png"])
         else:
-            self.mode = "items"
+            # Menu ahora muestra items
             self.price.set_label("burbujita.png")
             self.price.show_digits([0, 1])
             for item in self.items:
                 item.set_strip(stripes["smeti.png"])
-
+        
+        self.showing_items = not self.showing_items
         self.write_description()
 
     def __init__(self):
@@ -401,7 +406,7 @@ class Menu():
         self.y          = 20
         self.selected_y = 16
 
-        self.mode = "items"
+        self.showing_items = True
 
         self.items = [Sprite() for _ in range(5)]
         for i, item in enumerate(self.items):
@@ -411,22 +416,8 @@ class Menu():
             item.set_frame(i)
 
         self.items[self.selected_id].set_y(self.selected_y)
-                
-        self.items_name        = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
-        self.items_description = ["limpia nerds", "intocable", "da burbujas", "los espanta", "kabum!"]
-        self.items_price       = [100, 200, 200, 400, 500]
-        self.items_hps         = [5, 25, 5, 5,  1]
-        self.items_atks        = [1,  0, 0, 0, 10]
 
-        self.nerd_name        = ["Lolero", "Fedora guy", "Otaku runner", "furrito", "???"]
-        self.nerd_description = ["no se ducha", "m'lady...", "datebayo!", "rawr! XD", "???"]
-        self.nerd_speed       = [20, 10, 50, 20, 0]
-        self.nerd_hps         = [5, 5, 5, 10,  0]
-        self.nerd_atks        = [1,  1, 1, 1,  0]
-
-        # self.items_stats       =  ["ATK 01 HP 05", "ATK 00 HP 25", "ATK 00 HP 05", "ATK 00 HP 05", "ATK 10 HP 01"]
-
-        self.text        = Text(x=94,    y=14, len=13, sprite="letras_sirg.png")
+        self.name        = Text(x=94,    y=14, len=13, sprite="letras_sirg.png")
         self.description = Text(x=94,    y=26, len=12, sprite="letras_edrev.png")
         self.price       = Numbers(x=70, y=8,  len=4,  label="burbujita.png", label_width=4)
         self.hp          = Numbers(x=70, y=14, len=2,  label="hp.png" ,       label_width=12)
@@ -441,35 +432,28 @@ class Menu():
         
         self.price.set_sprite("yellow_numerals.png")
     
-        if self.mode == "items":
-            if money < self.items_price[self.selected_id]:
+        if self.showing_items:
+            if money < item_prices[self.selected_id]:
                 self.price.set_sprite("red_numerals.png")
 
         self.write_description()
 
     def get_focused_item_info(self):
-        return self.selected_id, self.items_name[self.selected_id], self.items_price[self.selected_id]
+        return self.selected_id, item_names[self.selected_id], item_prices[self.selected_id]
 
     def change_focused_item_frame(self, i):
         self.items[self.selected_id].set_frame(self.items[self.selected_id].frame() + i)
 
     def write_description(self):
 
-        if self.mode == "items":
-            self.text.setletters(self.items_name[self.selected_id])
-            self.description.setletters(self.items_description[self.selected_id])
-            self.price.setnumbers(self.items_price[self.selected_id])
-            self.hp.setnumbers(self.items_hps[self.selected_id])
-            self.atk.setnumbers(self.items_atks[self.selected_id])
-        else: 
-            self.text.setletters(self.nerd_name[self.selected_id])
-            self.description.setletters(self.nerd_description[self.selected_id])
-            self.price.setnumbers(self.nerd_speed[self.selected_id])
-            self.hp.setnumbers(self.nerd_hps[self.selected_id])
-            self.atk.setnumbers(self.nerd_atks[self.selected_id])
+        mode = int(self.showing_items)
+        index = self.selected_id
 
-
-
+        self.name.setletters(        [nerd_names,        item_names        ][mode][index])
+        self.description.setletters( [nerd_descriptions, item_descriptions ][mode][index])
+        self.price.setnumbers(       [nerd_speeds_user,  item_prices       ][mode][index])
+        self.hp.setnumbers(          [nerd_hps,          item_hps          ][mode][index])
+        self.atk.setnumbers(         [nerd_atks,         item_atks         ][mode][index])
 
 #  _____                         
 # |  ___|                        
@@ -557,7 +541,7 @@ class vs(Scene):
                 for lolero in self.tribus[lolero_id]:
                     if not lolero.is_active:
                         lolero.activate(j)
-                        print("activamos un lolero de tribu ", lolero_id, " en el carril ", j)
+                        print("Activamos un", nerd_names[lolero_id], "en el carril", j)
                         break
                 
                 self.level_id += 1
@@ -637,7 +621,7 @@ class vs(Scene):
                 self.menu.next_mode()
 
             if director.was_pressed(director.BUTTON_A):
-                if self.menu.mode == "items":
+                if self.menu.showing_items:
                     id, name, price = self.menu.get_focused_item_info()
                     if self.money >= price:
                     
