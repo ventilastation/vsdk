@@ -10,6 +10,26 @@ ROWS = 18
 
 DEBUG = True
 
+class ScoreBoard:
+    def __init__(self):
+        self.chars = []
+        for n in range(9):
+            s = Sprite()
+            s.set_strip(stripes["numerals.png"])
+            s.set_x(120 + n * 4)
+            s.set_y(0)
+            s.set_frame(10)
+            s.set_perspective(2)
+            self.chars.append(s)
+
+        self.setscore(0)
+
+    def setscore(self, value):
+        for n, l in enumerate("%05d" % value):
+            v = ord(l) - 0x30
+            self.chars[n].set_frame(v)
+
+
 class Vortex(Sprite):
     def __init__(self):
         super().__init__()
@@ -54,6 +74,7 @@ class Tablero:
         self.score = 0
         self.gameover = False
         self.vortex = Vortex()
+        self.scoreboard = ScoreBoard()
         self.spawn()
 
     def spawn(self):
