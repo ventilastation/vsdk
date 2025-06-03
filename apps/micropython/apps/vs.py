@@ -12,8 +12,7 @@ from ventilastation.sprites import Sprite
 # 5 para las opciones del menú
 # 9 para los items en el tablero
 # 9 para las balas
-# 1 para el lolero de prueba
-# Total: 32
+# Total: 31
 
 # Hardodeables:
 # 4 para el precio del item del menu
@@ -26,11 +25,14 @@ from ventilastation.sprites import Sprite
 # 12 para las letras de las descripciones del menu
 # Total de hardcodeables: 34
 
-# Total: 66
+# Total: 65
 
 # Dadas dos coordinadas en una matriz de tamaño 3x3 te dice qué indice es en un array tamaño 9
 def coords(i, j):
     return i + j*3
+
+# [(step, tipo, carril)]
+level_1 = [ (0, 0, 0), (60, 0, 1), (120, 0, 2)]
 
 class Text:
     def __init__(self, x, y, len, sprite):
@@ -232,27 +234,19 @@ class Lolero(Sprite):
 
     def __init__(self):
         super().__init__()
-        self.set_strip(stripes["fedora.png"])
-        self.is_active = True
-        self.can_move = True
-        self.has_debuff = False
-        self.debuff_turns = 0
-        self.modo_fedora = False
-        self.hp = 0
-        self.speed = 0
-        self.revive()
-
-    def revive(self):
+        self.morite()
+        
+    def activate(self, j):
         self.set_x(192)
-        self.set_y(16)
+        self.set_y(16*(j+1))
         self.set_frame(0)
         self.is_active = True
         self.can_move = True
         self.has_debuff = False
+        self.modo_fedora = False
         self.debuff_turns = 0
-        self.hp = 5
-        self.speed = 5
-        self.original_speed = self.speed
+        self.hp    = self.initial_hp
+        self.speed = self.initial_speed
 
     def se_baña(self, value):
         self.hp -= value
@@ -260,8 +254,7 @@ class Lolero(Sprite):
             self.morite()
 
     def se_realentiza(self):
-        
-        self.speed = self.original_speed*4
+        self.speed = self.initial_speed*4
         self.debuff_turns = 3
         self.has_debuff = True
 
@@ -275,7 +268,7 @@ class Lolero(Sprite):
     def step(self, step_counter):
         
         if self.debuff_turns <= 0:
-            self.speed = self.original_speed
+            self.speed = self.initial_speed
             self.has_debuff = False
 
         if self.is_active and step_counter % self.speed == 0 :
@@ -290,46 +283,31 @@ class Lolero(Sprite):
 class Brian(Lolero):
 
     def __init__(self):
+        self.frame_amount = 4
+        self.initial_hp = 5
+        self.initial_speed = 5
         super().__init__()
         self.set_strip(stripes["lolero.png"])
-        self.frame_amount = 4
 
-    def revive(self):
-        super().revive()
-        self.hp = 5
-        self.speed = 5
-        self.original_speed = self.speed
-    
-    def step(self, step_counter):
-        super().step(step_counter)
 
 class NarutoRunner(Lolero):
 
     def __init__(self):
+        self.frame_amount = 11
+        self.initial_hp = 3
+        self.initial_speed = 2
         super().__init__()
         self.set_strip(stripes["naruto_runner.png"])
-        self.frame_amount = 11
-
-    def revive(self):
-        super().revive()
-        self.hp    = 5
-        self.speed = 2
+       
     
-    def step(self, step_counter):
-        super().step(step_counter)
-        
-
 class Furro(Lolero):
 
     def __init__(self):
+        self.frame_amount = 4
+        self.initial_hp    = 5
+        self.initial_speed = 5
         super().__init__()
         self.set_strip(stripes["furry.png"])
-        self.frame_amount = 4
-
-    def revive(self):
-        super().revive()
-        self.hp    = 5
-        self.speed = 5
     
     def step(self, step_counter):
 
@@ -338,21 +316,16 @@ class Furro(Lolero):
 
         super().step(step_counter)
 
-
 class FedoraGuy(Lolero):
 
     def __init__(self):
+        self.frame_amount = 4
+        self.initial_hp    = 5
+        self.initial_speed = 5
         super().__init__()
         self.set_strip(stripes["fedora.png"])
-        self.frame_amount = 4
 
-    def revive(self):
-        super().revive()
-        self.hp    = 5
-        self.speed = 5
-    
     def step(self, step_counter):
-        
         if step_counter % 120 == 0:
             self.modo_fedora = not self.modo_fedora
         
@@ -477,16 +450,21 @@ class vs(Scene):
     def on_enter(self):
         super(vs, self).on_enter()
         
-        self.loleros = [FedoraGuy() for _ in range(1)]
-  
-        self.purchased_item_id = None
+        self.brians  = [Brian()        for _ in range(3)]
+        self.fedoras = [FedoraGuy()    for _ in range(3)]
+        self.otakus  = [NarutoRunner() for _ in range(3)]
+        self.furros  = [Furro()        for _ in range(3)]
+
+        self.tribus = [self.brians, self.fedoras, self.otakus, self.furros]
+
+        self.purchased_item_id = None  
         self.purchased_item = Sprite()
         self.purchased_item.set_strip(stripes["items.png"])
         self.purchased_item.disable()
 
         self.menu  = Menu()
         self.bullets = [Bullet() for _ in range(9)]
-        self.items = [Item(self.bullets[id]) for id in range(9)]
+        self.items   = [Item(self.bullets[id]) for id in range(9)]
 
         for i in range(3):
             for j in range(3):
@@ -509,9 +487,27 @@ class vs(Scene):
         self.road.set_frame(0)
         
         self.step_counter = 0
+        self.level_id = 0
+
+
+    def manage_level(self):
+
+        if self.level_id < len(level_1):
+                    
+            step, lolero_id, j = level_1[self.level_id]
+            if self.step_counter >= step:
+                for lolero in self.tribus[lolero_id]:
+                    if not lolero.is_active:
+                        lolero.activate(j)
+                        print("activamos un lolero de tribu ", lolero_id, " en el carril ", j)
+                        break
+                
+                self.level_id += 1
 
     def step(self):
-        
+
+        self.manage_level()
+
         for bullet in self.bullets:
             bullet.step()
 
@@ -521,29 +517,30 @@ class vs(Scene):
                 if item.type == "Burbujero" and self.step_counter % 30 == 0:
                     self.add_money(100)
 
-        for lolero in self.loleros:
-            if lolero.is_active:
-                if not lolero.modo_fedora:
-                    lolero.can_move = True
-                    bullet = lolero.collision(self.bullets)
-                    if bullet:
-                        if bullet.is_active and not bullet.is_reloading:
-                            if bullet.type == "Jabon":
-                                lolero.se_baña(1)
-                            if bullet.type == "Desodorante":
-                                lolero.se_realentiza()
-                            bullet.reset()
+        for tribu in self.tribus:
+            for lolero in tribu:
+                if lolero.is_active:
+                    if not lolero.modo_fedora:
+                        lolero.can_move = True
+                        bullet = lolero.collision(self.bullets)
+                        if bullet:
+                            if bullet.is_active and not bullet.is_reloading:
+                                if bullet.type == "Jabon":
+                                    lolero.se_baña(1)
+                                if bullet.type == "Desodorante":
+                                    lolero.se_realentiza()
+                                bullet.reset()
 
-                    item = lolero.collision(self.items)
-                    if item:
-                        if item.is_active:
-                            lolero.can_move = False
-                            item.se_ensucia(1, self.step_counter)
-                            if item.type == "Tocar pasto":
-                                lolero.se_baña(10)
-                                item.deactivate()
+                        item = lolero.collision(self.items)
+                        if item:
+                            if item.is_active:
+                                lolero.can_move = False
+                                item.se_ensucia(1, self.step_counter)
+                                if item.type == "Tocar pasto":
+                                    lolero.se_baña(10)
+                                    item.deactivate()
 
-                lolero.step(self.step_counter)
+                    lolero.step(self.step_counter)
 
         if self.purchased_item_id != None:
 
