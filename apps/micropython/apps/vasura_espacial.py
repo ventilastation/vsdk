@@ -6,7 +6,7 @@ from apps.vasura_scripts.managers.balas_manager import *
 from apps.vasura_scripts.managers.enemigos_manager import *
 from apps.vasura_scripts.managers.gameplay_manager import *
 
-from apps.vasura_scripts.managers.spawner_enemigos import *
+from apps.vasura_scripts.managers.spawner_enemigos import SpawnerEnemigos
 
 from apps.vasura_scripts.entities.nave import Nave
 from apps.vasura_scripts.entities.planeta import Planeta

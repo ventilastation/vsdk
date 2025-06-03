@@ -5,26 +5,21 @@ from utime import ticks_ms, ticks_diff, ticks_add
 from urandom import randint, seed, choice
 from math import floor
 
-INTERVALO_DE_SPAWN : float = 4
-
 class SpawnerEnemigos():
     def __init__(self, manager:EnemigosManager):
         self.manager : EnemigosManager = manager
-        self.tiempo_siguiente_spawn : int = -1
-        
+        self.comportamiento : ComportamientoSpawn = RandomSpawnIntervaloFijo(4)
+                
         seed(ticks_ms())
 
 
     def step(self):
-        if self.tiempo_siguiente_spawn == -1:
-            return
-        
-        if ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0:
+        if self.comportamiento.prendido and self.comportamiento.deberia_spawnear():
             self.spawnear_enemigo()
 
 
     def spawnear_enemigo(self):
-        tipo = choice(TIPOS_DE_ENEMIGO)
+        tipo = self.comportamiento.get_siguiente_enemigo()
         
         if tipo == Chiller:
             enemigos = []
@@ -42,9 +37,42 @@ class SpawnerEnemigos():
             enemigos = [e]
 
         pos = randint(0, 255)
+        
         for e in enemigos:
             e.reset()
             e.set_position(pos, 0)
             pos = (pos + 256 // 3) % 256
 
-        self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(INTERVALO_DE_SPAWN * 1000))
+        
+
+
+class ComportamientoSpawn:
+    def __init__(self):
+        pass
+    
+    def step(self):
+        pass
+
+    def deberia_spawnear(self):
+        return False
+    
+    def get_siguiente_enemigo(self):
+        return None
+    
+
+class RandomSpawnIntervaloFijo(ComportamientoSpawn):
+    def __init__(self, tiempo:float):
+        super().__init__()
+
+        self.intervalo_spawn : float = tiempo
+        self.tiempo_siguiente_spawn : int = -1
+        self.prendido = True
+
+    def get_siguiente_enemigo(self):
+        self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(self.intervalo_spawn * 1000))
+
+        return choice(TIPOS_DE_ENEMIGO)
+
+    def deberia_spawnear(self):
+        return ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
+
