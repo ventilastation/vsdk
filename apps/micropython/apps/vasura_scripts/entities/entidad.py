@@ -32,6 +32,10 @@ class Entidad(Sprite):
         pass
 
 
+    def get_position(self):
+        return self.x_interno, self.y_interno
+
+
     def round_position(self):
         self.set_x(floor(self.x_interno))
         self.set_y(floor(self.y_interno))

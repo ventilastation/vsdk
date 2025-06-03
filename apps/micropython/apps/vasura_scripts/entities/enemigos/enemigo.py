@@ -49,6 +49,8 @@ class Enemigo(Entidad):
 
         super().limpiar_eventos()
 
+
+
 class Driller(Enemigo):
     estado_inicial = Bajando
 
@@ -74,10 +76,11 @@ class Chiller(Enemigo):
 
 
 class Bully(Enemigo):
-    estado_inicial = Bajando
+    estado_inicial = Persiguiendo
 
     def __init__(self, scene):
-        self.velocidad_y = 0.5
+        self.velocidad_x = 1.5
+        self.velocidad_y = 1
 
         self.strip = "bully-sheet.png"
         self.puntaje = 50

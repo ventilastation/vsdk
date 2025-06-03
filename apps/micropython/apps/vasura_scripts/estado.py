@@ -1,6 +1,8 @@
 from ventilastation.director import director, stripes
 from apps.vasura_scripts.entities.entidad import *
 
+from math import sqrt
+
 class Estado:
     strip : int = None
     entidad : Entidad
@@ -37,7 +39,7 @@ class Explotando(Estado):  # Anarquía
 
     def on_enter(self):
         super().on_enter()
-        #director.sound_play("vasura_espacial/explosiodn_enemigo")
+        director.sound_play("vasura_espacial/explosion_enemigo")
         
         self.entidad.disable()
 
@@ -95,3 +97,23 @@ class Bajando(Vulnerable):
             
             return Explotando
 
+
+
+class Persiguiendo(Vulnerable):
+    def step(self):
+        cambio = super().step()
+        if cambio:
+            return cambio
+
+        nave = self.entidad.scene.nave
+        nave_x, nave_y = nave.get_position()
+
+        e = self.entidad
+        x, y = e.get_position()
+        delta_x = (nave_x - 128) % 256 - (x - 128) % 256
+        delta_y = nave_y - y
+        mag = sqrt(delta_x ** 2 + delta_y ** 2)
+
+        delta_x *= e.velocidad_x / mag
+        delta_y *= e.velocidad_y / mag
+        e.mover(delta_x, delta_y)
