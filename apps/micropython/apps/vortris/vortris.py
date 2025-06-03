@@ -7,6 +7,8 @@ from .rotaciones import ROTACIONES
 COLS = 16
 ROWS = 18
 
+DEBUG = True
+
 class Pieza(Sprite):
     def reset(self, col, row, shape_id):
         self.col = col
@@ -61,6 +63,11 @@ class Tablero:
             for x in range(4):
                 if grilla_pieza[y*4+x] == "X":
                     self.board[(y + self.current.row) - 1][(self.current.col + x) - 1] = self.current.shape_id + 1
+        if DEBUG:
+            for row in range(ROWS):
+                for col in range(COLS):
+                    print("X" if self.board[row][col] else "_", end='')
+                print()
         self.spawn()
 
     def clear_lines(self):
