@@ -4,8 +4,30 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 import time
 import json
-from itertools import zip_longest
 
+#from itertools
+def zip_longest(*iterables, fillvalue=None):
+    # zip_longest('ABCD', 'xy', fillvalue='-') → Ax By C- D-
+
+    iterators = list(map(iter, iterables))
+    num_active = len(iterators)
+    if not num_active:
+        return
+
+    while True:
+        values = []
+        for i, iterator in enumerate(iterators):
+            try:
+                value = next(iterator)
+            except StopIteration:
+                num_active -= 1
+                if not num_active:
+                    return
+                iterators[i] = repeat(fillvalue)
+                value = fillvalue
+            values.append(value)
+        yield tuple(values)
+    
 PISTAS = 16
 instrumento = 2
 posicion = 0
