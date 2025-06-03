@@ -1,5 +1,4 @@
 stripes = [
-
     palettegroup(
         fullscreen("game-center0.png", radius=32),
         fullscreen("game-center1.png", radius=24),
@@ -8,6 +7,7 @@ stripes = [
     ),
     palettegroup(
         strip("ship-sprite-asym-sheet.png", frames = 2),
+        strip("ship-sprite-gray.png", frames = 2),
     ),
     palettegroup(
         strip("driller-sheet.png", frames=7),

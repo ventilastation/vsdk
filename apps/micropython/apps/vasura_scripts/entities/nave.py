@@ -28,7 +28,11 @@ class Nave(Entidad):
             self.set_estado(nuevo_estado)
     
     def hit(self):
-        self.set_estado(Explotando)
+        if self.vulnerable():
+            self.set_estado(Explotando)
+
+    def vulnerable(self):
+        return issubclass(type(self.estado), Vulnerable)
     
     def disparar(self):
         bala = self.balas.get()
@@ -50,24 +54,14 @@ class Nave(Entidad):
     
     def morir(self):
         self.al_morir.disparar(self)
-        self.set_estado(Deshabilitado)
+        self.set_estado(NaveExplotando)
 
     def respawn(self):
         self.set_direccion(1)
-        self.set_estado(NaveSana)
+        self.set_estado(Invencible)
         self.set_position(0, 50)
    
     def procesar_input(self):
-        pass
-
-
-class NaveSana(Vulnerable):
-    def on_enter(self):
-        self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
-        self.entidad.set_frame(0)
-
-    def step(self):
-        super().step()
         target = [0, 0]
         
         if director.is_pressed(director.JOY_LEFT):
@@ -81,12 +75,67 @@ class NaveSana(Vulnerable):
 
         direccion = target[0]
         if direccion != 0:
-            self.entidad.set_direccion(direccion)
+            self.set_direccion(direccion)
 
-        target[0] *= self.entidad.velocidad_x
-        target[1] *= self.entidad.velocidad_y
+        target[0] *= self.velocidad_x
+        target[1] *= self.velocidad_y
         
-        self.entidad.mover(*target)
+        self.mover(*target)
         
         if director.was_pressed(director.BUTTON_A):
-            self.entidad.disparar()
+            self.disparar()
+
+
+class NaveSana(Vulnerable):
+    def on_enter(self):
+        self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
+        self.entidad.set_frame(0)
+
+    def step(self):
+        super().step()
+        self.entidad.procesar_input()
+
+
+class NaveExplotando(Explotando):
+    def step(self):
+        self.entidad.set_frame(self.entidad.frame() + 1)
+
+        if self.entidad.frame() == self.total_frames:
+            return Respawneando
+
+
+class Respawneando(Deshabilitado):
+
+    def on_enter(self):
+        self.entidad.set_strip(stripes["ship-sprite-gray.png"])
+        self.entidad.set_frame(0)
+        self.frames = 0
+        self.blink_rate = 6
+
+    def step(self):
+        self.frames += 1
+        if (self.frames // self.blink_rate) % 2 == 0:
+            self.entidad.set_frame(0)
+        else:
+            self.entidad.disable()
+
+
+class Invencible(Estado):
+    def on_enter(self):
+        self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
+        self.entidad.set_frame(0)
+        self.frames_left = 60
+        self.blink_rate = 4
+
+    def step(self):
+        super().step()
+        self.entidad.procesar_input()
+
+        self.frames_left -= 1
+        if self.frames_left == 0:
+            return NaveSana
+
+        if (self.frames_left // self.blink_rate) % 2 == 0:
+            self.entidad.set_direccion(self.entidad.direccion)
+        else:
+            self.entidad.disable()

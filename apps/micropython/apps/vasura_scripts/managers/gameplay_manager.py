@@ -29,6 +29,7 @@ class GameplayManager():
             self.respawnear_nave()
 
     def programar_respawn_nave(self, _):
+        self.nave.set_estado(Explotando)
         self.tiempo_respawn = ticks_add(ticks_ms(), TIEMPO_DE_RESPAWN * 1000)
     
     def on_planet_hit(self):
