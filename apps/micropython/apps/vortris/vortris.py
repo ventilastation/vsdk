@@ -39,13 +39,13 @@ class Vortex(Sprite):
         self.set_perspective(0)
         self.set_frame(0)
         self.set_x(0)
-        self.row = ROWS - 4
-        self.set_y(self.row * 8)
+        self.edge = ROWS - 4
+        self.set_y(self.edge * 8)
         self.steps = 0
 
     def grow(self):
-        self.row += 1
-        self.set_y(self.row * 8)
+        self.edge += 1
+        self.set_y(self.edge * 8)
         self.steps += 1
 
 
@@ -93,7 +93,7 @@ class Tablero:
         for y in range(4):
             for x in range(4):
                 if grilla_pieza[y*4+x] == "X":
-                    if x + new_col < 0 or x + new_col >= COLS or y + new_row >= ROWS:
+                    if x + new_col < 0 or x + new_col >= COLS or y + new_row >= ROWS - self.vortex.steps:
                         return True
                     if self.board[(new_row + y) - 1][(new_col + x) - 1]:
                         return True
