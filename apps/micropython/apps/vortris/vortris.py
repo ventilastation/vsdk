@@ -112,14 +112,6 @@ class Tablero:
                 print()
         self.spawn()
 
-    def clear_lines(self):
-        new_board = [row for row in self.board if any(cell is None for cell in row)]
-        lines_cleared = ROWS - len(new_board)
-        self.score += lines_cleared
-        for _ in range(lines_cleared):
-            new_board.insert(0, [None for _ in range(COLS)])
-        self.board = new_board
-
     def move(self, dx, dy):
         new_col = self.current.col + dx
         new_row = self.current.row + dy
