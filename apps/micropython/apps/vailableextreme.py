@@ -6,7 +6,7 @@ from time import sleep
 import utime
 import gc
 
-TIME_MODIFIER = 3400
+TIME_MODIFIER = 3200
 
 SCORE_STATES = {
     "miss" : 0,
@@ -15,7 +15,8 @@ SCORE_STATES = {
     "x": 3
 }
 
-BUTTON = director.JOY_DOWN
+BUTTON = director.JOY_RIGHT
+BUTTON2 = director.JOY_LEFT
 
 GOOD_LIMIT_1=(39,35)
 PERFECT_LIMIT=(35,30)
@@ -25,9 +26,9 @@ MISS_LIMIT=(255,GOOD_LIMIT_1[0])
 
 
 class CirclePart(Sprite):
-    def __init__(self,i,button,y):
+    def __init__(self,i,buttons,y):
         super().__init__()
-        self.button = button
+        self.buttons = buttons
         self.set_perspective(1)
         self.set_strip(stripes["borde_blanco.png"])
         self.set_x(64*i)
@@ -54,8 +55,8 @@ class LimitScoreLine(CirclePart):
         self.set_frame(0)
 
 class Circle:
-    def __init__(self,circle_part:ExpandingLine,button,y):
-        self.circle = [circle_part(i,button,y) for i in range(4)]
+    def __init__(self,circle_part:ExpandingLine,buttons,y):
+        self.circle = [circle_part(i,buttons,y) for i in range(4)]
         self.first = False
         self.state = 0
         
@@ -126,7 +127,7 @@ class Circle:
         if any(number < part.order for number in order_list):
             return False
         
-        if director.was_pressed(part.button):
+        if director.was_pressed(part.buttons[0]) or director.was_pressed(part.buttons[1]):
             part.set_y(27)
             part.disable()
             return True
@@ -196,13 +197,12 @@ class Animation:
                 elif quarter.y() <= 1:
                     self.disabled_animations.append(animation)
                     quarter.disable()
-                    quarter.set_y(GOOD_LIMIT_2[1]-2)
+                    quarter.set_y(GOOD_LIMIT_2[1])
                 
     def set_score(self,state,auto):
         for animation in self.disabled_animations:
             try:
                 if auto:
-                    print(f"seteando {auto} -- {state}")
                     score = self.disabled_animations.pop()
 
                     if not score in self.enabled_animations:
@@ -210,7 +210,7 @@ class Animation:
 
                     for i in score:
                         i.set_frame(state)
-                        i.set_y(GOOD_LIMIT_2[1]-2)
+                        i.set_y(GOOD_LIMIT_2[1])
             except:pass
 
 class Mode:
@@ -221,23 +221,31 @@ class Mode:
         self.state = 0
     
     def life(self, state, auto=False):
-        if director.was_pressed(BUTTON) or auto:
+        if self.score < 0:
+            return
+        
+        if auto:
             self.state = state
             if state == SCORE_STATES["miss"]:
-                self.score -= 1
+                if self.score >= 1:
+                    self.score -= 1
                 self.contador_perfect = 0
             elif state == SCORE_STATES["good"]:
-                self.contador_perfect = 0
+                if self.contador_perfect < 4:
+                    self.contador_perfect = 0
             elif state == SCORE_STATES["perfect"]:
-                if self.score <= 15:
+                if self.score < 15:
                     self.score += 1
                 if self.score >= 15:
                     self.contador_perfect += 1
     
     def mangment(self):
+        if self.score < 0:
+            return -3
+
         if self.score <= 5:
             if self.score <= 0:
-                self.mode = -2
+                self.mode = -3
             else:
                 self.mode = -1
         elif self.score >= 5:
@@ -246,7 +254,7 @@ class Mode:
             else:
                 self.mode = 0
 
-        if self.state == 0:
+        if self.state == 0 and self.mode != -3:
             return -2
         else:
             return self.mode
@@ -256,7 +264,8 @@ class Dancer:
         self.sprites_n = ["av_n1.png","av_n2.png","av_n3.png"]
         self.sprites_d = ["av_t1.png","av_t2.png","av_t3.png"]
         self.sprites_p = ["av_f1.png","av_f2.png","av_f3.png"]
-        self.sprites_dead = "av_apunialado.png"
+        self.sprites_dead = ["av_apunialado01.png","av_apunialado02.png","av_apunialado03.png","av_apunialado04.png","av_apunialado05.png"]
+        self.sprites_m = "av_apunialado.png"
 
         self.dancer = Sprite()
         self.dancer.set_strip(stripes[self.sprites_n[0]])
@@ -267,31 +276,38 @@ class Dancer:
         self.count = 0
     
     def dance(self,mode):
-        if self.count < 2:
-            self.count += 1
-        else:
-            self.count = 0
-        
         if mode == -1:
             sprite_list = self.sprites_d
         elif mode == 0:
             sprite_list = self.sprites_n
         elif mode == 1:
             sprite_list = self.sprites_p
-        
-        if mode == -2:
-            self.dancer.set_strip(stripes[self.sprites_dead])
-            self.dancer.set_perspective(0)
-            self.dancer.set_x(0)
-            self.dancer.set_y(255)
-            self.dancer.set_frame(0)
-        else:
-            self.dancer.set_strip(stripes[sprite_list[self.count]])
-            self.dancer.set_perspective(0)
-            self.dancer.set_x(0)
-            self.dancer.set_y(255)
-            self.dancer.set_frame(0)
 
+        if mode == -3:
+            sprite_list = self.sprites_dead
+            self.count += 1
+            if self.count == 5:
+                return True
+        else:
+            if self.count < 2:
+                self.count += 1
+            else:
+                self.count = 0
+
+        try:
+            if mode == -2:
+                self.dancer.set_strip(stripes[self.sprites_m])
+                self.dancer.set_perspective(0)
+                self.dancer.set_x(0)
+                self.dancer.set_y(255)
+                self.dancer.set_frame(0)
+            else:
+                self.dancer.set_strip(stripes[sprite_list[self.count]])
+                self.dancer.set_perspective(0)
+                self.dancer.set_x(0)
+                self.dancer.set_y(255)
+                self.dancer.set_frame(0)
+        except:pass
 
 
 class VailableExtremeGame(Scene):
@@ -316,12 +332,15 @@ class VailableExtremeGame(Scene):
 
         # create circles
         self.enabled_lines = []
-        self.disabled_lines = [Circle(ExpandingLine,BUTTON,255) for _ in range(10)]
+        self.disabled_lines = [Circle(ExpandingLine,[BUTTON,BUTTON2],255) for _ in range(10)]
 
-        self.animation = Animation(7)
+        self.animation = Animation(10)
 
         self.score_state = 0
         self.beat = 0
+
+        self.stop = False
+        self.cronometrer = -1
 
     def step(self):
         actual_time = utime.ticks_diff(utime.ticks_ms(), self.start_time)
@@ -338,24 +357,37 @@ class VailableExtremeGame(Scene):
             if order:
                 self.order = order 
                 break
-        
+  
         # Boundary detection and circle movement
         for circle in self.enabled_lines:
             if not circle in self.disabled_lines: 
                 state = circle.limits(self.disabled_lines,self.exit_order)
                 if state != None: self.score_state = state
                 circle.expand(2,self.disabled_lines)
-        
+
         # Automatic Animation score when passing pixel 25
-        for obj in self.enabled_lines:  
+        show = False
+        for obj in self.enabled_lines:
             for part in obj.circle:
-                if part.y() == 25 and not part.is_red:
-                    self.animation.set_score(self.score_state,True)
-                    self.mode.life(self.score_state,True)
+                if part.y() == GOOD_LIMIT_2[1] and not part.is_red:
+                    show = True
                     part.disable()
-                    self.dancer.dance(self.mode.mangment())
                     break
+
         
+        if (director.was_pressed(BUTTON) or director.was_pressed(BUTTON2) and self.score_state == SCORE_STATES["miss"]) or show:
+            if not self.stop:
+                self.mode.life(self.score_state,True)
+                if self.dancer.dance(self.mode.mangment()):
+                    self.cronometrer = redondeado + 4000
+                    self.stop = True
+            else:
+                self.score_state = SCORE_STATES["miss"]
+            self.animation.set_score(self.score_state,True)
+        
+        if self.cronometrer == redondeado:
+            self.finished()
+
         self.animation.move_score()
 
         if not self.exit_order:
@@ -363,9 +395,8 @@ class VailableExtremeGame(Scene):
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
-
+        
         gc.collect()
-
 
     def finished(self):
         director.pop()
