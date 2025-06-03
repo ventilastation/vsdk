@@ -1,4 +1,5 @@
-from urandom import choice, randrange, seed
+import utime
+from urandom import randrange
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
@@ -16,11 +17,12 @@ class Vortex(Sprite):
         self.set_perspective(0)
         self.set_frame(0)
         self.set_x(0)
-        self.set_y(10)
+        self.row = ROWS - 4
+        self.set_y(self.row * 8)
 
-    def grow(self, step_size = 10):
-        self.set_x(0)
-        self.set_y(self.y() + step_size)
+    def grow(self):
+        self.row += 1
+        self.set_y(self.row * 8)
 
 
 class Pieza(Sprite):
@@ -120,6 +122,7 @@ class Vortris(Scene):
     def on_enter(self):
         super().on_enter()
         self.game = Tablero()
+        self.last_vortex_growth = utime.ticks_ms()
 
     def step(self):
         if self.game.gameover:
@@ -145,11 +148,15 @@ class Vortris(Scene):
         #     self.game.drop()
         #     fall_time = 0
 
+        now = utime.ticks_ms()
+        gap_time = utime.ticks_diff(now, self.last_vortex_growth) / 1000 # should be in secs.
+        
+        if gap_time >= 10:
+            self.game.vortex.grow()
+            self.last_vortex_growth = now
+
         if director.was_pressed(director.BUTTON_D):
             self.finished()
-
-        if director.was_pressed(director.JOY_UP):
-            self.game.vortex.grow()
 
     def finished(self):
         director.pop()
