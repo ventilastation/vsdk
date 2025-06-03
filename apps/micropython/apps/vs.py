@@ -54,6 +54,7 @@ class Text:
                 self.chars[n].disable()
                 self.chars[n].set_frame(255-ord(l))
 
+
 class Numbers:
 
     def __init__(self, x, y, len, label=None, label_width=0, sprite="yellow_numerals.png"):
@@ -159,6 +160,12 @@ class Bullet(Sprite):
             else:
                 self.reset()
 
+
+
+
+
+
+
 class Item(Sprite): 
 
     def __init__(self, bullet):
@@ -220,16 +227,24 @@ class Item(Sprite):
             else:
                 self.next_frame()
 
+
 class Lolero(Sprite):
 
     def __init__(self):
         super().__init__()
-        self.set_strip(stripes["lolero.png"])
+        self.set_strip(stripes["fedora.png"])
+        self.is_active = True
+        self.can_move = True
+        self.has_debuff = False
+        self.debuff_turns = 0
+        self.modo_fedora = False
+        self.hp = 0
+        self.speed = 0
         self.revive()
 
     def revive(self):
         self.set_x(192)
-        self.set_y(18)
+        self.set_y(16)
         self.set_frame(0)
         self.is_active = True
         self.can_move = True
@@ -237,6 +252,7 @@ class Lolero(Sprite):
         self.debuff_turns = 0
         self.hp = 5
         self.speed = 5
+        self.original_speed = self.speed
 
     def se_baña(self, value):
         self.hp -= value
@@ -244,7 +260,8 @@ class Lolero(Sprite):
             self.morite()
 
     def se_realentiza(self):
-        self.speed = 20
+        
+        self.speed = self.original_speed*4
         self.debuff_turns = 3
         self.has_debuff = True
 
@@ -258,7 +275,7 @@ class Lolero(Sprite):
     def step(self, step_counter):
         
         if self.debuff_turns <= 0:
-            self.speed = 5
+            self.speed = self.original_speed
             self.has_debuff = False
 
         if self.is_active and step_counter % self.speed == 0 :
@@ -270,6 +287,81 @@ class Lolero(Sprite):
             if self.has_debuff:
                 self.debuff_turns -= 1
 
+class Brian(Lolero):
+
+    def __init__(self):
+        super().__init__()
+        self.set_strip(stripes["lolero.png"])
+        self.frame_amount = 4
+
+    def revive(self):
+        super().revive()
+        self.hp = 5
+        self.speed = 5
+        self.original_speed = self.speed
+    
+    def step(self, step_counter):
+        super().step(step_counter)
+
+class NarutoRunner(Lolero):
+
+    def __init__(self):
+        super().__init__()
+        self.set_strip(stripes["naruto_runner.png"])
+        self.frame_amount = 11
+
+    def revive(self):
+        super().revive()
+        self.hp    = 5
+        self.speed = 2
+    
+    def step(self, step_counter):
+        super().step(step_counter)
+        
+
+class Furro(Lolero):
+
+    def __init__(self):
+        super().__init__()
+        self.set_strip(stripes["furry.png"])
+        self.frame_amount = 4
+
+    def revive(self):
+        super().revive()
+        self.hp    = 5
+        self.speed = 5
+    
+    def step(self, step_counter):
+
+        if step_counter % 100 == 0:
+            self.set_y((self.y()) % 48 + 16)
+
+        super().step(step_counter)
+
+
+class FedoraGuy(Lolero):
+
+    def __init__(self):
+        super().__init__()
+        self.set_strip(stripes["fedora.png"])
+        self.frame_amount = 4
+
+    def revive(self):
+        super().revive()
+        self.hp    = 5
+        self.speed = 5
+    
+    def step(self, step_counter):
+        
+        if step_counter % 120 == 0:
+            self.modo_fedora = not self.modo_fedora
+        
+        if self.modo_fedora:
+            if self.frame() < 7 and step_counter % 5 == 0:
+                self.set_frame(self.frame()+1)
+        else:
+            super().step(step_counter)
+        
 class Menu():
 
     def next_mode(self):
@@ -385,7 +477,7 @@ class vs(Scene):
     def on_enter(self):
         super(vs, self).on_enter()
         
-        self.loleros = [Lolero() for _ in range(1)]
+        self.loleros = [FedoraGuy() for _ in range(1)]
   
         self.purchased_item_id = None
         self.purchased_item = Sprite()
@@ -431,25 +523,25 @@ class vs(Scene):
 
         for lolero in self.loleros:
             if lolero.is_active:
+                if not lolero.modo_fedora:
+                    lolero.can_move = True
+                    bullet = lolero.collision(self.bullets)
+                    if bullet:
+                        if bullet.is_active and not bullet.is_reloading:
+                            if bullet.type == "Jabon":
+                                lolero.se_baña(1)
+                            if bullet.type == "Desodorante":
+                                lolero.se_realentiza()
+                            bullet.reset()
 
-                lolero.can_move = True
-                bullet = lolero.collision(self.bullets)
-                if bullet:
-                    if bullet.is_active and not bullet.is_reloading:
-                        if bullet.type == "Jabon":
-                            lolero.se_baña(1)
-                        if bullet.type == "Desodorante":
-                            lolero.se_realentiza()
-                        bullet.reset()
-
-                item = lolero.collision(self.items)
-                if item:
-                    if item.is_active:
-                        lolero.can_move = False
-                        item.se_ensucia(1, self.step_counter)
-                        if item.type == "Tocar pasto":
-                            lolero.se_baña(10)
-                            item.deactivate()
+                    item = lolero.collision(self.items)
+                    if item:
+                        if item.is_active:
+                            lolero.can_move = False
+                            item.se_ensucia(1, self.step_counter)
+                            if item.type == "Tocar pasto":
+                                lolero.se_baña(10)
+                                item.deactivate()
 
                 lolero.step(self.step_counter)
 
@@ -482,12 +574,10 @@ class vs(Scene):
             if director.was_pressed(director.JOY_UP):
                 #Quizás up y down puedan cambiar la descripcion del item
                 self.menu.next_mode()
-                #self.menu.set_mode("items")
 
             if director.was_pressed(director.JOY_DOWN):
                 # Quizás up y down puedan cambiar la descripcion del item
                 self.menu.next_mode()
-                #self.menu.set_mode("nerds")
 
             if director.was_pressed(director.BUTTON_A):
                 if self.menu.mode == "items":
