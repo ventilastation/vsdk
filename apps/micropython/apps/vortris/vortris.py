@@ -9,6 +9,20 @@ ROWS = 18
 
 DEBUG = True
 
+class Vortex(Sprite):
+    def __init__(self):
+        super().__init__()
+        self.set_strip(stripes["fondo.png"])
+        self.set_perspective(0)
+        self.set_frame(0)
+        self.set_x(0)
+        self.set_y(10)
+
+    def grow(self, step_size = 10):
+        self.set_x(0)
+        self.set_y(self.y() + step_size)
+
+
 class Pieza(Sprite):
     def reset(self, col, row, shape_id):
         self.col = col
@@ -37,6 +51,7 @@ class Tablero:
         self.board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
         self.score = 0
         self.gameover = False
+        self.vortex = Vortex()
         self.spawn()
 
     def spawn(self):
@@ -132,6 +147,9 @@ class Vortris(Scene):
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
+
+        if director.was_pressed(director.JOY_UP):
+            self.game.vortex.grow()
 
     def finished(self):
         director.pop()
