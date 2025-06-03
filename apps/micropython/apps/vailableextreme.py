@@ -9,18 +9,19 @@ import gc
 TIME_MODIFIER = 3400
 
 SCORE_STATES = {
-    "miss" : 0, 
-    "good" : 1, 
+    "miss" : 0,
+    "good" : 1,
     "perfect" : 2,
     "x": 3
 }
 
 BUTTON = director.JOY_DOWN
 
-MISS_LIMIT=(255,45)
-GOOD_LIMIT=(35,25)
-PERFECT_LIMIT=(45,35)
+GOOD_LIMIT_1=(39,35)
+PERFECT_LIMIT=(35,30)
+GOOD_LIMIT_2=(30,25)
 ANIMATION_LIMIT=(25,1)
+MISS_LIMIT=(255,GOOD_LIMIT_1[0])
 
 
 class CirclePart(Sprite):
@@ -69,36 +70,42 @@ class Circle:
                 self.first = False
                 return
 
+            if not order_list:
+                self.first = False
+                return
+
             py = part.y()
 
             # y[255,40] MISS
-            if MISS_LIMIT[1] <= py <= MISS_LIMIT[0]:
-                if not any(number < part.order for number in order_list): self.first = True
-                if self._detect_first(order_list,part,0):
-                    self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["miss"]
+            if MISS_LIMIT[1] < py <= MISS_LIMIT[0]:
+                if not any(number < part.order for number in order_list):
+                    self.first = True
+                    self.state = SCORE_STATES["miss"]
 
             # y[45,35] GOOD
-            elif PERFECT_LIMIT[1] <= py <= PERFECT_LIMIT[0]:
-                if not any(number < part.order for number in order_list): 
+            elif GOOD_LIMIT_1[0] >= py > GOOD_LIMIT_1[1]:
+                if self._detect_first(order_list,part,1):
                     self.first = True
-                if self._detect_first(order_list,part,2):
-                    self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["perfect"]
-
-            # y[35,25] GOOD
-            elif GOOD_LIMIT[1] <= py <= GOOD_LIMIT[0]:
-                if not any(number < part.order for number in order_list): self.first = True
-                if self._detect_first(order_list,part,2):
                     self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["good"]
 
-
+            # y[35,27] PERFECT
+            elif PERFECT_LIMIT[0] >= py >= PERFECT_LIMIT[1]:
+                if self._detect_first(order_list,part,1):
+                    self.first = True
+                    self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["perfect"]
             
-            # y[25,1] animation score
-            elif ANIMATION_LIMIT[1] < py < ANIMATION_LIMIT[0]:
-                part.set_y(0)
-                if part.is_red:
-                    pass
-                else:
+            # y[27,25] GOOD
+            elif GOOD_LIMIT_2[0] > py > GOOD_LIMIT_2[1]:
+                if self._detect_first(order_list,part,1):
+                    self.first = True
+                    self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["good"]
+            
+                if 27 >= py:
                     self.state = SCORE_STATES["miss"]
+
+            # y[25,1] animation score
+            elif 25 >= py > 1:
+                part.set_y(1)
 
             # Delete quarter and order
             elif py <= 1:
@@ -107,7 +114,6 @@ class Circle:
                     order_list.remove(part.order)
                 if not self in disabled_list:
                     disabled_list.append(self)
-                part.set_y(255)
                 part.disable()
         
         if self.first:
@@ -115,16 +121,16 @@ class Circle:
 
     @staticmethod
     def _detect_first(order_list, part, frame):
+        part.set_frame(frame)
 
         if any(number < part.order for number in order_list):
-            part.set_frame(frame)
             return False
         
         if director.was_pressed(part.button):
-            part.set_y(1)
+            part.set_y(27)
+            part.disable()
             return True
         elif part.score_state not in (SCORE_STATES["good"], SCORE_STATES["perfect"], SCORE_STATES["x"]):
-            part.set_frame(frame)
             return True
     
     @staticmethod
@@ -153,8 +159,6 @@ class Circle:
                         elif int(beat) == 2:
                             i.is_red = True
                             i.set_strip(stripes["borde_rojo.png"])
-
-                    print(f"----------------")
                     return order
                 except:
                     print("disabled_lines error : " + disabled_lines)
@@ -171,22 +175,17 @@ class Music:
             
     
     def beat(self,actual_time):
-        time = int(actual_time) + TIME_MODIFIER
+        time = int(actual_time)
         if time in self.ms and self.anterior != time:
-            # print(self.ms[actual_time])
             self.anterior = time
             return self.ms[time]
     
 class Animation:
     def __init__(self,cantidad):
         self.enabled_animations = []
-        self.disabled_animations = [[ScoreAnimation(i,BUTTON,ANIMATION_LIMIT[0]-1) for i in range(4)] for _ in range(cantidad)]
+        self.disabled_animations = [[ScoreAnimation(i,BUTTON,24) for i in range(4)] for _ in range(cantidad)]
 
-    def score(self,state):
-        #Set
-        self._set_score_animation(state,False)
-        
-        #Move
+    def move_score(self):
         for animation in self.enabled_animations:
             for quarter in animation:
                 if animation in self.disabled_animations:
@@ -197,12 +196,13 @@ class Animation:
                 elif quarter.y() <= 1:
                     self.disabled_animations.append(animation)
                     quarter.disable()
-                    quarter.set_y(GOOD_LIMIT[1]-2)
+                    quarter.set_y(GOOD_LIMIT_2[1]-2)
                 
-    def _set_score_animation(self,state,auto):
+    def set_score(self,state,auto):
         for animation in self.disabled_animations:
             try:
-                if director.was_pressed(BUTTON) or auto:
+                if auto:
+                    print(f"seteando {auto} -- {state}")
                     score = self.disabled_animations.pop()
 
                     if not score in self.enabled_animations:
@@ -210,19 +210,19 @@ class Animation:
 
                     for i in score:
                         i.set_frame(state)
-                        i.set_y(GOOD_LIMIT[1]-2)
+                        i.set_y(GOOD_LIMIT_2[1]-2)
             except:pass
-
-        self.state_anterior = state
 
 class Mode:
     def __init__(self):
         self.score = 10
         self.contador_perfect = 0
         self.mode = 0
+        self.state = 0
     
-    def life(self, state, manual=False):
-        if director.was_pressed(BUTTON) or manual:
+    def life(self, state, auto=False):
+        if director.was_pressed(BUTTON) or auto:
+            self.state = state
             if state == SCORE_STATES["miss"]:
                 self.score -= 1
                 self.contador_perfect = 0
@@ -245,7 +245,11 @@ class Mode:
                 self.mode = 1
             else:
                 self.mode = 0
-        return self.mode
+
+        if self.state == 0:
+            return -2
+        else:
+            return self.mode
 
 class Dancer:   
     def __init__(self):
@@ -267,7 +271,7 @@ class Dancer:
             self.count += 1
         else:
             self.count = 0
-
+        
         if mode == -1:
             sprite_list = self.sprites_d
         elif mode == 0:
@@ -297,7 +301,6 @@ class VailableExtremeGame(Scene):
         super(VailableExtremeGame, self).on_enter()
     
         self.music_test = Music("apps/extreme_songs/electrochongo.txt")
-        director.music_play("vailableextreme/electrochongo")
         self.start_time = utime.ticks_ms()
 
         self.order = 0
@@ -307,25 +310,25 @@ class VailableExtremeGame(Scene):
 
         self.mode = Mode()
         
+        # create limit
+        self.limit_good_line = [LimitScoreLine(i,BUTTON,(34)) for i in range(4)]
+        self.limit_good_line = [LimitScoreLine(i,BUTTON,(41)) for i in range(4)]
+
         # create circles
         self.enabled_lines = []
         self.disabled_lines = [Circle(ExpandingLine,BUTTON,255) for _ in range(10)]
-
-        # create limit
-        self.limit_good_line = [LimitScoreLine(i,BUTTON,30) for i in range(4)]
 
         self.animation = Animation(7)
 
         self.score_state = 0
         self.beat = 0
 
-
     def step(self):
         actual_time = utime.ticks_diff(utime.ticks_ms(), self.start_time)
         redondeado = (actual_time // 50) * 50
-        print(utime.ticks_diff(utime.ticks_ms(), self.start_time))
 
-        self.animation.score(self.score_state)
+        if redondeado == TIME_MODIFIER:
+            director.music_play("vailableextreme/electrochongo")
 
         self.beat = self.music_test.beat(redondeado)
 
@@ -335,7 +338,6 @@ class VailableExtremeGame(Scene):
             if order:
                 self.order = order 
                 break
-            
         
         # Boundary detection and circle movement
         for circle in self.enabled_lines:
@@ -343,31 +345,27 @@ class VailableExtremeGame(Scene):
                 state = circle.limits(self.disabled_lines,self.exit_order)
                 if state != None: self.score_state = state
                 circle.expand(2,self.disabled_lines)
-
-
+        
         # Automatic Animation score when passing pixel 25
-        for obj in self.enabled_lines:
+        for obj in self.enabled_lines:  
             for part in obj.circle:
-                if not any(number < part.order for number in self.exit_order) and part.y() == GOOD_LIMIT[1] and not part.is_red and not director.was_pressed(BUTTON):
-                    self.score_state = SCORE_STATES["miss"]
-                    self.animation._set_score_animation(self.score_state,True)
+                if part.y() == 25 and not part.is_red:
+                    self.animation.set_score(self.score_state,True)
                     self.mode.life(self.score_state,True)
+                    part.disable()
                     self.dancer.dance(self.mode.mangment())
                     break
         
-        #Life
-        self.mode.life(self.score_state)
+        self.animation.move_score()
 
-        #Dance
-        if director.was_pressed(BUTTON):
-            self.dancer.dance(self.mode.mangment())
+        if not self.exit_order:
+            self.score_state = 0
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
         gc.collect()
 
-    
 
     def finished(self):
         director.pop()
