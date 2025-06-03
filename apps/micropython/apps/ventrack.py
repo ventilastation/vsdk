@@ -3,6 +3,8 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 import time
+import json
+from itertools import zip_longest
 
 PISTAS = 16
 
@@ -163,6 +165,114 @@ class Ventrack(Scene):
     def finished(self):
         director.pop()
         raise StopIteration()
+
+class Instrument:
+    sound_bank: str
+    kind: str # L, B, D 
+    patterns: list[list[int]]
+    
+    def __init__(self, sound_bank, kind, patterns=None):
+        self.sound_bank = sound_bank
+        self.kind = kind
+        self.patterns = patterns if patterns else [ [0]*16 ] * 16
+    
+    def __iter__(self):
+        for pattern in self.patterns:
+            for note in pattern:
+                if note:
+                    yield f"{self.sound_bank}{self.kind}{note:02d}"
+                    # x ej: AL09
+                else:
+                    # do not play anything for note 0
+                    yield ""
+    
+
+class Sonidito:
+    instruments: list[Instrument]
+    interval: int   # between steps, in milliseconds
+    n_step: int = 0     # step number for the rayita.
+    step_ts: int    # Timestamp of the last step, in ms from the epoch
+    
+    def __init__(self, scene, interval, n_step=0):
+        self.scene = scene
+        self.interval = interval
+        self.n_step = n_step
+
+        self.instruments = [] # There must be at least one instrument
+        self.sounds_iterable = self.loop()
+        
+        self.callback()
+    
+    def loop(self):
+        while True:
+            for step in zip_longest(*self.instruments, [None]):
+                self.n_step = (self.n_step + 1) % 16
+                for sound in step: #step will be a list of sounds
+                    if sound:
+                        director.sound_play("ventrack/"+sound)
+                yield
+    
+    def callback(self):
+        self.scene.call_later(self.interval, self.callback)
+        self.step_ts = time_ms()
+        
+        next(self.sounds_iterable) #makes sound for this step
+    
+    def to_json(self):
+        """
+        {
+            "interval": 150
+            "patterns": [
+                [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4],
+                # 0 o null es silencio
+                [ … ]
+            ],
+            "instruments": [
+                {
+                    "sound_bank": "A",
+                    "kind": "L" #lead
+                    "patterns": [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+                },
+                {
+                    "sound_bank": "A",
+                    "kind": "B", #bass
+                    "pattern": [ 0, None, 0, None, 0, None, 0, None, 0, None, 0, None, 0, None, 0, None, ],
+                },
+                {
+                    "sound_bank": "A",
+                    "kind": "D", #drums
+                    "pattern": [ 1, 1, 1, 1, None, None, instrument…]
+                }
+            ]
+        }
+        """
+        out_interval = self.interval
+        
+        out_patterns = {tuple(pattern) for instrument in self.instruments for pattern in instrument.patterns}
+        out_patterns = list(out_patterns)
+        
+        out_instruments = [
+            {
+                'sound_bank': instrument.sound_bank,
+                'kind': instrument.kind,
+                'patterns': list(out_patterns.index(tuple(pattern)) for pattern in instrument.patterns)
+            }
+            for instrument in self.instruments
+        ]
+        
+        return json.dumps({
+                "interval": out_interval,
+                "patterns": out_patterns,
+                "instruments": out_instruments
+        })
+    
+
+class MockDirector:
+    sound_play = print
+class MockScene:
+    def call_later(self, *args, **kwargs):
+        print(args, kwargs)
+        #call callback manually later :P
 
 
 def main():
