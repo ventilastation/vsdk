@@ -14,6 +14,7 @@ class SpawnerEnemigos():
         
         seed(ticks_ms())
 
+
     def step(self):
         if self.tiempo_siguiente_spawn == -1:
             return
@@ -21,14 +22,29 @@ class SpawnerEnemigos():
         if ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0:
             self.spawnear_enemigo()
 
+
     def spawnear_enemigo(self):
-        e = self.manager.get_enemigo(choice(TIPOS_DE_ENEMIGO))
+        tipo = choice(TIPOS_DE_ENEMIGO)
+        
+        if tipo == Chiller:
+            enemigos = []
+            for _ in range(3):
+                e = self.manager.get_enemigo(Chiller)
+                if not e:
+                    return
+                
+                enemigos.append(e)
+        else:
+            e = self.manager.get_enemigo(tipo)
+            if not e:
+                return
 
-        if not e:
-            return
+            enemigos = [e]
 
-        e.reset()
-
-        e.set_position(randint(0, 254), 0)
+        pos = randint(0, 255)
+        for e in enemigos:
+            e.reset()
+            e.set_position(pos, 0)
+            pos = (pos + 256 // 3) % 256
 
         self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(INTERVALO_DE_SPAWN * 1000))

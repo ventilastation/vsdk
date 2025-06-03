@@ -102,7 +102,7 @@ class ChillerBajando(Bajando):
     def on_enter(self):
         super().on_enter()
         self.frames_left = 30
-        self.entidad.set_direccion(choice([-1 ,1]))
+        self.entidad.set_direccion(-self.entidad.direccion)
 
     def step(self):
         cambio = super().step()
@@ -134,16 +134,6 @@ class Orbitando(Vulnerable):
 
 
 class Persiguiendo(Vulnerable):
-    # Gracias vyruss ;)
-    def calculate_direction(current, destination):
-        center_delta = 128 - current
-        new_destination = (destination + center_delta) % 256
-        if new_destination < 128:
-            return -1
-        if new_destination > 128:
-            return +1
-        return 0
-
     def step(self):
         cambio = super().step()
         if cambio:
