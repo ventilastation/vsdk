@@ -71,7 +71,8 @@ class Vulnerable(Estado):
         if not es_nave:
             nave = self.entidad.scene.nave
             
-            if self.entidad.collision([nave]):
+            if not isinstance(nave.estado, Deshabilitado) and \
+                self.entidad.collision([nave]):
                 nave.hit()
                 
                 return Explotando
