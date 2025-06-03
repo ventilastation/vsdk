@@ -134,6 +134,16 @@ class Orbitando(Vulnerable):
 
 
 class Persiguiendo(Vulnerable):
+    # Gracias vyruss ;)
+    def calculate_direction(current, destination):
+        center_delta = 128 - current
+        new_destination = (destination + center_delta) % 256
+        if new_destination < 128:
+            return -1
+        if new_destination > 128:
+            return +1
+        return 0
+
     def step(self):
         cambio = super().step()
         if cambio:
@@ -144,7 +154,8 @@ class Persiguiendo(Vulnerable):
 
         e = self.entidad
         x, y = e.get_position()
-        delta_x = (nave_x - 128) % 256 - (x - 128) % 256
+        delta_x = nave_x - x
+        delta_x = delta_x if abs(delta_x) < 128 else -delta_x
         delta_y = nave_y - y
         mag = sqrt(delta_x ** 2 + delta_y ** 2)
 
