@@ -170,6 +170,7 @@ class Music:
         file = open(filepath, "r")
         self.ms = {}
         self.tipo = []
+        self.contador = 0
         for line in file:
             partes = line.strip().split('\t')
             self.ms[int(partes[0])] = int(partes[1])
@@ -177,9 +178,13 @@ class Music:
     
     def beat(self,actual_time):
         time = int(actual_time)
+        if self.contador > len(self.ms):
+            return "win"
         if time in self.ms and self.anterior != time:
             self.anterior = time
+            self.contador += 1
             return self.ms[time]
+            
     
 class Animation:
     def __init__(self,cantidad):
@@ -351,6 +356,8 @@ class VailableExtremeGame(Scene):
             director.music_play("vailableextreme/electrochongo")
 
         self.beat = self.music_test.beat(redondeado)
+        if self.beat == "win":
+            self.cronometrer = actual_time + 3000
 
         # circle management
         for circle in self.disabled_lines:
