@@ -6,6 +6,7 @@ stripes = [
         strip("items.png",           frames=10),
         strip("smeti.png",           frames=10),
         strip("sdren.png",           frames=10),
+        strip("red_numerals.png",    frames=10),
         strip("yellow_numerals.png", frames=10),
         strip("white_numerals.png",  frames=10),
         strip("road.png",            frames=1),

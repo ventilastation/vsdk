@@ -12,7 +12,8 @@ from ventilastation.sprites import Sprite
 # 5 para las opciones del menú
 # 9 para los items en el tablero
 # 9 para las balas
-# Total: 31
+# 3 * 4 = 12 para los loleros
+# Total: 43
 
 # Hardodeables:
 # 4 para el precio del item del menu
@@ -25,14 +26,19 @@ from ventilastation.sprites import Sprite
 # 12 para las letras de las descripciones del menu
 # Total de hardcodeables: 34
 
-# Total: 65
+# Total: 77
 
 # Dadas dos coordinadas en una matriz de tamaño 3x3 te dice qué indice es en un array tamaño 9
 def coords(i, j):
     return i + j*3
 
+# 0 = Brian
+# 1 = Fedora
+# 2 = Naruto
+# 3 = Furro
 # [(step, tipo, carril)]
-level_1 = [ (0, 0, 0), (60, 0, 1), (120, 0, 2)]
+
+level = [ (0, 2, 0), (60, 0, 1), (120, 0, 2)]
 
 class Text:
     def __init__(self, x, y, len, sprite):
@@ -59,7 +65,7 @@ class Text:
 
 class Numbers:
 
-    def __init__(self, x, y, len, label=None, label_width=0, sprite="yellow_numerals.png"):
+    def __init__(self, x, y, len, label=None, label_width=0):
         self.chars = []
         self.len = len
         self.hidden_digits = []
@@ -74,7 +80,7 @@ class Numbers:
 
         for n in range(len):
             s = Sprite()
-            s.set_strip(stripes[sprite])
+            s.set_strip(stripes["yellow_numerals.png"])
             s.set_x(x + n * 4 + label_width)
             s.set_y(y)
             s.set_frame(10)
@@ -82,6 +88,10 @@ class Numbers:
             self.chars.append(s)
         
         self.setnumbers(0)
+
+    def set_sprite(self, sprite):
+        for n in range(self.len):
+            self.chars[n].set_strip(stripes[sprite])
 
     def set_label(self, label):
         self.label.set_strip(stripes[label])
@@ -100,6 +110,16 @@ class Numbers:
             if n < len(self.chars) and n not in self.hidden_digits:
                 v = ord(l) - 0x30
                 self.chars[n].set_frame(v)
+
+
+
+
+# ______       _           
+# | ___ \     | |          
+# | |_/ / __ _| | __ _ ___ 
+# | ___ \/ _` | |/ _` / __|
+# | |_/ / (_| | | (_| \__ \
+# \____/ \__,_|_|\__,_|___/
 
 class Bullet(Sprite):
     
@@ -164,10 +184,13 @@ class Bullet(Sprite):
 
 
 
-
-
-
-
+#  _____ _                     
+# |_   _| |                    
+#   | | | |_ ___ _ __ ___  ___ 
+#   | | | __/ _ \ '_ ` _ \/ __|
+#  _| |_| ||  __/ | | | | \__ \
+#  \___/ \__\___|_| |_| |_|___/
+                            
 class Item(Sprite): 
 
     def __init__(self, bullet):
@@ -230,6 +253,15 @@ class Item(Sprite):
                 self.next_frame()
 
 
+
+
+#  _           _                    
+# | |         | |                   
+# | |     ___ | | ___ _ __ ___  ___ 
+# | |    / _ \| |/ _ \ '__/ _ \/ __|
+# | |___| (_) | |  __/ | | (_) \__ \
+# \_____/\___/|_|\___|_|  \___/|___/
+
 class Lolero(Sprite):
 
     def __init__(self):
@@ -289,7 +321,6 @@ class Brian(Lolero):
         super().__init__()
         self.set_strip(stripes["lolero.png"])
 
-
 class NarutoRunner(Lolero):
 
     def __init__(self):
@@ -299,7 +330,6 @@ class NarutoRunner(Lolero):
         super().__init__()
         self.set_strip(stripes["naruto_runner.png"])
        
-    
 class Furro(Lolero):
 
     def __init__(self):
@@ -334,7 +364,17 @@ class FedoraGuy(Lolero):
                 self.set_frame(self.frame()+1)
         else:
             super().step(step_counter)
-        
+
+
+
+
+# ___  ___                 
+# |  \/  |                 
+# | .  . | ___ _ __  _   _ 
+# | |\/| |/ _ \ '_ \| | | |
+# | |  | |  __/ | | | |_| |
+# \_|  |_/\___|_| |_|\__,_|
+
 class Menu():
 
     def next_mode(self):
@@ -374,7 +414,7 @@ class Menu():
                 
         self.items_name        = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
         self.items_description = ["limpia nerds", "intocable", "da burbujas", "los espanta", "kabum!"]
-        self.items_price       = [100, 200, 300, 400, 500]
+        self.items_price       = [100, 200, 200, 400, 500]
         self.items_hps         = [5, 25, 5, 5,  1]
         self.items_atks        = [1,  0, 0, 0, 10]
 
@@ -388,16 +428,23 @@ class Menu():
 
         self.text        = Text(x=94,    y=14, len=13, sprite="letras_sirg.png")
         self.description = Text(x=94,    y=26, len=12, sprite="letras_edrev.png")
-        self.price       = Numbers(x=70, y=8,  len=4,  label="burbujita.png",        label_width=4)
-        self.hp          = Numbers(x=70, y=14, len=2,  label="hp.png" ,              label_width=12)
-        self.atk         = Numbers(x=70, y=20, len=2,  label="atk.png",              label_width=12)
+        self.price       = Numbers(x=70, y=8,  len=4,  label="burbujita.png", label_width=4)
+        self.hp          = Numbers(x=70, y=14, len=2,  label="hp.png" ,       label_width=12)
+        self.atk         = Numbers(x=70, y=20, len=2,  label="atk.png",       label_width=12)
 
         self.write_description()
     
-    def move_focus_to(self, direction):
+    def move_focus_to(self, direction, money):
         self.items[self.selected_id].set_y(self.y)
         self.selected_id = (self.selected_id + direction) % 5
         self.items[self.selected_id].set_y(self.selected_y)
+        
+        self.price.set_sprite("yellow_numerals.png")
+    
+        if self.mode == "items":
+            if money < self.items_price[self.selected_id]:
+                self.price.set_sprite("red_numerals.png")
+
         self.write_description()
 
     def get_focused_item_info(self):
@@ -420,7 +467,17 @@ class Menu():
             self.price.setnumbers(self.nerd_speed[self.selected_id])
             self.hp.setnumbers(self.nerd_hps[self.selected_id])
             self.atk.setnumbers(self.nerd_atks[self.selected_id])
-            
+
+
+
+
+#  _____                         
+# |  ___|                        
+# | |__ ___  ___ ___ _ __   __ _ 
+# |  __/ __|/ __/ _ \ '_ \ / _` |
+# | |__\__ \ (_|  __/ | | | (_| |
+# \____/___/\___\___|_| |_|\__,_|
+                                                            
 class vs(Scene):
 
     stripes_rom = "vs"
@@ -477,8 +534,9 @@ class vs(Scene):
         self.j = 0
 
         self.money = 0
-        self.money_counter = Numbers(x=66, y=0,  len=5, label="burbujita.png", label_width=5, sprite="white_numerals.png")
-        self.add_money(10000)
+        self.money_counter = Numbers(x=66, y=0,  len=5, label="burbujita.png", label_width=5)
+        self.money_counter.set_sprite("white_numerals.png")
+        self.add_money(1000)
 
         self.road = Sprite()
         self.road.set_strip(stripes["road.png"])
@@ -492,9 +550,9 @@ class vs(Scene):
 
     def manage_level(self):
 
-        if self.level_id < len(level_1):
+        if self.level_id < len(level):
                     
-            step, lolero_id, j = level_1[self.level_id]
+            step, lolero_id, j = level[self.level_id]
             if self.step_counter >= step:
                 for lolero in self.tribus[lolero_id]:
                     if not lolero.is_active:
@@ -541,6 +599,10 @@ class vs(Scene):
                                     item.deactivate()
 
                     lolero.step(self.step_counter)
+                    
+                    # Lolero llega a base
+                    if 64-16 < lolero.x() < 192:
+                        self.finished()
 
         if self.purchased_item_id != None:
 
@@ -563,17 +625,15 @@ class vs(Scene):
         else:
 
             if director.was_pressed(director.JOY_RIGHT):
-                self.menu.move_focus_to(1)
+                self.menu.move_focus_to(1, self.money)
     
             if director.was_pressed(director.JOY_LEFT):
-                self.menu.move_focus_to(-1)
+                self.menu.move_focus_to(-1, self.money)
 
             if director.was_pressed(director.JOY_UP):
-                #Quizás up y down puedan cambiar la descripcion del item
                 self.menu.next_mode()
 
             if director.was_pressed(director.JOY_DOWN):
-                # Quizás up y down puedan cambiar la descripcion del item
                 self.menu.next_mode()
 
             if director.was_pressed(director.BUTTON_A):
@@ -584,6 +644,8 @@ class vs(Scene):
                         self.add_money(-price)
                         self.purchased_item_id = id
                         self.temporarily_place_item(0,0)
+
+                        self.menu.move_focus_to(0, self.money)
 
                         self.menu.change_focused_item_frame(5)
                         print("Compramos "  + name)
