@@ -8,6 +8,8 @@ from .rotaciones import ROTACIONES
 COLS = 16
 ROWS = 18
 
+VORTEX_TIME = 30  # in seconds
+
 DEBUG = True
 
 class ScoreBoard:
@@ -39,10 +41,12 @@ class Vortex(Sprite):
         self.set_x(0)
         self.row = ROWS - 4
         self.set_y(self.row * 8)
+        self.steps = 0
 
     def grow(self):
         self.row += 1
         self.set_y(self.row * 8)
+        self.steps += 1
 
 
 class Pieza(Sprite):
@@ -70,7 +74,7 @@ class Pieza(Sprite):
 class Tablero:
     def __init__(self):
         self.unused_pieces = [Pieza() for _ in range(80)]
-        self.board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
+        self.board = [[0 for _ in range(COLS)] for _ in range(ROWS - 1)]
         self.score = 0
         self.gameover = False
         self.vortex = Vortex()
@@ -102,7 +106,7 @@ class Tablero:
                 if grilla_pieza[y*4+x] == "X":
                     self.board[(y + self.current.row) - 1][(self.current.col + x) - 1] = self.current.shape_id + 1
         if DEBUG:
-            for row in range(ROWS):
+            for row in range(len(self.board)):
                 for col in range(COLS):
                     print("X" if self.board[row][col] else "_", end='')
                 print()
@@ -135,6 +139,24 @@ class Tablero:
     def drop(self):
         if not self.move(0, 1):
             self.freeze()
+
+    def check_last_row(self):
+        steps = self.vortex.steps
+
+        if steps == 0:
+            return
+
+        last_row = self.board[-steps]
+
+        if DEBUG:
+            print("*"*10)
+            print(f"Num. of steps of the vortex: {steps}")
+            print(f"Last row's status: {last_row}")
+            print("*"*10)
+
+        if all([x > 0 for x in last_row]):
+            self.score += 1
+            self.scoreboard.setscore(self.score)
 
 
 class Vortris(Scene):
@@ -172,9 +194,10 @@ class Vortris(Scene):
         now = utime.ticks_ms()
         gap_time = utime.ticks_diff(now, self.last_vortex_growth) / 1000 # should be in secs.
         
-        if gap_time >= 10:
+        if gap_time >= VORTEX_TIME:
             self.game.vortex.grow()
             self.last_vortex_growth = now
+            self.game.check_last_row()
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
