@@ -166,6 +166,11 @@ class BajandoEnEspiral(Bajando):
         self.probabilidad_cambio_direccion : int = 25
         self.frames_left = self.frames_cambio_direccion
 
+        roll = randint(0, 100)
+        self.entidad.set_direccion(1 if roll < 50 else -1)
+        
+        self.entidad.set_frame(0 if self.entidad.direccion == 1 else 1)
+
     def step(self):
         cambio = super().step()
         if cambio:

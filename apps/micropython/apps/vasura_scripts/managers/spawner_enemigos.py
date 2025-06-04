@@ -176,9 +176,10 @@ class SpawnRandomIncremental(ComportamientoSpawn):
 
 
 class WaveEnemigos:
-    def __init__(self, pasos:List[(Enemigo, int, float)]):
+    def __init__(self, pasos:List[(Enemigo, int, float)], delay:float = 0):
         self.id = id
 
+        self.delay = delay * 1000
         self.pasos = []
         self.terminada : bool = False
 
@@ -200,28 +201,32 @@ class WaveEnemigos:
         return p
 
 class SpawnPorWaves(ComportamientoSpawn):
-    def __init__(self, waves:List[WaveEnemigos], no_quedan_enemigos:callable, delay : float = 0):
+    def __init__(self, waves:List[WaveEnemigos], no_quedan_enemigos_vivos:callable, delay : float = 0):
         super().__init__()
-        self.tiempo_siguiente_spawn : int = ticks_add(ticks_ms(), floor(delay * 1000))
         self.waves : List[WaveEnemigos] = waves
         self.waves.reverse()
 
         self.wave_actual : WaveEnemigos = self.waves.pop()
         
+        self.tiempo_siguiente_spawn : int = ticks_add(ticks_ms(), floor(delay + self.wave_actual.delay))
+
         self.tipo_enemigo_actual = None
         self.enemigos_restantes_paso : int = 0
         self.intervalo_spawn_actual : int = -1
 
-        self.no_quedan_enemigos : callable = no_quedan_enemigos
+        self.no_quedan_enemigos_vivos : callable = no_quedan_enemigos_vivos
 
     def get_siguiente_enemigo(self):
-        if self.wave_actual.terminada:
+        if self.wave_actual.terminada and self.enemigos_restantes_paso == 0:
             if not self.waves:
                 self.terminado = True
                 
                 return None
             
             self.wave_actual = self.waves.pop()
+            self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(self.wave_actual.delay))
+
+            return None
         
         if self.enemigos_restantes_paso == 0:
             self.tipo_enemigo_actual, self.enemigos_restantes_paso, self.intervalo_spawn_actual = self.wave_actual.get_siguiente_paso()
@@ -235,5 +240,5 @@ class SpawnPorWaves(ComportamientoSpawn):
     def deberia_spawnear(self):
         spawn_timeout = ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
 
-        return not self.terminado and (self.no_quedan_enemigos() if self.wave_actual.terminada else spawn_timeout)
+        return not self.terminado and (self.no_quedan_enemigos_vivos() if (self.wave_actual.terminada and self.enemigos_restantes_paso == 0) else spawn_timeout)
         

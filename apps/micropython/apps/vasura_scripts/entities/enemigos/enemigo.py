@@ -23,9 +23,12 @@ class Enemigo(Entidad):
 
     def reset(self):
         self.set_strip(stripes[self.strip])
-        self.set_estado(self.estado_inicial)
+
         self.set_frame(0)
         self.set_direccion(1)
+
+        self.set_estado(self.estado_inicial)
+        
 
 
     def step(self):
