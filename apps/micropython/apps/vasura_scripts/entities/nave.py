@@ -21,7 +21,7 @@ class Nave(Entidad):
         self.set_perspective(1)
         
         self.velocidad_x = 1.5
-        self.velocidad_y = 1.5
+        self.velocidad_y = 1.75
 
         self.set_estado(Invencible)
 
