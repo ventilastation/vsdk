@@ -13,22 +13,22 @@ class SpawnerEnemigos():
         self.comportamiento_fallback : ComportamientoSpawn = SpawnRandomIncremental(**comportamiento_test)
 
         waves = [
-            WaveEnemigos(4, [
-                #Tipo, cantidad, override de tiempo hasta siguiente spawn (0 para el default de la wave)
-                (Driller, 1, 0),
+            WaveEnemigos([
+                #Tipo, cantidad, tiempo de spawn
+                (Driller, 1, 4),
                 (Bully, 3, 2),
                 (Driller, 1, 0.1),
                 (Driller, 1, 2),
                 (Bully,   1, 0.1)
             ]),
-            WaveEnemigos(1, [
-                (Driller, 3, 0),
-                (Bully,   1, 0),
-                (Chiller, 1, 0)
+            WaveEnemigos([
+                (Driller, 3, 1),
+                (Bully,   1, 1),
+                (Chiller, 1, 1)
             ])
         ]
 
-        self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves, manager.enemigos_spawneados.is_empty)
+        self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves, manager.enemigos_spawneados.is_empty, delay=2)
                 
         seed(ticks_ms())
 
@@ -175,16 +175,15 @@ class SpawnRandomIncremental(ComportamientoSpawn):
 
 
 class WaveEnemigos:
-    def __init__(self, intervalo: float, pasos:List[(Enemigo, int, float)]):
+    def __init__(self, pasos:List[(Enemigo, int, float)]):
         self.id = id
 
-        self.intervalo_spawn : float = floor(intervalo * 1000)
         self.pasos = []
         self.terminada : bool = False
 
         pasos.reverse()
-        for tipo_enemigo, cantidad, override_intervalo in pasos:
-            t = floor(override_intervalo * 1000) if override_intervalo else self.intervalo_spawn
+        for tipo_enemigo, cantidad, intervalo_spawn in pasos:
+            t = floor(intervalo_spawn * 1000)
 
             self.pasos.append((tipo_enemigo, cantidad, t))
 
@@ -200,9 +199,9 @@ class WaveEnemigos:
         return p
 
 class SpawnPorWaves(ComportamientoSpawn):
-    def __init__(self, waves:List[WaveEnemigos], no_quedan_enemigos:callable):
+    def __init__(self, waves:List[WaveEnemigos], no_quedan_enemigos:callable, delay : float = 0):
         super().__init__()
-        self.tiempo_siguiente_spawn : int = -1
+        self.tiempo_siguiente_spawn : int = ticks_add(ticks_ms(), floor(delay * 1000))
         self.waves : List[WaveEnemigos] = waves
         self.waves.reverse()
 

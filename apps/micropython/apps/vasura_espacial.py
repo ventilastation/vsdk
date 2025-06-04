@@ -38,9 +38,6 @@ class VasuraEspacial(Scene):
 
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
 
-        #TODO Probablemente esta secuencia cambie.
-        self.spawner_enemigos.spawnear_enemigo()
-
 
     def step(self):
         self.nave.step()
