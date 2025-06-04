@@ -69,7 +69,7 @@ class SpawnerEnemigos():
         
         for e in enemigos:
             e.reset()
-            e.set_position(pos, 0)
+            e.set_position(pos, e.min_y)
             pos = (pos + 256 // 3) % 256
 
         

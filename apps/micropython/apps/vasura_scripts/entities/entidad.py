@@ -9,6 +9,8 @@ class Entidad(Sprite):
     velocidad_x : float = 0
     velocidad_y : float = 0
 
+    min_y : int = 0
+
     def __init__(self, scene, strip : int, x : int = 0, y : int = 0):
         super().__init__()
         #Eventos/callbacks
@@ -52,7 +54,7 @@ class Entidad(Sprite):
         self.x_interno %= 256
 
         self.y_interno += y
-        self.y_interno = max(min(self.y_interno, self.scene.planet.get_borde_y() - self.height()), self.height())
+        self.y_interno = max(min(self.y_interno, self.scene.planet.get_borde_y() - self.height()), self.min_y)
         self.round_position()
 
 
