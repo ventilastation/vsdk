@@ -1,12 +1,17 @@
-from urandom import choice, randrange, seed
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
-from apps.vasura_scripts.nave import Nave, Bala
-from apps.vasura_scripts.enemigo import *
+from apps.vasura_scripts.managers.balas_manager import *
+from apps.vasura_scripts.managers.enemigos_manager import *
+from apps.vasura_scripts.managers.gameplay_manager import *
 
-LIMITE_BALAS = 20
+from apps.vasura_scripts.managers.spawner_enemigos import SpawnerEnemigos
+
+from apps.vasura_scripts.entities.nave import Nave
+from apps.vasura_scripts.entities.planeta import Planeta
+
+
 
 class VasuraEspacial(Scene):
     stripes_rom = "vasura_espacial"
@@ -14,67 +19,52 @@ class VasuraEspacial(Scene):
     def on_enter(self):
         super(VasuraEspacial, self).on_enter()
 
-        self.nave = Nave(self, stripes["ship-sprite-asym.png"])
+        #Inicializacion
+        self.planet = Planeta(self)
 
-        self.planet = Sprite()
-        self.planet.set_strip(stripes["game-center.png"])
-        self.planet.set_perspective(0)
-        self.planet.set_frame(0)
-        self.planet.set_y(160)
+        self.manager_balas = BalasManager(self)
+        self.manager_enemigos = EnemigosManager(self)
+        self.spawner_enemigos = SpawnerEnemigos(self.manager_enemigos)
+        
+        self.nave = Nave(self, self.manager_balas)
+        
+        self.gameplay_manager = GameplayManager(self.nave)
 
-        self.enemigo = Driller(self, 50, 0)
+        #Suscripciones a eventos
+        self.planet.al_ser_golpeado.suscribir(self.gameplay_manager.on_planet_hit)
+        
+        self.gameplay_manager.al_perder_vida.suscribir(self.planet.al_perder_vida)
+        self.gameplay_manager.game_over.suscribir(self.muerte)
 
-        self.balas_libres = [
-            Bala(self, stripes["bala.png"]) 
-            for _ in range(LIMITE_BALAS)
-        ]
-
-        self.balas_usadas = []
+        self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
 
 
     def step(self):
-        self.nave.ArtificialStep()
-        self.enemigo.step()
-        [bala.step() for bala in self.balas_usadas]
+        self.nave.step()
+        self.manager_enemigos.step()
+        self.manager_balas.step()
+        self.gameplay_manager.step()
+        self.spawner_enemigos.step()
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
+    def on_exit(self):
+        self.nave.limpiar_eventos()
+        self.planet.limpiar_eventos()
+
+        self.manager_enemigos.limpiar()
+        self.gameplay_manager.limpiar()
+        self.manager_balas.limpiar()
+
     def finished(self):
         director.pop()
         raise StopIteration()
-
-    def get_bala_libre(self):
-        if not self.balas_libres:
-            return None
-
-        bala = self.balas_libres.pop()
-        self.balas_usadas.append(bala)
-
-        return bala
-
-
-    def get_colision_bala(self, sprite):
-        balas_sprites = [x.sprite for x in self.balas_usadas]
-        bala = sprite.collision(balas_sprites)
-        if bala:
-            return self.balas_usadas[balas_sprites.index(bala)]
-
-    def liberar_bala(self, bala):
-        bala.sprite.disable()
-        self.balas_usadas.remove(bala)
-        self.balas_libres.append(bala)
 
     
     def muerte(self):
-        self.nave.sprite.disable()
         director.music_play("vasura_espacial/game_over")
         self.finished()
-
-
-    def finished(self):
-        director.pop()
-        raise StopIteration()
 
 
 def main():
