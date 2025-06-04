@@ -51,6 +51,7 @@ class Vortex(Sprite):
 
 class Pieza(Sprite):
     def reset(self, col, row, shape_id):
+        self.suelta = False
         self.col = col
         self.row = row
         self.shape_id = shape_id
@@ -158,17 +159,25 @@ class Tablero:
             self.current.row = new_row
             self.start_animation(self.current)
             return True
-        return False
+        else:
+            return False
 
     def rotate(self):
         new_rotation = (self.current.rotation + 1) % 4
         if not self.collision(self.current.col, self.current.row, new_rotation):
             self.current.rotation = new_rotation
             self.current.update_rotation()
+            director.sound_play("vortris/bajar1")
+            return True
+        else:
+            return False
 
     def drop(self):
         if not self.move(0, 1):
             self.freeze()
+            director.sound_play("vortris/encastre")
+        else:
+            director.sound_play("vortris/bajar1")
 
     def check_last_row(self):
         steps = self.vortex.steps
@@ -212,6 +221,9 @@ class Tablero:
         for piece in self.animating_pieces:
             if not piece.slide():
                 self.animating_pieces.remove(piece)
+                if piece.suelta:
+                    piece.suelta = False
+                    director.sound_play("vortris/encastre")
                 # print("Piece animation finished:", self.animating_pieces)
 
 class Vortris(Scene):
@@ -229,14 +241,19 @@ class Vortris(Scene):
             self.finished()
 
         if director.was_pressed(director.JOY_LEFT):
-            self.game.move(-1, 0)
+            if not self.game.move(-1, 0):
+                director.sound_play("vortris/nomueve")
         if director.was_pressed(director.JOY_RIGHT):
-            self.game.move(1, 0)
+            if not self.game.move(1, 0):
+                director.sound_play("vortris/nomueve")
         if director.was_pressed(director.JOY_DOWN):
             self.game.drop()
         if director.was_pressed(director.JOY_UP):
-            self.game.rotate()
+            if not self.game.rotate():
+                director.sound_play("vortris/nomueve")
         if director.was_pressed(director.BUTTON_A):
+            director.sound_play("vortris/soltar")
+            self.game.current.suelta = True
             while self.game.move(0, 1):
                 pass
             self.game.freeze()
