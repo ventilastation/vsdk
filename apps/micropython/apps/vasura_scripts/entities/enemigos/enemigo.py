@@ -71,7 +71,7 @@ class Chiller(Enemigo):
     estado_inicial = ChillerBajando
 
     def __init__(self, scene):
-        self.velocidad_x = 2
+        self.velocidad_x = 1.15
         self.velocidad_y = 0.5
 
         self.strip = "chiller-sheet.png"
