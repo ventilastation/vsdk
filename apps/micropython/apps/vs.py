@@ -13,7 +13,8 @@ from ventilastation.sprites import Sprite
 # 9 para los items en el tablero
 # 9 para las balas
 # 3 * 4 = 12 para los loleros
-# Total: 43
+# 1 para la label del nivel
+# Total: 44
 
 # Hardodeables:
 # 4 para el precio del item del menu
@@ -26,7 +27,7 @@ from ventilastation.sprites import Sprite
 # 12 para las letras de las descripciones del menu
 # Total de hardcodeables: 34
 
-# Total: 77
+# Total: 78
 
 # Dadas dos coordinadas en una matriz de tamaño 3x3 te dice qué indice es en un array tamaño 9
 def coords(i, j):
@@ -59,11 +60,11 @@ item_frame_rate    = [3, 5, 30, 3, 5]
 
 nerd_names        = ["Lolero", "Fedora guy", "Otaku runner", "furrito", "???"]
 nerd_descriptions = ["no se ducha", "m'lady...", "datebayo!", "rawr! XD", "???"]
-nerd_hps          = [7, 10, 5, 15,  0]
-nerd_atks         = [1, 1, 1,  1,  0]
+nerd_hps          = [7, 10, 5, 15,    1]
+nerd_atks         = [1, 1, 1,  1,     1]
 nerd_speeds       = [ 5,  5,  2,  5, 50]
 nerd_speeds_user  = [50/x for x in nerd_speeds]
-nerd_frame_amount = [4, 4, 11, 4,  0]
+nerd_frame_amount = [4, 4, 11, 4,     1]
 
 class Text:
     def __init__(self, x, y, len, sprite):
