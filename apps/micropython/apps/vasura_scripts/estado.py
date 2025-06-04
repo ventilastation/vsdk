@@ -151,6 +151,15 @@ class Persiguiendo(Vulnerable):
         delta_y *= e.velocidad_y / mag
         e.mover(delta_x, delta_y)
 
+class YendoDerecho(Vulnerable):
+    def step(self):
+        cambio = super().step()
+        if cambio:
+            return cambio
+
+        self.entidad.mover(self.entidad.velocidad_x * self.entidad.direccion, 0)
+        
+
 class BajandoEnEspiral(Bajando):
     def on_enter(self):
         self.frames_cambio_direccion : int = 160

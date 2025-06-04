@@ -71,7 +71,7 @@ class Chiller(Enemigo):
     estado_inicial = ChillerBajando
 
     def __init__(self, scene):
-        self.velocidad_x = 2
+        self.velocidad_x = 1.15
         self.velocidad_y = 0.5
 
         self.strip = "chiller-sheet.png"
@@ -84,13 +84,35 @@ class Bully(Enemigo):
     estado_inicial = Persiguiendo
 
     def __init__(self, scene):
-        self.velocidad_x = 1.5
-        self.velocidad_y = 1
+        self.velocidad_x = 1
+        self.velocidad_y = 0.75
+
+        self.velocidad_y_original = self.velocidad_y
 
         self.strip = "bully-sheet.png"
         self.puntaje = 50
 
         super().__init__(scene)
+    
+    def morir(self):
+        self.scene.nave.al_morir.desuscribir(self.al_morir_nave)
+        self.scene.nave.al_respawnear.desuscribir(self.al_respawnear_nave)
+
+        super().morir()
+    
+    def reset(self):
+        self.scene.nave.al_morir.suscribir(self.al_morir_nave)
+        self.scene.nave.al_respawnear.suscribir(self.al_respawnear_nave)
+
+        super().reset()
+
+    def al_morir_nave(self, _):
+        self.velocidad_y = 0
+        self.set_estado(YendoDerecho)
+
+    def al_respawnear_nave(self):
+        self.velocidad_y = self.velocidad_y_original
+        self.set_estado(Persiguiendo)
 
 
 class Spiraler(Enemigo):
@@ -109,6 +131,7 @@ class Spiraler(Enemigo):
 
     def hit(self, from_x : int = 0):
         if from_x > self.x() and self.direccion == 1 or from_x < self.x() and self.direccion == -1:
+            director.sound_play("vasura_espacial/escudo_spiraler")
             return False
 
         return super().hit()
