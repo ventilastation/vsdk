@@ -73,7 +73,7 @@ class Vulnerable(Estado):
             
             if not isinstance(nave.estado, Deshabilitado) and \
                 self.entidad.collision([nave]):
-                nave.hit()
+                nave.hit(0)
                 
                 return Explotando
 
