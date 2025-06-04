@@ -40,6 +40,8 @@ class VasuraEspacial(Scene):
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
         self.call_later(1000 * 30, self.juntar_basura)
 
+        self.reproducir_bgm()
+
     def juntar_basura(self):
         gc.collect()
         self.call_later(1000 * 30, self.juntar_basura)
@@ -62,11 +64,16 @@ class VasuraEspacial(Scene):
         self.gameplay_manager.limpiar()
         self.manager_balas.limpiar()
 
+        director.music_off()
+
     def finished(self):
         gc.collect()
         director.pop()
         raise StopIteration()
 
+    def reproducir_bgm(self):
+        director.music_play("vasura_espacial/cancion_no_robada")
+        self.call_later(85000, self.reproducir_bgm)
     
     def muerte(self):
         director.music_play("vasura_espacial/game_over")
