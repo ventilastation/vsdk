@@ -287,8 +287,6 @@ class VentrackInstru(Scene):
 
         self.sono = False
         self.call_later(1000,self.sonidito)
-
-
             
     def finished(self):
         director.pop()
@@ -455,7 +453,15 @@ class Ventrack(Scene):
             print(f"Intrumento: {instrumento}")
             print(f"pattern: {posicion}")
             director.push(VentrackInstru())
-            
+
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+
+
+    def finished(self):
+        director.pop()
+        raise StopIteration()
+
 
     def sonidito(self):
        ## director.sound_play(b"vyruss/shoot1")
@@ -504,10 +510,6 @@ class Ventrack(Scene):
         self.sono = False
         self.call_later(1000,self.sonidito)
 
-
-            
-    def finished(self):
-        pass
 
 def main():
     return Ventrack()
