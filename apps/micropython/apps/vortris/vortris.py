@@ -76,6 +76,7 @@ class Tablero:
         self.scoreboard = ScoreBoard()
         self.vortex = Vortex()
         self.unused_pieces = [Pieza() for _ in range(80)]
+        self.used_pieces: list[Pieza] = []
         self.board = [[0 for _ in range(COLS)] for _ in range(ROWS - 1)]
         self.score = 0
         self.gameover = False
@@ -83,10 +84,14 @@ class Tablero:
 
     def spawn(self):
         self.current = self.unused_pieces.pop()
+        self.used_pieces.append(self.current)
         shape_id = randrange(7)
         self.current.reset(COLS // 2 - 2, 2, shape_id)
         if self.collision(self.current.col, self.current.row, self.current.rotation):
             self.gameover = True
+
+        if DEBUG:
+            print(f"Num. of pieces on the board: {len(self.used_pieces)}")
 
     def collision(self, new_col, new_row, new_rotation):
         grilla_pieza = ROTACIONES[self.current.shape_id][new_rotation]
@@ -151,6 +156,24 @@ class Tablero:
             self.score += 1
             self.scoreboard.setscore(self.score)
 
+        self.remove_covered_pieces()
+    
+    def remove_covered_pieces(self):
+        for piece in self.used_pieces:
+            blocks_covered = 0
+            grilla_pieza = ROTACIONES[piece.shape_id][piece.rotation]
+            for y in range(4):
+                for x in range(4):
+                    if grilla_pieza[y*4+x] == "X":
+                        row = (y + piece.row) - 1
+
+                        if row >= ROWS - self.vortex.steps:
+                            blocks_covered += 1
+            if blocks_covered == 4:
+                self.used_pieces.remove(piece)
+                piece.set_y(255)
+                piece.disable()
+                self.unused_pieces.append(piece)
 
 class Vortris(Scene):
     stripes_rom = "vortris"
