@@ -71,8 +71,13 @@ class Pieza(Sprite):
         if current_x == dest_x and current_y == dest_y:
             return False
 
-        self.set_x(current_x + (dest_x - current_x) // 4)
-        self.set_y(current_y + (dest_y - current_y) // 2)
+        delta_x = dest_x - current_x
+        step_x = abs(delta_x) // 4 + 1
+
+        if delta_x:
+            self.set_x(current_x + (step_x if delta_x > 0 else -step_x))
+        self.set_y(current_y + (dest_y - current_y + 1) // 2)
+        # print(f"Sliding piece towards ({dest_x}, {dest_y}) from ({current_x}, {current_y}) via ({self.x()}, {self.y()})")
         return True
 
     def update_rotation(self):
@@ -82,13 +87,24 @@ class Pieza(Sprite):
         return ROTACIONES[self.shape_id][self.rotation]
 
 
+class GridLines(Sprite):
+    def __init__(self):
+        super().__init__()
+        self.set_strip(stripes["gridlines.png"])
+        self.set_perspective(0)
+        self.set_x(0)
+        self.set_y(255)
+        self.set_frame(0)
+
+
 class Tablero:
     def __init__(self):
         self.scoreboard = ScoreBoard()
         self.vortex = Vortex()
         self.unused_pieces = [Pieza() for _ in range(80)]
+        # self.gridlines = GridLines()
         self.used_pieces: list[Pieza] = []
-        self.animating_pieces = []
+        self.animating_pieces = set()
         self.board = [[0 for _ in range(COLS)] for _ in range(ROWS - 1)]
         self.score = 0
         self.gameover = False
@@ -131,7 +147,8 @@ class Tablero:
 
     def start_animation(self, piece):
         if piece not in self.animating_pieces:
-            self.animating_pieces.append(piece)
+            self.animating_pieces.add(piece)
+            # print("Piece animation started:", self.animating_pieces)
 
     def move(self, dx, dy):
         new_col = self.current.col + dx
@@ -195,6 +212,7 @@ class Tablero:
         for piece in self.animating_pieces:
             if not piece.slide():
                 self.animating_pieces.remove(piece)
+                # print("Piece animation finished:", self.animating_pieces)
 
 class Vortris(Scene):
     stripes_rom = "vortris"
