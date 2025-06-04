@@ -9,6 +9,7 @@ stripes = [
         strip("red_numerals.png",    frames=10),
         strip("yellow_numerals.png", frames=10),
         strip("white_numerals.png",  frames=10),
+        strip("levels.png",          frames=4),
         strip("road.png",            frames=1),
         strip("lolero.png",          frames=4),
         strip("fedora.png",          frames=8),

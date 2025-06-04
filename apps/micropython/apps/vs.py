@@ -34,14 +34,14 @@ def coords(i, j):
 
 # [(step, tipo de lolero, carril)]
 
-BRIAN = 0
+BRIAN  = 0
 FEDORA = 1
 NARUTO = 2
-FURRO = 3
+FURRO  = 3
 
 test_level = [ (0, BRIAN, 0), (60, FEDORA, 1), (120, NARUTO, 2), (180, FURRO, 0)]
 
-level_0 = [ (120, BRIAN, 0) ] #, (400, BRIAN, 1), (580, BRIAN, 0) ]
+level_0 = [ (120, BRIAN, 0), (400, BRIAN, 1), (580, BRIAN, 0) ]
 
 level_1 = [ (0, BRIAN, 2), (0, FEDORA, 1), (0, BRIAN, 0), (400, NARUTO, 1), (500, NARUTO, 0), (600, FEDORA, 2)]
 
@@ -539,6 +539,13 @@ class vs(Scene):
         self.money_counter.set_sprite("white_numerals.png")
         self.add_money(1000)
 
+        self.level = Sprite()
+        self.level.set_strip(stripes["levels.png"])
+        self.level.set_x(64-24)
+        self.level.set_y(31)
+        self.level.set_frame(0)
+        self.level.set_perspective(2)
+
         self.road = Sprite()
         self.road.set_strip(stripes["road.png"])
         self.road.set_x(192)
@@ -553,11 +560,16 @@ class vs(Scene):
         self.starting_step_counter = 0
 
     def next_level(self):
-        if self.current_lolero_id == len(levels[self.level_id]) and self.level_id < len(levels):
-            self.current_lolero_id = 0
-            self.level_id += 1
-            self.starting_step_counter = self.step_counter + 150
 
+        if self.level_id < len(levels):
+            if self.current_lolero_id == len(levels[self.level_id]) and self.level_id < len(levels):
+                self.current_lolero_id = 0
+                self.level_id += 1
+                self.starting_step_counter = self.step_counter + 150
+                self.level.set_frame(self.level_id)
+        else:
+            print("Ganaste!")
+            self.finished()
     def manage_level(self):
 
         if self.level_id < len(levels):
