@@ -12,7 +12,7 @@ class Bala(Entidad):
     def __init__(self, scene):
         super().__init__(scene, stripes["bala.png"])
 
-        self.velocidad_x = 5
+        self.velocidad_x = 4
         self.set_perspective(1)
         self.set_y(self.height())
         self.disable()

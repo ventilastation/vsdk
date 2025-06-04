@@ -168,8 +168,6 @@ class BajandoEnEspiral(Bajando):
 
         roll = randint(0, 100)
         self.entidad.set_direccion(1 if roll < 50 else -1)
-        
-        self.entidad.set_frame(0 if self.entidad.direccion == 1 else 1)
 
     def step(self):
         cambio = super().step()
@@ -185,5 +183,3 @@ class BajandoEnEspiral(Bajando):
             
             if randint(0, 100) < self.probabilidad_cambio_direccion:
                 self.entidad.set_direccion(self.entidad.direccion * -1)
-
-                self.entidad.set_frame(0 if self.entidad.direccion == 1 else 1)

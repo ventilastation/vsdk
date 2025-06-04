@@ -123,7 +123,7 @@ class Spiraler(Enemigo):
 
     def __init__(self, scene):
         self.velocidad_x = 0.7
-        self.velocidad_y = 0.2
+        self.velocidad_y = 0.25
 
         self.strip = "05_bluebee.png"
         self.puntaje = 50
@@ -132,7 +132,12 @@ class Spiraler(Enemigo):
 
         self.set_frame(0)
 
+    def set_direccion(self, direccion):
+        super().set_direccion(direccion)
+        self.set_frame(0 if direccion == 1 else 1)
+
     def hit(self, from_x : int = 0):
+        #BUG esto no tiene en cuenta el screen wrapping y cuando esta cerca de x=0/255 rebota el tiro aunque no deberia
         if from_x > self.x() and self.direccion == 1 or from_x < self.x() and self.direccion == -1:
             director.sound_play("vasura_espacial/escudo_spiraler")
             return False

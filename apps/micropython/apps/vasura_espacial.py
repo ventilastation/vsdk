@@ -11,6 +11,7 @@ from apps.vasura_scripts.managers.spawner_enemigos import SpawnerEnemigos
 from apps.vasura_scripts.entities.nave import Nave
 from apps.vasura_scripts.entities.planeta import Planeta
 
+import gc
 
 
 class VasuraEspacial(Scene):
@@ -37,7 +38,11 @@ class VasuraEspacial(Scene):
         self.gameplay_manager.game_over.suscribir(self.muerte)
 
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
+        self.call_later(1000 * 30, self.juntar_basura)
 
+    def juntar_basura(self):
+        gc.collect()
+        self.call_later(1000 * 30, self.juntar_basura)
 
     def step(self):
         self.nave.step()
@@ -58,6 +63,7 @@ class VasuraEspacial(Scene):
         self.manager_balas.limpiar()
 
     def finished(self):
+        gc.collect()
         director.pop()
         raise StopIteration()
 
