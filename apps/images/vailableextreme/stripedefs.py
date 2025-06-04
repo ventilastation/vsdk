@@ -1,6 +1,6 @@
 stripes = [
     palettegroup(
-        strip("borde_blanco.png", frames=3),
+        strip("borde_blanco.png", frames=2),
         strip("borde_rojo.png", frames=3),
         strip("scores.png", frames=4),
         strip("limite.png", frames=1)
@@ -15,6 +15,11 @@ stripes = [
         fullscreen("av_t1.png", radius=30),
         fullscreen("av_t2.png", radius=30),
         fullscreen("av_t3.png", radius=30),
-        fullscreen("av_apunialado.png", radius=30)
+        fullscreen("av_apunialado.png", radius=30),
+        fullscreen("av_apunialado01.png", radius=30),
+        fullscreen("av_apunialado02.png", radius=30),
+        fullscreen("av_apunialado03.png", radius=30),
+        fullscreen("av_apunialado04.png", radius=30),
+        fullscreen("av_apunialado05.png", radius=30),
     )
 ]

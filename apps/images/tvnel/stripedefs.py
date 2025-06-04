@@ -1,10 +1,14 @@
 stripes = [
     palettegroup(
-        strip("target.png", frames=5),
+        strip("FallingTembac.png", frames=4),
+        strip("FallingTembacSmall.png", frames=4),
+        strip("monchito_runs.png", frames=4),
         strip("bola.png", frames=12),
         strip("moregrass.png", frames=4),
+        strip("bricks.png"),
     ),
     palettegroup(
-        fullscreen("fondo.png", radius=50),
+        fullscreen("fondo2.png"),
+        fullscreen("bottom.png"),
     ),
 ]
