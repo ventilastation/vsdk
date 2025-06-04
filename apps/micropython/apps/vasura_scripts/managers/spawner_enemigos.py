@@ -6,7 +6,6 @@ from utime import ticks_ms, ticks_diff, ticks_add
 from urandom import randint, seed, choice
 from math import floor
 
-
 class SpawnerEnemigos():
     def __init__(self, manager: EnemigosManager):
         self.manager : EnemigosManager = manager
@@ -14,19 +13,67 @@ class SpawnerEnemigos():
 
         waves = [
             WaveEnemigos([
-                #Tipo, cantidad, tiempo de spawn
+                #TODO construir esto desde un archivo de texto por el amor de dios kenoexiste
+                #Tipo, cantidad, tiempo entre spawn
                 #Tener en cuenta la cantidad de sprites que hay pooleados para cada enemigo
-                (Spiraler, 3, 2),
-                (Bully, 3, 2),
-                (Driller, 1, 0.1),
-                (Driller, 1, 2),
-                (Bully,   1, 0.1)
+                (Driller,  2, 3),
+                (Driller,  1, 5),
+                (Driller,  2, 0),
             ]),
+
             WaveEnemigos([
-                (Driller, 3, 1),
-                (Bully,   1, 1),
-                (Chiller, 1, 1)
-            ])
+                (Driller,  5, 1)
+            ], 3),
+
+            WaveEnemigos([
+                (Spiraler, 3, 2.5),
+                (Spiraler, 1, 1.75),
+                (Spiraler, 1, 3),
+                (Spiraler, 2, 0)
+            ]),
+
+            WaveEnemigos([
+                (Spiraler, 4, 1.5)
+            ], 3),
+
+            WaveEnemigos([
+                (Driller,  1, 2),
+                (Spiraler, 1, 2),
+                (Driller,  1, 1),
+                (Spiraler, 1, 4),
+                (Spiraler, 3, 2),
+                (Driller,  3, 2),
+            ], 1),
+
+            WaveEnemigos([
+                (Bully,  1, 0)
+            ], 1),
+
+            WaveEnemigos([
+                (Driller,  3, 3),
+                (Bully,    2, 6),
+                (Driller,  1, 0),
+                (Bully,    1, 4),
+                (Bully,    1, 0),
+                (Driller,  4, 3),
+                (Bully,    1, 5),
+                (Bully,    4, 1.75),
+            ], 2),
+
+            WaveEnemigos([
+                (Bully,     1, 2),
+                (Spiraler,  3, 2),
+            ], 3),
+
+            WaveEnemigos([
+                (Chiller,  1, 0),
+            ], 3),
+
+            WaveEnemigos([
+                (Driller,  3, 3),
+                (Chiller,  1, 7),
+                (Driller,  3, 3),
+            ], 3),
         ]
 
         self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves, manager.enemigos_spawneados.is_empty, delay=2)
