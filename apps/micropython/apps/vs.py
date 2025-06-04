@@ -13,7 +13,8 @@ from ventilastation.sprites import Sprite
 # 9 para los items en el tablero
 # 9 para las balas
 # 3 * 4 = 12 para los loleros
-# Total: 43
+# 1 para la label del nivel
+# Total: 44
 
 # Hardodeables:
 # 4 para el precio del item del menu
@@ -26,35 +27,44 @@ from ventilastation.sprites import Sprite
 # 12 para las letras de las descripciones del menu
 # Total de hardcodeables: 34
 
-# Total: 77
+# Total: 78
 
 # Dadas dos coordinadas en una matriz de tamaño 3x3 te dice qué indice es en un array tamaño 9
 def coords(i, j):
     return i + j*3
 
-# 0 = Brian
-# 1 = Fedora
-# 2 = Naruto
-# 3 = Furro
-# [(step, tipo, carril)]
+# [(step, tipo de lolero, carril)]
 
-level = [ (0, 2, 0), (60, 0, 1), (120, 0, 2)]
+BRIAN  = 0
+FEDORA = 1
+NARUTO = 2
+FURRO  = 3
+
+test_level = [ (0, BRIAN, 0), (60, FEDORA, 1), (120, NARUTO, 2), (180, FURRO, 0)]
+
+level_0 = [ (120, BRIAN, 0), (400, BRIAN, 1), (580, BRIAN, 0) ]
+
+level_1 = [ (0, BRIAN, 2), (0, FEDORA, 1), (0, BRIAN, 0), (400, NARUTO, 1), (500, NARUTO, 0), (600, FEDORA, 2)]
+
+level_2 = [ (0, NARUTO, 0), (0, NARUTO, 1), (0, NARUTO, 2), (60, FURRO, 0)]
+
+levels = [level_0, level_1, level_2]
 
 item_names         = ["Jabon", "Pala", "Burbujero", "Desodorante", "Tocar pasto"]
 item_descriptions  = ["limpia nerds", "intocable", "da burbujas", "los espanta", "kabum!"]
 item_prices        = [100, 200, 200, 400, 500]
-item_hps           = [5, 25, 5, 5,  1]
-item_atks          = [1,  0, 0, 0, 10]        
+item_hps           = [5, 25, 5, 5, 1]
+item_atks          = [1, 0, 0, 0, 10]        
 item_frame_amount  = [4, 8, 2, 4, 2]
 item_frame_rate    = [3, 5, 30, 3, 5]
 
 nerd_names        = ["Lolero", "Fedora guy", "Otaku runner", "furrito", "???"]
 nerd_descriptions = ["no se ducha", "m'lady...", "datebayo!", "rawr! XD", "???"]
-nerd_hps          = [5, 5, 3, 10,  0]
-nerd_atks         = [1, 1, 1,  1,  0]
+nerd_hps          = [7, 10, 5, 15,    1]
+nerd_atks         = [1, 1, 1,  1,     1]
 nerd_speeds       = [ 5,  5,  2,  5, 50]
 nerd_speeds_user  = [50/x for x in nerd_speeds]
-nerd_frame_amount = [4, 4, 11, 4,  0]
+nerd_frame_amount = [4, 4, 11, 4,     1]
 
 class Text:
     def __init__(self, x, y, len, sprite):
@@ -243,6 +253,7 @@ class Item(Sprite):
 
         self.is_active = True
         self.bullet.is_waiting_to_deactivate = True
+        self.start_animation = False
 
         if self.type == "Jabon":
             self.bullet.activate("Jabon")
@@ -255,11 +266,18 @@ class Item(Sprite):
     def step(self, step_counter):
         
         if step_counter % self.frame_rate == 0:
+            
             if self.bullet.is_active:
-                if self.bullet.is_reloading:
+
+                if self.bullet.is_reloading and step_counter % (self.frame_rate*20) == 0:
+                    self.start_animation = True
+                
+                if self.start_animation:
                     if self.frame() == self.frame_amount-1:
+                        self.start_animation = False
                         self.bullet.shoot()
                     self.next_frame()
+
             else:
                 self.next_frame()
 
@@ -321,7 +339,7 @@ class Lolero(Sprite):
 
             if self.can_move:
                 self.set_x(self.x() + 1)
-                self.set_frame((self.frame() + 1) % 4)
+            self.set_frame((self.frame() + 1) % 4)
 
             if self.has_debuff:
                 self.debuff_turns -= 1
@@ -522,6 +540,13 @@ class vs(Scene):
         self.money_counter.set_sprite("white_numerals.png")
         self.add_money(1000)
 
+        self.level = Sprite()
+        self.level.set_strip(stripes["levels.png"])
+        self.level.set_x(64-24)
+        self.level.set_y(31)
+        self.level.set_frame(0)
+        self.level.set_perspective(2)
+
         self.road = Sprite()
         self.road.set_strip(stripes["road.png"])
         self.road.set_x(192)
@@ -529,22 +554,38 @@ class vs(Scene):
         self.road.set_frame(0)
         
         self.step_counter = 0
+        
         self.level_id = 0
+        self.current_lolero_id = 0
+        
+        self.starting_step_counter = 0
 
+    def next_level(self):
 
+        if self.level_id < len(levels):
+            if self.current_lolero_id == len(levels[self.level_id]) and self.level_id < len(levels):
+                self.current_lolero_id = 0
+                self.level_id += 1
+                self.starting_step_counter = self.step_counter + 150
+                self.level.set_frame(self.level_id)
+        else:
+            print("Ganaste!")
+            self.finished()
     def manage_level(self):
 
-        if self.level_id < len(level):
+        if self.level_id < len(levels):
+
+            if self.current_lolero_id < len(levels[self.level_id]):
+                        
+                step, lolero_id, j = levels[self.level_id][self.current_lolero_id]
+                if self.step_counter >= step + self.starting_step_counter:
+                    for lolero in self.tribus[lolero_id]:
+                        if not lolero.is_active:
+                            lolero.activate(j)
+                            print("Activamos un", nerd_names[lolero_id], "en el carril", j)
+                            break
                     
-            step, lolero_id, j = level[self.level_id]
-            if self.step_counter >= step:
-                for lolero in self.tribus[lolero_id]:
-                    if not lolero.is_active:
-                        lolero.activate(j)
-                        print("Activamos un", nerd_names[lolero_id], "en el carril", j)
-                        break
-                
-                self.level_id += 1
+                    self.current_lolero_id += 1
 
     def step(self):
 
@@ -559,9 +600,12 @@ class vs(Scene):
                 if item.type == "Burbujero" and self.step_counter % 30 == 0:
                     self.add_money(100)
 
+        lolero_counter = 0
+
         for tribu in self.tribus:
             for lolero in tribu:
                 if lolero.is_active:
+                    lolero_counter += 1
                     if not lolero.modo_fedora:
                         lolero.can_move = True
                         bullet = lolero.collision(self.bullets)
@@ -587,6 +631,9 @@ class vs(Scene):
                     # Lolero llega a base
                     if 64-16 < lolero.x() < 192:
                         self.finished()
+        
+        if lolero_counter == 0:
+            self.next_level()
 
         if self.purchased_item_id != None:
 
