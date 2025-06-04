@@ -61,11 +61,22 @@ class Pieza(Sprite):
         self.set_x(self.col * 8 + 64)
         self.set_y(self.row * 8)
         self.set_strip(stripes["vortris.png"])
-        self.set_frame(self.shape_id * 4 + self.rotation)
+        self.update_rotation()
 
-    def rotate(self):
-        self.rotation = (self.rotation + 1) % 4
-        self.show()
+    def slide(self):
+        current_x = self.x()
+        current_y = self.y()
+        dest_x = self.col * 8 + 64
+        dest_y = self.row * 8
+        if current_x == dest_x and current_y == dest_y:
+            return False
+
+        self.set_x(current_x + (dest_x - current_x) // 4)
+        self.set_y(current_y + (dest_y - current_y) // 2)
+        return True
+
+    def update_rotation(self):
+        self.set_frame(self.shape_id * 4 + self.rotation)
 
     def grilla_actual(self):
         return ROTACIONES[self.shape_id][self.rotation]
@@ -77,6 +88,7 @@ class Tablero:
         self.vortex = Vortex()
         self.unused_pieces = [Pieza() for _ in range(80)]
         self.used_pieces: list[Pieza] = []
+        self.animating_pieces = []
         self.board = [[0 for _ in range(COLS)] for _ in range(ROWS - 1)]
         self.score = 0
         self.gameover = False
@@ -117,13 +129,17 @@ class Tablero:
                 print()
         self.spawn()
 
+    def start_animation(self, piece):
+        if piece not in self.animating_pieces:
+            self.animating_pieces.append(piece)
+
     def move(self, dx, dy):
         new_col = self.current.col + dx
         new_row = self.current.row + dy
         if not self.collision(new_col, new_row, self.current.rotation):
             self.current.col = new_col
             self.current.row = new_row
-            self.current.show()
+            self.start_animation(self.current)
             return True
         return False
 
@@ -131,7 +147,7 @@ class Tablero:
         new_rotation = (self.current.rotation + 1) % 4
         if not self.collision(self.current.col, self.current.row, new_rotation):
             self.current.rotation = new_rotation
-            self.current.show()
+            self.current.update_rotation()
 
     def drop(self):
         if not self.move(0, 1):
@@ -175,6 +191,11 @@ class Tablero:
                 piece.disable()
                 self.unused_pieces.append(piece)
 
+    def animate_pieces(self):
+        for piece in self.animating_pieces:
+            if not piece.slide():
+                self.animating_pieces.remove(piece)
+
 class Vortris(Scene):
     stripes_rom = "vortris"
 
@@ -182,6 +203,7 @@ class Vortris(Scene):
         super().on_enter()
         self.game = Tablero()
         self.last_vortex_growth = utime.ticks_ms()
+        self.moving_pieces = []
 
     def step(self):
         if self.game.gameover:
@@ -201,6 +223,7 @@ class Vortris(Scene):
                 pass
             self.game.freeze()
 
+        self.game.animate_pieces()
         # caída automática
         # fall_time += clock.get_rawtime()
         # if fall_time > 1000 // FPS:
