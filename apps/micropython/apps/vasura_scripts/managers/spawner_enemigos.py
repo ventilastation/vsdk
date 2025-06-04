@@ -176,9 +176,10 @@ class SpawnRandomIncremental(ComportamientoSpawn):
 
 
 class WaveEnemigos:
-    def __init__(self, pasos:List[(Enemigo, int, float)]):
+    def __init__(self, pasos:List[(Enemigo, int, float)], delay:float = 0):
         self.id = id
 
+        self.delay = delay * 1000
         self.pasos = []
         self.terminada : bool = False
 
@@ -202,12 +203,13 @@ class WaveEnemigos:
 class SpawnPorWaves(ComportamientoSpawn):
     def __init__(self, waves:List[WaveEnemigos], no_quedan_enemigos_vivos:callable, delay : float = 0):
         super().__init__()
-        self.tiempo_siguiente_spawn : int = ticks_add(ticks_ms(), floor(delay * 1000))
         self.waves : List[WaveEnemigos] = waves
         self.waves.reverse()
 
         self.wave_actual : WaveEnemigos = self.waves.pop()
         
+        self.tiempo_siguiente_spawn : int = ticks_add(ticks_ms(), floor(delay + self.wave_actual.delay))
+
         self.tipo_enemigo_actual = None
         self.enemigos_restantes_paso : int = 0
         self.intervalo_spawn_actual : int = -1
@@ -222,6 +224,9 @@ class SpawnPorWaves(ComportamientoSpawn):
                 return None
             
             self.wave_actual = self.waves.pop()
+            self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(self.wave_actual.delay))
+
+            return None
         
         if self.enemigos_restantes_paso == 0:
             self.tipo_enemigo_actual, self.enemigos_restantes_paso, self.intervalo_spawn_actual = self.wave_actual.get_siguiente_paso()
