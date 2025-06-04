@@ -131,6 +131,7 @@ class Spiraler(Enemigo):
 
     def hit(self, from_x : int = 0):
         if from_x > self.x() and self.direccion == 1 or from_x < self.x() and self.direccion == -1:
+            director.sound_play("vasura_espacial/escudo_spiraler")
             return False
 
         return super().hit()
