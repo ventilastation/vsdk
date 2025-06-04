@@ -202,6 +202,7 @@ bool already_initialized = false;
 
 static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
     if (already_initialized) {
+        ventilagon_exit();
         return mp_const_none;
     }
     already_initialized = true;
