@@ -13,6 +13,8 @@ class Nave(Entidad):
 
         self.min_y = floor(self.height() * 1.5)
 
+        self.al_respawnear : Evento = Evento()
+
         self.scene = scene
         self.balas : BalasManager = balas_manager
 
@@ -57,11 +59,15 @@ class Nave(Entidad):
     
     def morir(self):
         self.set_estado(NaveExplotando)
+    
+    def notificar_muerte(self):
+        self.al_morir.disparar(self)
 
     def respawn(self):
         self.set_direccion(1)
         self.set_frame(0)
         self.set_estado(Invencible)
+        self.al_respawnear.disparar()
    
     def procesar_input(self):
         target = [0, 0]
@@ -103,8 +109,8 @@ class NaveExplotando(Explotando):
         self.entidad.set_frame(self.entidad.frame() + 1)
 
         if self.entidad.frame() == self.total_frames:
-            self.entidad.al_morir.disparar(self)
-
+            self.entidad.notificar_muerte()
+            
             return Respawneando
 
 
