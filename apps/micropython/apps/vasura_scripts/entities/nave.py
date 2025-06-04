@@ -27,9 +27,11 @@ class Nave(Entidad):
         if nuevo_estado:
             self.set_estado(nuevo_estado)
     
-    def hit(self):
+    def hit(self, _:int):
         if self.vulnerable():
             self.set_estado(Explotando)
+
+        return True
 
     def vulnerable(self):
         return issubclass(type(self.estado), Vulnerable)

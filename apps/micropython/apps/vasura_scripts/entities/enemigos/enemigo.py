@@ -24,6 +24,8 @@ class Enemigo(Entidad):
     def reset(self):
         self.set_strip(stripes[self.strip])
         self.set_estado(self.estado_inicial)
+        self.set_frame(0)
+        self.set_direccion(1)
 
 
     def step(self):
@@ -32,10 +34,12 @@ class Enemigo(Entidad):
             self.set_estado(nuevo_estado)
 
 
-    def hit(self):
+    def hit(self, from_x : int = 0):
         self.al_colisionar_con_bala.disparar(self)
         
         self.set_estado(Explotando)
+
+        return True
             
 
     def morir(self):
@@ -87,3 +91,24 @@ class Bully(Enemigo):
         self.puntaje = 50
 
         super().__init__(scene)
+
+
+class Spiraler(Enemigo):
+    estado_inicial = BajandoEnEspiral
+
+    def __init__(self, scene):
+        self.velocidad_x = 0.7
+        self.velocidad_y = 0.2
+
+        self.strip = "05_bluebee.png"
+        self.puntaje = 50
+
+        super().__init__(scene)
+
+        self.set_frame(0)
+
+    def hit(self, from_x : int = 0):
+        if from_x > self.x() and self.direccion == 1 or from_x < self.x() and self.direccion == -1:
+            return False
+
+        return super().hit()

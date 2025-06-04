@@ -1,7 +1,7 @@
 from apps.vasura_scripts.entities.enemigos.enemigo import *
 
-LIMITE_ENEMIGOS = 21
-TIPOS_DE_ENEMIGO = [Driller, Chiller, Bully]
+LIMITE_ENEMIGOS = 28
+TIPOS_DE_ENEMIGO = [Driller, Chiller, Bully, Spiraler]
 
 class EnemigosManager():
     def __init__(self, scene):

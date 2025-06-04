@@ -15,7 +15,8 @@ class SpawnerEnemigos():
         waves = [
             WaveEnemigos([
                 #Tipo, cantidad, tiempo de spawn
-                (Driller, 1, 4),
+                #Tener en cuenta la cantidad de sprites que hay pooleados para cada enemigo
+                (Spiraler, 3, 2),
                 (Bully, 3, 2),
                 (Driller, 1, 0.1),
                 (Driller, 1, 2),

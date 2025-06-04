@@ -2,7 +2,7 @@ from ventilastation.director import director, stripes
 from apps.vasura_scripts.entities.entidad import *
 
 from math import sqrt
-from urandom import choice
+from urandom import randint
 
 class Estado:
     strip : int = None
@@ -78,9 +78,7 @@ class Vulnerable(Estado):
                 return Explotando
 
         bala : Bala = self.entidad.scene.manager_balas.get_bala_colisionando(self.entidad)
-        if bala:
-            self.entidad.hit()
-
+        if bala and self.entidad.hit(bala.x()):
             return Explotando
 
 
@@ -133,7 +131,6 @@ class Orbitando(Vulnerable):
         self.entidad.mover(e.velocidad_x * e.direccion, 0)
 
 
-
 class Persiguiendo(Vulnerable):
     def step(self):
         cambio = super().step()
@@ -153,3 +150,26 @@ class Persiguiendo(Vulnerable):
         delta_x *= e.velocidad_x / mag
         delta_y *= e.velocidad_y / mag
         e.mover(delta_x, delta_y)
+
+class BajandoEnEspiral(Bajando):
+    def on_enter(self):
+        self.frames_cambio_direccion : int = 160
+        self.probabilidad_cambio_direccion : int = 25
+        self.frames_left = self.frames_cambio_direccion
+
+    def step(self):
+        cambio = super().step()
+        if cambio:
+            return cambio
+        
+        self.frames_left -= 1
+
+        self.entidad.mover(self.entidad.velocidad_x * self.entidad.direccion, 0)
+
+        if self.frames_left == 0:
+            self.frames_left = self.frames_cambio_direccion
+            
+            if randint(0, 100) < self.probabilidad_cambio_direccion:
+                self.entidad.set_direccion(self.entidad.direccion * -1)
+
+                self.entidad.set_frame(0 if self.entidad.direccion == 1 else 1)

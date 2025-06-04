@@ -21,4 +21,7 @@ stripes = [
     palettegroup(
         strip("explosion.png", frames=6),
     ),
+    palettegroup(
+        strip("05_bluebee.png", frames=2),
+    ),
 ]
