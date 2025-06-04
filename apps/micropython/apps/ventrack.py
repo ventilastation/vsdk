@@ -196,6 +196,23 @@ class VentrackInstru(Scene):
         super().on_enter()
 
         global escena
+        global instrumento
+        
+        ##un beat es una negra y lo dividimos en semicorcheas
+        self.intervalo = 60000 // (self.bpm * 4)
+        
+        self.sonidito=Sonidito(VentrackInstru, self.intervalo)
+        lead = Instrument("A", "L")
+        bass = Instrument("A", "B")
+        drums = Instrument("A", "K")
+        if instrumento == 0:
+            self.sonidito.instruments = [lead]
+        if instrumento == 1:
+            self.sonidito.instruments = [bass]
+        if instrumento == 2:
+            self.sonidito.instruments = [drums]
+            
+        
         escena = 1
         self.raya = Sprite()
         self.raya.set_x(0)
@@ -207,11 +224,9 @@ class VentrackInstru(Scene):
         self.sono = False
         self.contador_sonido = 0
         self.bpm = 15 
-        ##un beat es una negra y lo dividimos en semicorcheas
-        self.intervalo = 60000 // (self.bpm * 4) 
+
         self.step_actual = 0
         self.step_ts = time_ms() 
-        self.call_later(self.intervalo, self.sonidito)
         
         self.cursor = Cursor()
         self.pasos = [Paso(i) for i in range(16)]
@@ -237,54 +252,6 @@ class VentrackInstru(Scene):
         if director.was_pressed(director.BUTTON_B):
             director.pop()
             
-
-    def sonidito(self):
-       ## director.sound_play(b"vyruss/shoot1")
-        if self.contador_sonido < 4:
-            director.sound_play(b"ventrack/1")
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 4 and self.contador_sonido <8:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2") 
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 8 and self.contador_sonido <12:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
-            director.sound_play(b"ventrack/3")
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 12 and self.contador_sonido <16:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
-            director.sound_play(b"ventrack/3")
-            director.sound_play(b"ventrack/4")
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 16 and self.contador_sonido <20:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
-            director.sound_play(b"ventrack/3")
-            director.sound_play(b"ventrack/4")
-            director.sound_play(b"ventrack/5")
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 20 and self.contador_sonido <24:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
-            director.sound_play(b"ventrack/3")
-            director.sound_play(b"ventrack/4")
-            director.sound_play(b"ventrack/5")
-            director.sound_play(b"ventrack/6")
-            self.contador_sonido +=1
-        if self.contador_sonido >= 24:
-            self.contador_sonido = 0
- 
-        self.step_ts = time_ms()
-     #   print(self.step_actual)
-        self.step_actual +=1 
-        if self.step_actual>=16 : 
-            self.step_actual = 0 
-
-        self.sono = False
-        self.call_later(1000,self.sonidito)
-
 
             
     def finished(self):
@@ -317,6 +284,7 @@ class Sonidito:
     interval: int   # between steps, in milliseconds
     n_step: int = 0     # step number for the rayita.
     step_ts: int    # Timestamp of the last step, in ms from the epoch
+    running: bool = False
     
     def __init__(self, scene, interval, n_step=0):
         self.scene = scene
@@ -325,8 +293,15 @@ class Sonidito:
 
         self.instruments = [] # There must be at least one instrument
         self.sounds_iterable = self.loop()
-        
+    
+    def start(self):
+        if self.running: return
+
         self.callback()
+        self.running = True
+        
+    def stop(self):
+        self.running = False
     
     def loop(self):
         while True:
@@ -338,6 +313,8 @@ class Sonidito:
                 yield
     
     def callback(self):
+        if not self.running: return
+        
         self.scene.call_later(self.interval, self.callback)
         self.step_ts = time_ms()
         
@@ -420,7 +397,22 @@ class Ventrack(Scene):
         self.intervalo = 60000 // (self.bpm * 4) 
         self.step_actual = 0
         self.step_ts = time_ms() 
-        self.call_later(self.intervalo, self.sonidito)
+        
+        ##implementacion sonidito
+        self.sonidito=Sonidito(Ventrack, 1000)
+        
+        lead = Instrument("A", "L")
+        bass = Instrument("A", "B")
+        drums = Instrument("A", "K")
+        self.sonidito.instruments = [ lead, bass, drums ]
+
+        
+        
+        
+        
+        
+        
+        
         
         self.cursor = CursorMain()
         self.pasos = [PasoMain(i,j) for i in range(16) for j in range(3)]
@@ -454,55 +446,7 @@ class Ventrack(Scene):
             director.push(VentrackInstru())
             
 
-    def sonidito(self):
-       ## director.sound_play(b"vyruss/shoot1")
-        if self.contador_sonido < 4:
-            director.sound_play(b"ventrack/1")
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 4 and self.contador_sonido <8:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2") 
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 8 and self.contador_sonido <12:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
-            director.sound_play(b"ventrack/3")
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 12 and self.contador_sonido <16:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
-            director.sound_play(b"ventrack/3")
-            director.sound_play(b"ventrack/4")
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 16 and self.contador_sonido <20:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
-            director.sound_play(b"ventrack/3")
-            director.sound_play(b"ventrack/4")
-            director.sound_play(b"ventrack/5")
-            self.contador_sonido +=1
-        elif self.contador_sonido >= 20 and self.contador_sonido <24:
-            director.sound_play(b"ventrack/1")
-            director.sound_play(b"ventrack/2")
-            director.sound_play(b"ventrack/3")
-            director.sound_play(b"ventrack/4")
-            director.sound_play(b"ventrack/5")
-            director.sound_play(b"ventrack/6")
-            self.contador_sonido +=1
-        if self.contador_sonido >= 24:
-            self.contador_sonido = 0
- 
-        self.step_ts = time_ms()
-        #print(self.step_actual)
-        self.step_actual +=1 
-        if self.step_actual>=16 : 
-            self.step_actual = 0 
-
-        self.sono = False
-        self.call_later(1000,self.sonidito)
-
-
-            
+                
     def finished(self):
         pass
 
