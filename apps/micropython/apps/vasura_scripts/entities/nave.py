@@ -19,8 +19,7 @@ class Nave(Entidad):
         self.velocidad_x = 1.5
         self.velocidad_y = 1.5
 
-        self.set_estado(NaveSana)
-        self.set_position(0, 50)
+        self.set_estado(Invencible)
 
     def step(self):
         nuevo_estado = self.estado.step()
@@ -28,12 +27,12 @@ class Nave(Entidad):
             self.set_estado(nuevo_estado)
     
     def hit(self, _:int):
-        if self.vulnerable():
+        if self.es_vulnerable():
             self.set_estado(Explotando)
 
         return True
 
-    def vulnerable(self):
+    def es_vulnerable(self):
         return issubclass(type(self.estado), Vulnerable)
     
     def disparar(self):
@@ -55,13 +54,12 @@ class Nave(Entidad):
         bala.set_position(x, y)
     
     def morir(self):
-        self.al_morir.disparar(self)
         self.set_estado(NaveExplotando)
 
     def respawn(self):
         self.set_direccion(1)
+        self.set_frame(0)
         self.set_estado(Invencible)
-        self.set_position(0, 50)
    
     def procesar_input(self):
         target = [0, 0]
@@ -91,7 +89,7 @@ class Nave(Entidad):
 class NaveSana(Vulnerable):
     def on_enter(self):
         self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
-        self.entidad.set_frame(0)
+        self.entidad.set_frame(0 if self.entidad.direccion == 1 else 1)
 
     def step(self):
         super().step()
@@ -103,6 +101,8 @@ class NaveExplotando(Explotando):
         self.entidad.set_frame(self.entidad.frame() + 1)
 
         if self.entidad.frame() == self.total_frames:
+            self.entidad.al_morir.disparar(self)
+
             return Respawneando
 
 
@@ -113,6 +113,7 @@ class Respawneando(Deshabilitado):
         self.entidad.set_frame(0)
         self.frames = 0
         self.blink_rate = 6
+        self.entidad.set_direccion(1)
 
     def step(self):
         self.frames += 1
