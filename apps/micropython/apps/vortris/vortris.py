@@ -73,12 +73,12 @@ class Pieza(Sprite):
 
 class Tablero:
     def __init__(self):
+        self.scoreboard = ScoreBoard()
+        self.vortex = Vortex()
         self.unused_pieces = [Pieza() for _ in range(80)]
         self.board = [[0 for _ in range(COLS)] for _ in range(ROWS - 1)]
         self.score = 0
         self.gameover = False
-        self.vortex = Vortex()
-        self.scoreboard = ScoreBoard()
         self.spawn()
 
     def spawn(self):
