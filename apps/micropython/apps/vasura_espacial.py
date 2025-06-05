@@ -40,7 +40,7 @@ class VasuraEspacial(Scene):
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
         self.call_later(1000 * 30, self.juntar_basura)
 
-        self.reproducir_bgm()
+        #self.reproducir_bgm()
 
     def juntar_basura(self):
         gc.collect()
@@ -82,3 +82,11 @@ class VasuraEspacial(Scene):
 
 def main():
     return VasuraEspacial()
+
+
+"""
+TODO Manteimiento:
+- Ubicar bien llamadas a gc.collect() (sugerencia de Ale: entre waves)
+- Meter las definiciones de waves en un archivo separado
+- Mover constantes de configuracion a un mismo archivo
+"""
