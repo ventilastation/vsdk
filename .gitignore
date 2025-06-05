@@ -169,3 +169,5 @@ hardware/rotor/micropython
 apps/micropython/apps/mygame.py
 apps/images/mygame
 apps/micropython/roms/mygame.rom
+
+*.wav

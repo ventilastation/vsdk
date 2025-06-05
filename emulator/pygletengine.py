@@ -45,13 +45,14 @@ SOUNDS_FOLDER = "../apps/sounds"
 
 for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
     for fn in files:
-        if fn.endswith(".mp3"):
+        if fn.endswith(".wav") or fn.endswith(".mp3"):
             fullname = os.path.join(dirpath, fn)
             fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
             try:
                 sound = pyglet.media.load(fullname, streaming=False)
-            except:
+            except pyglet.media.codecs.wave.WAVEDecodeException:
                 sound = pyglet.media.load(fullname + ".wav", streaming=False)
+
             print(fn)
             sounds[bytes(fn, "latin1")] = sound
 
