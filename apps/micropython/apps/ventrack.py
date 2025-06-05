@@ -299,15 +299,14 @@ class Ventrack(Scene):
 			print(self.sonidito.instruments)
 			
 		##self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern
-		##self.sonidito.start()
+		self.sonidito.start()
 		self.cursor = CursorMain()
 		self.pasos = [PasoMain(i, j) for i in range(16) for j in range(3)]
 		
 
 		for i in range(16):
 			for j in range(3):
-				pass
-				##self.pasos[3*i + j].sel(self.sonidito.instruments[j].patterns[i][16])
+				self.pasos[3*i + j].sel(self.sonidito.instruments[j].patterns[i][16])
     
 		self.instrucciones = Instrucciones("main")
 
