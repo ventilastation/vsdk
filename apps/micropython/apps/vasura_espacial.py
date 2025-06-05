@@ -40,6 +40,9 @@ class VasuraEspacial(Scene):
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
         self.call_later(1000 * 30, self.juntar_basura)
 
+        self.score_label : ScoreDisplay = ScoreDisplay()
+        self.gameplay_manager.puntaje_actualizado.suscribir(self.score_label.update)
+
         #self.reproducir_bgm()
 
     def juntar_basura(self):
@@ -84,9 +87,30 @@ def main():
     return VasuraEspacial()
 
 
+class ScoreDisplay:
+    def __init__(self):
+        self.chars = []
+        for n in range(9):
+            s = Sprite()
+            s.set_strip(stripes["numerals.png"])
+            s.set_x(118 + n * 4)
+            s.set_y(5)
+            s.set_frame(10)
+            s.set_perspective(2)
+            self.chars.append(s)
+
+        self.update(0)
+
+    def update(self, value):
+        for n, l in enumerate("%05d" % value):
+            v = ord(l) - 0x30
+            self.chars[n].set_frame(v)
+
 """
 TODO Manteimiento:
 - Ubicar bien llamadas a gc.collect() (sugerencia de Ale: entre waves)
 - Meter las definiciones de waves en un archivo separado
 - Mover constantes de configuracion a un mismo archivo
+- Agrupar bien los srtips en pallete groups
+- Renombrar archivos de sprites y audio para que se entienda mejor de qué son
 """

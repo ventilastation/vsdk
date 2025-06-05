@@ -7,7 +7,7 @@ VIDAS_INICIALES : int = 3
 TIEMPO_DE_RESPAWN : float = 3
 
 Y_INICIAL_NAVE : int = 50
-PUNTOS_RESTADOS_POR_MUERTE : int = 2500
+PUNTOS_RESTADOS_POR_MUERTE : int = 500
 
 class GameplayManager():    
     def __init__(self, nave:Nave):
@@ -62,11 +62,10 @@ class GameplayManager():
         self.puntaje += p
 
         self.puntaje_actualizado.disparar(self.puntaje)
-        print("Puntaje actualizado: " + str(self.puntaje))
 
     
     def restar_puntos(self, p:int):
         self.puntaje = max(self.puntaje - p, 0)
 
-        self.puntaje_actualizado.disparar(self.puntaje)
-        print("Puntaje actualizado: " + str(self.puntaje))
+        #HACK hay algo raro con pasar 0 como argumento y que el valor default del argumento en el evento sea None que hace que crashee cuando self.puntaje es 0
+        self.puntaje_actualizado.disparar(self.puntaje if self.puntaje else 0)
