@@ -92,7 +92,7 @@ class PasoMain:
         s.set_x(i*16)
         s.set_perspective(2)
         s.set_y(5+y*5)
-        s.set_frame(id)
+        s.set_frame(0)
         
     def sel(self,i):
         s = self.sprite
@@ -238,7 +238,7 @@ class VentrackInstru(Scene):
 
     def step(self):
         global current_pattern
-        global Idxinstrumento  # Usando el nombre consistente
+        global Idxinstrumento  
         
         pos_rayita = posRayita(self.sonidito.step_ts, self.sonidito.interval)
         self.raya.set_x(self.sonidito.n_step * 16 + pos_rayita)
@@ -261,7 +261,7 @@ class VentrackInstru(Scene):
             
         if director.was_pressed(director.BUTTON_B):
 			if current_pattern != self.patronoriginal:
-				if Idxinstrumento[instrumento] < 5:  # Nombre consistente
+				if Idxinstrumento[instrumento] < 5:  
 					print("nuevo patron creado")
 					Idxinstrumento[instrumento] += 1
 				else:
@@ -294,15 +294,17 @@ class Ventrack(Scene):
 			bass = Instrument("A", "B", [[0]*17] * 16)
 			drums = Instrument("A", "D", [[0]*17] * 16)
 			self.sonidito.instruments = [lead, bass, drums]
-		self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern
+		else:
+			print(self.sonidito.instruments)
+		##self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern
 		##self.sonidito.start()
 		self.cursor = CursorMain()
 		self.pasos = [PasoMain(i, j) for i in range(16) for j in range(3)]
-    
+		
+
 		for i in range(16):
 			for j in range(3):
-				print(self.sonidito.instruments[j].patterns[i][16])
-				self.pasos[i*j + j].sel(self.sonidito.instruments[j].patterns[i][16])
+				self.pasos[3*i + j].sel(self.sonidito.instruments[j].patterns[i][16])
     
 		self.instrucciones = Instrucciones("main")
 
