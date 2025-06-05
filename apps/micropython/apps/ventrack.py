@@ -289,9 +289,9 @@ class Ventrack(Scene):
     
         if self.sonidito is None:
             self.sonidito = Sonidito(self, bpm)
-            lead = Instrument("A", "L", [[0]*17] * 16)
-            bass = Instrument("A", "B", [[0]*17] * 16)
-            drums = Instrument("A", "D", [[0]*17] * 16)
+            lead = Instrument("A", "L", [[0 for _ in range(17)] for _ in range(16)])
+            bass = Instrument("A", "B", [[0 for _ in range(17)] for _ in range(16)])
+            drums = Instrument("A", "D", [[0 for _ in range(17)] for _ in range(16)])
             self.sonidito.instruments = [lead, bass, drums]
             
         else:
