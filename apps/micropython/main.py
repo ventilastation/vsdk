@@ -10,13 +10,13 @@ from ventilastation.shuffler import shuffled
 
 MAIN_MENU_OPTIONS = [
     # 1er Jam 2025
-    ('vortris', "vortris.png", 0),
+    ('ventrack', "venti808.png", 0),
+	('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
     ('uzumaki', "uzumaki.png", 0),
     ('vasura_espacial', "vasura_espacial.png", 0),
     ('vs', "vs.png", 0),
     ('tvnel', "tvnel.png", 0),
-    ('ventrack', "venti808.png", 0),
     ('oraculo', "oraculo.png", 0),
     # ('tvnel_alecu', "tvnel_alecu.png", 0),
     # ('mygame', "mygame.png", 0),

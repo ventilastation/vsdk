@@ -17,7 +17,7 @@ def repeat(object, times=None):
 #from itertools
 def zip_longest(*iterables, fillvalue=None):
     # zip_longest('ABCD', 'xy', fillvalue='-') → Ax By C- D-
-
+    print("hola")
     iterators = list(map(iter, iterables))
     num_active = len(iterators)
     if not num_active:
@@ -294,8 +294,10 @@ class Ventrack(Scene):
 			bass = Instrument("A", "B", [[0]*17] * 16)
 			drums = Instrument("A", "D", [[0]*17] * 16)
 			self.sonidito.instruments = [lead, bass, drums]
+			
 		else:
 			print(self.sonidito.instruments)
+			
 		##self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern
 		##self.sonidito.start()
 		self.cursor = CursorMain()
@@ -304,7 +306,8 @@ class Ventrack(Scene):
 
 		for i in range(16):
 			for j in range(3):
-				self.pasos[3*i + j].sel(self.sonidito.instruments[j].patterns[i][16])
+				pass
+				##self.pasos[3*i + j].sel(self.sonidito.instruments[j].patterns[i][16])
     
 		self.instrucciones = Instrucciones("main")
 
