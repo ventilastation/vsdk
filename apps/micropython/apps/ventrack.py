@@ -45,7 +45,9 @@ instrumento = 2
 posicion = 0
 posx = 0
 bpm = 60
-current_pattern = [ 0 ] * 16
+current_pattern = [ 0 ] * 17
+idUtilizadas = [[0]*5 for _ in range(3)]
+Idxinstrumento = [0]*3
 
 def time_ms():
     return time.time_ns() // 1_000_000
@@ -75,7 +77,7 @@ class Instrucciones:
         
     
 class PasoMain:
-    def __init__(self, i, y):
+    def __init__(self, i, y, id=0):
        
         self.sprite = Sprite()
         s = self.sprite
@@ -90,8 +92,7 @@ class PasoMain:
         s.set_x(i*16)
         s.set_perspective(2)
         s.set_y(5+y*5)
-        s.set_frame(0)
-
+        s.set_frame(id)
         
     def sel(self,i):
         s = self.sprite
@@ -210,7 +211,7 @@ class VentrackInstru(Scene):
         global instrumento
         global bpm
         global current_pattern
-
+        
         drums = Instrument("A", "K")
         
         if instrumento == 0:
@@ -219,9 +220,9 @@ class VentrackInstru(Scene):
             kind = "B"
         if instrumento == 2:
             kind = "D"
-            
+        self.patronoriginal = current_pattern.copy()    
         ins = Instrument("A", kind, [current_pattern])
-        self.sonidito=Sonidito(self, bpm, [ins])
+        self.sonidito = Sonidito(self, bpm, [ins])
         self.sonidito.start()
         self.raya = Sprite()
         self.raya.set_x(0)
@@ -231,16 +232,16 @@ class VentrackInstru(Scene):
         self.raya.set_perspective(2)
         
         self.cursor = Cursor()
-        self.pasos = [Paso(i,step) for i, step in enumerate(current_pattern)]
+        self.pasos = [Paso(i, step) for i, step in enumerate(current_pattern)]
         
         self.instrucciones = Instrucciones("instrumento")
-        
 
     def step(self):
         global current_pattern
-        pos_rayita = posRayita(self.sonidito.step_ts,self.sonidito.interval)
+        global Idxinstrumento  # Usando el nombre consistente
+        
+        pos_rayita = posRayita(self.sonidito.step_ts, self.sonidito.interval)
         self.raya.set_x(self.sonidito.n_step * 16 + pos_rayita)
-        #print(self.step_actual*16, pos_rayita)
         
         if director.was_pressed(director.JOY_UP):
             self.cursor.movY(1)              
@@ -259,10 +260,15 @@ class VentrackInstru(Scene):
             current_pattern[self.cursor.gridx] = note
             
         if director.was_pressed(director.BUTTON_B):
-            director.pop()
-            
+			if current_pattern != self.patronoriginal:
+				if Idxinstrumento[instrumento] < 5:  # Nombre consistente
+					print("nuevo patron creado")
+					Idxinstrumento[instrumento] += 1
+				else:
+					Idxinstrumento[instrumento] = 1
+				current_pattern[16] = Idxinstrumento[instrumento]
+			director.pop()
 
-            
     def finished(self):
         director.pop()
         raise StopIteration()
@@ -271,30 +277,34 @@ class Ventrack(Scene):
     stripes_rom = "ventrack"
     sonidito = None
     def on_enter(self):
-        super().on_enter()
+		super().on_enter()
     
-        print(current_pattern)
-        
-        self.raya = Sprite()
-        self.raya.set_x(0)
-        self.raya.set_y(0)
-        self.raya.set_strip(stripes["laraya_02.png"])
-        self.raya.set_frame(0)
-        self.raya.set_perspective(2)
-        
-        ##implementacion sonidito
-        if self.sonidito is None:
-            self.sonidito=Sonidito(self, bpm)
-            lead = Instrument("A", "L", [ [0]*16 ] * 16)
-            bass = Instrument("A", "B", [ [0]*16 ] * 16)
-            drums = Instrument("A", "D", [ [0]*16 ] * 16)
-            self.sonidito.instruments = [ lead, bass, drums ]
-        
-        
-        self.cursor = CursorMain()
-        self.pasos = [PasoMain(i,j) for i in range(16) for j in range(3)]
-        
-        self.instrucciones = Instrucciones("main")
+		print(current_pattern)
+    
+		self.raya = Sprite()
+		self.raya.set_x(0)
+		self.raya.set_y(0)
+		self.raya.set_strip(stripes["laraya_02.png"])
+		self.raya.set_frame(0)
+		self.raya.set_perspective(2)
+    
+		if self.sonidito is None:
+			self.sonidito = Sonidito(self, bpm)
+			lead = Instrument("A", "L", [[0]*17] * 16)
+			bass = Instrument("A", "B", [[0]*17] * 16)
+			drums = Instrument("A", "D", [[0]*17] * 16)
+			self.sonidito.instruments = [lead, bass, drums]
+		self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern
+		##self.sonidito.start()
+		self.cursor = CursorMain()
+		self.pasos = [PasoMain(i, j) for i in range(16) for j in range(3)]
+    
+		for i in range(16):
+			for j in range(3):
+				print(self.sonidito.instruments[j].patterns[i][16])
+				self.pasos[i*j + j].sel(self.sonidito.instruments[j].patterns[i][16])
+    
+		self.instrucciones = Instrucciones("main")
 
 
     def step(self):
@@ -336,7 +346,7 @@ class Instrument:
     def __init__(self, sound_bank, kind, patterns=None):
         self.sound_bank = sound_bank
         self.kind = kind
-        self.patterns = patterns if patterns else [ [0]*16 ] * 16
+        self.patterns = patterns if patterns else [ [0]*17 ] * 16
     
     def __iter__(self):
         for pattern in self.patterns:
