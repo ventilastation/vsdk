@@ -260,14 +260,14 @@ class VentrackInstru(Scene):
             current_pattern[self.cursor.gridx] = note
             
         if director.was_pressed(director.BUTTON_B):
-			if current_pattern != self.patronoriginal:
-				if Idxinstrumento[instrumento] < 5:  
-					print("nuevo patron creado")
-					Idxinstrumento[instrumento] += 1
-				else:
-					Idxinstrumento[instrumento] = 1
-				current_pattern[16] = Idxinstrumento[instrumento]
-			director.pop()
+            if current_pattern != self.patronoriginal:
+                if Idxinstrumento[instrumento] < 5:  
+                    print("nuevo patron creado")
+                    Idxinstrumento[instrumento] += 1
+                else:
+                    Idxinstrumento[instrumento] = 1
+                current_pattern[16] = Idxinstrumento[instrumento]
+            director.pop()
 
     def finished(self):
         director.pop()
@@ -277,38 +277,38 @@ class Ventrack(Scene):
     stripes_rom = "ventrack"
     sonidito = None
     def on_enter(self):
-		super().on_enter()
+        super().on_enter()
     
-		print(current_pattern)
+        print(current_pattern)
     
-		self.raya = Sprite()
-		self.raya.set_x(0)
-		self.raya.set_y(0)
-		self.raya.set_strip(stripes["laraya_02.png"])
-		self.raya.set_frame(0)
-		self.raya.set_perspective(2)
+        self.raya = Sprite()
+        self.raya.set_x(0)
+        self.raya.set_y(0)
+        self.raya.set_strip(stripes["laraya_02.png"])
+        self.raya.set_frame(0)
+        self.raya.set_perspective(2)
     
-		if self.sonidito is None:
-			self.sonidito = Sonidito(self, bpm)
-			lead = Instrument("A", "L", [[0]*17] * 16)
-			bass = Instrument("A", "B", [[0]*17] * 16)
-			drums = Instrument("A", "D", [[0]*17] * 16)
-			self.sonidito.instruments = [lead, bass, drums]
-			
-		else:
-			print(self.sonidito.instruments)
-			
-		##self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern
-		self.sonidito.start()
-		self.cursor = CursorMain()
-		self.pasos = [PasoMain(i, j) for i in range(16) for j in range(3)]
-		
+        if self.sonidito is None:
+            self.sonidito = Sonidito(self, bpm)
+            lead = Instrument("A", "L", [[0]*17 for _ in range(16)])
+            bass = Instrument("A", "B", [[0]*17 for _ in range(16)])
+            drums = Instrument("A", "D", [[0]*17 for _ in range(16)])
+            self.sonidito.instruments = [lead, bass, drums]
+            
+        else:
+            print(self.sonidito.instruments)
+            
+        self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern
+        self.sonidito.start()
+        self.cursor = CursorMain()
+        self.pasos = [PasoMain(i, j) for i in range(16) for j in range(3)]
+        
 
-		for i in range(16):
-			for j in range(3):
-				self.pasos[3*i + j].sel(self.sonidito.instruments[j].patterns[i][16])
+        for i in range(16):
+            for j in range(3):
+                self.pasos[3*i + j].sel(self.sonidito.instruments[j].patterns[i][16])
     
-		self.instrucciones = Instrucciones("main")
+        self.instrucciones = Instrucciones("main")
 
 
     def step(self):
@@ -336,8 +336,18 @@ class Ventrack(Scene):
             current_pattern = self.sonidito.instruments[instrumento].patterns[posicion]
             print(f"current_pattern = {current_pattern}")
             director.push(VentrackInstru())
+        if director.was_pressed(director.BUTTON_B):
+            instrumento = self.cursor.gridy
+            posicion = self.cursor.gridx
+            print(f"Pattern Copiado: {instrumento}")
+            current_pattern = self.sonidito.instruments[instrumento].patterns[posicion]
+        if director.was_pressed(director.BUTTON_C):
+            instrumento = self.cursor.gridy
+            posicion = self.cursor.gridx
+            print(f"Pattern pegado: {instrumento}")
+            self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern 
+            self.pasos[3*posicion + instrumento].sel(self.sonidito.instruments[instrumento].patterns[posicion][16])
 
-                
     def finished(self):
         pass
         
