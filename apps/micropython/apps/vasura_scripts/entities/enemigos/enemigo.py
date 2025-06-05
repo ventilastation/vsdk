@@ -65,7 +65,7 @@ class Driller(Enemigo):
         self.velocidad_y = 0.5
 
         self.strip = "driller-sheet.png"
-        self.puntaje = 50
+        self.puntaje = 75
 
         super().__init__(scene)
 
@@ -78,7 +78,7 @@ class Chiller(Enemigo):
         self.velocidad_y = 0.5
 
         self.strip = "chiller-sheet.png"
-        self.puntaje = 50
+        self.puntaje = 150
 
         super().__init__(scene)
 
@@ -93,7 +93,7 @@ class Bully(Enemigo):
         self.velocidad_y_original = self.velocidad_y
 
         self.strip = "bully-sheet.png"
-        self.puntaje = 50
+        self.puntaje = 200
 
         super().__init__(scene)
     
@@ -126,7 +126,7 @@ class Spiraler(Enemigo):
         self.velocidad_y = 0.25
 
         self.strip = "05_bluebee.png"
-        self.puntaje = 50
+        self.puntaje = 125
 
         super().__init__(scene)
 
