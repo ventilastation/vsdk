@@ -137,8 +137,11 @@ class Spiraler(Enemigo):
         self.set_frame(0 if direccion == 1 else 1)
 
     def hit(self, from_x : int = 0):
-        #BUG esto no tiene en cuenta el screen wrapping y cuando esta cerca de x=0/255 rebota el tiro aunque no deberia
-        if from_x > self.x() and self.direccion == 1 or from_x < self.x() and self.direccion == -1:
+        delta = min(self.x(), from_x)
+        x_spiraler_wrappeado = (self.x() - delta + 128) % 256
+        from_x_wrappeado = (from_x - delta + 128) % 256
+
+        if from_x_wrappeado > x_spiraler_wrappeado and self.direccion == 1 or from_x_wrappeado < x_spiraler_wrappeado and self.direccion == -1:
             director.sound_play("vasura_espacial/escudo_spiraler")
             return False
 
