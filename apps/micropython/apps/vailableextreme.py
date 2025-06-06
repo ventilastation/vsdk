@@ -2,11 +2,10 @@ from urandom import choice, randrange, seed
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-from time import sleep
 import utime
 import gc
 
-TIME_MODIFIER = 3200
+TIME_MODIFIER = 4250
 
 SCORE_STATES = {
     "miss" : 0,
