@@ -332,12 +332,25 @@ class Dancer:
         if self.start_dead + 5000 == time:
             return True
         
-    def win(self):
-        if self.count == 0:
-            self.count = 1
-        else:
-            self.count = 0
-        self._show(self.sprites_win,self.count)
+    def win(self,time):
+        if self.anterior == time:
+            return
+        
+        if not self.dead_timer:
+            self.dead_timer = time
+            self.start_dead = time
+
+        self.dead_accumulation = time - self.dead_timer
+
+        if self.dead_accumulation >= 100:
+            if self.count == 0:
+                self.count = 1
+            else:
+                self.count = 0
+            self._show(self.sprites_win,self.count)
+            self.dead_accumulation = 0
+            self.dead_timer = time
+        
 
     def _show(self,sprite,count):
         try:
@@ -436,7 +449,7 @@ class VailableExtremeGame(Scene):
             self.stop = True
 
         if 119900 <= redondeado:
-            self.dancer.win()
+            self.dancer.win(redondeado)
             self.win.set_frame(0)
             self.stop = True
 
