@@ -189,15 +189,15 @@ class PygletEngine():
                 down = joystick.y > 0.5 or joystick.hat_y < -0.5
 
 
-                boton = joystick.buttons[0] or joystick.buttons[1] or joystick.buttons[2] or joystick.buttons[3] # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
+                boton = joystick.buttons[0]  # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
 
-                accel = joystick.z > 0 or keys[key.PAGEUP] or keys[key.P]
-                decel = joystick.rz > 0 or keys[key.PAGEDOWN] or keys[key.O]
+                accel = joystick.z > 0 or keys[key.PAGEUP] or keys[key.P] or joystick.buttons[2]
+                decel = joystick.rz > 0 or keys[key.PAGEDOWN] or keys[key.O] or joystick.buttons[3]
 
                 try:
-                    reset = reset or joystick.buttons[8]
+                    reset = reset or joystick.buttons[8] or joystick.buttons[1]
                 except:
-                    reset = reset or joystick.buttons[7]
+                    reset = reset or joystick.buttons[7] or joystick.buttons[1]
                 left = left or keys[key.LEFT] or keys[key.A] or base_button_left()
                 right = right or keys[key.RIGHT] or keys[key.D] or base_button_right()
                 up = up or keys[key.UP] or keys[key.W]
