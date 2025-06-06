@@ -17,7 +17,7 @@ class VasuraIngresoHiScore(Scene):
 
 
     def on_enter(self):
-        HiScoreLabel("¡ENTRASTE", 122, 4)
+        HiScoreLabel("\xADENTRASTE", 122, 4)
         HiScoreLabel("AL RANKING!", 122, 16)
 
         Label("INICIALES:", 246, 24)
