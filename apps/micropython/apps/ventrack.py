@@ -293,7 +293,7 @@ class Ventrack(Scene):
             bass = Instrument("A", "B", [[0]*17 for _ in range(16)])
             drums = Instrument("A", "D", [[0]*17 for _ in range(16)])
             self.sonidito.instruments = [lead, bass, drums]
-
+            
         else:
             print(self.sonidito.instruments)
             
