@@ -65,6 +65,7 @@ class Driller(Enemigo):
         self.velocidad_y = 0.5
 
         self.strip = "driller-sheet.png"
+        self.largo_animacion = 7
         self.puntaje = 75
 
         super().__init__(scene)
@@ -78,6 +79,7 @@ class Chiller(Enemigo):
         self.velocidad_y = 0.5
 
         self.strip = "chiller-sheet.png"
+        self.largo_animacion = 6
         self.puntaje = 150
 
         super().__init__(scene)
@@ -93,6 +95,7 @@ class Bully(Enemigo):
         self.velocidad_y_original = self.velocidad_y
 
         self.strip = "bully-sheet.png"
+        self.largo_animacion = 5
         self.puntaje = 200
 
         super().__init__(scene)
@@ -125,16 +128,12 @@ class Spiraler(Enemigo):
         self.velocidad_x = 0.7
         self.velocidad_y = 0.25
 
-        self.strip = "05_bluebee.png"
+        self.strip = "spiraler-sheet.png"
+        self.largo_animacion = 8
         self.puntaje = 125
 
         super().__init__(scene)
 
-        self.set_frame(0)
-
-    def set_direccion(self, direccion):
-        super().set_direccion(direccion)
-        self.set_frame(0 if direccion == 1 else 1)
 
     def hit(self, from_x : int = 0):
         delta = min(self.x(), from_x)
