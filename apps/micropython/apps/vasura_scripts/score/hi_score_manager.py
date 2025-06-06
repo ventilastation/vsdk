@@ -14,6 +14,8 @@ class HiScoreManager:
 
         #Estado
         self.hi_score_superado : bool = False
+        self.posicion_jugadore : int = -1
+        self.puntaje_jugadore : int = 0
 
         try:
             with open(self.archivo_principal, 'r') as file:
@@ -37,6 +39,8 @@ class HiScoreManager:
         if score == -1:
             score = 0
 
+        self.puntaje_jugadore = score
+
         if not self.hi_score_superado and score > self.hi_score_guardado:
             self.al_superar_hi_score.disparar()
             self.hi_score_superado = True
@@ -51,16 +55,14 @@ class HiScoreManager:
         for i in range(len(self.hi_scores) - 2, -1, -1):
             if puntaje_final <= self.hi_scores[i]["puntaje"]:
                 self.hi_scores[i + 1] = {
-                    "nombre": "LUA",
+                    "nombre": "!!!",
                     "puntaje": puntaje_final
                 }
-                
-                #self.guardar_hi_scores()
 
-                return i + 1
-            
-        print("Queda #1")
-        return 1
+                self.posicion_jugadore = i+1
+                return
+    
+        self.posicion_jugadore = 1
 
     def guardar_hi_scores(self):
         try:
