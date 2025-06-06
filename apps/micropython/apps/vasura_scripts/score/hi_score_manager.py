@@ -92,15 +92,15 @@ class HiScoreManager:
             {
                 "nombre": "ASS",
                 "puntaje": 7500
-            },
-            {
-                "nombre": "TAT",
-                "puntaje": 5000
-            },
-            {
-                "nombre": "ION",
-                "puntaje": 2500
-            }
+            }#,
+            #{
+            #    "nombre": "TAT",
+            #    "puntaje": 5000
+            #},
+            #{
+            #    "nombre": "ION",
+            #    "puntaje": 2500
+            #}
         ]
         
         self.guardar_hi_scores()

@@ -27,4 +27,8 @@ stripes = [
     palettegroup(
         strip("numerals.png", frames=12),
     ),
+    palettegroup(
+        strip("charset.png", frames=256),
+        strip("tesrahc.png", frames=256)
+    ),
 ]
