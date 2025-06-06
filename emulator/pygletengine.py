@@ -64,6 +64,9 @@ sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin
 def playsound(name):
     sound_queue.append(("sound", name))
 
+def playnotes(folder, notes):
+    sound_queue.append(("notes", folder, notes))
+
 def playmusic(name):
     sound_queue.append(("music", name))
 
@@ -332,14 +335,16 @@ class PygletEngine():
         def animate(dt):
             send_keys()
             while sound_queue:
-                command, name = sound_queue.pop()
+                command, *args = sound_queue.pop()
                 if command == "sound":
+                    name = args[0]
                     s = sounds.get(name)
                     if s:
                         s.play()
                     else:
                         print("WARNING: sound not found:", name)
                 elif command == "music":
+                    name = args[0]
                     if self.music_player:
                         self.music_player.pause()
                     if name != b"off":
@@ -348,6 +353,18 @@ class PygletEngine():
                             self.music_player = s.play()
                         else:
                             print("WARNING: music not found:", name)
+                elif command == "notes":
+                    folder, notes = args
+                    to_play = []
+                    for note in notes.split(b";"):
+                        sound = sounds.get(folder + b"/" + note)
+                        if sound:
+                            to_play.append(sound)
+                        else:
+                            print("WARNING: note not found:", folder, note)
+
+                    for s in to_play:
+                        s.play()
             return
             "FIXME"
             for n in range(6):

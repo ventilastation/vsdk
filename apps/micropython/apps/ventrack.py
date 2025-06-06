@@ -411,10 +411,13 @@ class Sonidito:
             for step in zip_longest(*self.instruments, [None]):
                 #print(f"sound on step {step}")
                 self.n_step = (self.n_step + 1) % (16*16)
-                for sound in step: #step will be a list of sounds
-                    if sound:
+                notes = []
+                for note in step: #step will be a list of sounds
+                    if note:
+                        notes.append(note)
                         #print("playing {sound}")
-                        director.sound_play("ventrack/"+sound)
+                if notes:
+                    director.notes_play("ventrack", notes)
                 yield
     
     def callback(self):
