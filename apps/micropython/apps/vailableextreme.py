@@ -220,7 +220,7 @@ class Animation:
 
 class Mode:
     def __init__(self):
-        self.score = 10
+        self.score = 15
         self.contador_perfect = 0
         self.mode = 0
         self.state = 0
@@ -239,9 +239,9 @@ class Mode:
                 if self.contador_perfect < 4:
                     self.contador_perfect = 0
             elif state == SCORE_STATES["perfect"]:
-                if self.score < 15:
+                if self.score < 20:
                     self.score += 1
-                if self.score >= 15:
+                if self.score >= 20:
                     self.contador_perfect += 1
     
     def mangment(self):
