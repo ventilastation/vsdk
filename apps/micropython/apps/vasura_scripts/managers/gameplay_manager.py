@@ -65,7 +65,7 @@ class GameplayManager():
 
     
     def restar_puntos(self, p:int):
-        self.puntaje = max(self.puntaje - p, 0)
+        self.puntaje = int(max(self.puntaje - p, 0))
 
         #HACK hay algo raro con pasar 0 como argumento y que el valor default del argumento en el evento sea None que hace que crashee cuando self.puntaje es 0
-        self.puntaje_actualizado.disparar(self.puntaje if self.puntaje else 0)
+        self.puntaje_actualizado.disparar(self.puntaje if self.puntaje else -1)
