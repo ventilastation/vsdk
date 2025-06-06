@@ -363,7 +363,7 @@ class Instrument:
     
     def __iter__(self):
         for pattern in self.patterns:
-            for note in pattern:
+            for note in pattern[:16]:  # last element is the pattern id, not a note
                 if note:
                     yield f"{self.sound_bank}{self.kind}{note:02d}"
                     # x ej: AL09
