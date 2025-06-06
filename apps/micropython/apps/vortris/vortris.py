@@ -115,6 +115,7 @@ class Tablero:
                 for col in range(COLS):
                     print("X" if self.board[row][col] else "_", end='')
                 print()
+            print("*"*10)
         self.spawn()
 
     def move(self, dx, dy):
@@ -136,28 +137,37 @@ class Tablero:
     def drop(self):
         if not self.move(0, 1):
             self.freeze()
+    
+    def is_row_completed(self, row_id: int):
+        return all([x > 0 for x in self.board[row_id]])
 
     def check_last_row(self):
-        steps = self.vortex.steps
+        is_row_completed = self.is_row_completed(-1)
 
-        if steps == 0:
-            return
-
-        last_row = self.board[-steps]
-
-        if DEBUG:
-            print("*"*10)
-            print(f"Num. of steps of the vortex: {steps}")
-            print(f"Last row's status: {last_row}")
-            print(f"Scores points? {all([x > 0 for x in last_row])}")
-            print("*"*10)
-
-        if all([x > 0 for x in last_row]):
-            self.score += 1
+        if is_row_completed:
+            self.score += COLS * 3 # More points if a line is fully completed
             self.scoreboard.setscore(self.score)
+            self.vortex.grow()
 
         self.remove_covered_pieces()
-    
+
+    def vortex_eats(self):
+        is_row_completed = self.is_row_completed(-1)
+        if is_row_completed:
+            self.score += COLS * 3 # More points if a line is fully completed
+            self.scoreboard.setscore(self.score)
+            self.vortex.grow()
+        else:
+            self.score += sum([x > 0 for x in self.board[-self.vortex.steps]])
+            self.scoreboard.setscore(self.score)
+            for piece in self.used_pieces:
+                new_row = piece.row + 1
+                piece.row = new_row
+                piece.show()
+        self.board = [[0 for _ in range(COLS)]] + self.board
+        self.remove_covered_pieces()
+        self.board.pop()
+        
     def remove_covered_pieces(self):
         for piece in self.used_pieces:
             blocks_covered = 0
@@ -211,9 +221,9 @@ class Vortris(Scene):
         gap_time = utime.ticks_diff(now, self.last_vortex_growth) / 1000 # should be in secs.
         
         if gap_time >= VORTEX_TIME:
-            self.game.vortex.grow()
+            print("Eating time!!")
+            self.game.vortex_eats()
             self.last_vortex_growth = now
-            self.game.check_last_row()
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
