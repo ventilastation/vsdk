@@ -74,6 +74,7 @@ class VasuraEspacial(Scene):
         self.manager_enemigos.limpiar()
         self.gameplay_manager.limpiar()
         self.manager_balas.limpiar()
+        self.hi_score_manager.limpiar()
 
         director.music_off()
         

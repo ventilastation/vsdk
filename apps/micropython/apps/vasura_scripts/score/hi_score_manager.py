@@ -31,6 +31,7 @@ class HiScoreManager:
 
         self.hi_score_guardado = self.hi_scores[0]["puntaje"]
     
+    
     def chequear_puntaje_actual(self, score : int):
         #HACK. Ver GameplayManager.restar_puntos().
         if score == -1:
@@ -103,3 +104,6 @@ class HiScoreManager:
         ]
         
         self.guardar_hi_scores()
+    
+    def limpiar(self):
+        self.al_superar_hi_score.limpiar()
