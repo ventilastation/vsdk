@@ -21,5 +21,8 @@ stripes = [
         fullscreen("av_apunialado03.png", radius=30),
         fullscreen("av_apunialado04.png", radius=30),
         fullscreen("av_apunialado05.png", radius=30),
+        fullscreen("av_win1.png", radius=30),
+        fullscreen("av_win2.png", radius=30),
+        fullscreen("gane.png", radius=50),
     )
 ]

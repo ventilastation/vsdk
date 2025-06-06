@@ -101,11 +101,11 @@ class Circle:
                     self.first = True
                     self.state = SCORE_STATES["x"] if part.is_red else SCORE_STATES["good"]
             
-                if 27 >= py:
-                    self.state = SCORE_STATES["miss"]
+            elif 25 == py:
+                self.state = SCORE_STATES["miss"]
 
             # y[25,1] animation score
-            elif 25 >= py > 1:
+            elif 23 >= py > 1:
                 part.set_y(1)
 
             # Delete quarter and order
@@ -128,7 +128,7 @@ class Circle:
             return False
         
         if director.was_pressed(part.buttons[0]) or director.was_pressed(part.buttons[1]):
-            part.set_y(27)
+            part.set_y(25)
             part.disable()
             return True
         elif part.score_state not in (SCORE_STATES["good"], SCORE_STATES["perfect"], SCORE_STATES["x"]):
@@ -269,8 +269,9 @@ class Dancer:
         self.sprites_n = ["av_n1.png","av_n2.png","av_n3.png"]
         self.sprites_d = ["av_t1.png","av_t2.png","av_t3.png"]
         self.sprites_p = ["av_f1.png","av_f2.png","av_f3.png"]
+        self.sprites_m = ["av_apunialado01.png","av_apunialado.png","av_apunialado02.png"]
+        self.sprites_win = ["av_win1.png","av_win2.png"]
         self.sprites_dead = ["av_apunialado01.png","av_apunialado02.png","av_apunialado03.png","av_apunialado04.png","av_apunialado05.png"]
-        self.sprites_m = "av_apunialado.png"
 
         self.dancer = Sprite()
         self.dancer.set_strip(stripes[self.sprites_n[0]])
@@ -279,45 +280,82 @@ class Dancer:
         self.dancer.set_y(255)
         self.dancer.set_frame(0)
         self.count = 0
+        self.count_dead = 0
+
+        self.anterior = -1
+        self.dead_accumulation = 0
+        self.dead_timer = False
+        self.start_dead = 0
     
     def dance(self,mode):
+        if not mode == -3:
+            sprite_list = self._choice_dance(mode)
+            if self.count < 2:
+                self.count += 1
+            else:
+                self.count = 0
+            self._show(sprite_list,self.count)
+
+    def _choice_dance(self,mode):
         if mode == -1:
             sprite_list = self.sprites_d
         elif mode == 0:
             sprite_list = self.sprites_n
         elif mode == 1:
             sprite_list = self.sprites_p
-
-        if mode == -3:
-            sprite_list = self.sprites_dead
-            self.count += 1
-        else:
-            if self.count < 2:
-                self.count += 1
-            else:
-                self.count = 0
-
-        try:
-            if mode == -2:
-                self.dancer.set_strip(stripes[self.sprites_m])
-                self.dancer.set_perspective(0)
-                self.dancer.set_x(0)
-                self.dancer.set_y(255)
-                self.dancer.set_frame(0)
-            else:
-                self.dancer.set_strip(stripes[sprite_list[self.count]])
-                self.dancer.set_perspective(0)
-                self.dancer.set_x(0)
-                self.dancer.set_y(255)
-                self.dancer.set_frame(0)
-        except:pass
-
+        elif mode == -2:
+            sprite_list = self.sprites_m
+        return sprite_list
+        
+    
+    def lose(self,mode):
         if mode == -3:
             return True
+        
+    def dead(self,time):
+        if self.anterior == time:
+            return
+        
+        if not self.dead_timer:
+            self.dead_timer = time
+            self.start_dead = time
+
+        self.dead_accumulation = time - self.dead_timer
+
+        if self.dead_accumulation >= 700:
+            sprite_list = self.sprites_dead
+            self.count_dead += 1
+            self._show(sprite_list,self.count_dead)
+            self.dead_accumulation = 0
+            self.dead_timer = time
+
+        if self.start_dead + 5000 == time:
+            return True
+        
+    def win(self):
+        if self.count == 0:
+            self.count = 1
+        else:
+            self.count = 0
+        self._show(self.sprites_win,self.count)
+
+    def _show(self,sprite,count):
+        try:
+            self.dancer.set_strip(stripes[sprite[count]])
+            self.dancer.set_perspective(0)
+            self.dancer.set_x(0)
+            self.dancer.set_y(255)
+            self.dancer.set_frame(0)
+        except:pass
 
 
 class VailableExtremeGame(Scene):
     stripes_rom = "vailableextreme"
+
+    def press(self):
+        self.mode.life(self.score_state,True)
+        self.dancer.dance(self.mode.mangment())
+        self.animation.set_score(self.score_state,True)
 
     def on_enter(self):
         super(VailableExtremeGame, self).on_enter()
@@ -329,6 +367,15 @@ class VailableExtremeGame(Scene):
         self.exit_order=[]
 
         self.dancer = Dancer()
+
+        self.win = Sprite()
+        self.win.set_strip(stripes["gane.png"])
+        self.win.set_perspective(0)
+        self.win.set_x(0)
+        self.win.set_y(255)
+        self.win.set_frame(0)
+        self.win.disable()
+
 
         self.mode = Mode()
         
@@ -356,45 +403,44 @@ class VailableExtremeGame(Scene):
             director.music_play("vailableextreme/electrochongo")
 
         self.beat = self.music_test.beat(redondeado)
-        if self.beat == "win":
-            self.cronometrer = actual_time + 3000
 
         # circle management
         for circle in self.disabled_lines:
             order = circle.should_appear(self.beat,self.disabled_lines,self.enabled_lines,self.exit_order,self.order)
             if order:
-                self.order = order 
+                self.order = order
                 break
   
         # Boundary detection and circle movement
         for circle in self.enabled_lines:
-            if not circle in self.disabled_lines: 
+            if not circle in self.disabled_lines:
                 state = circle.limits(self.disabled_lines,self.exit_order)
                 if state != None: self.score_state = state
                 circle.expand(2,self.disabled_lines)
 
-        # Automatic Animation score when passing pixel 25
-        show = False
-        for obj in self.enabled_lines:
-            for part in obj.circle:
-                if part.y() == GOOD_LIMIT_2[1] and not part.is_red:
-                    show = True
-                    part.disable()
-                    break
+        #Score and Life
+        if not self.stop:
+            for obj in self.enabled_lines:
+                for part in obj.circle:
+                    if part.y() == 23 and not part.is_red:
+                        self.press()
+                        break
+                    elif (director.was_pressed(BUTTON) != director.was_pressed(BUTTON2)) and not any(number < part.order for number in self.exit_order) and part.y() > GOOD_LIMIT_1[0]:
+                        self.press()
+                        break
+            
 
-        
-        if (director.was_pressed(BUTTON) or director.was_pressed(BUTTON2) and self.score_state == SCORE_STATES["miss"]) or show:
-            if not self.stop:
-                self.mode.life(self.score_state,True)
-                if self.dancer.dance(self.mode.mangment()):
-                    self.cronometrer = redondeado + 4000
-                    self.stop = True
-            else:
-                self.dancer.dance(-3)
-                self.score_state = SCORE_STATES["miss"]
-            self.animation.set_score(self.score_state,True)
-        
-        if self.cronometrer == redondeado:
+        if self.dancer.lose(self.mode.mangment()):
+            if self.dancer.dead(redondeado):
+                self.finished()
+            self.stop = True
+
+        if 119900 <= redondeado:
+            self.dancer.win()
+            self.win.set_frame(0)
+            self.stop = True
+
+        if 125900 == redondeado:
             self.finished()
 
         self.animation.move_score()
@@ -404,8 +450,10 @@ class VailableExtremeGame(Scene):
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
+
+        if 3 <= len(self.exit_order) < 5:
+            gc.collect()
         
-        gc.collect()
 
     def finished(self):
         director.pop()
