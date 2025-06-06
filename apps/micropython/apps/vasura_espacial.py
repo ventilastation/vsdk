@@ -47,6 +47,7 @@ class VasuraEspacial(Scene):
         self.gameplay_manager.puntaje_actualizado.suscribir(self.label_puntajes.actualizar)
         
         self.gameplay_manager.puntaje_actualizado.suscribir(self.hi_score_manager.chequear_puntaje_actual)
+        self.hi_score_manager.al_superar_hi_score.suscribir(self.label_puntajes.mostrar_medalla)
 
         #self.reproducir_bgm()
     

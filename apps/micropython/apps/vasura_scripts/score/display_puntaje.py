@@ -13,6 +13,13 @@ class DisplayPuntaje:
             s.set_perspective(2)
             self.chars.append(s)
 
+        self.medal : Sprite = Sprite()
+        self.medal.set_strip(stripes["numerals.png"])
+        self.medal.set_y(5)
+        self.medal.set_x(114)
+        self.medal.set_perspective(2)
+        self.medal.disable()
+
         self.actualizar(0)
 
     def actualizar(self, value:int):
@@ -25,4 +32,4 @@ class DisplayPuntaje:
             self.chars[n].set_frame(v)
 
     def mostrar_medalla(self):
-        pass
+        self.medal.set_frame(11)
