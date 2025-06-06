@@ -13,6 +13,7 @@ class HiScoreManager:
         self.archivo_backup = path_base + "tabla_puntajes.bak"
 
         #Estado
+        self.jugadore_esta_en_ranking : bool = False
         self.hi_score_superado : bool = False
         self.posicion_jugadore : int = -1
         self.puntaje_jugadore : int = 0
@@ -40,8 +41,9 @@ class HiScoreManager:
             score = 0
 
         self.puntaje_jugadore = score
-
-        if not self.hi_score_superado and score > self.hi_score_guardado:
+        self.jugadore_esta_en_ranking = score > self.hi_scores[-1]["puntaje"]
+        
+        if self.jugadore_esta_en_ranking and not self.hi_score_superado and score > self.hi_score_guardado:
             self.al_superar_hi_score.disparar()
             self.hi_score_superado = True
     
