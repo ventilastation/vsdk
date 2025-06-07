@@ -347,7 +347,7 @@ class Ventrack(Scene):
             instrumento = self.cursor.gridy
             posicion = self.cursor.gridx
             print(f"Pattern pegado: {instrumento}")
-    # Pegar el pattern copiado
+    # Pegar el pattern copiadoo
             self.sonidito.instruments[instrumento].patterns[posicion] = [step for step in current_pattern]
             self.pasos[3*posicion + instrumento].sel(self.sonidito.instruments[instrumento].patterns[posicion][16])
     
