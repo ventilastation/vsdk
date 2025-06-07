@@ -99,7 +99,9 @@ class VasuraEspacial(Scene):
     def on_game_over(self):
         self.terminada = True
         self.planet.morir()
-        director.music_play("vasura_espacial/game_over")
+        director.music_off()
+
+        director.sound_play('vasura_espacial/explosion_planeta')
         self.call_later(6*1000, self.mostrar_hi_score)
 
 
