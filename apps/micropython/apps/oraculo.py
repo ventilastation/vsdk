@@ -4,8 +4,6 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
-NUBES_POR_NUBAREDA = 8
-
 def make_me_a_planet(strip):
     planet = Sprite()
     planet.set_strip(stripes[strip])
@@ -49,13 +47,38 @@ class TimedScene(Scene):
     def finish_scene(self):
         # print("Later called to finish scene, current time: ", utime.ticks_ms())
         director.pop()
-
-class SpriteAnimationScene(TimedScene):
-    sprite_files = []
-    order = []
+class FinalScene(TimedScene):
+    duration = 4000
+    def __init__(self, text):
+        super().__init__()
+        self.text = text
 
     def on_enter(self):
         super().on_enter()
+        self.textImagen = Sprite()
+        self.textImagen.set_strip(stripes[self.text])
+        self.textImagen.set_perspective(2)
+        self.textImagen.set_x(128 - self.textImagen.width() // 2)
+        self.textImagen.set_y(0)
+        self.textImagen.set_frame(0)
+    
+    def step(self):
+        super().step()
+        if director.was_pressed(director.BUTTON_A) or director.was_pressed(director.BUTTON_D):
+            self.finished()
+
+    def finished(self):
+        director.pop()
+        raise StopIteration()
+class SpriteAnimationScene(TimedScene):
+    sprite_files = []
+    order = []
+    imageText = ""
+    soundImage = "oraculo/audio02"
+
+    def on_enter(self):
+        super().on_enter()
+        director.music_play(b"oraculo/audio02")
         sprites = build_sprites(self.sprite_files)
         anim = build_animation(sprites, self.order)
         self.frente = lambda frame: anim[(frame // len(self.order)) % len(anim)]
@@ -66,10 +89,14 @@ class SpriteAnimationScene(TimedScene):
         ns = self.frente(self.animation_frames)
         self.frente(self.animation_frames - 1).disable()
         ns.set_frame(0)
-        # if director.was_pressed(director.JOY_DOWN):
-        #     director.push(textAnimation())
+    
+    def on_exit(self):
+        super().on_exit()
+        print("Imagen de texto: ", self.imageText)
+        director.push(FinalScene(self.imageText))
 class Animation1(SpriteAnimationScene):
     duration = 4000
+    imageText = "09CAMINO.png"
     sprite_files = [
         "09camino0000.png",
         "09camino0003.png",
@@ -79,6 +106,7 @@ class Animation1(SpriteAnimationScene):
     order = list(range(4))
 class Animation2(SpriteAnimationScene):
     duration = 4000
+    imageText = "08PANUELO.png"
     sprite_files = [
         "08pañuelo0000.png",
         "08pañuelo0003.png",
@@ -89,6 +117,7 @@ class Animation2(SpriteAnimationScene):
     order = list(range(5))
 class Animation3(SpriteAnimationScene):
     duration = 4000
+    imageText = "07AMOR.png"
     sprite_files = [
         "07amor0000.png",
         "07amor0003.png",
@@ -99,6 +128,7 @@ class Animation3(SpriteAnimationScene):
     order = list(range(5))
 class Animation4(SpriteAnimationScene):
     duration = 4000
+    imageText = "06AMISTAD.png"
     sprite_files = [
         "06amistad0000.png",
         "06amistad0003.png",
@@ -109,6 +139,7 @@ class Animation4(SpriteAnimationScene):
     order = list(range(5))
 class Animation5(SpriteAnimationScene):
     duration = 4000
+    imageText = "05COMUNIDAD.png"
     sprite_files = [
         "05comunidad0000.png",
         "05comunidad0002.png",
@@ -119,6 +150,7 @@ class Animation5(SpriteAnimationScene):
     order = list(range(5))
 class Animation6(SpriteAnimationScene):
     duration = 4000
+    imageText = "04FERNET.png"
     sprite_files = [
         "04fernet0000.png",
         "04fernet0003.png",
@@ -130,6 +162,7 @@ class Animation6(SpriteAnimationScene):
     order = list(range(6))
 class Animation7(SpriteAnimationScene):
     duration = 4000
+    imageText = "03FUEGO.png"
     sprite_files = [
         "03fuego0000.png",
         "03fuego0003.png",
@@ -139,6 +172,7 @@ class Animation7(SpriteAnimationScene):
     order = list(range(4))
 class Animation8(SpriteAnimationScene):
     duration = 4000
+    imageText = "02RATIS.png"
     sprite_files = [
         "02ratis0000.png",
         "02ratis0003.png",
@@ -148,6 +182,7 @@ class Animation8(SpriteAnimationScene):
     order = list(range(4))
 class Animation9(SpriteAnimationScene):
     duration = 4000
+    imageText = "01MUSICA.png"
     sprite_files = [
         "01musica0000.png",
         "01musica0003.png",
@@ -177,7 +212,6 @@ class RuletaX:
     
     def return_element(self):
         return self.nombre
-
 class Oraculo(Scene):
     def on_enter(self):
         super(Oraculo, self).on_enter()
@@ -246,7 +280,6 @@ class Oraculo(Scene):
     def finished(self):
         director.pop()
         raise StopIteration()
-
 class Inicio(TimedScene):
     duration = 4000
     stripes_rom = "oraculo"
@@ -270,7 +303,6 @@ class Inicio(TimedScene):
         director.pop()
         raise StopIteration()
         
-
 scenes = [
     Inicio,
     Animation1,
