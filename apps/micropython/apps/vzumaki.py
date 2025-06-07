@@ -4,11 +4,12 @@ from urandom import randrange
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
-import utime
+import utime, gc
 
 # este valor depende del tamaño de la letra
 STEP = 9
 RESERVED_SPRITES = 90
+WARMUP_STEPS = 500
 
 def quitar_newlines(texto):
     # Quita los saltos de línea y los espacios dobles del texto
@@ -107,6 +108,9 @@ class Vzumaki(Scene):
 
         self.counter = 0
 
+        for n in range(WARMUP_STEPS):
+            self.step_letters()
+
     def step(self):
         super().step()
 
@@ -120,6 +124,8 @@ class Vzumaki(Scene):
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
+        
+        gc.collect()
 
     def step_letters(self):
         if self.counter % STEP == 0:
@@ -127,7 +133,7 @@ class Vzumaki(Scene):
             l = self.unused_letters.pop()
             l.reset_char(c)
             self.letters.append(l)
-            print(len(self.unused_letters), len(self.letters))
+            # print(len(self.unused_letters), len(self.letters))
 
         self.counter += 1
 
