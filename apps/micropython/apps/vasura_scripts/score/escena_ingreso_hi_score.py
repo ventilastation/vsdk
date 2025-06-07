@@ -16,9 +16,15 @@ class VasuraIngresoHiScore(Scene):
 
         self.hi_score_manager = hi_score_manager
         self.current_char_index : int = 0
+        self.terminada = False
 
 
     def on_enter(self):
+        super(VasuraIngresoHiScore, self).on_enter()
+
+        if self.terminada:
+            director.pop()
+
         HiScoreLabel("\xADENTRASTE", 122, 4)
         HiScoreLabel("AL RANKING!", 122, 16)
 
@@ -64,11 +70,13 @@ class VasuraIngresoHiScore(Scene):
                 
                 #Reproducir sonido
                 
+                self.terminada = True
                 self.call_later(2000, lambda: director.push(VasuraHiScoresScene(self.hi_score_manager)))
                 
             return
 
         if director.was_pressed(director.BUTTON_D):
             director.pop()
+
             raise StopIteration()
     

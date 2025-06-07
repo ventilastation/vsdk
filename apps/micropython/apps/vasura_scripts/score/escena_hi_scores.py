@@ -17,6 +17,8 @@ class VasuraHiScoresScene(Scene):
 
 
     def on_enter(self):
+        super(VasuraHiScoresScene, self).on_enter()
+
         for i in range(len(self.hi_score_manager.hi_scores)):
             entry = self.hi_score_manager.hi_scores[i]
             y = 5 + 12 * i
@@ -30,4 +32,5 @@ class VasuraHiScoresScene(Scene):
     def step(self):
         if director.was_pressed(director.BUTTON_D):
             director.pop()
+            
             raise StopIteration()
