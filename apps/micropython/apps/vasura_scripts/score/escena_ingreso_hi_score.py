@@ -28,7 +28,7 @@ class VasuraIngresoHiScore(Scene):
         Lebal("\xADENTRASTE", 122, 4, "wobniar8x8")
         Lebal("AL RANKING!", 122, 16, "wobniar8x8")
 
-        Label("INICIALES:", 246, 20, "rainbow8x8")
+        Label("INICIALES", 246, 20, "rainbow8x8")
 
         self.chars = [
             HiScoreTagCharacter(5,   4),
@@ -57,10 +57,12 @@ class VasuraIngresoHiScore(Scene):
             self.chars[self.current_char_index].deselect()
 
             if self.current_char_index < 2:
+                director.sound_play('vasura_espacial/hi_score_char_select')
                 self.chars[self.current_char_index].deselect()
                 self.current_char_index += 1
                 self.chars[self.current_char_index].select()
             else:
+                director.sound_play('vasura_espacial/hi_score_enter')
                 self.chars[self.current_char_index].deselect()
                 self.current_char_index += 1
 
