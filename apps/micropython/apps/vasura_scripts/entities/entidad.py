@@ -10,6 +10,8 @@ class Entidad(Sprite):
     velocidad_y : float = 0
 
     min_y : int = 0
+    largo_animacion = 1
+    steps_por_frame = 4
 
     def __init__(self, scene, strip : int, x : int = 0, y : int = 0):
         super().__init__()
@@ -17,11 +19,12 @@ class Entidad(Sprite):
         self.al_morir : Evento = Evento()
 
         self.scene = scene
-        self.set_direccion(1)
-
         self.set_strip(strip)
 
-        self.set_frame(0)
+        self.fase_animacion = 0
+        self.frames = self.steps_por_frame
+        # self.set_direccion(1)
+
 
         self.x_interno = x
         self.y_interno = y
@@ -32,6 +35,17 @@ class Entidad(Sprite):
     
     def step(self):
         pass
+
+
+    def animar(self):
+        if self.largo_animacion == 1:
+            return
+        
+        self.frames -= 1
+        if self.frames == 0:
+            self.fase_animacion = (self.fase_animacion + 1) % self.largo_animacion
+            self.set_direccion(self.direccion)
+            self.frames = self.steps_por_frame
 
 
     def get_position(self):
@@ -74,9 +88,9 @@ class Entidad(Sprite):
 
         # Sentido horario
         if direccion == 1:
-            self.set_frame(0)
+            self.set_frame(self.fase_animacion)
         elif direccion == -1:
-            self.set_frame(1)
+            self.set_frame(self.fase_animacion + self.largo_animacion)
 
     def hit(self):
         pass
