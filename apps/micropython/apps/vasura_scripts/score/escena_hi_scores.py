@@ -29,4 +29,5 @@ class VasuraHiScoresScene(Scene):
 
     def step(self):
         if director.was_pressed(director.BUTTON_D):
-            self.finished()
+            director.pop()
+            raise StopIteration()
