@@ -44,6 +44,7 @@ class Nave(Entidad):
         bala = self.balas.get()
         
         if not bala:
+            director.sound_play('vasura_espacial/sin_balas')
             return
 
         bala.reset()
