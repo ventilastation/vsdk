@@ -37,6 +37,7 @@ class Explotando(Estado):  # Anarquía
     def __init__(self, entidad):
         super().__init__(entidad)
         self.strip = "explosion.png"
+        self.frame = 0
         self.total_frames = 6
 
     def on_enter(self):
@@ -54,13 +55,14 @@ class Explotando(Estado):  # Anarquía
         new_y = center_y - self.entidad.height() // 2
 
         self.entidad.set_position(new_x, new_y)
-
+        self.frame = 0
         self.entidad.set_frame(0)
 
     def step(self):
-        self.entidad.set_frame(self.entidad.frame() + 1)
+        self.entidad.set_frame(self.frame)
+        self.frame += 1
 
-        if self.entidad.frame() == self.total_frames:
+        if self.frame == self.total_frames:
             self.entidad.morir()
 
 

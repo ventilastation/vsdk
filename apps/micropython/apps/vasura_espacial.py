@@ -17,12 +17,19 @@ from apps.vasura_scripts.escena_game_over import *
 
 import gc
 
-
 class VasuraEspacial(Scene):
     stripes_rom = "vasura_espacial"
+    def __init__(self):
+        super().__init__()
+
+        #HACK? Estos flags son para detectar que ya pasaste por una escena y poder salir del juego directamente desde la de hi-scores
+        self.terminada = False
 
     def on_enter(self):
         super(VasuraEspacial, self).on_enter()
+        
+        if self.terminada:
+            self.quit_game()
 
         #Inicializacion
         self.planet = Planeta(self)
@@ -40,7 +47,7 @@ class VasuraEspacial(Scene):
         self.planet.al_ser_golpeado.suscribir(self.gameplay_manager.on_planet_hit)
         
         self.gameplay_manager.al_perder_vida.suscribir(self.planet.al_perder_vida)
-        self.gameplay_manager.game_over.suscribir(self.muerte)
+        self.gameplay_manager.scene_over.suscribir(self.on_game_over)
 
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
         self.call_later(1000 * 30, self.juntar_basura)
@@ -51,7 +58,7 @@ class VasuraEspacial(Scene):
         self.gameplay_manager.puntaje_actualizado.suscribir(self.hi_score_manager.chequear_puntaje_actual)
         self.hi_score_manager.al_superar_hi_score.suscribir(self.label_puntajes.mostrar_medalla)
 
-        #self.reproducir_bgm()
+        self.reproducir_bgm()
 
     
     def juntar_basura(self):
@@ -60,14 +67,17 @@ class VasuraEspacial(Scene):
 
 
     def step(self):
-        self.nave.step()
-        self.manager_enemigos.step()
-        self.manager_balas.step()
-        self.gameplay_manager.step()
-        self.spawner_enemigos.step()
+        if self.terminada:
+            self.planet.animar()
+        else:
+            self.nave.step()
+            self.manager_enemigos.step()
+            self.manager_balas.step()
+            self.gameplay_manager.step()
+            self.spawner_enemigos.step()
         
         if director.was_pressed(director.BUTTON_D):
-            self.finished()
+            self.quit_game()
 
 
     def on_exit(self):
@@ -81,19 +91,24 @@ class VasuraEspacial(Scene):
 
         director.music_off()
         
-    def finished(self):
-        director.push(VasuraGameOver(self.hi_score_manager))
-
-
     def reproducir_bgm(self):
-        director.music_play("vasura_espacial/cancion_no_robada")
-        self.call_later(85000, self.reproducir_bgm)
-    
+        #El tiempo de loopeo no coincide con la duracion de la cancion porque no podemos subir la que se usa por copyright
+        director.music_play("vasura_espacial/bgm_gameplay")
+        self.call_later(144000, self.reproducir_bgm)
 
-    def muerte(self):
-        #self.hi_score_manager.chequear_hi_score(self.gameplay_manager.puntaje)
+    def on_game_over(self):
+        self.terminada = True
+        self.planet.morir()
         director.music_play("vasura_espacial/game_over")
-        self.finished()
+        self.call_later(6*1000, self.mostrar_hi_score)
+
+
+    def mostrar_hi_score(self):
+        director.push(VasuraGameOver(self.hi_score_manager))
+    
+    def quit_game(self):
+        director.pop()
+        raise StopIteration()
 
 
 def main():
