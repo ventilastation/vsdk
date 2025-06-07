@@ -47,7 +47,7 @@ class VasuraEspacial(Scene):
         self.planet.al_ser_golpeado.suscribir(self.gameplay_manager.on_planet_hit)
         
         self.gameplay_manager.al_perder_vida.suscribir(self.planet.al_perder_vida)
-        self.gameplay_manager.game_over.suscribir(self.on_game_over)
+        self.gameplay_manager.scene_over.suscribir(self.on_game_over)
 
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
         self.call_later(1000 * 30, self.juntar_basura)
@@ -67,11 +67,14 @@ class VasuraEspacial(Scene):
 
 
     def step(self):
-        self.nave.step()
-        self.manager_enemigos.step()
-        self.manager_balas.step()
-        self.gameplay_manager.step()
-        self.spawner_enemigos.step()
+        if self.terminada:
+            self.planet.animar()
+        else:
+            self.nave.step()
+            self.manager_enemigos.step()
+            self.manager_balas.step()
+            self.gameplay_manager.step()
+            self.spawner_enemigos.step()
         
         if director.was_pressed(director.BUTTON_D):
             self.quit_game()
@@ -94,7 +97,12 @@ class VasuraEspacial(Scene):
 
     def on_game_over(self):
         self.terminada = True
+        self.planet.morir()
         director.music_play("vasura_espacial/game_over")
+        self.call_later(6*1000, self.mostrar_hi_score)
+
+
+    def mostrar_hi_score(self):
         director.push(VasuraGameOver(self.hi_score_manager))
     
     def quit_game(self):

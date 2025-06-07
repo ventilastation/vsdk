@@ -21,7 +21,7 @@ class GameplayManager():
 
         #Eventos
         self.al_perder_vida : Evento = Evento()
-        self.game_over : Evento = Evento()
+        self.scene_over : Evento = Evento()
         self.puntaje_actualizado : Evento = Evento()
 
         nave.al_morir.suscribir(self.programar_respawn_nave)
@@ -42,7 +42,7 @@ class GameplayManager():
         self.vidas_restantes -= 1
 
         if self.vidas_restantes == 0:
-            self.game_over.disparar()
+            self.scene_over.disparar()
         else:
             self.al_perder_vida.disparar(self.vidas_restantes)
 

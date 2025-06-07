@@ -20,6 +20,14 @@ stripes = [
     ),
     palettegroup(
         strip("explosion.png", frames=6),
+        fullscreen("explosion-grande0.png", radius=64),
+        fullscreen("explosion-grande1.png", radius=64),
+        fullscreen("explosion-grande2.png", radius=64),
+        fullscreen("explosion-grande3.png", radius=64),
+        fullscreen("explosion-grande4.png", radius=64),
+        fullscreen("explosion-grande5.png", radius=64),
+        fullscreen("explosion-grande6.png", radius=64),
+        fullscreen("explosion-grande7.png", radius=64),
     ),
     palettegroup(
         strip("numerals.png", frames=12),
