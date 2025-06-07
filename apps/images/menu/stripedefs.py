@@ -9,7 +9,7 @@ stripes = [
         strip("vzumaki.png"),
         strip("vasura_espacial.png"),
         strip("vs.png"),
-        strip("oraculo.png"),
+        strip("oraculo2.png"),
         strip("vailableextreme.png", frames=1),
         strip("venti808.png", frames=1),
         strip("tvnel.png", frames=1),
