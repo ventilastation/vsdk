@@ -335,17 +335,22 @@ class Ventrack(Scene):
             current_pattern = self.sonidito.instruments[instrumento].patterns[posicion]
             print(f"current_pattern = {current_pattern}")
             director.push(VentrackInstru())
+    
         if director.was_pressed(director.BUTTON_B):
             instrumento = self.cursor.gridy
             posicion = self.cursor.gridx
             print(f"Pattern Copiado: {instrumento}")
-            current_pattern = self.sonidito.instruments[instrumento].patterns[posicion]
+            # Copiar manualmente el pattern (asumiendo que es una lista)
+            current_pattern = [step for step in self.sonidito.instruments[instrumento].patterns[posicion]]
+    
         if director.was_pressed(director.BUTTON_C):
             instrumento = self.cursor.gridy
             posicion = self.cursor.gridx
             print(f"Pattern pegado: {instrumento}")
-            self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern 
+    # Pegar el pattern copiadoo
+            self.sonidito.instruments[instrumento].patterns[posicion] = [step for step in current_pattern]
             self.pasos[3*posicion + instrumento].sel(self.sonidito.instruments[instrumento].patterns[posicion][16])
+    
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
