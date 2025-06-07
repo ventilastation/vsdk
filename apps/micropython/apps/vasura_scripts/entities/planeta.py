@@ -18,6 +18,7 @@ class Planeta(Entidad):
 
 
     def hit(self):
+        return
         self.al_ser_golpeado.disparar()
 
     def animar(self):

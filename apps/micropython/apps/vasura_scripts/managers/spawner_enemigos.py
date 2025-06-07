@@ -98,6 +98,27 @@ class SpawnerEnemigos():
                 (Spiraler, 3, 4),
                 (Bully, 1, 1),
             ], 2),
+
+            WaveEnemigos([
+                (Driller,  5, 0.5)
+            ]),
+
+            WaveEnemigos([
+                (Driller,  5, 0),
+                (Chiller,  1, 0.5),
+            ], 0.5),
+
+            WaveEnemigos([
+                (Driller,  3, 0.5),
+                (Bully,  3, 0.5),
+            ], 0.5),
+
+            WaveEnemigos([
+                (Spiraler,  5, 1),
+                (Driller,  1, 0),
+                (Driller,  1, 1),
+                (Chiller,  1, 0.5),
+            ], 0.5),
         ]
         
         self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves_intro, waves_random, manager.enemigos_spawneados.is_empty, delay=2)
@@ -243,7 +264,7 @@ class WaveEnemigos:
     def __init__(self, pasos:List[(Enemigo, int, float)], delay:float = 0):
         self.id = id
 
-        self.delay = delay * 1000
+        self.delay = floor(delay * 1000)
         self.pasos = []
         self.terminada : bool = False
         self.paso_actual : int = 0
