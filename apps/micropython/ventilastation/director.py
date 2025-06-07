@@ -77,6 +77,9 @@ class Director:
     def sound_play(self, track):
         comms.send(b"sound " + track)
 
+    def notes_play(self, folder, notes):
+        comms.send(b"notes " + folder + b" " + ";".join(notes))
+
     def music_play(self, track):
         comms.send(b"music " + track)
 

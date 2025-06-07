@@ -1,7 +1,7 @@
 from apps.vasura_scripts.entities.entidad import *
 from apps.vasura_scripts.entities.bala import *
 
-LIMITE_BALAS : int = 20
+LIMITE_BALAS : int = 10
 
 class BalasManager():
     def __init__(self, scene):
