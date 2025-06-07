@@ -10,6 +10,7 @@ class Nave(Entidad):
 
     def __init__(self, scene, balas_manager: BalasManager):
         super().__init__(scene, stripes["ship-sprite-asym-sheet.png"])
+        self.largo_animacion = 1
 
         self.min_y = floor(self.height() * 1.5)
 

@@ -1,6 +1,5 @@
-from ventilastation.director import director, stripes
+from ventilastation.director import director
 from ventilastation.scene import Scene
-from ventilastation.sprites import Sprite
 
 from apps.vasura_scripts.managers.balas_manager import *
 from apps.vasura_scripts.managers.enemigos_manager import *
@@ -10,6 +9,11 @@ from apps.vasura_scripts.managers.spawner_enemigos import SpawnerEnemigos
 
 from apps.vasura_scripts.entities.nave import Nave
 from apps.vasura_scripts.entities.planeta import Planeta
+
+from apps.vasura_scripts.score.display_puntaje import *
+from apps.vasura_scripts.score.hi_score_manager import *
+
+from apps.vasura_scripts.escena_game_over import *
 
 import gc
 
@@ -26,6 +30,7 @@ class VasuraEspacial(Scene):
         self.manager_balas = BalasManager(self)
         self.manager_enemigos = EnemigosManager(self)
         self.spawner_enemigos = SpawnerEnemigos(self.manager_enemigos)
+        self.hi_score_manager = HiScoreManager()
         
         self.nave = Nave(self, self.manager_balas)
         
@@ -40,11 +45,19 @@ class VasuraEspacial(Scene):
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
         self.call_later(1000 * 30, self.juntar_basura)
 
-        self.reproducir_bgm()
+        self.label_puntajes : DisplayPuntaje = DisplayPuntaje()
+        self.gameplay_manager.puntaje_actualizado.suscribir(self.label_puntajes.actualizar)
+        
+        self.gameplay_manager.puntaje_actualizado.suscribir(self.hi_score_manager.chequear_puntaje_actual)
+        self.hi_score_manager.al_superar_hi_score.suscribir(self.label_puntajes.mostrar_medalla)
 
+        #self.reproducir_bgm()
+
+    
     def juntar_basura(self):
         gc.collect()
         self.call_later(1000 * 30, self.juntar_basura)
+
 
     def step(self):
         self.nave.step()
@@ -52,9 +65,10 @@ class VasuraEspacial(Scene):
         self.manager_balas.step()
         self.gameplay_manager.step()
         self.spawner_enemigos.step()
-
+        
         if director.was_pressed(director.BUTTON_D):
             self.finished()
+
 
     def on_exit(self):
         self.nave.limpiar_eventos()
@@ -63,22 +77,33 @@ class VasuraEspacial(Scene):
         self.manager_enemigos.limpiar()
         self.gameplay_manager.limpiar()
         self.manager_balas.limpiar()
+        self.hi_score_manager.limpiar()
 
         director.music_off()
-
+        
     def finished(self):
-        gc.collect()
-        director.pop()
-        raise StopIteration()
+        director.push(VasuraGameOver(self.hi_score_manager))
+
 
     def reproducir_bgm(self):
         director.music_play("vasura_espacial/cancion_no_robada")
         self.call_later(85000, self.reproducir_bgm)
     
+
     def muerte(self):
+        #self.hi_score_manager.chequear_hi_score(self.gameplay_manager.puntaje)
         director.music_play("vasura_espacial/game_over")
         self.finished()
 
 
 def main():
     return VasuraEspacial()
+
+"""
+TODO Manteimiento:
+- Ubicar bien llamadas a gc.collect() (sugerencia de Ale: entre waves)
+- Meter las definiciones de waves en un archivo separado
+- Mover constantes de configuracion a un mismo archivo
+- Agrupar bien los srtips en pallete groups
+- Renombrar archivos de sprites y audio para que se entienda mejor de qué son
+"""

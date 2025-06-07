@@ -2,7 +2,7 @@ import io
 import sys
 import utime
 
-from ventilastation.director import director
+from ventilastation.director import director, stripes
 from ventilastation import sprites
 from ventilastation import menu
 from ventilastation import povdisplay
@@ -10,14 +10,15 @@ from ventilastation.shuffler import shuffled
 
 MAIN_MENU_OPTIONS = [
     # 1er Jam 2025
+    ('oraculo', "oraculo.png", 0),
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
-    ('uzumaki', "uzumaki.png", 0),
+    ('vzumaki', "vzumaki.png", 0),
     ('vasura_espacial', "vasura_espacial.png", 0),
     ('vs', "vs.png", 0),
     ('tvnel', "tvnel.png", 0),
     ('ventrack', "venti808.png", 0),
-    ('oraculo', "oraculo.png", 0),
+    
     # ('tvnel_alecu', "tvnel_alecu.png", 0),
     # ('mygame', "mygame.png", 0),
     # PyCamp 2025
@@ -32,7 +33,6 @@ MAIN_MENU_OPTIONS = [
     # ('vyruss', "menu.png", 0),
     # ('ventilagon_game', "menu.png", 1),
     # ('ventap', "menu.png", 4),
-    # ('tutorial', "menu.png", 10),
     # ('debugmode', "menu.png", 9),
     # ('calibrate', "menu.png", 8),
     # ('credits', "menu.png", 3),
@@ -44,7 +44,7 @@ def update_over_the_air():
 
 def make_me_a_planet(strip):
     planet = sprites.Sprite()
-    planet.set_strip(strip)
+    planet.set_strip(stripes[strip])
     planet.set_perspective(0)
     planet.set_x(0)
     planet.set_y(255)
@@ -88,6 +88,15 @@ class GamesMenu(menu.Menu):
         # self.boot_screen = make_me_a_planet(strips.other.ventilastation)
         # self.boot_screen.set_frame(0)
         # self.call_later(1500, self.boot_screen.disable)
+        self.loviejo = sprites.Sprite()
+        self.loviejo.set_strip(stripes["loviejo-3.png"])
+        self.loviejo.set_perspective(2)
+        self.loviejo.set_x(128 - self.loviejo.width() // 2)
+        self.loviejo.set_y(0)
+        self.loviejo.set_frame(0)
+        self.favalli = make_me_a_planet("favalli.png")
+        # self.favalli.set_frame(0)
+
 
     def on_option_pressed(self, option_index):
         app_chosen = self.options[option_index][0]

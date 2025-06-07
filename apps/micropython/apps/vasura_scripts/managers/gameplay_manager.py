@@ -7,6 +7,7 @@ VIDAS_INICIALES : int = 3
 TIEMPO_DE_RESPAWN : float = 3
 
 Y_INICIAL_NAVE : int = 50
+PUNTOS_RESTADOS_POR_MUERTE : int = 500
 
 class GameplayManager():    
     def __init__(self, nave:Nave):
@@ -16,11 +17,12 @@ class GameplayManager():
         #Estado
         self.tiempo_respawn : float = -1
         self.vidas_restantes : int = VIDAS_INICIALES
-        self.puntaje_actual : int = 0
+        self.puntaje : int = 0
 
         #Eventos
         self.al_perder_vida : Evento = Evento()
         self.game_over : Evento = Evento()
+        self.puntaje_actualizado : Evento = Evento()
 
         nave.al_morir.suscribir(self.programar_respawn_nave)
 
@@ -31,7 +33,8 @@ class GameplayManager():
             self.respawnear_nave()
 
     def programar_respawn_nave(self, _):
-        #self.nave.set_estado(Explotando)
+        self.restar_puntos(PUNTOS_RESTADOS_POR_MUERTE)
+
         self.nave.set_position(255 - self.nave.width() // 2, Y_INICIAL_NAVE)
         self.tiempo_respawn = ticks_add(ticks_ms(), TIEMPO_DE_RESPAWN * 1000)
     
@@ -44,9 +47,7 @@ class GameplayManager():
             self.al_perder_vida.disparar(self.vidas_restantes)
 
     def al_morir_enemigo(self, e:Enemigo):
-        self.puntaje_actual += e.puntaje
-
-        print("Puntaje actualizado: " + str(self.puntaje_actual))
+        self.sumar_puntos(e.puntaje)
 
     def respawnear_nave(self):
         self.nave.set_position(255 - self.nave.width() // 2, Y_INICIAL_NAVE)
@@ -56,3 +57,15 @@ class GameplayManager():
     def limpiar(self):
         self.al_perder_vida.limpiar()
         self.game_over.limpiar()
+    
+    def sumar_puntos(self, p:int):
+        self.puntaje += p
+
+        self.puntaje_actualizado.disparar(self.puntaje)
+
+    
+    def restar_puntos(self, p:int):
+        self.puntaje = int(max(self.puntaje - p, 0))
+
+        #HACK hay algo raro con pasar 0 como argumento y que el valor default del argumento en el evento sea None que hace que crashee cuando self.puntaje es 0
+        self.puntaje_actualizado.disparar(self.puntaje if self.puntaje else -1)
