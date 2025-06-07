@@ -1,3 +1,5 @@
+from ventilastation.director import director
+
 from utime import ticks_ms, ticks_diff, ticks_add
 
 from ventilastation.director import stripes
@@ -38,19 +40,18 @@ class HiScoreTagCharacter(Sprite):
         self.next_blink_update_time = ticks_add(ticks_ms(), self.blink_delay)
     
     def deselect(self):
-        #TODO reproducir sonido
         self.is_blinking = False
         self.set_frame(ord(self.allowed_characters[self.selected_index]))
 
     def increase_index(self):
-        #TODO reproducir sonido
+        director.sound_play('vasura_espacial/hi_score_char')
         self.selected_index = (self.selected_index + 1) % len(self.allowed_characters)
 
         if not self.is_blinking:
             self.set_frame(ord(self.allowed_characters[self.selected_index]))
 
     def decrease_index(self):
-        #TODO reproducir sonido
+        director.sound_play('vasura_espacial/hi_score_char')
         self.selected_index = len(self.allowed_characters) - 1 if self.selected_index == 0 else self.selected_index - 1
         
         if not self.is_blinking:

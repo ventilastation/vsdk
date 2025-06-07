@@ -5,6 +5,7 @@ from utime import ticks_ms, ticks_diff, ticks_add
 from urandom import randint, seed, choice
 from math import floor
 
+import gc
 
 class SpawnerEnemigos():
     def __init__(self, manager: EnemigosManager):
@@ -21,12 +22,11 @@ class SpawnerEnemigos():
             ]),
 
             WaveEnemigos([
-                (Driller,  5, 1)
+                (Driller,  4, 1)
             ], 3),
 
             WaveEnemigos([
-                (Spiraler, 3, 2.5),
-                (Spiraler, 1, 1.75),
+                (Spiraler, 2, 2.5),
                 (Spiraler, 1, 3),
                 (Spiraler, 2, 0)
             ]),
@@ -39,8 +39,8 @@ class SpawnerEnemigos():
                 (Driller,  1, 2),
                 (Spiraler, 1, 2),
                 (Driller,  1, 1),
-                (Spiraler, 1, 4),
-                (Spiraler, 3, 2),
+                (Spiraler, 1, 2),
+                (Spiraler, 2, 2),
                 (Driller,  3, 2),
             ], 1),
 
@@ -49,14 +49,13 @@ class SpawnerEnemigos():
             ], 1),
 
             WaveEnemigos([
-                (Driller,  3, 3),
-                (Bully,    2, 6),
-                (Driller,  1, 0),
-                (Bully,    1, 4),
-                (Bully,    1, 0),
+                (Driller,  3, 2),
+                (Bully,    2, 4),
+                (Driller,  1, 1),
+                (Bully,    1, 1),
                 (Driller,  4, 3),
                 (Bully,    1, 5),
-                (Bully,    4, 1.75),
+                (Bully,    3, 1.75),
             ], 2),
 
             WaveEnemigos([
@@ -66,6 +65,7 @@ class SpawnerEnemigos():
 
             WaveEnemigos([
                 (Chiller,  1, 0),
+                (Bully, 2, 2),
             ], 3),
 
             WaveEnemigos([
@@ -77,7 +77,48 @@ class SpawnerEnemigos():
         waves_random = [
             WaveEnemigos([
                 (Driller,  1, 0)
-            ])
+            ], 0.5),
+
+            WaveEnemigos([
+                (Bully, 1, 1.5),
+                (Chiller, 1, 4),
+                (Driller, 2, 1.5),
+                (Chiller, 1, 4)
+            ]),
+
+            WaveEnemigos([
+                (Spiraler, 2, 1.5),
+                (Driller, 2, 0.55),
+                (Bully, 1, 2),
+                (Driller, 1, 2),
+            ], 2),
+
+            WaveEnemigos([
+                (Chiller, 1, 2),
+                (Spiraler, 3, 4),
+                (Bully, 1, 1),
+            ], 2),
+
+            WaveEnemigos([
+                (Driller,  5, 0.5)
+            ]),
+
+            WaveEnemigos([
+                (Driller,  5, 0),
+                (Chiller,  1, 0.5),
+            ], 0.5),
+
+            WaveEnemigos([
+                (Driller,  3, 0.5),
+                (Bully,  3, 0.5),
+            ], 0.5),
+
+            WaveEnemigos([
+                (Spiraler,  5, 1),
+                (Driller,  1, 0),
+                (Driller,  1, 1),
+                (Chiller,  1, 0.5),
+            ], 0.5),
         ]
         
         self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves_intro, waves_random, manager.enemigos_spawneados.is_empty, delay=2)
@@ -223,7 +264,7 @@ class WaveEnemigos:
     def __init__(self, pasos:List[(Enemigo, int, float)], delay:float = 0):
         self.id = id
 
-        self.delay = delay * 1000
+        self.delay = floor(delay * 1000)
         self.pasos = []
         self.terminada : bool = False
         self.paso_actual : int = 0
@@ -283,6 +324,9 @@ class SpawnPorWaves(ComportamientoSpawn):
             
             self.wave_actual = self.waves_intro.pop() if self.waves_intro else choice(self.waves_random)
             self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(self.wave_actual.delay))
+
+            if self.wave_actual.delay:
+                gc.collect()
 
             return None
         

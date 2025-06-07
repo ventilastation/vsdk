@@ -12,7 +12,7 @@ class Nave(Entidad):
         super().__init__(scene, stripes["ship-sprite-sheet.png"])
         self.largo_animacion = 6
 
-        self.min_y = floor(self.height() * 1.5)
+        self.min_y = floor(self.height() * 1.3)
 
         self.al_respawnear : Evento = Evento()
 
@@ -21,8 +21,8 @@ class Nave(Entidad):
 
         self.set_perspective(1)
         
-        self.velocidad_x = 2
-        self.velocidad_y = 1.9
+        self.velocidad_x = 1.9
+        self.velocidad_y = 2.2
 
         self.set_estado(Invencible)
 

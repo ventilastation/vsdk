@@ -105,7 +105,7 @@ class Bajando(Vulnerable):
 class ChillerBajando(Bajando):
     def on_enter(self):
         super().on_enter()
-        self.frames_left = 30
+        self.frames_left = 40
         self.entidad.set_direccion(-self.entidad.direccion)
 
     def step(self):

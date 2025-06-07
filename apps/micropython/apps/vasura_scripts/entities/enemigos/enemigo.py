@@ -62,7 +62,7 @@ class Driller(Enemigo):
     estado_inicial = Bajando
 
     def __init__(self, scene):
-        self.velocidad_y = 0.5
+        self.velocidad_y = 0.52
 
         self.strip = "driller-sheet.png"
         self.largo_animacion = 7
@@ -75,8 +75,8 @@ class Chiller(Enemigo):
     estado_inicial = ChillerBajando
 
     def __init__(self, scene):
-        self.velocidad_x = 1.15
-        self.velocidad_y = 0.5
+        self.velocidad_x = 1.25
+        self.velocidad_y = 0.6
 
         self.strip = "chiller-sheet.png"
         self.largo_animacion = 6
@@ -89,8 +89,8 @@ class Bully(Enemigo):
     estado_inicial = Persiguiendo
 
     def __init__(self, scene):
-        self.velocidad_x = 1
-        self.velocidad_y = 0.75
+        self.velocidad_x = 1.3
+        self.velocidad_y = 0.87
 
         self.velocidad_y_original = self.velocidad_y
 
@@ -132,7 +132,7 @@ class Spiraler(Enemigo):
 
     def __init__(self, scene):
         self.velocidad_x = 0.7
-        self.velocidad_y = 0.2
+        self.velocidad_y = 0.25
 
         self.strip = "spiraler-sheet.png"
         self.largo_animacion = 8

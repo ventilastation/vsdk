@@ -408,12 +408,14 @@ class VailableExtremeGame(Scene):
         redondeado = (actual_time // 50) * 50
 
         if redondeado == 2000:
-            self.music_test = Music("apps/extreme_songs/electrochongo.txt")
+            self.music_test = Music("apps/extreme_songs/electro_easy.txt")
+
+        if redondeado == TIME_MODIFIER + 1500:
+            self.tutorial.disable()
+            self.dancer.set_frame(0)
 
         if redondeado == TIME_MODIFIER + 2000:
             director.music_play("vailableextreme/electrochongo")
-            self.tutorial.disable()
-            self.dancer.set_frame(0)
 
         # wave management
         if self.music_test:
