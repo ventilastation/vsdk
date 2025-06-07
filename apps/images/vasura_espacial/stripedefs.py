@@ -6,7 +6,7 @@ stripes = [
 
     ),
     palettegroup(
-        strip("ship-sprite-asym-sheet.png", frames = 2),
+        strip("ship-sprite-sheet.png", frames = 6*2),
         strip("ship-sprite-gray.png", frames = 2),
     ),
     palettegroup(

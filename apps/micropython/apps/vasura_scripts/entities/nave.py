@@ -9,8 +9,8 @@ from apps.vasura_scripts.estado import *
 class Nave(Entidad):
 
     def __init__(self, scene, balas_manager: BalasManager):
-        super().__init__(scene, stripes["ship-sprite-asym-sheet.png"])
-        self.largo_animacion = 1
+        super().__init__(scene, stripes["ship-sprite-sheet.png"])
+        self.largo_animacion = 6
 
         self.min_y = floor(self.height() * 1.5)
 
@@ -97,8 +97,7 @@ class Nave(Entidad):
 
 class NaveSana(Vulnerable):
     def on_enter(self):
-        self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
-        self.entidad.set_frame(0 if self.entidad.direccion == 1 else 1)
+        self.entidad.set_strip(stripes["ship-sprite-sheet.png"])
 
     def step(self):
         super().step()
@@ -134,7 +133,7 @@ class Respawneando(Deshabilitado):
 
 class Invencible(Estado):
     def on_enter(self):
-        self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
+        self.entidad.set_strip(stripes["ship-sprite-sheet.png"])
         self.entidad.set_frame(0)
         self.frames_left = 60
         self.blink_rate = 4
