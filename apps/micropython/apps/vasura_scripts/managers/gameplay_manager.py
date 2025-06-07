@@ -56,7 +56,7 @@ class GameplayManager():
     
     def limpiar(self):
         self.al_perder_vida.limpiar()
-        self.game_over.limpiar()
+        self.scene_over.limpiar()
     
     def sumar_puntos(self, p:int):
         self.puntaje += p
