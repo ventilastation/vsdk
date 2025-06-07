@@ -61,8 +61,8 @@ stripes = [
     fullscreen("06AMISTAD.png"),
     fullscreen("07AMOR.png"),
     fullscreen("08PANUELO.png"),
-    fullscreen("09CAMINO.png"),
     fullscreen("titulo.png"),
+    strip("09CAMINO.png"),
     strip("ball.png", frames=1),
     strip("vga_cp437.png", frames=256),
   )
