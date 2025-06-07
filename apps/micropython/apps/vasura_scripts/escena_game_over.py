@@ -22,7 +22,7 @@ class VasuraGameOver(Scene):
 
         Lebal("GAME OVER :(", 120, 12)
 
-        Label("TU PUNTAJE:", 246, 24, "rainbow8x8")
+        Label("TU PUNTAJE", 246, 24, "rainbow8x8")
         Label(str(self.hi_score_manager.puntaje_jugadore), 246, 12, "horizon8x8")
 
         self.call_later(5000, self.advance)   
