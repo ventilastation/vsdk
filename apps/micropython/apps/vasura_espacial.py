@@ -13,6 +13,8 @@ from apps.vasura_scripts.entities.planeta import Planeta
 from apps.vasura_scripts.score.display_puntaje import *
 from apps.vasura_scripts.score.hi_score_manager import *
 
+from apps.vasura_scripts.escena_game_over import *
+
 import gc
 
 
@@ -50,6 +52,7 @@ class VasuraEspacial(Scene):
         self.hi_score_manager.al_superar_hi_score.suscribir(self.label_puntajes.mostrar_medalla)
 
         #self.reproducir_bgm()
+
     
     def juntar_basura(self):
         gc.collect()
@@ -78,12 +81,8 @@ class VasuraEspacial(Scene):
 
         director.music_off()
         
-
-
     def finished(self):
-        gc.collect()
-        director.pop()
-        raise StopIteration()
+        director.push(VasuraGameOver(self.hi_score_manager))
 
 
     def reproducir_bgm(self):

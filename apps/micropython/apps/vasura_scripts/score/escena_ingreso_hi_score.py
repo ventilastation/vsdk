@@ -56,7 +56,6 @@ class VasuraIngresoHiScore(Scene):
                 self.chars[self.current_char_index].deselect()
                 self.current_char_index += 1
 
-                self.hi_score_manager.puntaje_jugadore = 8025
                 self.hi_score_manager.guardar_puntaje_actual(
                     self.chars[0].get_char() + 
                     self.chars[1].get_char() + 
