@@ -33,10 +33,6 @@ stripes = [
         strip("numerals.png", frames=12),
     ),
     palettegroup(
-        strip("charset.png", frames=256),
-        strip("tesrahc.png", frames=256)
-    ),
-    palettegroup(
         strip("horizon8x8.png", frames=256),
         strip("noziroh8x8.png", frames=256)
     ),
