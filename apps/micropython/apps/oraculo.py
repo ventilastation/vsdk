@@ -48,8 +48,8 @@ class TimedScene(Scene):
     def finish_scene(self):
         # print("Later called to finish scene, current time: ", utime.ticks_ms())
         director.pop()
+
 class SpriteAnimationScene(TimedScene):
-    stripes_rom = "oraculo"
     sprite_files = []
     order = []
 
@@ -178,7 +178,6 @@ class RuletaX:
         return self.nombre
 
 class Oraculo(Scene):
-    stripes_rom = "oraculo"
     def on_enter(self):
         super(Oraculo, self).on_enter()
         director.sound_play(b"oraculo/ruleta")
@@ -269,19 +268,6 @@ class Inicio(TimedScene):
     def finished(self):
         director.pop()
         raise StopIteration()
-class Orquestador (Scene):
-    stripes_rom = "oraculo"
-    def on_enter(self):
-        super(Orquestador, self).on_enter()
-        director.push(scenes[0]())
-
-    def step(self):
-        if director.was_pressed(director.BUTTON_D):
-            self.finished()
-    
-    def finished(self):
-        director.pop()
-        raise StopIteration()
         
 
 scenes = [
@@ -298,4 +284,4 @@ scenes = [
 ]      
 
 def main():
-    return Orquestador()
+    return Inicio()
