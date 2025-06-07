@@ -21,12 +21,11 @@ class SpawnerEnemigos():
             ]),
 
             WaveEnemigos([
-                (Driller,  5, 1)
+                (Driller,  4, 1)
             ], 3),
 
             WaveEnemigos([
-                (Spiraler, 3, 2.5),
-                (Spiraler, 1, 1.75),
+                (Spiraler, 2, 2.5),
                 (Spiraler, 1, 3),
                 (Spiraler, 2, 0)
             ]),
@@ -39,8 +38,8 @@ class SpawnerEnemigos():
                 (Driller,  1, 2),
                 (Spiraler, 1, 2),
                 (Driller,  1, 1),
-                (Spiraler, 1, 4),
-                (Spiraler, 3, 2),
+                (Spiraler, 1, 2),
+                (Spiraler, 2, 2),
                 (Driller,  3, 2),
             ], 1),
 
@@ -49,14 +48,13 @@ class SpawnerEnemigos():
             ], 1),
 
             WaveEnemigos([
-                (Driller,  3, 3),
-                (Bully,    2, 6),
-                (Driller,  1, 0),
-                (Bully,    1, 4),
-                (Bully,    1, 0),
+                (Driller,  3, 2),
+                (Bully,    2, 4),
+                (Driller,  1, 1),
+                (Bully,    1, 1),
                 (Driller,  4, 3),
                 (Bully,    1, 5),
-                (Bully,    4, 1.75),
+                (Bully,    3, 1.75),
             ], 2),
 
             WaveEnemigos([
@@ -66,6 +64,7 @@ class SpawnerEnemigos():
 
             WaveEnemigos([
                 (Chiller,  1, 0),
+                (Bully, 2, 2),
             ], 3),
 
             WaveEnemigos([
@@ -77,7 +76,27 @@ class SpawnerEnemigos():
         waves_random = [
             WaveEnemigos([
                 (Driller,  1, 0)
-            ])
+            ], 0.5),
+
+            WaveEnemigos([
+                (Bully, 1, 1.5),
+                (Chiller, 1, 4),
+                (Driller, 2, 1.5),
+                (Chiller, 1, 4)
+            ]),
+
+            WaveEnemigos([
+                (Spiraler, 2, 1.5),
+                (Driller, 2, 0.55),
+                (Bully, 1, 2),
+                (Driller, 1, 2),
+            ], 2),
+
+            WaveEnemigos([
+                (Chiller, 1, 2),
+                (Spiraler, 3, 4),
+                (Bully, 1, 1),
+            ], 2),
         ]
         
         self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves_intro, waves_random, manager.enemigos_spawneados.is_empty, delay=2)
