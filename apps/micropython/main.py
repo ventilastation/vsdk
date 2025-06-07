@@ -10,6 +10,7 @@ from ventilastation.shuffler import shuffled
 
 MAIN_MENU_OPTIONS = [
     # 1er Jam 2025
+    ('oraculo', "oraculo.png", 0),
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
     ('uzumaki', "uzumaki.png", 0),
@@ -17,7 +18,7 @@ MAIN_MENU_OPTIONS = [
     ('vs', "vs.png", 0),
     ('tvnel', "tvnel.png", 0),
     ('ventrack', "venti808.png", 0),
-    ('oraculo', "oraculo.png", 0),
+    
     # ('tvnel_alecu', "tvnel_alecu.png", 0),
     # ('mygame', "mygame.png", 0),
     # PyCamp 2025
@@ -32,7 +33,6 @@ MAIN_MENU_OPTIONS = [
     # ('vyruss', "menu.png", 0),
     # ('ventilagon_game', "menu.png", 1),
     # ('ventap', "menu.png", 4),
-    # ('tutorial', "menu.png", 10),
     # ('debugmode', "menu.png", 9),
     # ('calibrate', "menu.png", 8),
     # ('credits', "menu.png", 3),
