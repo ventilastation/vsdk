@@ -4,10 +4,10 @@ from apps.vasura_scripts.entities.nave import Nave
 from apps.vasura_scripts.entities.enemigos.enemigo import *
 
 VIDAS_INICIALES : int = 3
-TIEMPO_DE_RESPAWN : float = 3
+TIEMPO_DE_RESPAWN : float = 2
 
 Y_INICIAL_NAVE : int = 50
-PUNTOS_RESTADOS_POR_MUERTE : int = 500
+PUNTOS_RESTADOS_POR_MUERTE : int = 350
 
 class GameplayManager():    
     def __init__(self, nave:Nave):

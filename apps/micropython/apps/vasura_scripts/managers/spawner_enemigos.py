@@ -13,39 +13,39 @@ class SpawnerEnemigos():
         #TODO Agregar comportamiento que tire waves random de entre las mas dificiles (y capaz algunas no tan dificiles para ir intercalando) y usarlo como fallback
         self.comportamiento_fallback : ComportamientoSpawn = SpawnRandomIncremental(**comportamiento_test)
 
+        #TODO construir esto desde un archivo de texto por el amor de dios kenoexiste
+        #Tipo, cantidad, tiempo entre spawn
+        #Tener en cuenta la cantidad de sprites que hay pooleados para cada enemigo
         waves = [
-            WaveEnemigos([
-                #TODO construir esto desde un archivo de texto por el amor de dios kenoexiste
-                #Tipo, cantidad, tiempo entre spawn
-                #Tener en cuenta la cantidad de sprites que hay pooleados para cada enemigo
-                (Driller,  2, 3),
-                (Driller,  1, 5),
-                (Driller,  2, 0),
-            ]),
+            # WaveEnemigos([
+            #     (Driller,  2, 3),
+            #     (Driller,  1, 5),
+            #     (Driller,  2, 0),
+            # ]),
 
-            WaveEnemigos([
-                (Driller,  5, 1)
-            ], 3),
+            # WaveEnemigos([
+            #     (Driller,  5, 1)
+            # ], 3),
 
-            WaveEnemigos([
-                (Spiraler, 3, 2.5),
-                (Spiraler, 1, 1.75),
-                (Spiraler, 1, 3),
-                (Spiraler, 2, 0)
-            ]),
+            # WaveEnemigos([
+            #     (Spiraler, 3, 2.5),
+            #     (Spiraler, 1, 1.75),
+            #     (Spiraler, 1, 3),
+            #     (Spiraler, 2, 0)
+            # ]),
 
-            WaveEnemigos([
-                (Spiraler, 4, 1.5)
-            ], 3),
+            # WaveEnemigos([
+            #     (Spiraler, 4, 1.5)
+            # ], 3),
 
-            WaveEnemigos([
-                (Driller,  1, 2),
-                (Spiraler, 1, 2),
-                (Driller,  1, 1),
-                (Spiraler, 1, 4),
-                (Spiraler, 3, 2),
-                (Driller,  3, 2),
-            ], 1),
+            # WaveEnemigos([
+            #     (Driller,  1, 2),
+            #     (Spiraler, 1, 2),
+            #     (Driller,  1, 1),
+            #     (Spiraler, 1, 4),
+            #     (Spiraler, 3, 2),
+            #     (Driller,  3, 2),
+            # ], 1),
 
             WaveEnemigos([
                 (Bully,  1, 0)

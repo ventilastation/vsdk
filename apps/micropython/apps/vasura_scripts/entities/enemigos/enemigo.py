@@ -132,7 +132,7 @@ class Spiraler(Enemigo):
 
     def __init__(self, scene):
         self.velocidad_x = 0.7
-        self.velocidad_y = 0.25
+        self.velocidad_y = 0.2
 
         self.strip = "spiraler-sheet.png"
         self.largo_animacion = 8
