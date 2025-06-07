@@ -58,7 +58,7 @@ class VasuraEspacial(Scene):
         self.gameplay_manager.puntaje_actualizado.suscribir(self.hi_score_manager.chequear_puntaje_actual)
         self.hi_score_manager.al_superar_hi_score.suscribir(self.label_puntajes.mostrar_medalla)
 
-        #self.reproducir_bgm()
+        self.reproducir_bgm()
 
     
     def juntar_basura(self):
@@ -89,7 +89,7 @@ class VasuraEspacial(Scene):
         director.music_off()
         
     def reproducir_bgm(self):
-        director.music_play("vasura_espacial/cancion_no_robada")
+        director.music_play("vasura_espacial/bgm_gameplay")
         self.call_later(85000, self.reproducir_bgm)
 
     def on_game_over(self):
