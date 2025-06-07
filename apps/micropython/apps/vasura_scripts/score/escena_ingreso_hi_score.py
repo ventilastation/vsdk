@@ -2,7 +2,7 @@ from ventilastation.director import director
 from ventilastation.scene import Scene
 
 from apps.vasura_scripts.score.hi_score_manager import *
-from apps.vasura_scripts.score.hi_score_label import *
+from apps.vasura_scripts.score.lebal import *
 from apps.vasura_scripts.score.hi_score_tag_character import *
 from apps.vasura_scripts.score.escena_hi_scores import *
 
@@ -25,10 +25,10 @@ class VasuraIngresoHiScore(Scene):
         if self.terminada:
             director.pop()
 
-        HiScoreLabel("\xADENTRASTE", 122, 4)
-        HiScoreLabel("AL RANKING!", 122, 16)
+        Lebal("\xADENTRASTE", 122, 4, "wobniar8x8")
+        Lebal("AL RANKING!", 122, 16, "wobniar8x8")
 
-        Label("INICIALES:", 246, 20)
+        Label("INICIALES:", 246, 20, "rainbow8x8")
 
         self.chars = [
             HiScoreTagCharacter(5,   4),
@@ -40,8 +40,10 @@ class VasuraIngresoHiScore(Scene):
         
 
     def step(self):
-        if self.current_char_index < 3:
-            self.chars[self.current_char_index].step()
+        if self.current_char_index > 2:
+            return
+
+        self.chars[self.current_char_index].step()
         
         if director.was_pressed(director.JOY_UP) or director.was_pressed(director.JOY_RIGHT):
             self.chars[self.current_char_index].increase_index()

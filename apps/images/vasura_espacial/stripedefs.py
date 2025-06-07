@@ -28,4 +28,16 @@ stripes = [
         strip("charset.png", frames=256),
         strip("tesrahc.png", frames=256)
     ),
+    palettegroup(
+        strip("horizon8x8.png", frames=256),
+        strip("noziroh8x8.png", frames=256)
+    ),
+    palettegroup(
+        strip("rainbow8x8.png", frames=256),
+        strip("wobniar8x8.png", frames=256)
+    ),
+    palettegroup(
+        strip("steel8x8.png", frames=256),
+        strip("leets8x8.png", frames=256)
+    ),
 ]
