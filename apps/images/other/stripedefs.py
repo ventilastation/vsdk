@@ -18,7 +18,7 @@ stripes = [
         fullscreen("bembi.png"),
         strip("pollitos.png", frames=5),
     ),
-    # palettegroup(
-    #     fullscreen("doom.png"),
-    # ),
+    palettegroup(
+        fullscreen("doom.png"),
+    ),
 ]
