@@ -281,7 +281,7 @@ class Oraculo(Scene):
         director.pop()
         raise StopIteration()
 class Inicio(TimedScene):
-    duration = 4000
+    duration = 30000
     stripes_rom = "oraculo"
     def on_enter(self):
         super(Inicio, self).on_enter()
