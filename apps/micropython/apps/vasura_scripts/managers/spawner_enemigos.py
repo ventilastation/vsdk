@@ -1,6 +1,5 @@
 from apps.vasura_scripts.entities.enemigos.enemigo import *
 from apps.vasura_scripts.managers.enemigos_manager import TIPOS_DE_ENEMIGO, EnemigosManager
-from apps.vasura_scripts.managers.tablas import comportamiento_test
 
 from utime import ticks_ms, ticks_diff, ticks_add
 from urandom import randint, seed, choice
@@ -10,13 +9,11 @@ from math import floor
 class SpawnerEnemigos():
     def __init__(self, manager: EnemigosManager):
         self.manager : EnemigosManager = manager
-        #TODO Agregar comportamiento que tire waves random de entre las mas dificiles (y capaz algunas no tan dificiles para ir intercalando) y usarlo como fallback
-        self.comportamiento_fallback : ComportamientoSpawn = SpawnRandomIncremental(**comportamiento_test)
 
         #TODO construir esto desde un archivo de texto por el amor de dios kenoexiste
         #Tipo, cantidad, tiempo entre spawn
         #Tener en cuenta la cantidad de sprites que hay pooleados para cada enemigo
-        waves = [
+        waves_intro = [
             WaveEnemigos([
                 (Driller,  2, 3),
                 (Driller,  1, 5),
@@ -77,8 +74,13 @@ class SpawnerEnemigos():
                 (Driller,  3, 3),
             ], 3),
         ]
-
-        self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves, manager.enemigos_spawneados.is_empty, delay=2)
+        waves_random = [
+            WaveEnemigos([
+                (Driller,  1, 0)
+            ])
+        ]
+        
+        self.comportamiento : ComportamientoSpawn = SpawnPorWaves(waves_intro, waves_random, manager.enemigos_spawneados.is_empty, delay=2)
                 
         seed(ticks_ms())
 
@@ -92,12 +94,7 @@ class SpawnerEnemigos():
         tipo = self.comportamiento.get_siguiente_enemigo()
         
         if not tipo:
-            if self.comportamiento.terminado:
-                self.comportamiento = self.comportamiento_fallback
-
-                tipo = self.comportamiento.get_siguiente_enemigo()
-            else: 
-                return
+            return
 
         if tipo == Chiller:
             enemigos = []
@@ -229,8 +226,8 @@ class WaveEnemigos:
         self.delay = delay * 1000
         self.pasos = []
         self.terminada : bool = False
-
-        pasos.reverse()
+        self.paso_actual : int = 0
+        
         for tipo_enemigo, cantidad, intervalo_spawn in pasos:
             t = floor(intervalo_spawn * 1000)
 
@@ -240,21 +237,28 @@ class WaveEnemigos:
         if self.terminada:
             return
 
-        p = self.pasos.pop()
+        p = self.pasos[self.paso_actual]
+        self.paso_actual += 1
 
-        if not self.pasos:
+        if self.paso_actual == len(self.pasos):
             self.terminada = True
         
         return p
+    
+    def reset(self):
+        self.paso_actual = 0
+        self.terminada = False
 
 #TODO Que el tiempo de espera de una wave sea para el final y no el delay con el que empieza
 class SpawnPorWaves(ComportamientoSpawn):
-    def __init__(self, waves:List[WaveEnemigos], no_quedan_enemigos_vivos:callable, delay : float = 0):
+    def __init__(self, waves_intro:List[WaveEnemigos], waves_random:List[WaveEnemigos], no_quedan_enemigos_vivos:callable, delay : float = 0):
         super().__init__()
-        self.waves : List[WaveEnemigos] = waves
-        self.waves.reverse()
+        self.waves_intro : List[WaveEnemigos] = waves_intro
+        self.waves_intro.reverse()
 
-        self.wave_actual : WaveEnemigos = self.waves.pop()
+        self.waves_random : List[WaveEnemigos] = waves_random
+
+        self.wave_actual : WaveEnemigos = self.waves_intro.pop()
         
         self.tiempo_siguiente_spawn : int = ticks_add(ticks_ms(), floor(delay + self.wave_actual.delay))
 
@@ -263,15 +267,21 @@ class SpawnPorWaves(ComportamientoSpawn):
         self.intervalo_spawn_actual : int = -1
 
         self.no_quedan_enemigos_vivos : callable = no_quedan_enemigos_vivos
+        self.modo_random : bool = False
 
-    def get_siguiente_enemigo(self):
+    def get_siguiente_enemigo(self,):
         if self.wave_actual.terminada and self.enemigos_restantes_paso == 0:
-            if not self.waves:
-                self.terminado = True
-                
-                return None
+            #if not self.waves_intro:
+                #self.terminado = True
+                #return None
             
-            self.wave_actual = self.waves.pop()
+            if not self.waves_intro:
+                if not self.modo_random:
+                    self.modo_random = True
+                else:
+                    self.wave_actual.reset()
+            
+            self.wave_actual = self.waves_intro.pop() if self.waves_intro else choice(self.waves_random)
             self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(self.wave_actual.delay))
 
             return None
@@ -289,4 +299,3 @@ class SpawnPorWaves(ComportamientoSpawn):
         spawn_timeout = ticks_diff(self.tiempo_siguiente_spawn, ticks_ms()) <= 0
 
         return not self.terminado and (self.no_quedan_enemigos_vivos() if (self.wave_actual.terminada and self.enemigos_restantes_paso == 0) else spawn_timeout)
-        
