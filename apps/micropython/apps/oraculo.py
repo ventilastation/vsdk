@@ -1,4 +1,4 @@
-import utime
+import utime, gc
 from urandom import choice, randrange, seed
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
@@ -43,6 +43,7 @@ class TimedScene(Scene):
         if director.was_pressed(director.BUTTON_D):
             director.pop()
             raise StopIteration()
+        gc.collect()
 
     def finish_scene(self):
         # print("Later called to finish scene, current time: ", utime.ticks_ms())
