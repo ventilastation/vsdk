@@ -10,15 +10,15 @@ from ventilastation.shuffler import shuffled
 
 MAIN_MENU_OPTIONS = [
     # 1er Jam 2025
-    ('oraculo', "oraculo.png", 0),
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
     ('vzumaki', "vzumaki.png", 0),
+
     ('vasura_espacial', "vasura_espacial.png", 0),
     ('vs', "vs.png", 0),
+    ('oraculo', "oraculo.png", 0),
     ('tvnel', "tvnel.png", 0),
     ('ventrack', "venti808.png", 0),
-    
     # ('tvnel_alecu', "tvnel_alecu.png", 0),
     # ('mygame', "mygame.png", 0),
     # PyCamp 2025
@@ -62,6 +62,7 @@ class GamesMenu(menu.Menu):
     stripes_rom = "menu"
     def __init__(self, options, selected_index=0):
         super().__init__(options, selected_index)
+        self.last_shuffle = -1
         self.shuffle_options()
 
     def shuffle_options(self):
@@ -70,7 +71,9 @@ class GamesMenu(menu.Menu):
             self.last_shuffle = utime.ticks_ms()
 
     def needs_shuffling(self):
-        return False
+        if self.last_shuffle == -1:
+            return True
+        # return False
         return utime.ticks_diff(utime.ticks_ms(), self.last_shuffle) > 60000
 
     def on_enter(self):
@@ -95,7 +98,7 @@ class GamesMenu(menu.Menu):
         self.loviejo.set_y(0)
         self.loviejo.set_frame(0)
         self.favalli = make_me_a_planet("favalli.png")
-        # self.favalli.set_frame(0)
+        self.favalli.set_frame(0)
 
 
     def on_option_pressed(self, option_index):
@@ -151,8 +154,9 @@ if __name__ == '__main__':
         director.sound_play(b"vyruss/shoot3")
         main()
     except Exception as e:
-        buf = io.StringIO()
-        sys.print_exception(e, buf)
-        director.report_traceback(buf.getvalue().encode("utf-8"))
-        print(buf.getvalue())
-        #machine.reset()
+        raise
+        # buf = io.StringIO()
+        # sys.print_exception(e, buf)
+        # director.report_traceback(buf.getvalue().encode("utf-8"))
+        # print(buf.getvalue())
+        # #machine.reset()

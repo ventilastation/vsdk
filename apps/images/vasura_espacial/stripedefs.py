@@ -6,7 +6,7 @@ stripes = [
 
     ),
     palettegroup(
-        strip("ship-sprite-asym-sheet.png", frames = 2),
+        strip("ship-sprite-sheet.png", frames = 6*2),
         strip("ship-sprite-gray.png", frames = 2),
     ),
     palettegroup(
@@ -20,12 +20,28 @@ stripes = [
     ),
     palettegroup(
         strip("explosion.png", frames=6),
+        fullscreen("explosion-grande0.png", radius=64),
+        fullscreen("explosion-grande1.png", radius=64),
+        fullscreen("explosion-grande2.png", radius=64),
+        fullscreen("explosion-grande3.png", radius=64),
+        fullscreen("explosion-grande4.png", radius=64),
+        fullscreen("explosion-grande5.png", radius=64),
+        fullscreen("explosion-grande6.png", radius=64),
+        fullscreen("explosion-grande7.png", radius=64),
     ),
     palettegroup(
         strip("numerals.png", frames=12),
     ),
     palettegroup(
-        strip("charset.png", frames=256),
-        strip("tesrahc.png", frames=256)
+        strip("horizon8x8.png", frames=256),
+        strip("noziroh8x8.png", frames=256)
+    ),
+    palettegroup(
+        strip("rainbow8x8.png", frames=256),
+        strip("wobniar8x8.png", frames=256)
+    ),
+    palettegroup(
+        strip("steel8x8.png", frames=256),
+        strip("leets8x8.png", frames=256)
     ),
 ]

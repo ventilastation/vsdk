@@ -113,10 +113,16 @@ class Bully(Enemigo):
         super().reset()
 
     def al_morir_nave(self, _):
+        if isinstance(self.estado, Explotando):
+            return
+        
         self.velocidad_y = 0
         self.set_estado(YendoDerecho)
 
     def al_respawnear_nave(self):
+        if isinstance(self.estado, Explotando):
+            return
+        
         self.velocidad_y = self.velocidad_y_original
         self.set_estado(Persiguiendo)
 
@@ -126,7 +132,7 @@ class Spiraler(Enemigo):
 
     def __init__(self, scene):
         self.velocidad_x = 0.7
-        self.velocidad_y = 0.25
+        self.velocidad_y = 0.2
 
         self.strip = "spiraler-sheet.png"
         self.largo_animacion = 8

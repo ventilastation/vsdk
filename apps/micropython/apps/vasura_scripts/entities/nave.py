@@ -9,8 +9,8 @@ from apps.vasura_scripts.estado import *
 class Nave(Entidad):
 
     def __init__(self, scene, balas_manager: BalasManager):
-        super().__init__(scene, stripes["ship-sprite-asym-sheet.png"])
-        self.largo_animacion = 1
+        super().__init__(scene, stripes["ship-sprite-sheet.png"])
+        self.largo_animacion = 6
 
         self.min_y = floor(self.height() * 1.5)
 
@@ -21,8 +21,8 @@ class Nave(Entidad):
 
         self.set_perspective(1)
         
-        self.velocidad_x = 1.5
-        self.velocidad_y = 1.75
+        self.velocidad_x = 2
+        self.velocidad_y = 1.9
 
         self.set_estado(Invencible)
 
@@ -33,7 +33,7 @@ class Nave(Entidad):
     
     def hit(self, _:int):
         if self.es_vulnerable():
-            self.set_estado(Explotando)
+            self.set_estado(NaveExplotando)
 
         return True
 
@@ -44,6 +44,7 @@ class Nave(Entidad):
         bala = self.balas.get()
         
         if not bala:
+            director.sound_play('vasura_espacial/sin_balas')
             return
 
         bala.reset()
@@ -57,9 +58,6 @@ class Nave(Entidad):
         y = self.y() + self.height() // 2 - bala.height() // 2
         
         bala.set_position(x, y)
-    
-    def morir(self):
-        self.set_estado(NaveExplotando)
     
     def notificar_muerte(self):
         self.al_morir.disparar(self)
@@ -97,8 +95,7 @@ class Nave(Entidad):
 
 class NaveSana(Vulnerable):
     def on_enter(self):
-        self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
-        self.entidad.set_frame(0 if self.entidad.direccion == 1 else 1)
+        self.entidad.set_strip(stripes["ship-sprite-sheet.png"])
 
     def step(self):
         super().step()
@@ -107,9 +104,10 @@ class NaveSana(Vulnerable):
 
 class NaveExplotando(Explotando):
     def step(self):
-        self.entidad.set_frame(self.entidad.frame() + 1)
+        self.entidad.set_frame(self.frame)
+        self.frame += 1
 
-        if self.entidad.frame() == self.total_frames:
+        if self.frame >= self.total_frames:
             self.entidad.notificar_muerte()
             
             return Respawneando
@@ -134,7 +132,7 @@ class Respawneando(Deshabilitado):
 
 class Invencible(Estado):
     def on_enter(self):
-        self.entidad.set_strip(stripes["ship-sprite-asym-sheet.png"])
+        self.entidad.set_strip(stripes["ship-sprite-sheet.png"])
         self.entidad.set_frame(0)
         self.frames_left = 60
         self.blink_rate = 4

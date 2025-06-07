@@ -23,7 +23,7 @@ class Entidad(Sprite):
 
         self.fase_animacion = 0
         self.frames = self.steps_por_frame
-        # self.set_direccion(1)
+        self.set_direccion(1)
 
 
         self.x_interno = x

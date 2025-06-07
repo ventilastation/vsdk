@@ -13,7 +13,7 @@ class HiScoreTagCharacter(Sprite):
         self.is_blinking : bool = False
         self.next_blink_update_time : int = -1
 
-        self.set_strip(stripes["charset.png"])
+        self.set_strip(stripes["horizon8x8.png"])
         self.set_x(x)
         self.set_y(y)
         self.set_perspective(2)
