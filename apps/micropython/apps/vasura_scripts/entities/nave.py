@@ -33,7 +33,7 @@ class Nave(Entidad):
     
     def hit(self, _:int):
         if self.es_vulnerable():
-            self.set_estado(Explotando)
+            self.set_estado(NaveExplotando)
 
         return True
 
@@ -58,9 +58,6 @@ class Nave(Entidad):
         y = self.y() + self.height() // 2 - bala.height() // 2
         
         bala.set_position(x, y)
-    
-    def morir(self):
-        self.set_estado(NaveExplotando)
     
     def notificar_muerte(self):
         self.al_morir.disparar(self)
@@ -107,9 +104,10 @@ class NaveSana(Vulnerable):
 
 class NaveExplotando(Explotando):
     def step(self):
-        self.entidad.set_frame(self.entidad.frame() + 1)
+        self.entidad.set_frame(self.frame)
+        self.frame += 1
 
-        if self.entidad.frame() == self.total_frames:
+        if self.frame >= self.total_frames:
             self.entidad.notificar_muerte()
             
             return Respawneando
