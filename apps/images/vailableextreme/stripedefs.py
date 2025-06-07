@@ -6,6 +6,7 @@ stripes = [
         strip("limite.png", frames=1)
     ),
     palettegroup(
+        fullscreen("av_first.png", radius=30),
         fullscreen("av_n1.png", radius=30),
         fullscreen("av_n2.png", radius=30),
         fullscreen("av_n3.png", radius=30),
@@ -24,5 +25,7 @@ stripes = [
         fullscreen("av_win1.png", radius=30),
         fullscreen("av_win2.png", radius=30),
         fullscreen("gane.png", radius=50),
+        fullscreen("perdi.png", radius=50),
+        fullscreen("tutorial.png", radius=35),
     )
 ]

@@ -244,8 +244,9 @@ class Mode:
         else:
             return self.mode
 
-class Dancer:   
+class Dancer(Sprite):   
     def __init__(self):
+        super().__init__()
         self.sprites_n = ["av_n1.png","av_n2.png","av_n3.png"]
         self.sprites_d = ["av_t1.png","av_t2.png","av_t3.png"]
         self.sprites_p = ["av_f1.png","av_f2.png","av_f3.png"]
@@ -253,12 +254,12 @@ class Dancer:
         self.sprites_win = ["av_win1.png","av_win2.png"]
         self.sprites_dead = ["av_apunialado01.png","av_apunialado02.png","av_apunialado03.png","av_apunialado04.png","av_apunialado05.png"]
 
-        self.dancer = Sprite()
-        self.dancer.set_strip(stripes[self.sprites_n[0]])
-        self.dancer.set_perspective(0)
-        self.dancer.set_x(0)
-        self.dancer.set_y(255)
-        self.dancer.set_frame(0)
+        self.set_strip(stripes["av_first.png"])
+        self.set_perspective(0)
+        self.set_x(0)
+        self.set_y(255)
+        self.set_frame(0)
+        self.disable()
         self.count = 0
         self.count_dead = 0
 
@@ -338,11 +339,11 @@ class Dancer:
         
     def _show(self,sprite,count):
         try:
-            self.dancer.set_strip(stripes[sprite[count]])
-            self.dancer.set_perspective(0)
-            self.dancer.set_x(0)
-            self.dancer.set_y(255)
-            self.dancer.set_frame(0)
+            self.set_strip(stripes[sprite[count]])
+            self.set_perspective(0)
+            self.set_x(0)
+            self.set_y(255)
+            self.set_frame(0)
         except:pass
 
 
@@ -356,10 +357,7 @@ class VailableExtremeGame(Scene):
 
     def on_enter(self):
         super(VailableExtremeGame, self).on_enter()
-        self.start_time = utime.ticks_ms()
-
-        self.music_test = Music("apps/extreme_songs/electrochongo.txt")
-        self.start_time = utime.ticks_ms()
+        self.music_test = False
 
         self.order = 0
         self.exit_order=[]
@@ -374,10 +372,25 @@ class VailableExtremeGame(Scene):
         self.win.set_frame(0)
         self.win.disable()
 
+        self.lose = Sprite()
+        self.lose.set_strip(stripes["perdi.png"])
+        self.lose.set_perspective(0)
+        self.lose.set_x(0)
+        self.lose.set_y(255)
+        self.lose.set_frame(0)
+        self.lose.disable()
+
+        self.tutorial = Sprite()
+        self.tutorial.set_strip(stripes["tutorial.png"])
+        self.tutorial.set_perspective(0)
+        self.tutorial.set_x(0)
+        self.tutorial.set_y(255)
+        self.tutorial.set_frame(0)
+
         self.mode = Mode()
 
-        Limit(34)
-        Limit(41)
+        self.limit1 = Limit(34)
+        self.limit2 = Limit(41)
 
         self.enabled_lines = []
         self.disabled_lines = [Wave([BUTTON,BUTTON2],200) for _ in range(10)]
@@ -388,20 +401,28 @@ class VailableExtremeGame(Scene):
         self.beat = 0
         self.stop = False
 
+        self.start_time = utime.ticks_ms()
+
     def step(self):
         actual_time = utime.ticks_diff(utime.ticks_ms(), self.start_time)
         redondeado = (actual_time // 50) * 50
 
-        if redondeado == TIME_MODIFIER:
+        if redondeado == 2000:
+            self.music_test = Music("apps/extreme_songs/electrochongo.txt")
+
+        if redondeado == TIME_MODIFIER + 2000:
             director.music_play("vailableextreme/electrochongo")
+            self.tutorial.disable()
+            self.dancer.set_frame(0)
 
         # wave management
-        self.beat = self.music_test.beat(redondeado)
-        for wave in self.disabled_lines:
-            order = wave.should_appear(self.beat,self.disabled_lines,self.enabled_lines,self.exit_order,self.order)
-            if order:
-                self.order = order
-                break
+        if self.music_test:
+            self.beat = self.music_test.beat(redondeado)
+            for wave in self.disabled_lines:
+                order = wave.should_appear(self.beat,self.disabled_lines,self.enabled_lines,self.exit_order,self.order)
+                if order:
+                    self.order = order
+                    break
         
         # pop wave and expand
         for wave in self.enabled_lines:
@@ -425,6 +446,7 @@ class VailableExtremeGame(Scene):
         if self.dancer.lose(self.mode.mangment()):
             if self.dancer.dead(redondeado):
                 self.finished()
+            self.lose.set_frame(0)
             self.stop = True
 
         if 119900 <= redondeado:
