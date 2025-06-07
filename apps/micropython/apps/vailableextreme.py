@@ -4,7 +4,7 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 import utime
 
-TIME_MODIFIER = 4250
+TIME_MODIFIER = 3500
 
 SCORE_STATES = {
     "miss" : 0,
