@@ -92,8 +92,9 @@ class VasuraEspacial(Scene):
         director.music_off()
         
     def reproducir_bgm(self):
+        #El tiempo de loopeo no coincide con la duracion de la cancion porque no podemos subir la que se usa por copyright
         director.music_play("vasura_espacial/bgm_gameplay")
-        self.call_later(85000, self.reproducir_bgm)
+        self.call_later(144000, self.reproducir_bgm)
 
     def on_game_over(self):
         self.terminada = True
