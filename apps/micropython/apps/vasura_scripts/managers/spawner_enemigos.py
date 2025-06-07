@@ -6,9 +6,11 @@ from utime import ticks_ms, ticks_diff, ticks_add
 from urandom import randint, seed, choice
 from math import floor
 
+
 class SpawnerEnemigos():
     def __init__(self, manager: EnemigosManager):
         self.manager : EnemigosManager = manager
+        #TODO Agregar comportamiento que tire waves random de entre las mas dificiles (y capaz algunas no tan dificiles para ir intercalando) y usarlo como fallback
         self.comportamiento_fallback : ComportamientoSpawn = SpawnRandomIncremental(**comportamiento_test)
 
         waves = [
@@ -120,8 +122,6 @@ class SpawnerEnemigos():
             pos = (pos + 256 // 3) % 256
 
         
-
-
 class ComportamientoSpawn:
     def __init__(self):
         self.terminado = False
@@ -247,6 +247,7 @@ class WaveEnemigos:
         
         return p
 
+#TODO Que el tiempo de espera de una wave sea para el final y no el delay con el que empieza
 class SpawnPorWaves(ComportamientoSpawn):
     def __init__(self, waves:List[WaveEnemigos], no_quedan_enemigos_vivos:callable, delay : float = 0):
         super().__init__()

@@ -17,7 +17,7 @@ class Estado:
 
 
     def step(self):
-        pass
+        self.entidad.animar()
 
 
     def on_exit(self):
@@ -29,6 +29,8 @@ class Deshabilitado(Estado):
     def on_enter(self):
         self.entidad.disable()
 
+    def step(self):
+        pass
 
 
 class Explotando(Estado):  # Anarquía
@@ -66,6 +68,7 @@ class Explotando(Estado):  # Anarquía
 class Vulnerable(Estado):
     #TODO mover esto a un lugar donde nos ahorremos el chequeo de tipos
     def step(self):
+        super().step()
         es_nave = self.entidad.__class__.__name__ == "Nave"
 
         if not es_nave:
