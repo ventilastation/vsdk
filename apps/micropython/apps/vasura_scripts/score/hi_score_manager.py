@@ -47,24 +47,20 @@ class HiScoreManager:
             self.al_superar_hi_score.disparar()
             self.hi_score_superado = True
     
-    def chequear_hi_score(self, puntaje_final : int):
-        if score == -1:
-            score = 0
-
-        if puntaje_final < self.hi_scores[-1]["puntaje"]:
+    def guardar_puntaje_actual(self, iniciales:str):
+        if self.puntaje_jugadore < self.hi_scores[-1]["puntaje"]:
             return -1
 
         for i in range(len(self.hi_scores) - 2, -1, -1):
-            if puntaje_final <= self.hi_scores[i]["puntaje"]:
+            if self.puntaje_jugadore <= self.hi_scores[i]["puntaje"]:
                 self.hi_scores[i + 1] = {
-                    "nombre": "!!!",
-                    "puntaje": puntaje_final
+                    "nombre": iniciales,
+                    "puntaje": self.puntaje_jugadore
                 }
 
-                self.posicion_jugadore = i+1
+                self.guardar_hi_scores()
+                
                 return
-    
-        self.posicion_jugadore = 1
 
     def guardar_hi_scores(self):
         try:
