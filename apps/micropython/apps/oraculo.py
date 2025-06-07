@@ -20,6 +20,7 @@ def build_sprites(strips):
 def build_animation(sprites, order):
     return [sprites[n] for n in order]
 class TimedScene(Scene):
+    keep_music = True
     def __init__(self):
         super().__init__()
         self.scene_start = utime.ticks_ms()
@@ -180,7 +181,7 @@ class RuletaX:
 class Oraculo(Scene):
     def on_enter(self):
         super(Oraculo, self).on_enter()
-        director.sound_play(b"oraculo/ruleta")
+        director.music_play(b"oraculo/ruleta")
         self.bola = Sprite()
         self.bola.set_strip(stripes["ball.png"])
         self.bola.set_x(128 - self.bola.width()//2)
