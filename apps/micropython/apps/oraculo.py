@@ -56,7 +56,7 @@ class FinalScene(TimedScene):
     def on_enter(self):
         super().on_enter()
         self.textImagen = Sprite()
-        self.textImagen.set_strip(stripes["09CAMINO.png"])
+        self.textImagen.set_strip(stripes[self.text])
         self.textImagen.set_perspective(2)
         self.textImagen.set_x(128 - self.textImagen.width() // 2)
         self.textImagen.set_y(0)
@@ -74,9 +74,11 @@ class SpriteAnimationScene(TimedScene):
     sprite_files = []
     order = []
     imageText = ""
+    soundImage = "oraculo/audio02"
 
     def on_enter(self):
         super().on_enter()
+        director.music_play(b"oraculo/audio02")
         sprites = build_sprites(self.sprite_files)
         anim = build_animation(sprites, self.order)
         self.frente = lambda frame: anim[(frame // len(self.order)) % len(anim)]
@@ -104,7 +106,7 @@ class Animation1(SpriteAnimationScene):
     order = list(range(4))
 class Animation2(SpriteAnimationScene):
     duration = 4000
-    imageText = "08PAÑUELO.png"
+    imageText = "08PANUELO.png"
     sprite_files = [
         "08pañuelo0000.png",
         "08pañuelo0003.png",
@@ -293,7 +295,7 @@ class Inicio(TimedScene):
     def step(self):
         super(Inicio, self).step()            
         if director.was_pressed(director.BUTTON_A):
-            director.push(FinalScene("09CAMINO.png"))
+            director.push(Oraculo())
         elif director.was_pressed(director.BUTTON_D):
             self.finished()
 
