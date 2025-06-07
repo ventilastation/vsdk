@@ -258,7 +258,7 @@ class VentrackInstru(Scene):
             self.pasos[self.cursor.gridx].sel(note)
             current_pattern[self.cursor.gridx] = note
             
-        if director.was_pressed(director.BUTTON_B):
+        if director.was_pressed(director.BUTTON_D):
             if current_pattern != self.patronoriginal:
                 if Idxinstrumento[instrumento] < 5:  
                     print("nuevo patron creado")
@@ -346,10 +346,13 @@ class Ventrack(Scene):
             print(f"Pattern pegado: {instrumento}")
             self.sonidito.instruments[instrumento].patterns[posicion] = current_pattern 
             self.pasos[3*posicion + instrumento].sel(self.sonidito.instruments[instrumento].patterns[posicion][16])
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
 
     def finished(self):
-        pass
-        
+        director.pop()
+        raise StopIteration()
+            
         
 class Instrument:
     sound_bank: str
@@ -411,10 +414,13 @@ class Sonidito:
             for step in zip_longest(*self.instruments, [None]):
                 #print(f"sound on step {step}")
                 self.n_step = (self.n_step + 1) % (16*16)
-                for sound in step: #step will be a list of sounds
-                    if sound:
+                notes = []
+                for note in step: #step will be a list of sounds
+                    if note:
+                        notes.append(note)
                         #print("playing {sound}")
-                        director.sound_play("ventrack/"+sound)
+                if notes:
+                    director.notes_play("ventrack", notes)
                 yield
     
     def callback(self):
