@@ -9,7 +9,7 @@ import config
 import struct
 import socket
 import threading
-from pygletengine import all_strips, set_palettes, spritedata, playsound, playmusic
+from pygletengine import all_strips, set_palettes, spritedata, playsound, playmusic, playnotes
 
 class ConnectionBase:
     def __init__(self):
@@ -142,6 +142,9 @@ def receive_loop():
 
             elif command == b"sound":
                 playsound(b" ".join(args))
+
+            elif command == b"notes":
+                playnotes(args[0], args[1])
 
             elif command == b"arduino":
                 arduino_send(b" ".join(args))

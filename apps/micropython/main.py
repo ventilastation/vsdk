@@ -18,7 +18,6 @@ MAIN_MENU_OPTIONS = [
     ('vs', "vs.png", 0),
     ('tvnel', "tvnel.png", 0),
     ('ventrack', "venti808.png", 0),
-    
     # ('tvnel_alecu', "tvnel_alecu.png", 0),
     # ('mygame', "mygame.png", 0),
     # PyCamp 2025
