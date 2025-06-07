@@ -1,16 +1,22 @@
 # -*- coding: cp437 -*-
 
-from urandom import choice, randrange, seed
+from urandom import randrange
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 import utime
 
+# este valor depende del tamaño de la letra
+STEP = 9
+RESERVED_SPRITES = 90
+
 def quitar_newlines(texto):
-    """Quita los saltos de línea y los espacios dobles de un texto."""
+    # Quita los saltos de línea y los espacios dobles del texto
     texto = " ".join(texto.split()).replace("  ", " ")
-    # Reemplaza caracteres de UTF-8 con sus equivalentes en cp437
-    # Esto es necesario porque Micropython no soporta UTF-8.
+ 
+    # Reemplaza caracteres de UTF-8 con sus equivalentes en CP437
+    # Esto es necesario porque Micropython solo soporta UTF-8
+    # mientras que el font que usamos es del CP437 de MS-DOS.
     texto = texto.replace("ñ", "\xa4")
     texto = texto.replace("á", "\xa0")
     texto = texto.replace("é", "\x82")
@@ -39,13 +45,25 @@ en espiral desde su centro,
 
 texto2b = quitar_newlines("""
 yendo de pequeños a grandes, una corona fractal de dientes, como la boca de una lamprea
-de mar, qué hunde sus colmillos en un tiburón, dejando en su piel una rosa de sangre,
-roja como la que sostenés entre tus dedos, sus pétalos crecen en espiral desde su centro,
-yendo de grandes a pequeños, un anillo de llamas qué arden en la oscuridad de la noche,
-un fuego que consume deltas y montes lanzando sus cenizas blancas al viento,
-blancas como los pétalos de rosa que sostenés entre tus dedos
-y que crecen en espiral desde su centro,
+de mar, qué hunde sus colmillos en un tiburón dejando en su piel una rosa de sangre,
+roja como los pétalos de la rosa que sostenés entre tus dedos que crecen en espiral
+desde su centro, yendo de grandes a pequeños, un anillo de llamas qué arden en la 
+oscuridad de la noche, un fuego que consume deltas y montes lanzando sus cenizas
+blancas al viento, blancas como los pétalos de la rosa que sostenés entre tus dedos
+que crecen en espiral desde su centro,
 """)
+
+def uzugen1():
+    while True:
+        for c in texto1:
+            yield c
+
+def uzugen2():
+    for c in texto2a:
+        yield c
+    while True:
+        for c in texto2b:
+            yield c
 
 class Letter(Sprite):
     def __init__(self):
@@ -54,17 +72,23 @@ class Letter(Sprite):
         self.set_perspective(1)
         self.set_strip(stripes["vga_cp437.png"])
     
-    def set_char(self, char, n):
+    def reset_char(self, char):
         self.disable()
-        self.set_x(-n * 9)
-        self.set_y(int(n * 2))
+        self.position = RESERVED_SPRITES * STEP
+        self.update_screenpos()
         self.set_frame(ord(char))
-        self.position = 200 + n * 9
+
+    def update_screenpos(self):
+        self.set_x(-(self.position - 64) % 256)
+        dest_y = self.position // 4
+        self.set_y(dest_y)
 
     def step_out(self):
         self.position -= 1
-        self.set_x(-(self.position - 64) % 256)
-        self.set_y(int(self.position / 4))
+        self.update_screenpos()
+
+    def finished(self):
+        return self.position <= 15
 
 
 class Vzumaki(Scene):
@@ -73,19 +97,45 @@ class Vzumaki(Scene):
 
     def on_enter(self):
         super().on_enter()
+        self.phrase_generator = uzugen2() if randrange(2) else uzugen1()
+
         self.letters = []
-        for n in range(90):
+        self.unused_letters = []
+        for n in range(RESERVED_SPRITES):
             letter = Letter()
-            letter.set_char(self.phrase[n], n)
-            self.letters.append(letter)
+            self.unused_letters.append(letter)
+
+        self.counter = 0
 
     def step(self):
         super().step()
-        for l in self.letters:
-            l.step_out()
+
+        velocity = 1
+
+        if director.is_pressed(director.BUTTON_A) or director.is_pressed(director.JOY_DOWN):
+            velocity = 4
+
+        for n in range(velocity):
+            self.step_letters()
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
+
+    def step_letters(self):
+        if self.counter % STEP == 0:
+            c = next(self.phrase_generator)
+            l = self.unused_letters.pop()
+            l.reset_char(c)
+            self.letters.append(l)
+            print(len(self.unused_letters), len(self.letters))
+
+        self.counter += 1
+
+        for l in self.letters:
+            l.step_out()
+            if l.finished():
+                self.unused_letters.append(l)
+                self.letters.remove(l)
 
     def finished(self):
         director.pop()
