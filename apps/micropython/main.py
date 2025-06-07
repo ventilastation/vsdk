@@ -16,7 +16,7 @@ MAIN_MENU_OPTIONS = [
 
     ('vasura_espacial', "vasura_espacial.png", 0),
     ('vs', "vs.png", 0),
-    ('oraculo', "oraculo.png", 0),
+    ('oraculo', "oraculo2.png", 0),
     ('tvnel', "tvnel.png", 0),
     ('ventrack', "venti808.png", 0),
     # ('tvnel_alecu', "tvnel_alecu.png", 0),
