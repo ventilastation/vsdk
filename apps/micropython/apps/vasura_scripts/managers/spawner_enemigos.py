@@ -5,6 +5,7 @@ from utime import ticks_ms, ticks_diff, ticks_add
 from urandom import randint, seed, choice
 from math import floor
 
+import gc
 
 class SpawnerEnemigos():
     def __init__(self, manager: EnemigosManager):
@@ -302,6 +303,9 @@ class SpawnPorWaves(ComportamientoSpawn):
             
             self.wave_actual = self.waves_intro.pop() if self.waves_intro else choice(self.waves_random)
             self.tiempo_siguiente_spawn = ticks_add(ticks_ms(), floor(self.wave_actual.delay))
+
+            if self.wave_actual.delay:
+                gc.collect()
 
             return None
         

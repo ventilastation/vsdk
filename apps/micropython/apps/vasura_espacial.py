@@ -15,8 +15,6 @@ from apps.vasura_scripts.score.hi_score_manager import *
 
 from apps.vasura_scripts.escena_game_over import *
 
-import gc
-
 class VasuraEspacial(Scene):
     stripes_rom = "vasura_espacial"
     def __init__(self):
@@ -50,7 +48,6 @@ class VasuraEspacial(Scene):
         self.gameplay_manager.scene_over.suscribir(self.on_game_over)
 
         self.manager_enemigos.al_morir_enemigo.suscribir(self.gameplay_manager.al_morir_enemigo)
-        self.call_later(1000 * 30, self.juntar_basura)
 
         self.label_puntajes : DisplayPuntaje = DisplayPuntaje()
         self.gameplay_manager.puntaje_actualizado.suscribir(self.label_puntajes.actualizar)
@@ -59,11 +56,6 @@ class VasuraEspacial(Scene):
         self.hi_score_manager.al_superar_hi_score.suscribir(self.label_puntajes.mostrar_medalla)
 
         self.reproducir_bgm()
-
-    
-    def juntar_basura(self):
-        gc.collect()
-        self.call_later(1000 * 30, self.juntar_basura)
 
 
     def step(self):
