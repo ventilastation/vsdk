@@ -10,6 +10,7 @@ except Exception as e:
 from ventilastation import sprites
 import gc
 import struct
+import uos
 
 
 DEBUG = False
@@ -90,7 +91,9 @@ class Director:
         comms.send(b"traceback %d"%len(content), content)
 
     def load_rom(self, filename):
-        self.romdata = memoryview(open(filename, "rb").read())
+        romlength = uos.stat(filename)[6]
+        self.romdata = memoryview(bytearray(romlength))
+        open(filename, "rb").readinto(self.romdata)
         stripes.clear()
         num_stripes, num_palettes = struct.unpack("<HH", self.romdata)
         offsets = struct.unpack_from("<%dL%dL" % (num_stripes, num_palettes), self.romdata, 4)
