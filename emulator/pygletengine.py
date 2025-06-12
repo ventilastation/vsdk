@@ -38,28 +38,33 @@ if platform.system() != "Windows":
 
 # preload all sounds
 sounds = {}
+sound_queue = []
 
 all_strips = {}
 
 SOUNDS_FOLDER = "../apps/sounds"
 
-for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
-    for fn in files:
-        if fn.endswith(".wav") or fn.endswith(".mp3"):
-            fullname = os.path.join(dirpath, fn)
-            fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
-            try:
-                sound = pyglet.media.load(fullname, streaming=False)
-            except pyglet.media.codecs.wave.WAVEDecodeException:
-                sound = pyglet.media.load(fullname + ".wav", streaming=False)
+def load_sounds():
+    for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
+        for fn in files:
+            if fn.endswith(".mp3"):
+                fullname = os.path.join(dirpath, fn)
+                fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
+                try:
+                    sound = pyglet.media.load(fullname, streaming=False)
+                except pyglet.media.codecs.wave.WAVEDecodeException:
+                    sound = pyglet.media.load(fullname + ".wav", streaming=False)
 
-            print(fn)
-            sounds[bytes(fn, "latin1")] = sound
+                print(fn)
+                sounds[bytes(fn, "latin1")] = sound
 
-sound_queue = []
+    # startup sound
+    sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin1")))
 
-# startup sound
-sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin1")))
+
+import threading
+
+threading.Thread(target=load_sounds, daemon=True).start()
 
 def playsound(name):
     sound_queue.append(("sound", name))
@@ -127,19 +132,12 @@ def unpack_palette(pal):
     fmt_unpack = "<" + "L" * (len(pal)//4)
     return unpack(fmt_unpack, pal)
 
-def ungamma(values, gamma=2.5, offset=0.5):
-    d = []
-    for v in values:
-        i = int(pow(((float(v) + offset) / 255.0), 1.0/gamma) * 255.0)
-        d.append(i)
-    return bytes(d)
-
 palette = []
 upalette = []
 
 def set_palettes(paldata):
     global palette, upalette
-    palette = ungamma(change_colors(paldata))
+    palette = change_colors(paldata)
     upalette = unpack_palette(palette)
 
 class PygletEngine():
