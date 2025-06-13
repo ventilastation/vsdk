@@ -51,11 +51,15 @@ def load_sounds():
                 fullname = os.path.join(dirpath, fn)
                 fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
                 try:
-                    sound = pyglet.media.load(fullname, streaming=False)
-                except pyglet.media.codecs.wave.WAVEDecodeException:
                     sound = pyglet.media.load(fullname + ".wav", streaming=False)
+                    print(fullname + ".wav")
+                except:
+                    try:
+                        sound = pyglet.media.load(fullname, streaming=False)
+                        print(fullname)
+                    except pyglet.media.codecs.wave.WAVEDecodeException:
+                        print("WARNING: sound not found:", fullname)
 
-                print(fn)
                 sounds[bytes(fn, "latin1")] = sound
 
     # startup sound
@@ -149,7 +153,7 @@ class PygletEngine():
         led_step = (LED_SIZE / led_count)
         self.enable_display = enable_display
         self.music_player = None
-        self.help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
+        self.help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
 
         vertex_pos = []
         theta = (math.pi * 2 / COLUMNS)
