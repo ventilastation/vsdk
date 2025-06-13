@@ -51,11 +51,15 @@ def load_sounds():
                 fullname = os.path.join(dirpath, fn)
                 fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
                 try:
-                    sound = pyglet.media.load(fullname, streaming=False)
-                except pyglet.media.codecs.wave.WAVEDecodeException:
                     sound = pyglet.media.load(fullname + ".wav", streaming=False)
+                    print(fullname + ".wav")
+                except:
+                    try:
+                        sound = pyglet.media.load(fullname, streaming=False)
+                        print(fullname)
+                    except pyglet.media.codecs.wave.WAVEDecodeException:
+                        print("WARNING: sound not found:", fullname)
 
-                print(fn)
                 sounds[bytes(fn, "latin1")] = sound
 
     # startup sound
