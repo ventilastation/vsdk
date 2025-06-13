@@ -9,10 +9,8 @@ from PIL import Image, ImageChops
 
 TRANSPARENT = (255, 0, 255)
 ROOT_FOLDER = "../apps/images"
-WORKDIR = ".workdir/"
 ROMS_FOLDER = "../apps/micropython/roms"
 
-os.makedirs(WORKDIR, exist_ok=True)
 os.makedirs(ROMS_FOLDER, exist_ok=True)
 
 def grouper(iterable, n, fillvalue=None):
@@ -103,11 +101,9 @@ def generate_rom(folder, palettegroups):
 
 
         pal_raw = []
-        with open(WORKDIR + "palette.pal", "wb") as palfile:
-            for r, g, b in grouper(full_palette, 3):
-                quad = bytearray((255, b, g, r))
-                palfile.write(quad)
-                pal_raw.append(quad)
+        for r, g, b in grouper(full_palette, 3):
+            quad = bytearray((255, b, g, r))
+            pal_raw.append(quad)
 
 
         palettes.append(b"".join(pal_raw))
