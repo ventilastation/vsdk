@@ -167,6 +167,6 @@ hardware/rotor/micropython
 *.mp3.wav
 apps/micropython/apps/mygame.py
 apps/images/mygame
-apps/micropython/roms/mygame.rom
+apps/micropython/roms/*.rom
 
 *.wav
