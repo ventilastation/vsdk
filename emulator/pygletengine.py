@@ -153,7 +153,7 @@ class PygletEngine():
         led_step = (LED_SIZE / led_count)
         self.enable_display = enable_display
         self.music_player = None
-        self.help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
+        self.help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
 
         vertex_pos = []
         theta = (math.pi * 2 / COLUMNS)
