@@ -27,6 +27,13 @@ class Menu(Scene):
 
             self.sprites.append(sprite)
 
+    def both_console_buttons(self):
+        """Check if both buttons are pressed."""
+        return (
+            (director.was_pressed(director.JOY_LEFT) and director.is_pressed(director.JOY_RIGHT)) or
+            (director.was_pressed(director.JOY_RIGHT) and director.is_pressed(director.JOY_LEFT))
+        ) and not director.is_pressed(director.JOY_UP) and not director.is_pressed(director.JOY_DOWN)
+
     def step(self):
         if director.was_pressed(director.JOY_DOWN):
             director.sound_play(b'vyruss/shoot3')
@@ -38,7 +45,7 @@ class Menu(Scene):
             self.selected_index += 1
             if self.selected_index > len(self.options) - 1:
                 self.selected_index = len(self.options) - 1
-        if director.was_pressed(director.BUTTON_A):
+        if (director.was_pressed(director.BUTTON_A) or self.both_console_buttons()):
             director.sound_play(b'vyruss/shoot1')
             try:
                 self.on_option_pressed(self.selected_index)
@@ -51,9 +58,12 @@ class Menu(Scene):
             if n == self.selected_index:
                 sprite.set_y(0)
                 sprite.set_perspective(2)
+            elif n < self.selected_index:
+                sprite.set_y(255)
+                sprite.set_perspective(1)
             else:
                 curr_y = sprite.y()
-                dest_y = int((n - self.selected_index) * self.y_step + 16)
+                dest_y = int((n - self.selected_index) * self.y_step + 30)
                 if dest_y < 0:
                     y = 255
                 else:

@@ -9,10 +9,8 @@ from PIL import Image, ImageChops
 
 TRANSPARENT = (255, 0, 255)
 ROOT_FOLDER = "../apps/images"
-WORKDIR = ".workdir/"
 ROMS_FOLDER = "../apps/micropython/roms"
 
-os.makedirs(WORKDIR, exist_ok=True)
 os.makedirs(ROMS_FOLDER, exist_ok=True)
 
 def grouper(iterable, n, fillvalue=None):
@@ -54,10 +52,19 @@ def reproject(image, n_led=54, n_ang=256):
 
 
 def generate_rom(folder, palettegroups):
+    rom_name = folder.parts[-1]
+    rom_filename = Path(ROMS_FOLDER) / (rom_name + ".rom")
+    rom_timestamp = rom_filename.stat().st_mtime if rom_filename.exists() else 0
+    src_filenames = (folder / filename for group in palettegroups for filename, _ in group)
+
+    if all(f.stat().st_mtime <= rom_timestamp for f in src_filenames):
+        print("Skipping", rom_name, file=sys.stderr)
+        return
+    print("Generating", rom_name, file=sys.stderr)
+
     rom_strips = []
     palettes = []
     attributes = {}
-    rom_name = folder.parts[-1]
 
     for palnumber, group in enumerate(palettegroups):
         images = {}
@@ -66,7 +73,7 @@ def generate_rom(folder, palettegroups):
         for filename, file_opts in group:
             image = Image.open(folder / filename).convert("RGBA")
             if file_opts.get("process") == "reproject":
-                print("reprojecting", filename, file=sys.stderr)
+                print("    Reprojecting", filename, file=sys.stderr)
                 image = reproject(image, n_led=file_opts["radius"])
             images[filename] = image
             images_opts[filename] = file_opts
@@ -103,18 +110,16 @@ def generate_rom(folder, palettegroups):
 
 
         pal_raw = []
-        with open(WORKDIR + "palette.pal", "wb") as palfile:
-            for r, g, b in grouper(full_palette, 3):
-                quad = bytearray((255, b, g, r))
-                palfile.write(quad)
-                pal_raw.append(quad)
+        for r, g, b in grouper(full_palette, 3):
+            quad = bytearray((255, b, g, r))
+            pal_raw.append(quad)
 
 
         palettes.append(b"".join(pal_raw))
 
         y = 0
         for fn, i in images.items():
-            print("processing", fn, file=sys.stderr)
+            print("    Processing", fn, file=sys.stderr)
             bitmask = ImageChops.invert(i.getchannel(3).convert("1"))
             i_paletted = workspace_paletted.crop((0, y, i.width, y + i.height))
             y += i.height
@@ -137,7 +142,7 @@ def generate_rom(folder, palettegroups):
             pascal_filename = struct.pack("B", len(fnb)) + fnb
             rom_strips.append(pascal_filename + attrbytes + b)
         
-    with open(Path(ROMS_FOLDER) / (rom_name + ".rom"), "wb") as rom:
+    with open(rom_filename, "wb") as rom:
         offset = 4 + len(rom_strips) * 4 + len(palettes) * 4
         rom.write(struct.pack("<HH", len(rom_strips), len(palettes)))
 
