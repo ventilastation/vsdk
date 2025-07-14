@@ -1,6 +1,4 @@
-future==0.17.1
-# pyglet==1.5.11; sys_platform != 'darwin'
-# pyglet<2; sys_platform == 'darwin'
+future==0.18.3
 pyglet<2
 gmqtt
 pyserial
