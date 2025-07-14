@@ -113,7 +113,7 @@ void display_tick(int64_t now) {
       draw_buffer[ROW_SHIP + j] = SHIP_COLOR;
     }
     for(int k=0; k<NUM_ROWS; k++) {
-	pixels0[k] = draw_buffer[NUM_ROWS-k-1];
+        pixels0[k] = draw_buffer[NUM_ROWS-k-1];
     }
 
     for (int l=0; l<NUM_ROWS; l++) {

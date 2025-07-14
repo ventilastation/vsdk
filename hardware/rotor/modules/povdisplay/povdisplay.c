@@ -157,20 +157,20 @@ void gpu_step() {
     int64_t now = esp_timer_get_time();
     uint32_t column = ((now - last_turn) * COLUMNS / last_turn_duration) % COLUMNS;
     if (column != last_column) {
-	gpio_set_level(GPIO_DEBUG, true);
-	render((column + COLUMNS/2) % COLUMNS, extra_buf);
-	for(int n=0; n<54; n++) {
-	    pixels0[n] = extra_buf[53-n];
-	}
-	render(column, pixels1);
-	gpio_set_level(GPIO_DEBUG, false);
-	spi_write_HSPI();
-	last_column = column;
+        gpio_set_level(GPIO_DEBUG, true);
+        render((column + COLUMNS/2) % COLUMNS, extra_buf);
+        for(int n=0; n<54; n++) {
+            pixels0[n] = extra_buf[53-n];
+        }
+        render(column, pixels1);
+        gpio_set_level(GPIO_DEBUG, false);
+        spi_write_HSPI();
+        last_column = column;
     }
 
     if (now > last_starfield_step + 20000) {
-	step_starfield();
-	last_starfield_step = now;
+        step_starfield();
+        last_starfield_step = now;
     }
 }
  
@@ -315,7 +315,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(ventilagon_ventilagon_received_obj, ventilagon_
 static mp_obj_t ventilagon_ventilagon_sending(void) {
     char* buff;
     if( xQueueReceive( queue_sending, &buff, 0 ) ) {
-	return mp_obj_new_str(buff, strlen(buff));
+        return mp_obj_new_str(buff, strlen(buff));
     }
     return mp_const_none;
 }

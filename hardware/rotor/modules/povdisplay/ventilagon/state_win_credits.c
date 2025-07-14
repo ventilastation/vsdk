@@ -66,13 +66,13 @@ void text_loop2(int64_t now) {
       int visible_column = current_column - 64;
       credits_draw_column(visible_column);
       for(int k=0; k<16; k++) {
-	  pixels1[54 - 16 + k] = draw_buffer[k];
+          pixels1[54 - 16 + k] = draw_buffer[k];
       }
     } else {
       int visible_column = (current_column + 64) % 256;
       credits_draw_column(visible_column);
       for(int m=0; m<16; m++) {
-	  pixels0[15-m] = draw_buffer[m];
+          pixels0[15-m] = draw_buffer[m];
       }
     }
 

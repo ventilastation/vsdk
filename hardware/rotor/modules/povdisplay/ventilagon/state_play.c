@@ -63,17 +63,17 @@ void play_loop() {
       int new_pos = 0;
 
       if (boton_cw) {
-	new_pos = nave_pos + current_level->rotation_speed;
+        new_pos = nave_pos + current_level->rotation_speed;
       }
       if (boton_ccw) {
-	new_pos = nave_pos - current_level->rotation_speed;
+        new_pos = nave_pos - current_level->rotation_speed;
       }
 
       new_pos = (new_pos + SUBDEGREES) & SUBDEGREES_MASK;
 
       bool colision_futura = board_colision(new_pos, ROW_SHIP);
       if (!colision_futura) {
-	nave_pos = new_pos;
+        nave_pos = new_pos;
       }
     }
     last_move = now;
