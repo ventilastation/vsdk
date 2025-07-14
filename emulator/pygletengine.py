@@ -162,11 +162,11 @@ class PygletEngine():
 
         x1, x2 = 0, 0
         for i in range(led_count):
-            y1 = led_step * i
+            y1 = led_step * i - (led_step * .3)
             y2 = y1 + (led_step * 1)
             x3 = arc_chord(y2) * 0.7
             x4 = -x3
-            vertex_pos.extend([x1, y1, x2, y1, x2, y2, x1, y2])
+            vertex_pos.extend([x1, y1, x2, y1, x4, y2, x3, y2])
             x1, x2 = x3, x4
 
         vertex_colors = (0, 0, 0, 255) * led_count * 4

@@ -82,27 +82,41 @@ int get_visible_column(int sprite_x, int sprite_width, int render_column) {
     }
 }
 
+
 void render(int column, uint32_t* pixels) {
+  uint32_t colorbuf[PIXELS];
+
+
   inline void set_pixel(uint8_t n, uint32_t color) {
     if (n < PIXELS) {
-      if (gamma_mode == 0) {
-        pixels[n] = 0xff |
-          intensidades[n][(color & 0xff000000) >> 24] << 24 |
-          intensidades[n][(color & 0x00ff0000) >> 16] << 16 |
-          intensidades[n][(color & 0x0000ff00) >>  8] <<  8;
-      } else if (gamma_mode == 1) {
-        int alt_n = intensidades_por_led[n];
-        pixels[n] = (brillos[n] & 0x1f) | 0xe0 |
-          intensidades[alt_n][(color & 0xff000000) >> 24] << 24 |
-          intensidades[alt_n][(color & 0x00ff0000) >> 16] << 16 |
-          intensidades[alt_n][(color & 0x0000ff00) >>  8] <<  8;
-      }
+      colorbuf[n] = color;
+    }
+  }
+
+  inline void finish_nogamma() {
+    for (int n=0; n<PIXELS; n++) {
+      uint32_t color = colorbuf[n];
+      pixels[n] = 0xff |
+        intensidades[n][(color & 0xff000000) >> 24] << 24 |
+        intensidades[n][(color & 0x00ff0000) >> 16] << 16 |
+        intensidades[n][(color & 0x0000ff00) >>  8] <<  8;
+    }
+  }
+
+  inline void finish_with_gamma() {
+    for (int n=0; n<PIXELS; n++) {
+      uint32_t color = colorbuf[n];
+      int alt_n = intensidades_por_led[n];
+      pixels[n] = (brillos[n] & 0x1f) | 0xe0 |
+        intensidades[alt_n][(color & 0xff000000) >> 24] << 24 |
+        intensidades[alt_n][(color & 0x00ff0000) >> 16] << 16 |
+        intensidades[alt_n][(color & 0x0000ff00) >>  8] <<  8;
     }
   }
 
   column = column % COLUMNS;
   for (int y=0; y<PIXELS; y++) {
-    pixels[y] = 0x000000ff;
+    colorbuf[y] = 0x000000ff;
   }
   for (int f=0; f<STARS; f++) {
     if (starfield[f].x == column) {
@@ -164,4 +178,11 @@ void render(int column, uint32_t* pixels) {
       }
     }
   }
+
+  if (gamma_mode == 0) {
+    finish_nogamma();
+  } else {
+    finish_with_gamma();
+  }
+
 }
