@@ -13,7 +13,6 @@ MAIN_MENU_OPTIONS = [
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
     ('vzumaki', "vzumaki.png", 0),
-
     ('vasura_espacial', "vasura_espacial.png", 0),
     ('vs', "vs.png", 0),
     ('oraculo', "oraculo2.png", 0),
@@ -30,13 +29,19 @@ MAIN_MENU_OPTIONS = [
     # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # Original content
-    # ('vyruss', "menu.png", 0),
-    # ('ventilagon_game', "menu.png", 1),
+    ('vyruss', "menu.png", 0),
+    ('ventilagon_game', "menu.png", 1),
     # ('ventap', "menu.png", 4),
     # ('debugmode', "menu.png", 9),
     # ('calibrate', "menu.png", 8),
     # ('credits', "menu.png", 3),
 ]
+
+def prepare_uploads():
+    import os
+    os.remove("main.py")
+    import machine
+    machine.reset()
 
 def update_over_the_air():
     import ota_update
@@ -71,9 +76,9 @@ class GamesMenu(menu.Menu):
             self.last_shuffle = utime.ticks_ms()
 
     def needs_shuffling(self):
+        # return False
         if self.last_shuffle == -1:
             return True
-        # return False
         return utime.ticks_diff(utime.ticks_ms(), self.last_shuffle) > 60000
 
     def on_enter(self):
