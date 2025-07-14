@@ -1,7 +1,7 @@
 future==0.18.3
-pyglet==1.5.11; sys_platform != 'darwin'
-pyglet<2; sys_platform == 'darwin'
+pyglet<2
 gmqtt
 pyserial
 pillow
-numpy
+RPi.GPIO; "Raspbian" in platform_version
+numpy; "Raspbian" not in platform_version

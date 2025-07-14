@@ -1,10 +1,7 @@
-trap 'kill $BGPID; exit' SIGINT
-cd apps
-micropython main.py &
-BGPID=$!
-cd ..
-
 . .venv/bin/activate
+cd tools
+python generate_roms.py
+cd ..
 cd emulator
-python emu.py 127.0.0.1
-kill $BGPID
+python emu.py
+pkill micropython

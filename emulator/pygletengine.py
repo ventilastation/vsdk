@@ -1,7 +1,10 @@
+import platform
 import config
+import sys
 import pyglet
-# Force using OpenAL since pulse crashes
-pyglet.options['audio'] = ('openal', 'silent')
+
+pyglet.options['vsync'] = "--no-display" not in sys.argv
+
 import math
 import random
 import os
@@ -10,83 +13,80 @@ from pyglet.window import key
 from struct import pack, unpack
 from deepspace import deepspace
 
+try:
+    # Botones de la base de Super Ventilagon
+    import RPi.GPIO as GPIO
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup([9,10], GPIO.IN, GPIO.PUD_UP)
 
+    def base_button_left():
+        return GPIO.input(9) == 0
+    
+    def base_button_right():
+        return GPIO.input(10) == 0
 
+except ImportError:
+    def base_button_left():
+        return False
+
+    def base_button_right():
+        return False
+
+if platform.system() != "Windows":
+    # Force using OpenAL since pulse crashes
+    pyglet.options['audio'] = ('openal', 'silent')
 
 # preload all sounds
 sounds = {}
-
-for dirpath, dirs, files in os.walk("../sounds"):
-    for fn in files:
-        if fn.endswith(".mp3"):
-            fullname = os.path.join(dirpath, fn)
-            fn = fullname[10:-4]
-            sounds[bytes(fn, "latin1")] = pyglet.media.load(fullname, streaming=False)
-
-
 sound_queue = []
+
+all_strips = {}
+
+SOUNDS_FOLDER = "../apps/sounds"
+
+def load_sounds():
+    for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
+        for fn in files:
+            if fn.endswith(".mp3"):
+                fullname = os.path.join(dirpath, fn)
+                fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
+                try:
+                    sound = pyglet.media.load(fullname + ".wav", streaming=False)
+                    print(fullname + ".wav")
+                except:
+                    try:
+                        sound = pyglet.media.load(fullname, streaming=False)
+                        print(fullname)
+                    except pyglet.media.codecs.wave.WAVEDecodeException:
+                        print("WARNING: sound not found:", fullname)
+
+                sounds[bytes(fn, "latin1")] = sound
+
+    # startup sound
+    sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin1")))
+
+
+import threading
+
+threading.Thread(target=load_sounds, daemon=True).start()
+
 def playsound(name):
     sound_queue.append(("sound", name))
+
+def playnotes(folder, notes):
+    sound_queue.append(("notes", folder, notes))
 
 def playmusic(name):
     sound_queue.append(("music", name))
 
 
-import imagenes
-image_stripes = {
-    "0": imagenes.galaga_png,
-    "1": imagenes.numerals_png,
-    "2": imagenes.gameover_png,
-    "3": imagenes.disparo_png,
-    "4": imagenes.ll9_png,
-    "5": imagenes.explosion_png,
-    "6": imagenes.explosion_nave_png,
-    "7": imagenes.menu_png,
-    "8": imagenes.credits_png,
-
-    "10": imagenes.tierra_png,
-    "11": imagenes.marte_png,
-    "12": imagenes.jupiter_png,
-    "13": imagenes.saturno_png,
-    "14": imagenes.sves_png,
-    "15": imagenes.ventilastation_png,
-    "16": imagenes.tecno_estructuras_png,
-    "17": imagenes.menatwork_png,
-    "18": imagenes.vladfartylogo_png,
-    "19": imagenes.vga_pc734_png,
-    "20": imagenes.vga_cp437_png,
-    "21": imagenes.vladfartylogo_png,
-    "22": imagenes.farty_lion_png,
-    "23": imagenes.ready_png,
-    "24": imagenes.bg64_png,
-    "25": imagenes.copyright_png,
-    "26": imagenes.bgspeccy_png,
-    "27": imagenes.reset_png,
-    "28": imagenes.farty_lionhead_png,
-    "29": imagenes.rainbow437_png,
-    "30": imagenes.chanime01_png,
-    "31": imagenes.chanime02_png,
-    "32": imagenes.chanime03_png,
-    "33": imagenes.chanime04_png,
-    "34": imagenes.chanime05_png,
-    "35": imagenes.chanime06_png,
-    "36": imagenes.chanime07_png,
-    "37": imagenes.salto01_png,
-    "38": imagenes.salto02_png,
-    "39": imagenes.salto03_png,
-    "40": imagenes.salto04_png,
-    "41": imagenes.salto05_png,
-    "42": imagenes.salto06_png,
-    "43": imagenes.pollitos_png,
-    "44": imagenes.bembi_png,
-}
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 
 joysticks = pyglet.input.get_joysticks()
 print(joysticks)
 if joysticks:
-    import pdb
-    pdb.set_trace()
+    #import pdb
+    #pdb.set_trace()
     joystick = joysticks[0]
     joystick.open()
 else:
@@ -113,6 +113,14 @@ glEnable(GL_BLEND)
 #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_ONE)
 
+@window.event
+def on_key_press(symbol, modifiers):
+    if symbol == pyglet.window.key.ESCAPE:
+        return pyglet.event.EVENT_HANDLED
+    if symbol == pyglet.window.key.Q:
+        pyglet.app.exit()
+
+
 def change_colors(colors):
     # byteswap all longs
     fmt_unpack = "<" + "L" * (len(colors)//4)
@@ -128,16 +136,13 @@ def unpack_palette(pal):
     fmt_unpack = "<" + "L" * (len(pal)//4)
     return unpack(fmt_unpack, pal)
 
-def ungamma(values, gamma=2.5, offset=0.5):
-    d = []
-    for v in values:
-        i = int(pow(((float(v) + offset) / 255.0), 1.0/gamma) * 255.0)
-        d.append(i)
-    return bytes(d)
+palette = []
+upalette = []
 
-palette = ungamma(change_colors(imagenes.palette_pal))
-upalette = unpack_palette(palette)
-
+def set_palettes(paldata):
+    global palette, upalette
+    palette = change_colors(paldata)
+    upalette = unpack_palette(palette)
 
 class PygletEngine():
     def __init__(self, led_count, keyhandler, enable_display=True):
@@ -148,6 +153,7 @@ class PygletEngine():
         led_step = (LED_SIZE / led_count)
         self.enable_display = enable_display
         self.music_player = None
+        self.help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
 
         vertex_pos = []
         theta = (math.pi * 2 / COLUMNS)
@@ -177,7 +183,7 @@ class PygletEngine():
 
 
         def send_keys():
-            reset = keys[key.P]
+            reset = keys[key.ESCAPE]
             try:
                 left = joystick.x < -0.5 or joystick.hat_x < -0.5 or joystick.buttons[4]
                 right = joystick.x > 0.5 or joystick.hat_x > 0.5 or joystick.buttons[5]
@@ -185,29 +191,30 @@ class PygletEngine():
                 down = joystick.y > 0.5 or joystick.hat_y < -0.5
 
 
-                boton = joystick.buttons[0] or joystick.buttons[1] or joystick.buttons[2] or joystick.buttons[3] # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
+                boton = joystick.buttons[0]  # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
 
-                accel = joystick.rz > 0
-                decel = joystick.z > 0
+                accel = joystick.z > 0 or keys[key.PAGEUP] or keys[key.P] or joystick.buttons[2]
+                decel = joystick.rz > 0 or keys[key.PAGEDOWN] or keys[key.O] or joystick.buttons[3]
+
                 try:
-                    reset = reset or joystick.buttons[8]
+                    reset = reset or joystick.buttons[8] or joystick.buttons[1]
                 except:
-                    reset = reset or joystick.buttons[7]
-                left = left or keys[key.LEFT] or keys[key.A]
-                right = right or keys[key.RIGHT] or keys[key.D]
+                    reset = reset or joystick.buttons[7] or joystick.buttons[1]
+                left = left or keys[key.LEFT] or keys[key.A] or base_button_left()
+                right = right or keys[key.RIGHT] or keys[key.D] or base_button_right()
                 up = up or keys[key.UP] or keys[key.W]
                 down = down or keys[key.DOWN] or keys[key.S]
                 boton = boton or keys[key.SPACE]
 
             except Exception:
-                left = keys[key.LEFT] or keys[key.A]
-                right = keys[key.RIGHT] or keys[key.D]
+                left = keys[key.LEFT] or keys[key.A] or base_button_left()
+                right = keys[key.RIGHT] or keys[key.D] or base_button_right()
                 up = keys[key.UP] or keys[key.W]
                 down = keys[key.DOWN] or keys[key.S]
 
                 boton = keys[key.SPACE]
-                accel = keys[key.A]
-                decel = keys[key.D]
+                accel = keys[key.PAGEUP] or keys[key.P]
+                decel = keys[key.PAGEDOWN] or keys[key.O]
 
             val = (left << 0 | right << 1 | up << 2 | down << 3 | boton << 4 |
                     accel << 5 | decel << 6 | reset << 7)
@@ -253,7 +260,9 @@ class PygletEngine():
                 if frame == 255:
                     continue
 
-                strip = image_stripes["%d" % image]
+                strip = all_strips.get(image)
+                if not strip:
+                    continue
                 w, h, total_frames, pal = unpack("BBBB", strip[0:4])
                 pal_base = 256 * pal
                 if w == 255: w = 256 # caso especial, para los planetas
@@ -302,6 +311,7 @@ class PygletEngine():
                 return
             window.clear()
             fps_display.draw()
+            self.help_label.draw()
 
             angle = -(360.0 / 256.0)
 
@@ -312,8 +322,11 @@ class PygletEngine():
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
             for column in range(256):
                 limit = len(self.vertex_list.colors)
-                self.vertex_list.colors[:] = render(column)[0:limit]
-                self.vertex_list.draw(GL_QUADS)
+                try:
+                    self.vertex_list.colors[:] = render(column)[0:limit]
+                    self.vertex_list.draw(GL_QUADS)
+                except:
+                    pass
                 glRotatef(angle, 0, 0, 1)
             glDisable(texture.target)
             glRotatef(180, 0, 0, 1)
@@ -324,14 +337,36 @@ class PygletEngine():
         def animate(dt):
             send_keys()
             while sound_queue:
-                command, name = sound_queue.pop()
+                command, *args = sound_queue.pop()
                 if command == "sound":
-                    sounds[name].play()
+                    name = args[0]
+                    s = sounds.get(name)
+                    if s:
+                        s.play()
+                    else:
+                        print("WARNING: sound not found:", name)
                 elif command == "music":
+                    name = args[0]
                     if self.music_player:
                         self.music_player.pause()
                     if name != b"off":
-                        self.music_player = sounds[name].play()
+                        s = sounds.get(name)
+                        if s:
+                            self.music_player = s.play()
+                        else:
+                            print("WARNING: music not found:", name)
+                elif command == "notes":
+                    folder, notes = args
+                    to_play = []
+                    for note in notes.split(b";"):
+                        sound = sounds.get(folder + b"/" + note)
+                        if sound:
+                            to_play.append(sound)
+                        else:
+                            print("WARNING: note not found:", folder, note)
+
+                    for s in to_play:
+                        s.play()
             return
             "FIXME"
             for n in range(6):

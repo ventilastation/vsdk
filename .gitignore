@@ -163,4 +163,10 @@ cython_debug/
 
 .DS_Store
 .*.swp
-tools/.workdir
+hardware/rotor/micropython
+*.mp3.wav
+apps/micropython/apps/mygame.py
+apps/images/mygame
+apps/micropython/roms/*.rom
+
+*.wav
