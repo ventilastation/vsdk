@@ -10,6 +10,7 @@ from ventilastation.shuffler import shuffled
 
 MAIN_MENU_OPTIONS = [
     # 1er Jam 2025
+    ('aaa', 'aaa.png', 0),
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
     ('vzumaki', "vzumaki.png", 0),
