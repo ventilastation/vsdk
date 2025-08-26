@@ -3,6 +3,17 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
+#
+#  TODO (como terminar el juego)
+# ===============================
+# - Dificultades x numero de barras 1 al 9, sube cada 13 segundos
+#   - [Bonus] Luego sube la velocidad (espaciado efecto warp?)
+# - Score por tiempo
+# - Modo fixed_seed testeadas & random_seed
+# - Musica con mix gradual por nivel
+# - Sonido por colisión y pasar de nivel cada 9 segundos
+#
+
 NUM_BARRAS = 9
 
 def gen_sprite(name, x=0):
