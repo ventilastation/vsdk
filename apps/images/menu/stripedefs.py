@@ -1,5 +1,6 @@
 stripes = [
     palettegroup(
+        strip("aaa.png"),
         strip("menu.png", frames=16),
         strip("mygame.png", frames=1),
         strip("tvnel_alecu.png", frames=1),
