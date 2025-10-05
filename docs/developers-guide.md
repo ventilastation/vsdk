@@ -19,7 +19,6 @@ In the Ventilastation repo there are a few folders that you'll need to identify,
 * `apps/micropython/ventilastation` is a folder with system code
 
 ### VSDK repo, scripts
-* `regenerate-images.sh` (or `.bat` under Windows) needs to be run every time you make a change in your images. It compiles the images into a `ROM` format that ventilastation and the emulator can understand.
 * `vs-emu.sh` (or `.bat`) is the script to start the emulator.
 
 
@@ -52,10 +51,10 @@ stripes = [
 ]
 ```
 
-Now you are ready to transform the images into the ROM format. If you ever add new images or change the existing files, you'll need to run this command again:
+Whenever you run the emulator, your PNG images are compiled into a ROM file, which is what the physical Ventilastation uses. The first time it will be kinda slow, but this step will only happen if you ever add new images or change the existing files:
 
 ```
-regenerate-images.sh
+./vs-emu.sh
 ```
 
 The above creates a ROM file in `apps/micropython/roms/mygame.rom`. We can reference it in our source code by changing the line `stripes_rom = "mygame"` in the `MyGame` class.
