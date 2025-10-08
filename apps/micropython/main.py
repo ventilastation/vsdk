@@ -104,7 +104,7 @@ class GamesMenu(menu.Menu):
         # self.loviejo.set_frame(0)
         # self.favalli = make_me_a_planet("favalli.png")
         # self.favalli.set_frame(0)
-        self.glitch = make_me_a_planet("glitch.jpg")
+        self.glitch = make_me_a_planet("glitch.png")
         self.glitch.set_frame(0)
 
 
