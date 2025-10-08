@@ -10,14 +10,14 @@ from ventilastation.shuffler import shuffled
 
 MAIN_MENU_OPTIONS = [
     # 1er Jam 2025
-    ('vortris', "vortris.png", 0),
-    ('vailableextreme', "vailableextreme.png", 0),
-    ('vzumaki', "vzumaki.png", 0),
     ('vasura_espacial', "vasura_espacial.png", 0),
+    ('vailableextreme', "vailableextreme.png", 0),
     ('vs', "vs.png", 0),
-    ('oraculo', "oraculo2.png", 0),
-    ('tvnel', "tvnel.png", 0),
     ('ventrack', "venti808.png", 0),
+    ('oraculo', "oraculo2.png", 0),
+    # ('vortris', "vortris.png", 0),
+    ('vzumaki', "vzumaki.png", 0),
+    # ('tvnel', "tvnel.png", 0),
     # ('tvnel_alecu', "tvnel_alecu.png", 0),
     # ('mygame', "mygame.png", 0),
     # PyCamp 2025
@@ -76,7 +76,7 @@ class GamesMenu(menu.Menu):
             self.last_shuffle = utime.ticks_ms()
 
     def needs_shuffling(self):
-        # return False
+        return False
         if self.last_shuffle == -1:
             return True
         return utime.ticks_diff(utime.ticks_ms(), self.last_shuffle) > 60000
@@ -96,14 +96,16 @@ class GamesMenu(menu.Menu):
         # self.boot_screen = make_me_a_planet(strips.other.ventilastation)
         # self.boot_screen.set_frame(0)
         # self.call_later(1500, self.boot_screen.disable)
-        self.loviejo = sprites.Sprite()
-        self.loviejo.set_strip(stripes["loviejo-3.png"])
-        self.loviejo.set_perspective(2)
-        self.loviejo.set_x(128 - self.loviejo.width() // 2)
-        self.loviejo.set_y(0)
-        self.loviejo.set_frame(0)
-        self.favalli = make_me_a_planet("favalli.png")
-        self.favalli.set_frame(0)
+        # self.loviejo = sprites.Sprite()
+        # self.loviejo.set_strip(stripes["loviejo-3.png"])
+        # self.loviejo.set_perspective(2)
+        # self.loviejo.set_x(128 - self.loviejo.width() // 2)
+        # self.loviejo.set_y(0)
+        # self.loviejo.set_frame(0)
+        # self.favalli = make_me_a_planet("favalli.png")
+        # self.favalli.set_frame(0)
+        self.glitch = make_me_a_planet("glitch.jpg")
+        self.glitch.set_frame(0)
 
 
     def on_option_pressed(self, option_index):
