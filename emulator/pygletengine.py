@@ -93,6 +93,8 @@ else:
     joystick = None
 
 window = pyglet.window.Window(config=Config(double_buffer=True), fullscreen=config.FULLSCREEN)
+logo = pyglet.image.load("logo.png")
+window.set_icon(logo)
 fps_display = pyglet.window.FPSDisplay(window)
 keys = key.KeyStateHandler()
 
