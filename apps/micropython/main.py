@@ -31,7 +31,7 @@ MAIN_MENU_OPTIONS = [
     # Original content
     ('vyruss', "menu.png", 0),
     ('ventilagon_game', "menu.png", 1),
-    # ('ventap', "menu.png", 4),
+    ('ventap', "menu.png", 4),
     # ('debugmode', "menu.png", 9),
     # ('calibrate', "menu.png", 8),
     # ('credits', "menu.png", 3),
@@ -76,7 +76,7 @@ class GamesMenu(menu.Menu):
             self.last_shuffle = utime.ticks_ms()
 
     def needs_shuffling(self):
-        # return False
+        return False
         if self.last_shuffle == -1:
             return True
         return utime.ticks_diff(utime.ticks_ms(), self.last_shuffle) > 60000
