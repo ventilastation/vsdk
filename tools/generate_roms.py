@@ -51,13 +51,13 @@ def reproject(image, n_led=54, n_ang=256):
 # ('bluesky.png', {'frames': 1, 'radius': 54, 'process': 'reproject'})]]
 
 
-def generate_rom(folder, palettegroups):
+def generate_rom(folder, palettegroups, spritedef_path):
     rom_name = folder.parts[-1]
     rom_filename = Path(ROMS_FOLDER) / (rom_name + ".rom")
     rom_timestamp = rom_filename.stat().st_mtime if rom_filename.exists() else 0
     src_filenames = (folder / filename for group in palettegroups for filename, _ in group)
 
-    if all(f.stat().st_mtime <= rom_timestamp for f in src_filenames):
+    if all(f.stat().st_mtime <= rom_timestamp for f in chain(src_filenames,[spritedef_path])):
         print("Skipping", rom_name, file=sys.stderr)
         return
     print("Generating", rom_name, file=sys.stderr)
@@ -174,6 +174,7 @@ def fullscreen(filename, radius=54):
 
 for root, dirs, files in Path(ROOT_FOLDER).walk(on_error=print):
     if STRIPEDEF_FILENAME in files:
-        stripedef = open(root / STRIPEDEF_FILENAME).read()
+        spritedef_path = root / STRIPEDEF_FILENAME
+        stripedef = open(spritedef_path).read()
         parsed = exec(stripedef)
-        generate_rom(root, stripes)
+        generate_rom(root, stripes, spritedef_path)
