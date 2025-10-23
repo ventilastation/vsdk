@@ -22,10 +22,10 @@ MAIN_MENU_OPTIONS = [
     # ('mygame', "mygame.png", 0),
     # PyCamp 2025
     ('vance', "menu.png", 5),
-    # ('vong', "menu.png", 6),
-    # ('vugo', "menu.png", 7),
+    ('vong', "menu.png", 6),
+    ('vugo', "menu.png", 7),
     # Gallery
-    # ('gallery', "pollitos.png", 0),
+    ('gallery', "pollitos.png", 0),
     # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # Original content

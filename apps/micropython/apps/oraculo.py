@@ -109,11 +109,11 @@ class Animation2(SpriteAnimationScene):
     duration = 4000
     imageText = "08PANUELO.png"
     sprite_files = [
-        "08pañuelo0000.png",
-        "08pañuelo0003.png",
-        "08pañuelo0006.png",
-        "08pañuelo0012.png",
-        "08pañuelo0014.png",
+        "08panuelo0000.png",
+        "08panuelo0003.png",
+        "08panuelo0006.png",
+        "08panuelo0012.png",
+        "08panuelo0014.png",
     ]
     order = list(range(5))
 class Animation3(SpriteAnimationScene):
