@@ -169,4 +169,4 @@ apps/micropython/apps/mygame.py
 apps/images/mygame
 apps/micropython/roms/*.rom
 
-*.wav
+# *.wav
