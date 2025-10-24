@@ -47,7 +47,7 @@ SOUNDS_FOLDER = "../apps/sounds"
 def load_sounds():
     for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
         for fn in files:
-            if fn.endswith(".mp3"):
+            if fn.endswith(".mp3") or fn.endswith(".wav"):
                 fullname = os.path.join(dirpath, fn)
                 fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
                 try:
