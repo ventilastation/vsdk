@@ -8,33 +8,35 @@ from ventilastation import menu
 from ventilastation import povdisplay
 from ventilastation.shuffler import shuffled
 
+# (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
-    # 1er Jam 2025
-    ('vortris', "vortris.png", 0),
-    ('vailableextreme', "vailableextreme.png", 0),
-    ('vzumaki', "vzumaki.png", 0),
-    ('vasura_espacial', "vasura_espacial.png", 0),
-    ('vs', "vs.png", 0),
-    ('oraculo', "oraculo2.png", 0),
-    ('tvnel', "tvnel.png", 0),
-    ('ventrack', "venti808.png", 0),
-    # ('tvnel_alecu', "tvnel_alecu.png", 0),
-    # ('mygame', "mygame.png", 0),
-    # PyCamp 2025
-    ('vance', "menu.png", 5),
-    ('vong', "menu.png", 6),
-    ('vugo', "menu.png", 7),
-    # Gallery
-    ('gallery', "pollitos.png", 0),
-    # Flash Party 2023
-    # ('vladfarty', "menu.png", 2),
-    # Original content
-    ('vyruss', "menu.png", 0),
-    ('ventilagon_game', "menu.png", 1),
-    ('ventap', "menu.png", 4),
-    # ('debugmode', "menu.png", 9),
-    # ('calibrate', "menu.png", 8),
-    # ('credits', "menu.png", 3),
+    # # 1er Jam 2025
+    # ('vortris', "vortris.png", 0),
+    # ('vailableextreme', "vailableextreme.png", 0),
+    # ('vzumaki', "vzumaki.png", 0),
+    # ('vasura_espacial', "vasura_espacial.png", 0),
+    # ('vs', "vs.png", 0),
+    # ('oraculo', "oraculo2.png", 0),
+    # ('tvnel', "tvnel.png", 0),
+    # ('ventrack', "venti808.png", 0),
+    # # ('tvnel_alecu', "tvnel_alecu.png", 0),
+    # # ('mygame', "mygame.png", 0),
+    # # PyCamp 2025
+    # ('vance', "menu.png", 5),
+    # ('vong', "menu.png", 6),
+    # ('vugo', "menu.png", 7),
+    # # Gallery
+    # ('gallery', "pollitos.png", 0),
+    # # Flash Party 2023
+    # # ('vladfarty', "menu.png", 2),
+    # # Original content
+    # ('vyruss', "menu.png", 0),
+    # ('ventilagon_game', "menu.png", 1),
+    # ('ventap', "menu.png", 4),
+    # # ('debugmode', "menu.png", 9),
+    # # ('calibrate', "menu.png", 8),
+    # # ('credits', "menu.png", 3),
+    ('2bam_demo', "2bam_demo_menu.png", 0),
 ]
 
 def prepare_uploads():
