@@ -9,6 +9,7 @@ from ventilastation import povdisplay
 from ventilastation.shuffler import shuffled
 
 MAIN_MENU_OPTIONS = [
+    ('villalugano_games', "pollitos.png", 0),
     # 1er Jam 2025
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
@@ -25,7 +26,7 @@ MAIN_MENU_OPTIONS = [
     ('vong', "menu.png", 6),
     ('vugo', "menu.png", 7),
     # Gallery
-    ('gallery', "pollitos.png", 0),
+    # ('gallery', "pollitos.png", 0),
     # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # Original content
