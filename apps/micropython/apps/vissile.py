@@ -89,6 +89,11 @@ class Vissile(Scene):
         for m in self.misiles:
             m.mover()
 
+        #for i in range(len(misiles), -1, -1):
+        #   if misiles[i] ... :
+        #       del misiles[i]
+
+
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
