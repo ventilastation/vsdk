@@ -15,6 +15,7 @@ stripes = [
         strip("venti808.png", frames=1),
         strip("tvnel.png", frames=1),
         strip("loviejo-3.png"),
+        strip("2bam_demo_menu.png",frames=1),
         fullscreen("favalli.png"),
     ),
 ]

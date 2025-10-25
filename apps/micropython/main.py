@@ -8,23 +8,27 @@ from ventilastation import menu
 from ventilastation import povdisplay
 from ventilastation.shuffler import shuffled
 
+# (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
-    # 1er Jam 2025
     ('peronjam', "peronjam.png", 0),
-    #('vailableextreme', "vailableextreme.png", 0),
-    #('vortris', "vortris.png", 0),
-    # ('vzumaki', "vzumaki.png", 0),
-    # ('vasura_espacial', "vasura_espacial.png", 0),
-    # ('vs', "vs.png", 0),
-    # ('oraculo', "oraculo2.png", 0),
-    # ('tvnel', "tvnel.png", 0),
-    # ('ventrack', "venti808.png", 0),
-    # # ('tvnel_alecu', "tvnel_alecu.png", 0),
+    ('2bam_demo', "2bam_demo_menu.png", 0),
+    # # 1er Jam 2025
+    ('vortris', "vortris.png", 0),
+    ('vailableextreme', "vailableextreme.png", 0),
+    ('vzumaki', "vzumaki.png", 0),
+    ('vasura_espacial', "vasura_espacial.png", 0),
+    ('vs', "vs.png", 0),
+    ('oraculo', "oraculo2.png", 0),
+    ('tvnel', "tvnel.png", 0),
+    ('ventrack', "venti808.png", 0),
+    # ('tvnel_alecu', "tvnel_alecu.png", 0),
+    # ('mygame', "mygame.png", 0),
     # PyCamp 2025
-    # ('vance', "menu.png", 5),
-    # ('vugo', "menu.png", 7),
+    ('vance', "menu.png", 5),
+    ('vong', "menu.png", 6),
+    ('vugo', "menu.png", 7),
     # Gallery
-    # ('gallery', "pollitos.png", 0),
+    ('gallery', "pollitos.png", 0),
     # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # Original content
