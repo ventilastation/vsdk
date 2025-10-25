@@ -3,7 +3,7 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
-MAX_VIDAS = 1 #3
+MAX_VIDAS = 3
 SPEED = 8
 LIMIT = 30
 
