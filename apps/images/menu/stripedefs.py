@@ -2,6 +2,7 @@ stripes = [
     palettegroup(
         strip("menu.png", frames=16),
         strip("mygame.png", frames=1),
+        strip("peronjam.png", frames=1),
         strip("tvnel_alecu.png", frames=1),
         strip("pollitos.png", frames=5),
         strip("vortris.png"),
