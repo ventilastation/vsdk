@@ -13,11 +13,15 @@ DER = -1
 SPEED_0 = 1.8       # Velocidad inicial
 ACC = 0.2           # Aceleracion
 
+class MySprite(Sprite):
+    pass
+
+
 def animate(sp):
     sp.set_frame(sp.init_frame + (sp.frame() - sp.init_frame + 1) % sp.frames)
 
 def peron():
-    sp = Sprite()
+    sp = MySprite()
     sp.set_strip(stripes["peronsad.png"])
     sp.set_perspective(0)
     sp.set_x(0)
@@ -27,7 +31,7 @@ def peron():
     return sp
 
 def crear_mano(sentido):
-    sp = Sprite()
+    sp = MySprite()
     sp.set_strip(stripes["mano.png"])
     sp.set_frame(1)
     sp.set_perspective(1)
@@ -40,7 +44,7 @@ def crear_mano(sentido):
     return sp
 
 def cosito():
-    sp = Sprite()
+    sp = MySprite()
     sp.set_strip(stripes["bola.png"])
     sp.set_frame(1)
     sp.set_perspective(1)
@@ -68,7 +72,7 @@ class Peron():
         self.frames[0].disable()
 
     def crear_sprite(self, name):
-        sp = Sprite()
+        sp = MySprite()
         sp.set_strip(stripes[name])
         sp.set_perspective(0)
         sp.set_x(0)
@@ -111,7 +115,7 @@ class ScoreVidas():
         print("crear_cartel")
         self.chars = []
         for n in range(9):
-            s = Sprite()
+            s = MySprite()
             s.set_strip(stripes["numerals.png"])
             s.set_x(110 + n * 4)
             s.set_y(0)
@@ -132,7 +136,7 @@ class GameOver(Scene):
 
         self.sc = ScoreVidas(self.score, 0)
 
-        sp = Sprite()
+        sp = MySprite()
         sp.set_strip(stripes["gameover.png"])
         sp.set_perspective(0)
         sp.set_x(0)
