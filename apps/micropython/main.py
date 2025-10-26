@@ -10,6 +10,7 @@ from ventilastation.shuffler import shuffled
 
 # (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
+    ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
     # # 1er Jam 2025
     ('vortris', "vortris.png", 0),
@@ -31,9 +32,9 @@ MAIN_MENU_OPTIONS = [
     # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # Original content
-    ('vyruss', "menu.png", 0),
-    ('ventilagon_game', "menu.png", 1),
-    ('ventap', "menu.png", 4),
+    # ('vyruss', "menu.png", 0),
+    # ('ventilagon_game', "menu.png", 1),
+    # ('ventap', "menu.png", 4),
     # ('debugmode', "menu.png", 9),
     # ('calibrate', "menu.png", 8),
     # ('credits', "menu.png", 3),
