@@ -18,7 +18,7 @@
 #include "ventilagon/ventilagon.h"
 
 #define GPIO_HALL     GPIO_NUM_26
-#define GPIO_HALL_B     GPIO_NUM_4
+#define GPIO_HALL_B     GPIO_NUM_5
 #define GPIO_DEBUG     GPIO_NUM_18
 
 //#define printf(...) mp_printf(MP_PYTHON_PRINTER, __VA_ARGS__)
@@ -82,22 +82,17 @@ char* init_buffers(int num_pixels) {
 
 void spi_init(int num_pixels) {
     buf_size = 4 + num_pixels * 4 * 2 + 8;
-    const long freq = 20000000;
-    spiStartBuses(freq);
     init_buffers(num_pixels);
 }
 
 
 void spi_write_HSPI() {
-    spiWriteNL(2, spi_buf, buf_size);
+    spiWriteNL(spi_buf, buf_size);
 }
 
 void spi_shutdown() {
     free(spi_buf);
 }
-
-
-static int taskCore = 0;
 
 void delay(int ms) {
     uint32_t end = esp_timer_get_time() + ms * 1000;
@@ -177,7 +172,7 @@ void gpu_step() {
 
 void coreTask( void * pvParameters ){
 // I suspect we can't print from this thread, perhaps printf is not reentrant?
-    //printf("GPU task running on core %d\n", xPortGetCoreID());
+    printf("GPU task running on core %d\n", xPortGetCoreID());
 
     // //gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
     // //hall_init(GPIO_HALL);
@@ -186,6 +181,9 @@ void coreTask( void * pvParameters ){
     gpio_set_direction(GPIO_NUM_38, GPIO_MODE_OUTPUT);
 
     init_sprites();
+
+    const long freq = 20000000;
+    spiStartBuses(freq);
     spiAcquire();
 
     while(true){
@@ -208,7 +206,7 @@ static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
     already_initialized = true;
 
     spi_init(mp_obj_get_int(num_pixels));
-    //printf("Micropython running on core %d\n", xPortGetCoreID());
+    printf("Micropython running on core %d\n", xPortGetCoreID());
     ventilagon_init();
     //printf("pixels0: %p\n", pixels0);
     //printf("pixels1: %p\n", pixels1);
@@ -221,7 +219,7 @@ static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
             NULL,       /* Task input parameter */
             10,          /* Priority of the task */
             NULL,       /* Task handle. */
-            taskCore);  /* Core where the task should run */
+            GPU_TASK_CORE);  /* Core where the task should run */
     // printf("task created...\n");
     gamma_mode = 0;
     return mp_const_none;

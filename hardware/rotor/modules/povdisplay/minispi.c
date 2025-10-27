@@ -24,12 +24,10 @@
 #include <soc/spi_struct.h>
 #include <soc/io_mux_reg.h>
 #include <driver/gpio.h>
-#include "esp_log.h"
 //#include "py/mpprint.h"
 #include "FreeRTOS.h"
 #include "freertos/task.h"
-
-static const char* TAG = "Ventilastation:SPI";
+#include "minispi.h"
 
 //
 //#define HSPI_PIN_CLK  GPIO_NUM_14
@@ -233,45 +231,55 @@ static const char* TAG = "Ventilastation:SPI";
 
 spi_device_handle_t spi_handle;
 
-spi_bus_config_t buscfg={
-        .miso_io_num = -1,
-        .mosi_io_num = PIN_NUM_MOSI,
-        .sclk_io_num = PIN_NUM_CLK,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = 32,
-};
-
-spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 20 * 1000 * 1000,     //Clock out at 20 MHz
-        .mode = 0,                              //SPI mode 0
-        .spics_io_num = -1,             //CS pin
-};
 
 void spiStartBuses(uint32_t freq) {
-    //printf("Initializing bus SPI%d...\n", LEDS_SPI_HOST+1);
+    printf("Initializing bus SPI, handle is %p\n", spi_handle);
 
     esp_err_t ret;
+
+    spi_bus_config_t buscfg={
+            .miso_io_num = -1,
+            .mosi_io_num = PIN_NUM_MOSI,
+            .sclk_io_num = PIN_NUM_CLK,
+            .quadwp_io_num = -1,
+            .quadhd_io_num = -1,
+            .max_transfer_sz = 512,
+            .isr_cpu_id = GPU_TASK_CORE,
+    };
+
 
     ret = spi_bus_initialize(LEDS_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
     ESP_ERROR_CHECK(ret);
         //const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
         //vTaskDelay( xDelay );
 
+    spi_device_interface_config_t devcfg = {
+            .clock_speed_hz = 20 * 1000 * 1000,     //Clock out at 20 MHz
+            .mode = 0,                              //SPI mode 0
+            .spics_io_num = -1,             //CS pin
+            .queue_size=10,
+            .pre_cb=NULL,
+            .cs_ena_pretrans = 0,
+            .cs_ena_posttrans = 0,
+            .input_delay_ns = 62.5,
+    };
+
     spi_bus_add_device(LEDS_SPI_HOST, &devcfg, &spi_handle);
     ESP_ERROR_CHECK(ret);
-    //printf("adding device returned... %d\n", ret);
+    printf("adding device returned... %d\n", ret);
 
-    //printf("spi bus ready\n");
+    printf("spi bus ready, handle is ready\n");
 }
 
 void spiAcquire() {
     esp_err_t ret;
+    printf("about to acquire bus, handle: %p\n", &spi_handle);
     ret = spi_device_acquire_bus(spi_handle, portMAX_DELAY);
     ESP_ERROR_CHECK(ret);
+    printf("bus acquisition completed\n");
 }
 
-void spiWriteNL(int device, const void * data_in, size_t len){
+void spiWriteNL(const void * data_in, size_t len){
     esp_err_t ret;
     spi_transaction_t transaction = {
         .length=len*8,
