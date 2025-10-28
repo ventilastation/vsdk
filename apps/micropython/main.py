@@ -12,6 +12,7 @@ from ventilastation.shuffler import shuffled
 MAIN_MENU_OPTIONS = [
     ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
+    ('villalugano_games', "pollitos.png", 0),
     # # 1er Jam 2025
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
@@ -107,7 +108,12 @@ class GamesMenu(menu.Menu):
         self.loviejo.set_frame(0)
         self.favalli = make_me_a_planet("favalli.png")
         self.favalli.set_frame(0)
+        self.garbage_collect()
 
+    def garbage_collect(self):
+        import gc
+        gc.collect()
+        self.call_later(60000, self.garbage_collect)
 
     def on_option_pressed(self, option_index):
         app_chosen = self.options[option_index][0]
