@@ -58,11 +58,14 @@ class Explosion:
         self.sprite.set_x(x)
         self.sprite.set_y(y)
         self.delete = False
+        self.animation_delay = 15  # Used to animate the sprite slower
 
     def animar(self):
         current_frame = self.sprite.frame()
-        if (current_frame < EXPLOSION_FRAMES):
-            self.sprite.set_frame(current_frame+1)
+        if current_frame < EXPLOSION_FRAMES:
+            if self.animation_delay % 6 == 0:
+                self.sprite.set_frame(current_frame+1)
+            self.animation_delay = self.animation_delay + 1
         else:
             self.delete = True
 
@@ -77,17 +80,6 @@ class Vissile(Scene):
         self.explosiones = []
 
     def step(self):
-        # if director.was_pressed(director.BUTTON_A):
-        #     nub_x = self.nubareda.x
-        #     nub_finx = self.nubareda.x + self.nubareda.width + 16
-        #     if nub_x < self.bola.x() < nub_finx:
-        #         director.sound_play(b"vyruss/shoot1")
-        #         self.nubareda.reiniciar()
-        #     else:
-        #         director.sound_play(b"vyruss/explosion3")
-        #         director.music_play("vyruss/vy-gameover")
-        #         self.finished()
-           
         if director.is_pressed(director.JOY_LEFT):
             self.mira.mover_izq()
 
@@ -101,7 +93,6 @@ class Vissile(Scene):
             self.mira.bajar()
 
         if director.was_pressed(director.BUTTON_A):
-            # self.misiles.append(Misil())
             e = Explosion(self.mira.sprite.x() - 10, self.mira.sprite.y() - 10)
             self.explosiones.append(e)
 
@@ -117,7 +108,8 @@ class Vissile(Scene):
             if (e.delete):
                 e.sprite.disable()
                 self.explosiones.remove(e)
-
+        
+        # Salir
         if director.was_pressed(director.BUTTON_D):
             self.finished()
 
