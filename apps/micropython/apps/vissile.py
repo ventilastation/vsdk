@@ -49,6 +49,25 @@ class Misil:
         self.y_actual = self.sprite.y()
         self.sprite.set_y(self.y_actual + 1)
 
+class Cascote:
+    def __init__(self, torreta):
+        self.sprite = Sprite()
+        self.sprite.set_strip(stripes["cascote.png"])
+        self.sprite.set_frame(0)
+        self.sprite.set_perspective(1)
+        if torreta == 1:
+            self.sprite.set_x(64)
+            self.sprite.set_y(85)
+        elif torreta == 2:
+            self.sprite.set_x(64)
+            self.sprite.set_y(170)
+        elif torreta == 3:
+            self.sprite.set_x(192)
+            self.sprite.set_y(170)
+        elif torreta == 4:
+            self.sprite.set_x(192)
+            self.sprite.set_y(85)
+
 class Explosion:
     def __init__(self, x, y):
         self.sprite = Sprite()
@@ -96,6 +115,7 @@ class Vissile(Scene):
 
         # Disparar misil
         if director.was_pressed(director.BUTTON_A):
+            Cascote(1)
             e = Explosion(self.mira.sprite.x() - 10, self.mira.sprite.y() - 10)
             # TODO: Sólo permitir una cantidad determinada de explosiones al mismo tiempo para evitar flooding
             self.explosiones.append(e)
