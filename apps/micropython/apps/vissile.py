@@ -6,6 +6,7 @@ from ventilastation.sprites import Sprite
 MIRA_VELOCIDAD_HORIZONTAL = 4
 MIRA_VELOCIDAD_VERTICAL = 3
 ANCHO_MIRA = 6
+EXPLOSION_FRAMES = 5
 
 class Mira:
     def __init__(self):
@@ -35,8 +36,6 @@ class Mira:
         self.y_actual = min(self.sprite.y(), 100)  # Bound inferior
         self.sprite.set_y( self.y_actual + MIRA_VELOCIDAD_VERTICAL)
 
-
-
 class Misil:
     def __init__(self):
         self.sprite = Sprite()
@@ -50,6 +49,23 @@ class Misil:
         self.y_actual = self.sprite.y()
         self.sprite.set_y(self.y_actual + 1)
 
+class Explosion:
+    def __init__(self, x, y):
+        self.sprite = Sprite()
+        self.sprite.set_strip(stripes["explosion.png"])
+        self.sprite.set_frame(0)
+        self.sprite.set_perspective(1)
+        self.sprite.set_x(x)
+        self.sprite.set_y(y)
+        self.delete = False
+
+    def animar(self):
+        current_frame = self.sprite.frame()
+        if (current_frame < EXPLOSION_FRAMES):
+            self.sprite.set_frame(current_frame+1)
+        else:
+            self.delete = True
+
 class Vissile(Scene):
     stripes_rom = "vissile"
 
@@ -58,6 +74,7 @@ class Vissile(Scene):
 
         self.mira = Mira()
         self.misiles = []
+        self.explosiones = []
 
     def step(self):
         # if director.was_pressed(director.BUTTON_A):
@@ -84,15 +101,22 @@ class Vissile(Scene):
             self.mira.bajar()
 
         if director.was_pressed(director.BUTTON_A):
-            self.misiles.append(Misil())
+            # self.misiles.append(Misil())
+            e = Explosion(self.mira.sprite.x() - 10, self.mira.sprite.y() - 10)
+            self.explosiones.append(e)
 
         for m in self.misiles:
             m.mover()
+            if m.sprite.y() > 120:
+                m.sprite.disable()
+                self.misiles.remove(m)
+                # TODO Take damage!
 
-        #for i in range(len(misiles), -1, -1):
-        #   if misiles[i] ... :
-        #       del misiles[i]
-
+        for e in self.explosiones:
+            e.animar()
+            if (e.delete):
+                e.sprite.disable()
+                self.explosiones.remove(e)
 
         if director.was_pressed(director.BUTTON_D):
             self.finished()
