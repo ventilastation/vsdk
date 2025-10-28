@@ -21,11 +21,11 @@ class Mira:
         self.sprite.set_y(60)
 
     def mover_izq(self):
-        self.x_actual = max(self.sprite.x(), 85 - ANCHO_MIRA//2)  # Bound izquierdo
+        self.x_actual = max(self.sprite.x(), 80 - ANCHO_MIRA//2)  # Bound izquierdo
         self.sprite.set_x( self.x_actual - MIRA_VELOCIDAD_HORIZONTAL)
 
     def mover_der(self):
-        self.x_actual = min(self.sprite.x(), 170 - ANCHO_MIRA//2)  # Bound derecho
+        self.x_actual = min(self.sprite.x(), 175 - ANCHO_MIRA//2)  # Bound derecho
         self.sprite.set_x( self.x_actual + MIRA_VELOCIDAD_HORIZONTAL)
 
     def subir(self):
@@ -62,8 +62,8 @@ class Explosion:
 
     def animar(self):
         current_frame = self.sprite.frame()
-        if current_frame < EXPLOSION_FRAMES:
-            if self.animation_delay % 6 == 0:
+        if current_frame < EXPLOSION_FRAMES - 2:
+            if self.animation_delay % 5 == 0:
                 self.sprite.set_frame(current_frame+1)
             self.animation_delay = self.animation_delay + 1
         else:
@@ -80,6 +80,8 @@ class Vissile(Scene):
         self.explosiones = []
 
     def step(self):
+
+        # Movimiento de la mira
         if director.is_pressed(director.JOY_LEFT):
             self.mira.mover_izq()
 
@@ -92,22 +94,26 @@ class Vissile(Scene):
         if director.is_pressed(director.JOY_DOWN):
             self.mira.bajar()
 
+        # Disparar misil
         if director.was_pressed(director.BUTTON_A):
             e = Explosion(self.mira.sprite.x() - 10, self.mira.sprite.y() - 10)
+            # TODO: Sólo permitir una cantidad determinada de explosiones al mismo tiempo para evitar flooding
             self.explosiones.append(e)
 
+        # Actualizar misiles
         for m in self.misiles:
             m.mover()
             if m.sprite.y() > 120:
                 m.sprite.disable()
-                self.misiles.remove(m)
+                self.misiles.remove(m)  # funciona?
                 # TODO Take damage!
-
+        
+        # Actualizar explosiones
         for e in self.explosiones:
             e.animar()
             if (e.delete):
                 e.sprite.disable()
-                self.explosiones.remove(e)
+                self.explosiones.remove(e)  # funciona?
         
         # Salir
         if director.was_pressed(director.BUTTON_D):
