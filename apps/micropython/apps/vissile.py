@@ -17,7 +17,7 @@ class Mira:
         self.reiniciar()
 
     def reiniciar(self):
-        self.sprite.set_x(128 - ANCHO_MIRA//2)
+        self.sprite.set_x(127 - ANCHO_MIRA//2)
         self.sprite.set_y(65)
 
     # No llega hasta el plano horizontal porque no van a venir misiles por el piso XD
@@ -50,11 +50,15 @@ class Misil:
         self.sprite.set_y(self.y_actual + 1)
 
 class Cascote:
-    def __init__(self, torreta):
+    def __init__(self, torreta, derecha, target_x):
         self.sprite = Sprite()
         self.sprite.set_strip(stripes["cascote.png"])
         self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
+        self.derecha = derecha
+        self.target_x = target_x
+        self.delete = False
+
         # Torretas isquierdas, de izquierda a derecha
         if torreta == 1:
             self.sprite.set_x(64 - 2)
@@ -75,6 +79,20 @@ class Cascote:
         elif torreta == 6:
             self.sprite.set_x(192 - 2)
             self.sprite.set_y(40)
+    
+    def mover(self):
+        if self.derecha:
+            self.x_actual = self.sprite.x()
+            if self.x_actual < self.target_x:
+                self.sprite.set_x(self.x_actual + 1)
+            else:
+                self.delete = True
+        else:
+            self.x_actual = self.sprite.x()
+            if self.x_actual > self.target_x:
+                self.sprite.set_x(self.x_actual - 1)
+            else:
+                self.delete = True
 
 class Explosion:
     def __init__(self, x, y):
@@ -90,7 +108,7 @@ class Explosion:
     def animar(self):
         current_frame = self.sprite.frame()
         if current_frame < EXPLOSION_FRAMES - 2:
-            if self.animation_delay % 5 == 0:
+            if self.animation_delay % 6 == 0:
                 self.sprite.set_frame(current_frame+1)
             self.animation_delay = self.animation_delay + 1
         else:
@@ -105,6 +123,7 @@ class Vissile(Scene):
         self.mira = Mira()
         self.misiles = []
         self.explosiones = []
+        self.cascotes = []
 
     def step(self):
 
@@ -123,23 +142,22 @@ class Vissile(Scene):
 
         # Disparar misil
         if director.was_pressed(director.BUTTON_A):
+            target_x = self.mira.sprite.x()
             if self.mira.sprite.x() < 128 - ANCHO_MIRA // 2:
                 if self.mira.sprite.y() == 40:
-                    Cascote(1)
+                    self.cascotes.append(Cascote(1, True, target_x - ANCHO_MIRA//2))
                 elif self.mira.sprite.y() == 65:
-                    Cascote(2)
+                    self.cascotes.append(Cascote(2, True, target_x - ANCHO_MIRA//2))
                 elif self.mira.sprite.y() == 90:
-                    Cascote(3)
+                    self.cascotes.append(Cascote(3, True, target_x - ANCHO_MIRA//2))
             else:
                 if self.mira.sprite.y() == 40:
-                    Cascote(6)
+                    self.cascotes.append(Cascote(6, False, target_x - ANCHO_MIRA//2))
                 elif self.mira.sprite.y() == 65:
-                    Cascote(5)
+                    self.cascotes.append(Cascote(5, False, target_x - ANCHO_MIRA//2))
                 elif self.mira.sprite.y() == 90:
-                    Cascote(4)
-            e = Explosion(self.mira.sprite.x() - 10, self.mira.sprite.y() - 10)
-            # TODO: Sólo permitir una cantidad determinada de explosiones al mismo tiempo para evitar flooding
-            self.explosiones.append(e)
+                    self.cascotes.append(Cascote(4, False, target_x - ANCHO_MIRA//2))
+            
 
         # Actualizar misiles
         for m in self.misiles:
@@ -156,6 +174,15 @@ class Vissile(Scene):
                 e.sprite.disable()
                 self.explosiones.remove(e)  # funciona?
         
+        for c in self.cascotes:
+            c.mover()
+            if (c.delete):
+                c.sprite.disable()
+                e = Explosion(c.sprite.x() - 10, c.sprite.y() - 10)
+                # TODO: Sólo permitir una cantidad determinada de explosiones al mismo tiempo para evitar flooding
+                self.cascotes.remove(c)
+                self.explosiones.append(e)
+
         # Salir
         if director.was_pressed(director.BUTTON_D):
             self.finished()
