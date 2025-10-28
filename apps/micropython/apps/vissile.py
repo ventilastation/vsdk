@@ -4,7 +4,7 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
 MIRA_VELOCIDAD_HORIZONTAL = 4
-MIRA_VELOCIDAD_VERTICAL = 3
+MIRA_STEP_VERTICAL = 3
 ANCHO_MIRA = 6
 EXPLOSION_FRAMES = 5
 
@@ -18,8 +18,9 @@ class Mira:
 
     def reiniciar(self):
         self.sprite.set_x(128 - ANCHO_MIRA//2)
-        self.sprite.set_y(60)
+        self.sprite.set_y(65)
 
+    # No llega hasta el plano horizontal porque no van a venir misiles por el piso XD
     def mover_izq(self):
         self.x_actual = max(self.sprite.x(), 80 - ANCHO_MIRA//2)  # Bound izquierdo
         self.sprite.set_x( self.x_actual - MIRA_VELOCIDAD_HORIZONTAL)
@@ -28,13 +29,12 @@ class Mira:
         self.x_actual = min(self.sprite.x(), 175 - ANCHO_MIRA//2)  # Bound derecho
         self.sprite.set_x( self.x_actual + MIRA_VELOCIDAD_HORIZONTAL)
 
+    # Sube y baja escalonadamente
     def subir(self):
-        self.y_actual = max(self.sprite.y(), 30)   # Bound superior
-        self.sprite.set_y( self.y_actual - MIRA_VELOCIDAD_VERTICAL)
+        self.sprite.set_y( max(self.sprite.y() - 25, 40) )
 
     def bajar(self):
-        self.y_actual = min(self.sprite.y(), 100)  # Bound inferior
-        self.sprite.set_y( self.y_actual + MIRA_VELOCIDAD_VERTICAL)
+        self.sprite.set_y( min(self.sprite.y() + 25, 90))
 
 class Misil:
     def __init__(self):
@@ -55,18 +55,26 @@ class Cascote:
         self.sprite.set_strip(stripes["cascote.png"])
         self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
+        # Torretas isquierdas, de izquierda a derecha
         if torreta == 1:
-            self.sprite.set_x(64)
-            self.sprite.set_y(85)
+            self.sprite.set_x(64 - 2)
+            self.sprite.set_y(40)
         elif torreta == 2:
-            self.sprite.set_x(64)
-            self.sprite.set_y(170)
+            self.sprite.set_x(64 - 2)
+            self.sprite.set_y(65)
         elif torreta == 3:
-            self.sprite.set_x(192)
-            self.sprite.set_y(170)
+            self.sprite.set_x(64 - 2)
+            self.sprite.set_y(90)
+        # Torretas derechas, de izquierda a derecha
         elif torreta == 4:
-            self.sprite.set_x(192)
-            self.sprite.set_y(85)
+            self.sprite.set_x(192 - 2)
+            self.sprite.set_y(90)
+        elif torreta == 5:
+            self.sprite.set_x(192 - 2)
+            self.sprite.set_y(65)
+        elif torreta == 6:
+            self.sprite.set_x(192 - 2)
+            self.sprite.set_y(40)
 
 class Explosion:
     def __init__(self, x, y):
@@ -77,7 +85,7 @@ class Explosion:
         self.sprite.set_x(x)
         self.sprite.set_y(y)
         self.delete = False
-        self.animation_delay = 15  # Used to animate the sprite slower
+        self.animation_delay = 15  # Contador que se usa para ralentizar la animación
 
     def animar(self):
         current_frame = self.sprite.frame()
@@ -107,15 +115,28 @@ class Vissile(Scene):
         if director.is_pressed(director.JOY_RIGHT):
             self.mira.mover_der()
 
-        if director.is_pressed(director.JOY_UP):
+        if director.was_pressed(director.JOY_UP):
             self.mira.subir()
 
-        if director.is_pressed(director.JOY_DOWN):
+        if director.was_pressed(director.JOY_DOWN):
             self.mira.bajar()
 
         # Disparar misil
         if director.was_pressed(director.BUTTON_A):
-            Cascote(1)
+            if self.mira.sprite.x() < 128 - ANCHO_MIRA // 2:
+                if self.mira.sprite.y() == 40:
+                    Cascote(1)
+                elif self.mira.sprite.y() == 65:
+                    Cascote(2)
+                elif self.mira.sprite.y() == 90:
+                    Cascote(3)
+            else:
+                if self.mira.sprite.y() == 40:
+                    Cascote(6)
+                elif self.mira.sprite.y() == 65:
+                    Cascote(5)
+                elif self.mira.sprite.y() == 90:
+                    Cascote(4)
             e = Explosion(self.mira.sprite.x() - 10, self.mira.sprite.y() - 10)
             # TODO: Sólo permitir una cantidad determinada de explosiones al mismo tiempo para evitar flooding
             self.explosiones.append(e)
