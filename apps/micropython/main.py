@@ -11,7 +11,9 @@ from ventilastation.shuffler import shuffled
 # (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
     ('vissile', "mygame.png", 0),
+    ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
+    ('villalugano_games', "pollitos.png", 0),
     # # 1er Jam 2025
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
@@ -32,9 +34,9 @@ MAIN_MENU_OPTIONS = [
     # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # Original content
-    ('vyruss', "menu.png", 0),
-    ('ventilagon_game', "menu.png", 1),
-    ('ventap', "menu.png", 4),
+    # ('vyruss', "menu.png", 0),
+    # ('ventilagon_game', "menu.png", 1),
+    # ('ventap', "menu.png", 4),
     # ('debugmode', "menu.png", 9),
     # ('calibrate', "menu.png", 8),
     # ('credits', "menu.png", 3),
@@ -107,7 +109,12 @@ class GamesMenu(menu.Menu):
         self.loviejo.set_frame(0)
         self.favalli = make_me_a_planet("favalli.png")
         self.favalli.set_frame(0)
+        self.garbage_collect()
 
+    def garbage_collect(self):
+        import gc
+        gc.collect()
+        self.call_later(60000, self.garbage_collect)
 
     def on_option_pressed(self, option_index):
         app_chosen = self.options[option_index][0]
