@@ -10,6 +10,7 @@ from ventilastation.shuffler import shuffled
 
 # (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
+    ('vissile', "mygame.png", 0),
     ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
     ('villalugano_games', "pollitos.png", 0),
