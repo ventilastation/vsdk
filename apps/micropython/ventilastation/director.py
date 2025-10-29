@@ -44,7 +44,7 @@ class Director:
         self.last_buttons = 0
         self.last_player_action = utime.ticks_ms()
         self.timedout = False
-        self.rom_data = None
+        self.romdata = None
 
         gc.disable()
         sprites.reset_sprites()
