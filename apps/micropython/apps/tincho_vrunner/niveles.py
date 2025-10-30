@@ -5,11 +5,12 @@ from urandom import choice, randrange, seed
 
 
 def make_me_a_planet(strip):
-    planet = sprites.Sprite()
+    planet = Sprite()
     planet.set_strip(stripes[strip])
     planet.set_perspective(0)
     planet.set_x(0)
     planet.set_y(255)
+    planet.set_frame(0)
     return planet
 
 CENTRO_WIDTH = 32
@@ -27,7 +28,25 @@ COLS_CENTERS = [int(TILE_WIDTH * (c - DAMERO_COLS/2 + 0.5) ) for c in range(DAME
 
 # FIXME
 DESFAZAJES = [0, 1, 2, 1, 1, 0, -1, -1]
-VELOCIDADES = [-5, -4, -3, -2, -1, -1/2, -1/4, -1/8, 0, 1/8, 1/4, 1/2, 1, 2, 3, 4, 5]
+VELOCIDADES = [-5, -4, -3, -2, -1, -1/2, -1/4, -1/8, 1/8, 1/4, 1/2, 1, 2, 3, 4, 5]
+PLAYER_HORIZONTAL_VELS = {
+    -5: 1,
+    -4: 1,
+    -3: 1,
+    -2: 1,
+    -1: 2,
+    -1/2: 4,
+    -1/4: 6,
+    -1/8: 8,
+    1/8: 8,
+    1/4: 6,
+    1/2: 4,
+    1: 2,
+    2: 1,
+    3: 1,
+    4: 1,
+    5: 1,
+}
 
 def get_damero_strip(x, y, tile_x, tile_y):
     #return stripes["damero.png"]
@@ -42,24 +61,34 @@ def get_damero_frame(x, y, tile_x, tile_y):
     elif y < ROWS_LO_HEIGHT:
         return 1
     else:
-        return 2
+        return 1 # 2
     # return tile_y % DAMERO_ROWS // 2
 
 class Nivel01(Scene):
-    stripes_rom = "vvv"
+    stripes_rom = "tincho_vrunner"
 
     def on_enter(self):
         super(Nivel01, self).on_enter()
 
-        self.tiles_centro = []
-        for i in range(256 // CENTRO_WIDTH):
-            tile = Sprite()
-            self.tiles_centro.append(tile)
-            tile.set_strip(stripes["centro.png"])
-            tile.set_x(i * CENTRO_WIDTH)
-            tile.set_y(54-tile.height())
-            tile.set_frame(0)
-            tile.set_perspective(2)
+        self.frame = 0
+
+        self.player = Sprite()
+        self.player.set_strip(stripes["tincho_palante.png"])
+        self.player.set_x(-(self.player.width() // 2))
+        self.player.set_y(0)
+        self.player.set_frame(0)
+        self.player.set_perspective(2)
+
+        # self.has_centro = True
+        # self.tiles_centro = []
+        # for i in range(256 // CENTRO_WIDTH):
+        #     tile = Sprite()
+        #     self.tiles_centro.append(tile)
+        #     tile.set_strip(stripes["centro.png"])
+        #     tile.set_x(i * CENTRO_WIDTH)
+        #     tile.set_y(54-tile.height())
+        #     tile.set_frame(0)
+        #     tile.set_perspective(2)
 
         self.tiles_suelo = {}
         for tile_x in range(DAMERO_COLS):
@@ -74,22 +103,26 @@ class Nivel01(Scene):
                 tile.set_strip(get_damero_strip(x, y, tile_x, tile_y))
                 tile.set_frame(get_damero_frame(x, y, tile_x, tile_y))
 
-        self.bg = Sprite()
-        self.bg.set_strip(stripes["negro.png"])
-        self.bg.set_x(0)
-        self.bg.set_y(255)
-        self.bg.set_frame(0)
-        self.bg.set_perspective(0)
+        # make_me_a_planet("tincho_pescando.png")
+        make_me_a_planet("negro.png")
 
         self.run_vel = 1/4
         self.run_acc = 0
-        self.has_centro = True
 
         self.duration = 1000
         self.dir_acelerar = 1
         self.call_later(self.duration, self.acelerar)
 
     def step(self):
+        self.frame += 1
+
+        if abs(self.run_vel) >= 3:
+            self.player.set_frame((self.frame // 4) % 4)
+        elif abs(self.run_vel) >= 1:
+            self.player.set_frame((self.frame // 8) % 4)
+        else:
+            self.player.set_frame((self.frame // 16) % 4)
+
         if self.run_vel >= 1 or self.run_vel <= -1:
             self.animar_paisaje(self.run_vel)
         else:
@@ -98,15 +131,15 @@ class Nivel01(Scene):
                 self.animar_paisaje(int(self.run_acc))
                 self.run_acc = 0
 
-        y_axis = director.was_released(director.JOY_UP) - director.was_released(director.JOY_DOWN)
-        new_index = VELOCIDADES.index(self.run_vel) + y_axis
-        self.run_vel = VELOCIDADES[max(min(new_index, len(VELOCIDADES)-1), 0)]
+        x_axis = director.is_pressed(director.JOY_LEFT) - director.is_pressed(director.JOY_RIGHT)
+        if x_axis and not self.frame % PLAYER_HORIZONTAL_VELS[self.run_vel]:
+            self.player.set_x(self.player.x() + x_axis)
 
-        if director.was_pressed(director.BUTTON_A):
-            self.run_vel = 0
-            self.has_centro = not self.has_centro
-            for t in self.tiles_centro:
-                t.disable() if not self.has_centro else t.set_frame(0)
+        # if director.was_pressed(director.BUTTON_A):
+        #     # self.run_vel = 0
+        #     self.has_centro = not self.has_centro
+        #     for t in self.tiles_centro:
+        #         t.disable() if not self.has_centro else t.set_frame(0)
 
         if director.was_pressed(director.BUTTON_D): # or director.timedout:
             self.finished()
@@ -132,4 +165,8 @@ class Nivel01(Scene):
             self.dir_acelerar *= -1
         new_index = VELOCIDADES.index(self.run_vel) + self.dir_acelerar
         self.run_vel = VELOCIDADES[max(min(new_index, len(VELOCIDADES)-1), 0)]
+        if self.run_vel != 0:
+            s = "tincho_palante.png" if self.run_vel > 0 else "tincho_patras.png"
+            self.player.set_strip(stripes[s])
+
         self.call_later(self.duration, self.acelerar)

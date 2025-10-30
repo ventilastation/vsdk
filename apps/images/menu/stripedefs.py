@@ -18,7 +18,7 @@ stripes = [
         strip("2bam_demo_menu.png",frames=1),
         strip("2bam_sencom.png",frames=1),
         strip("domedefander.png"),
-        strip("vvv.png"),
+        strip("tincho_vrunner.png",frames=2),
         strip("villalugano_games.png"),
         fullscreen("favalli.png"),
     ),
