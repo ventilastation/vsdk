@@ -16,6 +16,7 @@ MAIN_MENU_OPTIONS = [
     ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
     ('villalugano_games', "villalugano_games.png", 0),
+    ('upgrade', "pollitos.png", 0),
     # # # 1er Jam 2025
     # ('vortris', "vortris.png", 0),
     # ('vailableextreme', "vailableextreme.png", 0),
