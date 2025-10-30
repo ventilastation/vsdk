@@ -12,7 +12,7 @@ from ventilastation.shuffler import shuffled
 MAIN_MENU_OPTIONS = [
     ('2bam_sencom', "2bam_sencom.png", 0),
     ('vissile', "domedefander.png", 0),
-    ('vvv', "vvv.png", 0),
+    ('tincho_vrunner', "tincho_vrunner.png", 0),
     ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
     ('villalugano_games', "villalugano_games.png", 0),
@@ -99,6 +99,11 @@ class GamesMenu(menu.Menu):
             self.pollitos = self.sprites[pollitos_index]
         except ValueError:
             self.pollitos = None
+        try:
+            tincho_index = [m[1] for m in self.options].index("tincho_vrunner.png")
+            self.es_tincho = self.sprites[tincho_index]
+        except ValueError:
+            self.es_tincho = None
 
         # self.boot_screen = make_me_a_planet(strips.other.ventilastation)
         # self.boot_screen.set_frame(0)
@@ -138,7 +143,7 @@ class GamesMenu(menu.Menu):
             from apps.calibrate import Calibrate
             director.push(Calibrate())
             return True
-            
+
     def step(self):
         # if director.timedout:
         #     load_app("gallery")
@@ -157,6 +162,11 @@ class GamesMenu(menu.Menu):
                 self.animation_frames += 1
                 pf = (self.animation_frames // 4) % 5
                 self.pollitos.set_frame(pf)
+
+            if self.es_tincho:
+                self.animation_frames += 1
+                pf = (self.animation_frames // 4) % 2
+                self.es_tincho.set_frame(pf)
 
 def main():
     # init images
