@@ -5,7 +5,7 @@ from ventilastation.sprites import Sprite
 
 MIRA_VELOCIDAD_HORIZONTAL = 4
 MIRA_STEP_VERTICAL = 3
-ANCHO_MIRA = 6
+ANCHO_MIRA = 9
 EXPLOSION_FRAMES = 5
 
 class Mira:
@@ -62,34 +62,37 @@ class Cascote:
         # Torretas isquierdas, de izquierda a derecha
         if torreta == 1:
             self.sprite.set_x(64 - 2)
-            self.sprite.set_y(40)
+            self.sprite.set_y(40+4)
         elif torreta == 2:
             self.sprite.set_x(64 - 2)
-            self.sprite.set_y(65)
+            self.sprite.set_y(65+4)
         elif torreta == 3:
             self.sprite.set_x(64 - 2)
-            self.sprite.set_y(90)
+            self.sprite.set_y(90+4)
         # Torretas derechas, de izquierda a derecha
         elif torreta == 4:
             self.sprite.set_x(192 - 2)
-            self.sprite.set_y(90)
+            self.sprite.set_y(90 + 4)
+            self.sprite.set_frame(1)
         elif torreta == 5:
             self.sprite.set_x(192 - 2)
-            self.sprite.set_y(65)
+            self.sprite.set_y(65 + 4)
+            self.sprite.set_frame(1)
         elif torreta == 6:
             self.sprite.set_x(192 - 2)
-            self.sprite.set_y(40)
+            self.sprite.set_y(40 + 4)
+            self.sprite.set_frame(1)
     
     def mover(self):
         if self.derecha:
             self.x_actual = self.sprite.x()
-            if self.x_actual < self.target_x:
+            if self.x_actual < self.target_x + ANCHO_MIRA//2:
                 self.sprite.set_x(self.x_actual + 1)
             else:
                 self.delete = True
         else:
             self.x_actual = self.sprite.x()
-            if self.x_actual > self.target_x:
+            if self.x_actual > self.target_x - ANCHO_MIRA//2:
                 self.sprite.set_x(self.x_actual - 1)
             else:
                 self.delete = True
@@ -140,8 +143,12 @@ class Vissile(Scene):
         if director.was_pressed(director.JOY_DOWN):
             self.mira.bajar()
 
-        # Disparar misil
+        # Disparar cascote
         if director.was_pressed(director.BUTTON_A):
+
+            # Temporalmente también usar el clic para crear misiles
+            self.misiles.append(Misil())
+
             target_x = self.mira.sprite.x()
             if self.mira.sprite.x() < 128 - ANCHO_MIRA // 2:
                 if self.mira.sprite.y() == 40:
@@ -152,11 +159,11 @@ class Vissile(Scene):
                     self.cascotes.append(Cascote(3, True, target_x - ANCHO_MIRA//2))
             else:
                 if self.mira.sprite.y() == 40:
-                    self.cascotes.append(Cascote(6, False, target_x - ANCHO_MIRA//2))
+                    self.cascotes.append(Cascote(6, False, target_x + ANCHO_MIRA//2))
                 elif self.mira.sprite.y() == 65:
-                    self.cascotes.append(Cascote(5, False, target_x - ANCHO_MIRA//2))
+                    self.cascotes.append(Cascote(5, False, target_x + ANCHO_MIRA//2))
                 elif self.mira.sprite.y() == 90:
-                    self.cascotes.append(Cascote(4, False, target_x - ANCHO_MIRA//2))
+                    self.cascotes.append(Cascote(4, False, target_x + ANCHO_MIRA//2))
             
 
         # Actualizar misiles
@@ -178,7 +185,7 @@ class Vissile(Scene):
             c.mover()
             if (c.delete):
                 c.sprite.disable()
-                e = Explosion(c.sprite.x() - 10, c.sprite.y() - 10)
+                e = Explosion(c.sprite.x() - 8, c.sprite.y() - 8)
                 # TODO: Sólo permitir una cantidad determinada de explosiones al mismo tiempo para evitar flooding
                 self.cascotes.remove(c)
                 self.explosiones.append(e)
