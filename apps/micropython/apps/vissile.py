@@ -5,7 +5,7 @@ from ventilastation.sprites import Sprite
 
 MIRA_VELOCIDAD_HORIZONTAL = 4
 MIRA_STEP_VERTICAL = 3
-ANCHO_MIRA = 6
+ANCHO_MIRA = 9
 EXPLOSION_FRAMES = 5
 
 class Mira:
@@ -73,12 +73,15 @@ class Cascote:
         elif torreta == 4:
             self.sprite.set_x(192 - 2)
             self.sprite.set_y(90)
+            self.sprite.set_frame(1)
         elif torreta == 5:
             self.sprite.set_x(192 - 2)
             self.sprite.set_y(65)
+            self.sprite.set_frame(1)
         elif torreta == 6:
             self.sprite.set_x(192 - 2)
             self.sprite.set_y(40)
+            self.sprite.set_frame(1)
     
     def mover(self):
         if self.derecha:
