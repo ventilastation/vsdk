@@ -140,8 +140,12 @@ class Vissile(Scene):
         if director.was_pressed(director.JOY_DOWN):
             self.mira.bajar()
 
-        # Disparar misil
+        # Disparar cascote
         if director.was_pressed(director.BUTTON_A):
+
+            # Temporalmente también usar el clic para crear misiles
+            self.misiles.append(Misil())
+
             target_x = self.mira.sprite.x()
             if self.mira.sprite.x() < 128 - ANCHO_MIRA // 2:
                 if self.mira.sprite.y() == 40:
