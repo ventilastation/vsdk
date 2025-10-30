@@ -3,7 +3,7 @@ import os
 import hashlib
 import binascii
 
-SYNC_HOST = '192.168.100.187'
+SYNC_HOST = '192.168.1.100'
 PORT = 9000
 
 def get_file_length_and_hash(filename):
@@ -25,6 +25,7 @@ def makedirs(filename):
             os.mkdir(path)
  
 def sync_with_server(host, port):
+    print(f"Connecting to sync server at {host}:{port}...")
     server_file = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         server_file.connect((host, port))
@@ -44,6 +45,7 @@ def sync_with_server(host, port):
                 filename = line[1]
                 file_length = int(line[2])
                 file_hash = line[3]
+                yield filename.decode()
                 print(f"Receiving file {filename} of length {file_length} and hash {file_hash}")
                 makedirs(filename)
                 with open(filename, 'wb') as f:
@@ -55,7 +57,8 @@ def sync_with_server(host, port):
                             raise Exception("Connection lost while receiving file")
                         f.write(chunk)
                         remaining -= len(chunk)
-                print(f"File {filename} received successfully.")
+                print(f"File {filename.de} received successfully.")
+                yield None
             else:
                 print("Unknown command from server", line)
     finally:
@@ -64,8 +67,12 @@ def sync_with_server(host, port):
 
 
 def main():
-    sync_with_server(SYNC_HOST, PORT)
-
+    for filename in sync_with_server(SYNC_HOST, PORT):
+        if filename:
+            print("Syncing file:", filename, end="")
+        else:
+            print()
+    print("Sync complete.")
 
 if __name__ == '__main__':
     main()
