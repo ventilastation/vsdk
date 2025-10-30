@@ -40,11 +40,13 @@ class Menu(Scene):
             self.selected_index -= 1
             if self.selected_index == -1:
                 self.selected_index = 0
+            print("Selected menu option", self.options[self.selected_index][0])
         if director.was_pressed(director.JOY_UP):
             director.sound_play(b'vyruss/shoot3')
             self.selected_index += 1
             if self.selected_index > len(self.options) - 1:
                 self.selected_index = len(self.options) - 1
+            print("Selected menu option", self.options[self.selected_index][0])
         if (director.was_pressed(director.BUTTON_A) or self.both_console_buttons()):
             director.sound_play(b'vyruss/shoot1')
             try:

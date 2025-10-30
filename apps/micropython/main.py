@@ -167,7 +167,7 @@ class GamesMenu(menu.Menu):
 
             if self.es_tincho:
                 self.tincho_frames += 1
-                pf = (self.tincho_frames // 4) % 2
+                pf = (self.tincho_frames // 6) % 2
                 self.es_tincho.set_frame(pf)
 
 def main():
