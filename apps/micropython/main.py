@@ -8,11 +8,10 @@ from ventilastation import menu
 from ventilastation import povdisplay
 from ventilastation.shuffler import shuffled
 
-# (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
+    # 1er Jam 2025
     ('fanphibious_danger', "fanphibious_danger_2.png", 0),
-    ('2bam_demo', "2bam_demo_menu.png", 0),
-    # # 1er Jam 2025
+    ('aaa', 'aaa.png', 0),
     ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
     ('vzumaki', "vzumaki.png", 0),
