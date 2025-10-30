@@ -17,7 +17,7 @@ class Skater(Sprite):
 
         if self.vx != 0:
             # moviendo las manos
-            nf = self.base_frame + ((self.scene.frame_count // 4) % 2)
+            nf = self.base_frame + ((self.scene.frame_count // 8) % 2)
             self.set_frame(nf)
                 
             if 184-32 < self.x() < 192-32:
@@ -34,12 +34,12 @@ class Skater(Sprite):
         self.vx = 0
         self.set_x(64)
         self.set_y(16)
-        self.set_frame(7)
+        self.set_frame(6)
         self.scene.call_later(500, self.turn_right)
 
     def turn_right(self):
-        self.set_frame(6)
-        self.scene.call_later(800, self.jump_right)
+        self.set_frame(7)
+        self.scene.call_later(200, self.jump_right)
 
     def jump_right(self):
         self.set_x(64-16)
@@ -51,12 +51,12 @@ class Skater(Sprite):
         self.vx = 0
         self.set_x(192-32)
         self.set_y(16)
-        self.set_frame(5)
+        self.set_frame(4)
         self.scene.call_later(500, self.turn_left)
 
     def turn_left(self):
-        self.set_frame(4)
-        self.scene.call_later(800, self.jump_left)
+        self.set_frame(5)
+        self.scene.call_later(200, self.jump_left)
 
     def jump_left(self):
         self.set_x(192-16)
