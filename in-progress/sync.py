@@ -60,6 +60,7 @@ def sync_with_server(host, port):
                 print("Unknown command from server", line)
     finally:
         server_file.close()
+        os.sync()
 
 
 def main():
