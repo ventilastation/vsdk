@@ -95,6 +95,7 @@ class GamesMenu(menu.Menu):
         super(GamesMenu, self).on_enter()
 
         self.animation_frames = 0
+        self.tincho_frames = 0
         try:
             pollitos_index = [m[1] for m in self.options].index("pollitos.png")
             self.pollitos = self.sprites[pollitos_index]
@@ -165,8 +166,8 @@ class GamesMenu(menu.Menu):
                 self.pollitos.set_frame(pf)
 
             if self.es_tincho:
-                self.animation_frames += 1
-                pf = (self.animation_frames // 4) % 2
+                self.tincho_frames += 1
+                pf = (self.tincho_frames // 4) % 2
                 self.es_tincho.set_frame(pf)
 
 def main():
