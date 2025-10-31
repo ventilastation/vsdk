@@ -61,11 +61,11 @@ def sync_with_server(host, port):
                             raise Exception("Connection lost while receiving file")
                         f.write(chunk)
                         remaining -= len(chunk)
-                print(f"File {filename.de} received successfully.")
-                yield None, None
+                print(f"File {filename} received successfully.")
             else:
                 print("Unknown command from server", line)
     finally:
+        print("Sync complete, closing connection and rebooting.")
         server_file.close()
         os.sync()
         import machine
