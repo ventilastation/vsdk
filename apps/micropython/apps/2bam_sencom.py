@@ -6,8 +6,12 @@
 #            Boton A      (emu: SPACE) : Dispara
 #            Mantener boton A          : Activa movimiento rapido
 
+# FIXME^^^: explosions near x=0 are buggy
+
 # TODO: REVISAR SCORE: Ojo de usar el centro q tiene una tapita en el de españa
 
+# TODO ^: shuffle bag target city (double, triple size bag for less predictability)
+# DONE ^: Red alert 1 building
 # TODO ^: Que tambien haya impacto en el suelo (te resta puntos groso pero no perdes) -- igual q apunte "mas" hacia los edificios
 # TODO ^: Wave wait all enemies dead before next step or max_time? -- or stop waiting? min_time
 # TODO ^: Tweak missile Y speed (per level)
@@ -119,6 +123,22 @@ def make_sprite(name, x=0, y=0, persp=1):
     s.set_y(y)
     s.disable()
     return s
+
+# SND_WARNING=b"2bam_sencom/test/531488__rickplayer__alarmalert.mp3"
+SND_WARNING=b"2bam_sencom/warning" # TODO: recortar en tiempo
+SND_EMPTY_CLIP=b"2bam_sencom/empty-clip"
+SND_RED_ALERT=b"2bam_sencom/red-alert"
+SND_CITY_EXPLODE=b"2bam_sencom/city-explode" # LPF menos chillon o pitch down
+SND_BOOM=b"2bam_sencom/boom"
+SNDS_SPAWN=[
+    b"2bam_sencom/chop0",
+    b"2bam_sencom/chop1",
+    b"2bam_sencom/chop2",
+]
+
+#SND_BOOM=b"2bam_sencom/test/434751__djfroyd__monster-kick.wav"
+
+# Faltan: lose, level win, score raising, city counting
 
 def find_color_index(pal, r,g,b):
     for i in range(0, len(pal), 4):
@@ -303,7 +323,9 @@ class Game(Scene):
     level=0
 
 
-
+    def reset(self):
+        self.score=0
+        self.level=0
 
     def save_score():
         # TODO
@@ -329,15 +351,15 @@ class Warning(Entity):
         self.alive=False
 
     def activate(self):
-        # TODO sound here?
-        self.tmr=3*STEPS_PER_SECOND
+        director.sound_play(SND_WARNING)
+        self.tmr=0.707*4*STEPS_PER_SECOND
         self.alive=True
 
     def step(self):
         if self.tmr > 0:
             self.tmr-=1
             self.sprite.set_x(self.sprite.x()+1)
-            self.sprite.set_frame(0 if (self.tmr //12) % 3 > 0 else 255)
+            self.sprite.set_frame(0 if (self.tmr // 7) % 3 > 0 else 255)
             if self.tmr <= 0:
                 self.sprite.disable()
                 self.alive=False
@@ -445,6 +467,7 @@ class Combat(Scene):
         self.aim_y=0
 
         self.cities=[City(i*255//5) for i in range(NUM_CITIES)]
+        self.cities_dead=0
         self.booms=[Boom() for _ in range(MAX_WEAPON)]
 
         self.core=Sprite()
@@ -472,6 +495,7 @@ class Combat(Scene):
             if not missile.alive:
                 if len(cities_alive) > 0:
                     target_city=choice(cities_alive)
+                    
                     missile.reset(
                         target_city,
                         target_city*255//NUM_CITIES+randint(-10, 10),
@@ -516,16 +540,14 @@ class Combat(Scene):
 
 
         cities_alive=[]
-        cities_dead=0
         for city_index, city in enumerate(self.cities):
             if city.state == CITY_OK:
                 cities_alive.append(city_index)
-            elif city.state == CITY_DEAD:
-                cities_dead+=1
             city.step()
         
-        if cities_dead == NUM_CITIES:
+        if self.cities_dead == NUM_CITIES:
             # TODO: LOSE STATE
+            self.game.reset()
             director.pop()
             #raise StopIteration()
             return
@@ -556,8 +578,14 @@ class Combat(Scene):
                 if missile.hit_ground:
                     # self.missile.reset(128, randint(0, 6))
                     # missile.reset(randint(0,255), randint(0, 6), MISSILE_Y_SPEED)
-                    self.cities[missile.target_city].explode()
+                    city = self.cities[missile.target_city]
+                    if city.state == CITY_OK:
+                        self.cities_dead+=1
+                        if self.cities_dead == NUM_CITIES-1:
+                            director.sound_play(SND_RED_ALERT)
+                    city.explode()
                     missile.kill()
+                    director.sound_play(SND_CITY_EXPLODE)
                     # missile.alive = False
                     #TODO: remove life from player
 
@@ -574,6 +602,8 @@ class Combat(Scene):
         elif next_spawn == W_M2:
             self.spawn_missile(cities_alive, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
 
+        if W_ENEMY_MIN <= next_spawn < W_ENEMY_MAX:
+            director.sound_play(choice(SNDS_SPAWN))
 
 
         # if director.was_pressed(director.JOY_UP):
@@ -593,8 +623,9 @@ class Combat(Scene):
             boom = find_dead(self.booms)
             if boom is not None:
                 boom.reset(self.aim_a, self.aim_l, 60)
+                director.sound_play(SND_BOOM)
             else:
-                pass #TODO: SFX empty
+                director.sound_play(SND_EMPTY_CLIP)
         
             
         if director.was_pressed(director.BUTTON_D):
@@ -710,11 +741,15 @@ INV_DEEPSPACE=[255, 190, 167, 153, 143, 135, 128, 122, 116, 111, 107, 103, 99, 9
 W_NONE=0
 W_WARN=1
 W_COMPLETE=2
+
+W_ENEMY_MIN=10
 W_M0=10
 W_M1=11
 W_M2=12
 W_B0=20
 W_B1=21
+W_ENEMY_MAX=29
+
 level_waves=[
     # ------- LEVEL 1 -------
     [
