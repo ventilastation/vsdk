@@ -422,10 +422,20 @@ class Combat(Scene):
         self.pal_copy=pal_copy = bytearray(director.romdata[palette_offsets[0]:])
         
         self.pal_ind_blue=find_color_index(pal_copy, 0, 7, 250)
+        self.pal_ind_blue=find_color_index(pal_copy, 0, 7, 250)
         self.pal_ind_city=find_color_index(pal_copy, 147, 0, 255)
+        self.pal_ind_score=find_color_index(pal_copy, 0, 255, 0)
         pal_copy[self.pal_ind_city+1] = randint(128,255)
         pal_copy[self.pal_ind_city+2] = randint(128,255)
         pal_copy[self.pal_ind_city+3] = randint(128,255)
+        pal_copy[self.pal_ind_score+1] = 0
+        pal_copy[self.pal_ind_score+2] = 0
+        pal_copy[self.pal_ind_score+3] = 0
+        if self.pal_ind_blue and self.pal_ind_city:
+            self.pal_copy[self.pal_ind_city+1]=self.pal_copy[self.pal_ind_blue+1]=randint(0,255)
+            self.pal_copy[self.pal_ind_city+2]=self.pal_copy[self.pal_ind_blue+2]=randint(0,255)
+            self.pal_copy[self.pal_ind_city+3]=self.pal_copy[self.pal_ind_blue+3]=randint(0,255)
+            povdisplay.set_palettes(self.pal_copy)
 
         self.aim=Sprite()
         self.aim.set_strip(STRIPS["crosshair.png"])
@@ -503,13 +513,6 @@ class Combat(Scene):
                         missile.kill()
                         self.game.score += 125 # TODO: inflation per level/type
                         self.score.set_score(self.game.score)
-
-
-        if self.pal_ind_blue:
-            self.pal_copy[self.pal_ind_city+1]=self.pal_copy[self.pal_ind_blue+1]=randint(0,255)
-            self.pal_copy[self.pal_ind_city+2]=self.pal_copy[self.pal_ind_blue+2]=randint(0,255)
-            self.pal_copy[self.pal_ind_city+3]=self.pal_copy[self.pal_ind_blue+3]=randint(0,255)
-            povdisplay.set_palettes(self.pal_copy)
 
 
         cities_alive=[]
