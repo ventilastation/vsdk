@@ -48,13 +48,13 @@ class Misil:
         self.sprite.set_y(self.y_actual + 1)
 
 class Cascote:
-    def __init__(self, torreta, derecha, target_x):
+    def __init__(self, torreta, target_x):
         self.sprite = Sprite()
         self.sprite.set_strip(stripes["cascote.png"])
         self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
-        self.derecha = derecha  # Si se dispara desde la derecha, se debe usar el asset invertido
         self.target_x = target_x  # valor del **centro** del objetivo
+        self.torreta = torreta
         self.delete = False
 
         # Torretas isquierdas, de izquierda a derecha
@@ -84,18 +84,19 @@ class Cascote:
     def mover(self):
         
         self.x_actual = self.sprite.x()
-        self.x_centro = self.x_actual - (self.sprite.width() // 2)
+        self.x_centro = self.x_actual + (self.sprite.width() // 2)
 
-        if self.derecha:
-            if self.x_centro + 2 > self.target_x:
-                self.sprite.set_x(self.x_actual - 1)
-            else:
-                self.delete = True
-        else:
+        if self.torreta == 1 or self.torreta == 2 or self.torreta == 3 :
             if self.x_centro + 2 < self.target_x:
                 self.sprite.set_x(self.x_actual + 1)
             else:
                 self.delete = True
+        else:
+            if self.x_centro + 2 > self.target_x:
+                self.sprite.set_x(self.x_actual - 1)
+            else:
+                self.delete = True
+            
             
 
 class Explosion:
@@ -154,18 +155,18 @@ class Vissile(Scene):
             target_x = self.mira.sprite.x() - (self.mira.sprite.width() // 2)
             if self.mira.sprite.x() < 128 - self.mira.sprite.width() // 2:
                 if self.mira.sprite.y() == 40:
-                    self.cascotes.append(Cascote(1, False, target_x - self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(1, target_x - self.mira.sprite.width()//2))
                 elif self.mira.sprite.y() == 65:
-                    self.cascotes.append(Cascote(2, False, target_x - self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(2, target_x - self.mira.sprite.width()//2))
                 elif self.mira.sprite.y() == 90:
-                    self.cascotes.append(Cascote(3, False, target_x - self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(3, target_x - self.mira.sprite.width()//2))
             else:
                 if self.mira.sprite.y() == 40:
-                    self.cascotes.append(Cascote(6, True, target_x + self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(6, target_x + self.mira.sprite.width()//2))
                 elif self.mira.sprite.y() == 65:
-                    self.cascotes.append(Cascote(5, True, target_x + self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(5, target_x + self.mira.sprite.width()//2))
                 elif self.mira.sprite.y() == 90:
-                    self.cascotes.append(Cascote(4, True, target_x + self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(4, target_x + self.mira.sprite.width()//2))
             
 
         # Actualizar misiles
@@ -184,17 +185,18 @@ class Vissile(Scene):
                 self.explosiones.remove(e)  # funciona?
         
         for c in self.cascotes:
-            c.mover()
             if (c.delete):
                 c.sprite.disable()
-                if c.derecha:
+                if c.torreta == 4 or c.torreta == 5 or c.torreta == 6:
                     center_x = c.sprite.x() - (c.sprite.width() // 2)
                 else:
-                    center_x = c.sprite.x() - (c.sprite.width() // 2)
+                    center_x = c.sprite.x() + (c.sprite.width() // 2)
                 e = Explosion(center_x, c.sprite.y() - (c.sprite.height() // 2))
                 # TODO: Sólo permitir una cantidad determinada de explosiones al mismo tiempo para evitar flooding
                 self.cascotes.remove(c)
                 self.explosiones.append(e)
+            else:
+                c.mover()
 
         # Salir
         if director.was_pressed(director.BUTTON_D):
