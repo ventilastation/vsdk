@@ -4,6 +4,8 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
 MIRA_VELOCIDAD_HORIZONTAL = 4
+MIRA_ANCHO = 9
+MIRA_ALTO = 9
 EXPLOSION_FRAMES = 5
 
 class Mira:
@@ -38,22 +40,27 @@ class Misil:
     def __init__(self):
         self.sprite = Sprite()
         self.sprite.set_strip(stripes["misil.png"])
-        self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
         self.sprite.set_x(randrange(90,165))  # Tiene que estar dentro del área que puede cubrir la mira (x > 80 && x < 175)
         self.sprite.set_y(30)  # apenas por fuera de la pantalla
+        self.sprite.disable = True
+
+    def reset(self):
+        self.sprite.set_x(randrange(90,165))  # Tiene que estar dentro del área que puede cubrir la mira (x > 80 && x < 175)
+        self.sprite.set_y(30)  # apenas por fuera de la pantalla
+        self.sprite.set_frame(0)
 
     def mover(self):
         self.y_actual = self.sprite.y()
         self.sprite.set_y(self.y_actual + 1)
 
 class Cascote:
-    def __init__(self, torreta, target_x_center):
+    def __init__(self, torreta, target_center_x):
         self.sprite = Sprite()
         self.sprite.set_strip(stripes["cascote.png"])
         self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
-        self.target_x = target_x_center  # valor del **centro** del objetivo
+        self.target_center_x = target_center_x  # valor del **centro** del objetivo
         self.torreta = torreta
         self.delete = False
 
@@ -87,12 +94,12 @@ class Cascote:
         self.x_centro = self.x_actual + (self.sprite.width() // 2)
 
         if self.torreta == 1 or self.torreta == 2 or self.torreta == 3 :
-            if self.x_centro + 2 < self.target_x:
+            if self.x_centro + 2 < self.target_center_x:
                 self.sprite.set_x(self.x_actual + 1)
             else:
                 self.delete = True
         else:
-            if self.x_centro + 2 > self.target_x:
+            if self.x_centro + 2 > self.target_center_x:
                 self.sprite.set_x(self.x_actual - 1)
             else:
                 self.delete = True
@@ -129,13 +136,14 @@ class Vissile(Scene):
         self.explosiones = []
         self.cascotes = []
         self.misiles = []
+        self.misiles_reserva = [Misil(),Misil(),Misil()]
 
-        cielo = Sprite()
-        cielo.set_strip(stripes["cielo.png"])
-        cielo.set_x(0)
-        cielo.set_y(0)
-        cielo.set_frame(0)
-        cielo.set_perspective(1)
+        # cielo = Sprite()
+        # cielo.set_strip(stripes["cielo.png"])
+        # cielo.set_x(0)
+        # cielo.set_y(0)
+        # cielo.set_frame(0)
+        # cielo.set_perspective(1)
     
 
     def step(self):
@@ -157,7 +165,9 @@ class Vissile(Scene):
         if director.was_pressed(director.BUTTON_A):
 
             # Temporalmente también usar el clic para crear misiles
-            #self.misiles.append(Misil())
+            m = self.misiles_reserva.pop()  # Obtengo misil de reserva
+            m.reset()  # Lo reinicializo
+            self.misiles.append(m)  # Lo agrego a los misiles activos
 
             target_x_center = self.mira.sprite.x() - (self.mira.sprite.width() // 2)
             if self.mira.sprite.x() < 128 - self.mira.sprite.width() // 2:
@@ -178,21 +188,23 @@ class Vissile(Scene):
 
         # Actualizar misiles
         for m in self.misiles:
-            m.mover()
             if m.sprite.y() > 120:
-                m.sprite.disable()
-                self.misiles.remove(m)  # funciona?
+                m.sprite.disable = True
+                self.misiles.remove(m)
+                self.misiles_reserva.append(m)
                 # TODO Take damage!
+            else:
+                m.mover()
         
         # Actualizar explosiones
         for e in self.explosiones:
             e.animar()
-            if (e.delete):
+            if e.delete:
                 e.sprite.disable()
-                self.explosiones.remove(e)  # funciona?
+                self.explosiones.remove(e)
         
         for c in self.cascotes:
-            if (c.delete):
+            if c.delete:
                 center_x = c.sprite.x() + (c.sprite.width() // 2)
                 center_y = c.sprite.y() - (c.sprite.height() // 2)
                 e = Explosion(center_x, center_y)
