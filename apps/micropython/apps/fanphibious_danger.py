@@ -74,20 +74,20 @@ class Frog(MySprite):
 
         
 class Trunk(MySprite):
-    def __init__(self, scene, speed=100, flotability=1000):
+    def __init__(self, scene, speed=100, buoyancy=1000):
         super().__init__()
         self.scene = scene
         self.set_strip(stripes["trunks.png"])
         self.set_frame(0)
         self.speed = speed
-        self.flotability = flotability
+        self.buoyancy = buoyancy
 
         
     def step(self):
         self.set_scaled_x(self._scaled_x + self.speed)
 
-        # self.flotability -= 1
-        # if (self.flotability == 0):
+        # self.buoyancy -= 1
+        # if (self.buoyancy == 0):
         #   self.disable()
 
 
@@ -116,12 +116,12 @@ class FanphibiousDanger(Scene):
         vel1 = randrange(32, 512, 8)
         
         
-        self.trunk1 = Trunk(self, speed=vel1, flotability=2750)
+        self.trunk1 = Trunk(self, speed=vel1, buoyancy=2750)
         self.trunk1.set_scaled_x(-16*SCALE_FACTOR)
         self.trunk1.set_scaled_y(32*SCALE_FACTOR)
 
         vel2 = randrange(32, 512, 8)
-        self.trunk2 = Trunk(self, speed=vel2, flotability=3500)
+        self.trunk2 = Trunk(self, speed=vel2, buoyancy=3500)
         self.trunk2.set_scaled_x(-16*SCALE_FACTOR)
         self.trunk2.set_scaled_y(52*SCALE_FACTOR)
         
