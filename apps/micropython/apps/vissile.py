@@ -48,36 +48,36 @@ class Misil:
         self.sprite.set_y(self.y_actual + 1)
 
 class Cascote:
-    def __init__(self, torreta, target_x):
+    def __init__(self, torreta, target_x_center):
         self.sprite = Sprite()
         self.sprite.set_strip(stripes["cascote.png"])
         self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
-        self.target_x = target_x  # valor del **centro** del objetivo
+        self.target_x = target_x_center  # valor del **centro** del objetivo
         self.torreta = torreta
         self.delete = False
 
         # Torretas isquierdas, de izquierda a derecha
         if torreta == 1:
-            self.sprite.set_x(64 - 2)
+            self.sprite.set_x(64 - self.sprite.width())
             self.sprite.set_y(40)
         elif torreta == 2:
-            self.sprite.set_x(64 - 2)
+            self.sprite.set_x(64 - self.sprite.width())
             self.sprite.set_y(65)
         elif torreta == 3:
-            self.sprite.set_x(64 - 2)
+            self.sprite.set_x(64 - self.sprite.width())
             self.sprite.set_y(90)
         # Torretas derechas, de izquierda a derecha
         elif torreta == 4:
-            self.sprite.set_x(192 - 2)
+            self.sprite.set_x(192 - self.sprite.width())
             self.sprite.set_y(90 + 4)
             self.sprite.set_frame(1)
         elif torreta == 5:
-            self.sprite.set_x(192 - 2)
+            self.sprite.set_x(192 - self.sprite.width())
             self.sprite.set_y(65 + 4)
             self.sprite.set_frame(1)
         elif torreta == 6:
-            self.sprite.set_x(192 - 2)
+            self.sprite.set_x(192 - self.sprite.width())
             self.sprite.set_y(40 + 4)
             self.sprite.set_frame(1)
     
@@ -105,7 +105,6 @@ class Explosion:
         self.sprite.set_strip(stripes["explosion.png"])
         self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
-        print(self.sprite.height())
         self.sprite.set_x(center_x - (self.sprite.width()// 5) // 2)
         self.sprite.set_y(center_y - 10)
         self.delete = False
@@ -127,9 +126,17 @@ class Vissile(Scene):
         super(Vissile, self).on_enter()
 
         self.mira = Mira()
-        self.misiles = []
         self.explosiones = []
         self.cascotes = []
+        self.misiles = []
+
+        cielo = Sprite()
+        cielo.set_strip(stripes["cielo.png"])
+        cielo.set_x(0)
+        cielo.set_y(0)
+        cielo.set_frame(0)
+        cielo.set_perspective(1)
+    
 
     def step(self):
 
@@ -152,21 +159,21 @@ class Vissile(Scene):
             # Temporalmente también usar el clic para crear misiles
             #self.misiles.append(Misil())
 
-            target_x = self.mira.sprite.x() - (self.mira.sprite.width() // 2)
+            target_x_center = self.mira.sprite.x() - (self.mira.sprite.width() // 2)
             if self.mira.sprite.x() < 128 - self.mira.sprite.width() // 2:
                 if self.mira.sprite.y() == 40:
-                    self.cascotes.append(Cascote(1, target_x - self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(1, target_x_center - self.mira.sprite.width()//2))
                 elif self.mira.sprite.y() == 65:
-                    self.cascotes.append(Cascote(2, target_x - self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(2, target_x_center - self.mira.sprite.width()//2))
                 elif self.mira.sprite.y() == 90:
-                    self.cascotes.append(Cascote(3, target_x - self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(3, target_x_center - self.mira.sprite.width()//2))
             else:
                 if self.mira.sprite.y() == 40:
-                    self.cascotes.append(Cascote(6, target_x + self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(6, target_x_center + self.mira.sprite.width()//2))
                 elif self.mira.sprite.y() == 65:
-                    self.cascotes.append(Cascote(5, target_x + self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(5, target_x_center + self.mira.sprite.width()//2))
                 elif self.mira.sprite.y() == 90:
-                    self.cascotes.append(Cascote(4, target_x + self.mira.sprite.width()//2))
+                    self.cascotes.append(Cascote(4, target_x_center + self.mira.sprite.width()//2))
             
 
         # Actualizar misiles
@@ -186,13 +193,11 @@ class Vissile(Scene):
         
         for c in self.cascotes:
             if (c.delete):
-                c.sprite.disable()
-                if c.torreta == 4 or c.torreta == 5 or c.torreta == 6:
-                    center_x = c.sprite.x() - (c.sprite.width() // 2)
-                else:
-                    center_x = c.sprite.x() + (c.sprite.width() // 2)
-                e = Explosion(center_x, c.sprite.y() - (c.sprite.height() // 2))
+                center_x = c.sprite.x() + (c.sprite.width() // 2)
+                center_y = c.sprite.y() - (c.sprite.height() // 2)
+                e = Explosion(center_x, center_y)
                 # TODO: Sólo permitir una cantidad determinada de explosiones al mismo tiempo para evitar flooding
+                c.sprite.disable()
                 self.cascotes.remove(c)
                 self.explosiones.append(e)
             else:
