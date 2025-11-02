@@ -42,15 +42,16 @@ class Misil:
         self.sprite.set_strip(stripes["misil.png"])
         self.sprite.set_frame(0)
         self.sprite.set_perspective(1)
-        self.sprite.disable = True
+        self.sprite.disable()
 
     def activar(self):
         self.sprite.set_x(randrange(90,165))  # Tiene que estar dentro del área que puede cubrir la mira (x > 80 && x < 175)
         self.sprite.set_y(30)
-        self.sprite.disable = False
+        self.sprite.set_frame(0)
+        # self.sprite.disable = False
         
     def desactivar(self):
-        self.sprite.disable = True
+        self.sprite.disable()
 
     def mover(self):
         self.y_actual = self.sprite.y()
@@ -144,7 +145,7 @@ class Vissile(Scene):
         
         self.misiles_reserva = [Misil(), Misil(), Misil(), Misil()]
         self.misiles_activos = []
-        
+
         # cielo = Sprite()
         # cielo.set_strip(stripes["cielo.png"])
         # cielo.set_x(0)
