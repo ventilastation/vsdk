@@ -26,6 +26,9 @@ def makedirs(filename):
  
 def sync_with_server(host, port):
     print(f"Connecting to sync server at {host}:{port}...")
+    from boot import connect_to_wifi
+    connect_to_wifi()
+
     server_file = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         server_file.connect((host, port))
@@ -36,6 +39,7 @@ def sync_with_server(host, port):
                 break
             if line[0] == b"HEAD":
                 filename = line[1]
+                yield filename.decode(), False
                 try:
                     file_length, file_hash = get_file_length_and_hash(filename)
                     server_file.write(f"200 {file_length} {file_hash}\n".encode())
@@ -45,7 +49,7 @@ def sync_with_server(host, port):
                 filename = line[1]
                 file_length = int(line[2])
                 file_hash = line[3]
-                yield filename.decode()
+                yield filename.decode(), True
                 print(f"Receiving file {filename} of length {file_length} and hash {file_hash}")
                 makedirs(filename)
                 with open(filename, 'wb') as f:
@@ -57,13 +61,15 @@ def sync_with_server(host, port):
                             raise Exception("Connection lost while receiving file")
                         f.write(chunk)
                         remaining -= len(chunk)
-                print(f"File {filename.de} received successfully.")
-                yield None
+                print(f"File {filename} received successfully.")
             else:
                 print("Unknown command from server", line)
     finally:
+        print("Sync complete, closing connection and rebooting.")
         server_file.close()
         os.sync()
+        import machine
+        machine.reset()
 
 
 def main():

@@ -38,14 +38,18 @@ class TextDisplay:
             v = ord(l)# - 0x30
             self.chars[n].set_frame(v)
 
+    def set_strip(self, strip):
+        for c in self.chars:
+            c.set_strip(strip)
+
 
 def sync_with_server_test(host, port):
     import utime
     for n in range(10):
         print(f"yielding sample filename {n}.txt")
-        yield f"sample/filename{n}.txt"
+        yield f"sample/filename{n}.txt", n % 2 == 0
         utime.sleep_ms(500)
-        yield None
+        yield None, None
         utime.sleep_ms(100)
 
 class Upgrade(Scene):
@@ -60,12 +64,16 @@ class Upgrade(Scene):
     def step(self):
         print("step Upgrade")
         try:
-            filename = next(self.upgrade_iterator)
+            filename, writing = next(self.upgrade_iterator)
             print("Syncing file:", filename)
             if filename:
                 filename = filename.split('/')[-1]
             else:
                 filename = f""
+            if writing:
+                self.filename_display.set_strip(stripes["rainbow437.png"])
+            else:
+                self.filename_display.set_strip(stripes["vga_cp437.png"])
             self.filename_display.set_value(filename[:display_len])
         except StopIteration:
             self.finished()
