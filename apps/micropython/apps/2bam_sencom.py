@@ -1,14 +1,22 @@
 # Senile command
 # Ayuda al motor del ventilador a evitar que los dedos geriatricos lo atasquen.
 # 2bam.com 2025
+#
+# Reglas     Dispararle a los dedos que caen antes de que impacten los motores
+#            magicos del Ventilastation. Si no quedan motores se pierde el juego.
+#
+# Puntos     +125 puntos  : Dedo destruido
+#            -250 puntos  : Impacto directo al nucleo 
+#            +1000 puntos : Por cada motor que sobreviva hasta el fin del nivel.
+#            NOTA: El impacto a un motor no quita puntos.
+#
+# Controles               Flechas : Movimiento
+#            Boton A (emu: SPACE) : Dispara
+#                Mantener boton A : Activa movimiento rapido
 
-# Controles: Flechas                   : Movimiento
-#            Boton A      (emu: SPACE) : Dispara
-#            Mantener boton A          : Activa movimiento rapido
+# FIXME^^^: explosions near x=0/255 are buggy
 
-# FIXME^^^: explosions near x=0 are buggy
-
-# TODO: REVISAR SCORE: Ojo de usar el centro q tiene una tapita en el de españa
+# TODO ^^: REVISAR SCORE: Ojo de usar el centro q tiene una tapita en el de españa
 
 # TODO ^: shuffle bag target city (double, triple size bag for less predictability)
 # DONE ^: Red alert 1 building
@@ -105,6 +113,7 @@ MISSILE_Y_SPEED=0.25
 WARHEAD_FRAMES=3
 
 NUM_CITIES=5
+ALL_CITIES=list(range(NUM_CITIES))
 MAX_WEAPON=4
 MAX_ATTACKS=20
 
@@ -583,11 +592,16 @@ class Combat(Scene):
                         self.cities_dead+=1
                         if self.cities_dead == NUM_CITIES-1:
                             director.sound_play(SND_RED_ALERT)
+                        director.sound_play(SND_CITY_EXPLODE)
+                    else:
+                        # TODO: lesser explosion sound
+                        # TODO: some lesser explosion anim?
+                        self.game.score = max(0, self.game.score-250)
+                        self.score.set_score(self.game.score)
+
                     city.explode()
                     missile.kill()
-                    director.sound_play(SND_CITY_EXPLODE)
-                    # missile.alive = False
-                    #TODO: remove life from player
+
 
         next_spawn = self.waves.next()
         if next_spawn == W_WARN:
@@ -596,10 +610,12 @@ class Combat(Scene):
             # TODO!!
             pass
         elif next_spawn == W_M0:
-            self.spawn_missile(cities_alive, [2]) #[0]
+            self.spawn_missile(ALL_CITIES, [2]) #[0]
         elif next_spawn == W_M1:
-            self.spawn_missile(cities_alive, [1,2,3]) #[-45, 0, 45]
+            self.spawn_missile(ALL_CITIES, [1,2,3]) #[-45, 0, 45]
         elif next_spawn == W_M2:
+            self.spawn_missile(ALL_CITIES, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
+        elif next_spawn == W_M2CA:
             self.spawn_missile(cities_alive, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
 
         if W_ENEMY_MIN <= next_spawn < W_ENEMY_MAX:
@@ -746,6 +762,7 @@ W_ENEMY_MIN=10
 W_M0=10
 W_M1=11
 W_M2=12
+W_M2CA=13 # CITY AIM
 W_B0=20
 W_B1=21
 W_ENEMY_MAX=29
@@ -761,7 +778,7 @@ level_waves=[
         ( 3, 0, []          ),
         ( 4, 4, [W_M0,W_M1] ),
         ( 3, 0, []          ),
-        ( 3, 1, [W_WARN]    ),
+        ( 2.4, 1, [W_WARN]    ),
         ( 0, 5, [W_M0]      ),
     ],
 ]
