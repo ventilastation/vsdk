@@ -1,13 +1,15 @@
 stripes = [
     palettegroup(
         # personajes:
-        strip("tincho_palante.png", frames=4),
-        strip("tincho_patras.png", frames=4),
+        strip("tincho_palante.png", frames=6),
+        strip("tincho_patras.png", frames=6),
 
         # túneles:
         strip("suelo.png", frames=1),
         strip("damero.png", frames=2),
-        strip("suelo_dof.png", frames=3),
+
+        # props:
+        strip("props.png", frames=3),
 
         # fondos, parches, etc:
         strip("centro.png", frames=1),
