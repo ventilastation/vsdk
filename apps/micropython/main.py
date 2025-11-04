@@ -17,33 +17,34 @@ MAIN_MENU_OPTIONS = [
     ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
     ('villalugano_games', "villalugano_games.png", 0),
-    ('upgrade', "pollitos.png", 0),
     # # # 1er Jam 2025
     # ('vortris', "vortris.png", 0),
-    # ('vailableextreme', "vailableextreme.png", 0),
+    ('vailableextreme', "vailableextreme.png", 0),
     # ('vzumaki', "vzumaki.png", 0),
-    # ('vasura_espacial', "vasura_espacial.png", 0),
-    # ('vs', "vs.png", 0),
-    # ('oraculo', "oraculo2.png", 0),
+    ('vasura_espacial', "vasura_espacial.png", 0),
+    ('vs', "vs.png", 0),
+    ('oraculo', "oraculo2.png", 0),
     # ('tvnel', "tvnel.png", 0),
-    # ('ventrack', "venti808.png", 0),
+    ('ventrack', "venti808.png", 0),
     # # ('tvnel_alecu', "tvnel_alecu.png", 0),
     # # ('mygame', "mygame.png", 0),
     # # PyCamp 2025
-    # ('vance', "menu.png", 5),
+    ('vance', "menu.png", 5),
     # ('vong', "menu.png", 6),
     # ('vugo', "menu.png", 7),
     # # Gallery
-    # ('gallery', "pollitos.png", 0),
+    ('gallery', "pollitos.png", 0),
     # # Flash Party 2023
-    # # ('vladfarty', "menu.png", 2),
+    # ('vladfarty', "menu.png", 2),
     # # Original content
-    # # ('vyruss', "menu.png", 0),
-    # # ('ventilagon_game', "menu.png", 1),
-    # # ('ventap', "menu.png", 4),
-    # # ('debugmode', "menu.png", 9),
-    # # ('calibrate', "menu.png", 8),
-    # # ('credits', "menu.png", 3),
+    ('vyruss', "menu.png", 0),
+    ('ventilagon_game', "menu.png", 1),
+    ('ventap', "menu.png", 4),
+    ('debugmode', "menu.png", 9),
+    # ('calibrate', "menu.png", 8),
+    ('tutorial', "menu.png", 10),
+    ('credits', "menu.png", 3),
+    ('upgrade', "menu.png", 11),
 ]
 
 def prepare_uploads():
@@ -161,12 +162,12 @@ class GamesMenu(menu.Menu):
                 pass
                 #update_over_the_air()
 
-            if self.pollitos:
+            if self.pollitos and self.pollitos.frame() != 255:
                 self.animation_frames += 1
                 pf = (self.animation_frames // 4) % 5
                 self.pollitos.set_frame(pf)
 
-            if self.es_tincho:
+            if self.es_tincho and self.es_tincho.frame() != 255:
                 self.tincho_frames += 1
                 pf = (self.tincho_frames // 6) % 2
                 self.es_tincho.set_frame(pf)
