@@ -104,12 +104,12 @@ class Cascote:
 
         if self.torreta == 1 or self.torreta == 2 or self.torreta == 3 :
             if centrer_x < self.target_center_x:
-                self.sprite.set_x(x_actual + 1)
+                self.sprite.set_x(x_actual + 2)
             else:
                 self.delete = True
         else:
             if centrer_x > self.target_center_x:
-                self.sprite.set_x(x_actual - 1)
+                self.sprite.set_x(x_actual - 2)
             else:
                 self.delete = True
             
