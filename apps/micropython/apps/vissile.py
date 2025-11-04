@@ -66,11 +66,13 @@ class Cascote:
 
         self.delete = True
 
+        print("Cascote inicializado. delete = ", self.delete)
+
     def activar(self, torreta, target_center_x):
         self.torreta = torreta
         self.target_center_x = target_center_x  # valor del **centro** del objetivo
-        self.sprite.set_frame(0)
         self.delete = False
+        self.sprite.set_frame(0)
         
         # Torretas isquierdas, de izquierda a derecha
         if torreta == 1:
@@ -92,6 +94,8 @@ class Cascote:
         elif torreta == 6:
             self.sprite.set_x(192 - self.sprite.width())
             self.sprite.set_y(40 + 4)
+
+        print("Cascote activado. delete = ", self.delete)
         
     
     def desactivar(self):
@@ -150,12 +154,12 @@ class Vissile(Scene):
         self.misiles_reserva = [Misil(), Misil(), Misil(), Misil()]
         self.misiles_activos = []
 
-        # cielo = Sprite()
-        # cielo.set_strip(stripes["cielo.png"])
-        # cielo.set_x(0)
-        # cielo.set_y(0)
-        # cielo.set_frame(0)
-        # cielo.set_perspective(1)
+        cielo = Sprite()
+        cielo.set_strip(stripes["cielo.png"])
+        cielo.set_x(0)
+        cielo.set_y(0)
+        cielo.set_frame(0)
+        cielo.set_perspective(1)
     
 
     def step(self):
@@ -188,18 +192,24 @@ class Vissile(Scene):
                 mira_center_x = self.mira.sprite.x() + (self.mira.sprite.width() // 2)
                 if mira_center_x < 128 :
                     if self.mira.sprite.y() == 40:
-                        self.cascotes_activos.append(c.activar(1, mira_center_x))
+                        c.activar(1, mira_center_x)
+                        self.cascotes_activos.append(c)
                     elif self.mira.sprite.y() == 65:
-                        self.cascotes_activos.append(c.activar(2, mira_center_x))
+                        c.activar(2, mira_center_x)
+                        self.cascotes_activos.append(c)
                     elif self.mira.sprite.y() == 90:
-                        self.cascotes_activos.append(c.activar(3, mira_center_x))
+                        c.activar(3, mira_center_x)
+                        self.cascotes_activos.append(c)
                 else:
                     if self.mira.sprite.y() == 40:
-                        self.cascotes_activos.append(c.activar(6, mira_center_x))
+                        c.activar(6, mira_center_x)
+                        self.cascotes_activos.append(c)
                     elif self.mira.sprite.y() == 65:
-                        self.cascotes_activos.append(c.activar(5, mira_center_x))
+                        c.activar(5, mira_center_x)
+                        self.cascotes_activos.append(c)
                     elif self.mira.sprite.y() == 90:
-                        self.cascotes_activos.append(c.activar(4, mira_center_x))
+                        c.activar(4, mira_center_x)
+                        self.cascotes_activos.append(c)
             
 
         # Actualizar misiles
