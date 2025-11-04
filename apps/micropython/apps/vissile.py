@@ -163,22 +163,26 @@ class Explosion:
             self.delete = True
 
 
+
 class Vissile(Scene):
     stripes_rom = "vissile"
 
     def on_enter(self):
         super(Vissile, self).on_enter()
-
+        
+        self.lives = 5
+        
         self.mira = Mira()
 
-        self.explosiones_reserva = [Explosion(), Explosion(), Explosion(), Explosion(), Explosion()]
+        self.explosiones_reserva = [Explosion(), Explosion(), Explosion(), Explosion()]
         self.explosiones_activas = []
 
-        self.cascotes_reserva = [Cascote(), Cascote(), Cascote(), Cascote(), Cascote()]
+        self.cascotes_reserva = [Cascote(), Cascote(), Cascote()]
         self.cascotes_activos = []
         
         self.misiles_reserva = [Misil(), Misil(), Misil(), Misil()]
         self.misiles_activos = []
+        
 
         cielo = Sprite()
         cielo.set_strip(stripes["tierra.png"])
@@ -220,80 +224,98 @@ class Vissile(Scene):
             #     self.misiles_activos.append(m)  # Lo agrego a los misiles activos
 
             if len(self.cascotes_reserva) > 0:
-                c = self.cascotes_reserva.pop()
-                
-                mira_center_x = self.mira.sprite.x() + (self.mira.sprite.width() // 2)
-                if mira_center_x < 128 :
-                    if self.mira.sprite.y() == 13:
-                        c.activar(1, mira_center_x)
-                        self.cascotes_activos.append(c)
-                    elif self.mira.sprite.y() == 23:
-                        c.activar(2, mira_center_x)
-                        self.cascotes_activos.append(c)
-                    elif self.mira.sprite.y() == 33:
-                        c.activar(3, mira_center_x)
-                        self.cascotes_activos.append(c)
-                else:
-                    if self.mira.sprite.y() == 13:
-                        c.activar(6, mira_center_x)
-                        self.cascotes_activos.append(c)
-                    elif self.mira.sprite.y() == 23:
-                        c.activar(5, mira_center_x)
-                        self.cascotes_activos.append(c)
-                    elif self.mira.sprite.y() == 33:
-                        c.activar(4, mira_center_x)
-                        self.cascotes_activos.append(c)
-            
+                if self.lives > 0:    
 
-        # Actualizar misiles
-        if len(self.misiles_activos) > 0:
-            for m in self.misiles_activos:
-                if m.sprite.y() > 48:
-                    m.desactivar()
-                    self.misiles_activos.remove(m)
-                    self.misiles_reserva.append(m)
-                    # TODO Take damage!
+                    director.sound_play(b"vissile/cascote1")
+                    c = self.cascotes_reserva.pop()
+                    
+                    mira_center_x = self.mira.sprite.x() + (self.mira.sprite.width() // 2)
+                    if mira_center_x < 128 :
+                        if self.mira.sprite.y() == 13:
+                            c.activar(1, mira_center_x)
+                            self.cascotes_activos.append(c)
+                        elif self.mira.sprite.y() == 23:
+                            c.activar(2, mira_center_x)
+                            self.cascotes_activos.append(c)
+                        elif self.mira.sprite.y() == 33:
+                            c.activar(3, mira_center_x)
+                            self.cascotes_activos.append(c)
+                    else:
+                        if self.mira.sprite.y() == 13:
+                            c.activar(6, mira_center_x)
+                            self.cascotes_activos.append(c)
+                        elif self.mira.sprite.y() == 23:
+                            c.activar(5, mira_center_x)
+                            self.cascotes_activos.append(c)
+                        elif self.mira.sprite.y() == 33:
+                            c.activar(4, mira_center_x)
+                            self.cascotes_activos.append(c)
                 else:
-                    m.mover()
+                    self.restart()
+                    self.lives = 5
 
-        if len(self.misiles_activos) < 3:
-                m = self.misiles_reserva.pop()
-                m.activar()
-                self.misiles_activos.append(m)
+        if self.lives > 0:    
 
-        # Actualizar explosiones
-        if len(self.explosiones_activas) > 0:
-            for e in self.explosiones_activas:
-                if e.delete:
-                    e.desactivar()
-                    self.explosiones_activas.remove(e)
-                    self.explosiones_reserva.append(e)
-                else:
-                    for i in range(4):
-                        lm = e.colisiones(self.misiles_activos)
-                        for m in lm:
+            # Actualizar misiles
+            if len(self.misiles_activos) > 0:
+                for m in self.misiles_activos:
+                    if m.sprite.y() > 48:
+                        self.lives = self.lives - 1
+                        if self.lives == 0:
+                            director.sound_play(b"vissile/fin")
+                            # Fin
+                            
+                        else:
+                            # Hit
+                            director.sound_play(b"vissile/hit1")
                             m.desactivar()
                             self.misiles_activos.remove(m)
                             self.misiles_reserva.append(m)
-                    e.animar()
+                        
+                        
+                        
+                    else:
+                        m.mover()
+
+            if len(self.misiles_activos) < 3:
+                    director.sound_play(b"vissile/misil1")
+                    m = self.misiles_reserva.pop()
+                    m.activar()
+                    self.misiles_activos.append(m)
+
+            # Actualizar explosiones
+            if len(self.explosiones_activas) > 0:
+                for e in self.explosiones_activas:
+                    if e.delete:
+                        e.desactivar()
+                        self.explosiones_activas.remove(e)
+                        self.explosiones_reserva.append(e)
+                    else:
+                        for i in range(4):
+                            lm = e.colisiones(self.misiles_activos)
+                            for m in lm:
+                                m.desactivar()
+                                self.misiles_activos.remove(m)
+                                self.misiles_reserva.append(m)
+                        e.animar()
         
-        
-        # Actualizar cascotes
-        if len(self.cascotes_activos) > 0:
-            for c in self.cascotes_activos:
-                if c.delete:
-                    c.desactivar()
-                    self.cascotes_activos.remove(c)
-                    self.cascotes_reserva.append(c)
-                    
-                    center_x = c.sprite.x() + (c.sprite.width() // 2)
-                    center_y = c.sprite.y() - (c.sprite.height() // 2)
-                    if len(self.explosiones_reserva) > 0:
-                        e = self.explosiones_reserva.pop()
-                        e.activar(center_x, center_y)
-                        self.explosiones_activas.append(e)
-                else:
-                    c.mover()
+            # Actualizar cascotes
+            if len(self.cascotes_activos) > 0:
+                for c in self.cascotes_activos:
+                    if c.delete:
+                        c.desactivar()
+                        self.cascotes_activos.remove(c)
+                        self.cascotes_reserva.append(c)
+                        
+                        center_x = c.sprite.x() + (c.sprite.width() // 2)
+                        center_y = c.sprite.y() - (c.sprite.height() // 2)
+                        if len(self.explosiones_reserva) > 0:
+                            director.sound_play(b"vissile/explosion1")
+                            e = self.explosiones_reserva.pop()
+                            e.activar(center_x, center_y)
+                            self.explosiones_activas.append(e)
+                    else:
+                        c.mover()
 
 
         # Salir
