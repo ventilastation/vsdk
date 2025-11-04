@@ -56,7 +56,8 @@ class Misil:
     def mover(self):
         self.y_actual = self.sprite.y()
         self.movement_delay = self.movement_delay + 1
-        if self.movement_delay % 4 == 0:  # Mover sólo 1 vez cada 4 steps
+        step = randrange(4,6)
+        if self.movement_delay % step == 0:  # Mover sólo 1 vez cada 4 steps
             self.sprite.set_y(self.y_actual + 1)
 
 class Cascote:
