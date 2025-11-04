@@ -5,36 +5,36 @@ from ventilastation.sprites import Sprite
 
 MIRA_VELOCIDAD_HORIZONTAL = 4
 EXPLOSION_FRAMES = 5
-# MIRA_ANCHO = 9
-# MIRA_ALTO = 9
+ANCHO_MIRA = 8
+ALTO_MIRA = 8
 
 class Mira:
     def __init__(self):
         self.sprite = Sprite()
         self.sprite.set_strip(stripes["mira.png"])
         self.sprite.set_frame(0)
-        self.sprite.set_perspective(1)
+        self.sprite.set_perspective(2)
         self.reiniciar()
 
     def reiniciar(self):
-        self.sprite.set_x(127 - self.sprite.width()//2)
-        self.sprite.set_y(65)
+        self.sprite.set_x(127 - ANCHO_MIRA//2)
+        self.sprite.set_y(23)
 
     # No llega hasta el plano horizontal porque no van a venir misiles por el piso XD
     def mover_izq(self):
-        self.x_actual = max(self.sprite.x(), 80 - self.sprite.width()//2)  # Bound izquierdo
+        self.x_actual = max(self.sprite.x(), 80 - ANCHO_MIRA//2)  # Bound izquierdo
         self.sprite.set_x( self.x_actual - MIRA_VELOCIDAD_HORIZONTAL)
 
     def mover_der(self):
-        self.x_actual = min(self.sprite.x(), 175 - self.sprite.width()//2)  # Bound derecho
+        self.x_actual = min(self.sprite.x(), 175 - ANCHO_MIRA//2)  # Bound derecho
         self.sprite.set_x( self.x_actual + MIRA_VELOCIDAD_HORIZONTAL)
 
     # Sube y baja escalonadamente
     def subir(self):
-        self.sprite.set_y( max(self.sprite.y() - 25, 40) )
+        self.sprite.set_y( max(self.sprite.y() - 10, 13) )
 
     def bajar(self):
-        self.sprite.set_y( min(self.sprite.y() + 25, 90))
+        self.sprite.set_y( min(self.sprite.y() + 10, 33))
 
 class Misil:
     def __init__(self):
@@ -61,7 +61,7 @@ class Cascote:
         self.sprite = Sprite()
         self.sprite.set_strip(stripes["cascote.png"])
         self.sprite.set_frame(0)
-        self.sprite.set_perspective(1)
+        self.sprite.set_perspective(2)
         self.sprite.disable()
 
         self.delete = True
@@ -77,26 +77,23 @@ class Cascote:
         # Torretas isquierdas, de izquierda a derecha
         if torreta == 1:
             self.sprite.set_x(64 - self.sprite.width())
-            self.sprite.set_y(40)
+            self.sprite.set_y(13 + 2)
         elif torreta == 2:
             self.sprite.set_x(64 - self.sprite.width())
-            self.sprite.set_y(65)
+            self.sprite.set_y(23 + 2)
         elif torreta == 3:
             self.sprite.set_x(64 - self.sprite.width())
-            self.sprite.set_y(90)
+            self.sprite.set_y(33 + 2)
         # Torretas derechas, de izquierda a derecha
         elif torreta == 4:
             self.sprite.set_x(192 - self.sprite.width())
-            self.sprite.set_y(90 + 4)
+            self.sprite.set_y(33 + 2)
         elif torreta == 5:
             self.sprite.set_x(192 - self.sprite.width())
-            self.sprite.set_y(65 + 4)
+            self.sprite.set_y(23 + 2)
         elif torreta == 6:
             self.sprite.set_x(192 - self.sprite.width())
-            self.sprite.set_y(40 + 4)
-
-        print("Cascote activado. delete = ", self.delete)
-        
+            self.sprite.set_y(13 + 2)        
     
     def desactivar(self):
         self.sprite.disable()
@@ -188,33 +185,33 @@ class Vissile(Scene):
         if director.was_pressed(director.BUTTON_A):
 
             # Temporalmente también usar el clic para crear misiles
-            if len(self.misiles_reserva) > 0:
-                m = self.misiles_reserva.pop()  # Obtengo misil de reserva
-                m.activar()  # Lo reinicializo
-                self.misiles_activos.append(m)  # Lo agrego a los misiles activos
+            # if len(self.misiles_reserva) > 0:
+            #     m = self.misiles_reserva.pop()  # Obtengo misil de reserva
+            #     m.activar()  # Lo reinicializo
+            #     self.misiles_activos.append(m)  # Lo agrego a los misiles activos
 
             if len(self.cascotes_reserva) > 0:
                 c = self.cascotes_reserva.pop()
                 
                 mira_center_x = self.mira.sprite.x() + (self.mira.sprite.width() // 2)
                 if mira_center_x < 128 :
-                    if self.mira.sprite.y() == 40:
+                    if self.mira.sprite.y() == 13:
                         c.activar(1, mira_center_x)
                         self.cascotes_activos.append(c)
-                    elif self.mira.sprite.y() == 65:
+                    elif self.mira.sprite.y() == 23:
                         c.activar(2, mira_center_x)
                         self.cascotes_activos.append(c)
-                    elif self.mira.sprite.y() == 90:
+                    elif self.mira.sprite.y() == 33:
                         c.activar(3, mira_center_x)
                         self.cascotes_activos.append(c)
                 else:
-                    if self.mira.sprite.y() == 40:
+                    if self.mira.sprite.y() == 13:
                         c.activar(6, mira_center_x)
                         self.cascotes_activos.append(c)
-                    elif self.mira.sprite.y() == 65:
+                    elif self.mira.sprite.y() == 23:
                         c.activar(5, mira_center_x)
                         self.cascotes_activos.append(c)
-                    elif self.mira.sprite.y() == 90:
+                    elif self.mira.sprite.y() == 33:
                         c.activar(4, mira_center_x)
                         self.cascotes_activos.append(c)
             
