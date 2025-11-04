@@ -4,6 +4,7 @@ stripes = [
         strip("mira.png", frames=1),
         strip("misil.png", frames=1),
         strip("cascote.png", frames=1),
+        strip("tierra.png", frames=1),
         strip("cielo.png", frames=1),
     ),
 ]
