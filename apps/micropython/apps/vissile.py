@@ -63,7 +63,6 @@ class Cascote:
         self.sprite.set_frame(0)
         self.sprite.set_perspective(2)
         self.sprite.disable()
-
         self.delete = True
 
         print("Cascote inicializado. delete = ", self.delete)
@@ -103,37 +102,45 @@ class Cascote:
         centrer_x = x_actual + (self.sprite.width() // 2)
 
         if self.torreta == 1 or self.torreta == 2 or self.torreta == 3 :
-            if centrer_x < self.target_center_x:
+            if centrer_x <= self.target_center_x:
                 self.sprite.set_x(x_actual + 2)
             else:
                 self.delete = True
         else:
-            if centrer_x > self.target_center_x:
+            if centrer_x >= self.target_center_x:
                 self.sprite.set_x(x_actual - 2)
             else:
                 self.delete = True
             
             
 
-# class Explosion:
-#     def __init__(self, center_x, center_y):
-#         self.sprite = Sprite()
-#         self.sprite.set_strip(stripes["explosion.png"])
-#         self.sprite.set_frame(0)
-#         self.sprite.set_perspective(1)
-#         self.sprite.set_x(center_x - (self.sprite.width()// 5) // 2)
-#         self.sprite.set_y(center_y - 10)
-#         self.delete = False
-#         self.animation_delay = 15  # Contador que se usa para ralentizar la animación
+class Explosion:
+    def __init__(self):
+        self.sprite = Sprite()
+        self.sprite.set_strip(stripes["explosion.png"])
+        self.sprite.set_frame(0)
+        self.sprite.set_perspective(2)
+        self.sprite.disable()
+        self.delete = True
+        self.animation_delay = 15  # Contador que se usa para ralentizar la animación
 
-#     def animar(self):
-#         current_frame = self.sprite.frame()
-#         if current_frame < EXPLOSION_FRAMES - 2:
-#             if self.animation_delay % 6 == 0:
-#                 self.sprite.set_frame(current_frame+1)
-#             self.animation_delay = self.animation_delay + 1
-#         else:
-#             self.delete = True
+    def activar(self, center_x, center_y):
+        self.sprite.set_x(center_x - self.sprite.width()//2)
+        self.sprite.set_y(center_y - 12)
+        self.delete = False
+        self.sprite.set_frame(0)
+
+    def desactivar(self):
+        self.sprite.disable()
+
+    def animar(self):
+        current_frame = self.sprite.frame()
+        if current_frame < EXPLOSION_FRAMES - 2:
+            if self.animation_delay % 6 == 0:
+                self.sprite.set_frame(current_frame+1)
+            self.animation_delay = self.animation_delay + 1
+        else:
+            self.delete = True
 
 
 
@@ -144,7 +151,10 @@ class Vissile(Scene):
         super(Vissile, self).on_enter()
 
         self.mira = Mira()
-        # self.explosiones = []
+
+        self.explosiones_reserva = [Explosion(), Explosion(), Explosion(), Explosion(), Explosion()]
+        self.explosiones_activas = []
+
         self.cascotes_reserva = [Cascote(), Cascote(), Cascote(), Cascote(), Cascote()]
         self.cascotes_activos = []
         
@@ -228,23 +238,30 @@ class Vissile(Scene):
                     m.mover()
         
         # Actualizar explosiones
-        # for e in self.explosiones:
-        #     e.animar()
-        #     if e.delete:
-        #         e.sprite.disable()
-        #         self.explosiones.remove(e)
+        if len(self.explosiones_activas) > 0:
+            for e in self.explosiones_activas:
+                if e.delete:
+                    e.desactivar()
+                    self.explosiones_activas.remove(e)
+                    self.explosiones_reserva.append(e)
+                else:
+                    e.animar()
+        
         
         # Actualizar cascotes
         if len(self.cascotes_activos) > 0:
             for c in self.cascotes_activos:
                 if c.delete:
-                    # center_x = c.sprite.x() + (c.sprite.width() // 2)
-                    # center_y = c.sprite.y() - (c.sprite.height() // 2)
-                    # e = Explosion(center_x, center_y)
                     c.desactivar()
                     self.cascotes_activos.remove(c)
                     self.cascotes_reserva.append(c)
-                    # self.explosiones.append(e)
+                    
+                    center_x = c.sprite.x() + (c.sprite.width() // 2)
+                    center_y = c.sprite.y() - (c.sprite.height() // 2)
+                    if len(self.explosiones_reserva) > 0:
+                        e = self.explosiones_reserva.pop()
+                        e.activar(center_x, center_y)
+                        self.explosiones_activas.append(e)
                 else:
                     c.mover()
 
