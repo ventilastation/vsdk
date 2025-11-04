@@ -1,6 +1,6 @@
 stripes = [
     palettegroup(
-        strip("explosion.png", frames=5),
+        strip("explosion2.png", frames=5),
         strip("mira.png", frames=1),
         strip("misil.png", frames=1),
         strip("cascote.png", frames=1),
