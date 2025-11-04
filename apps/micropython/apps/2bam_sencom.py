@@ -14,16 +14,7 @@
 #            Boton A (emu: SPACE) : Dispara
 #                Mantener boton A : Activa movimiento rapido
 
-# FIXME^^^: explosions near x=0/255 are buggy
-
-# TODO ^^: REVISAR SCORE: Ojo de usar el centro q tiene una tapita en el de españa
-
-# TODO ^: shuffle bag target city (double, triple size bag for less predictability)
-# DONE ^: Red alert 1 building
-# TODO ^: Que tambien haya impacto en el suelo (te resta puntos groso pero no perdes) -- igual q apunte "mas" hacia los edificios
-# TODO ^: Wave wait all enemies dead before next step or max_time? -- or stop waiting? min_time
-# TODO ^: Tweak missile Y speed (per level)
-# TODO ^: Better explosions for player - COlor de paleta "glitch" para explosiones tuyas
+# MEMO: 6-7 pixels near the center may be covered by the fan's cap
 
 # TODO ^: End of level animation / change level
 #         Score numbers "lifted up" --> y=24
@@ -35,10 +26,22 @@
 #         End of level warp fx (paleta y efecto loco del fullscreen
 #         Efecto loco con texto_intro en perspective 2 yendo hacia adentro!
 
-#        
+
+# FIXME^^^: use depth (persp=2) collisions instead!!
+# FIXME^^^: player explosions not always hit right
+# FIXME: Trail for WH_MODE=1 needs perspective lengths
+
+# TODO ^: Better explosions for player - COlor de paleta "glitch" para explosiones tuyas
+# DONE ^: shuffle bag target city (double, triple size bag for less predictability)
+# DONE ^: Red alert 1 building
+# DONE ^: Que tambien haya impacto en el suelo (te resta puntos groso pero no perdes)
+# TODO ^: Wave wait all enemies dead before next step or max_time? -- or stop waiting? min_time
+# TODO ^: Tweak missile Y speed (per level)
+
+
 # TODO: Intro (Game)
 # TODO: Score change palette to black, then flashy on EOL
-# TODO ^: SFX placeholder
+# DONE ^: SFX placeholder
 # TODO^: Level progression
 # TODO^: Define waves
 # TODO: Define overwave
@@ -84,6 +87,8 @@ STEPS_PER_SECOND=33
 SECONDS_PER_STEP=1.0/STEPS_PER_SECOND
 AIM_LIMIT=110
 
+HISCORE=0
+
 INV_SQRT2=0.70710678
 
 #15frames 72x36 step 12 
@@ -98,39 +103,40 @@ MISSILE_SINS=[sin(deg*pi/180) for deg in MISSILE_ANGLES]
 TRAIL_FRAME_HEIGHT=40
 TRAIL_FRAME_WIDTH=105
 TRAIL_X_OFFSETS=[-(round(TRAIL_FRAME_HEIGHT*sin(deg*pi/180)/cos(deg*pi/180))+(TRAIL_FRAME_WIDTH-2 if deg <= 0 else 2)) for deg in MISSILE_ANGLES]
+#print("TRAIL_X_OFFSETS", TRAIL_X_OFFSETS)
 MISSILE_XXX=[sin(deg*pi/180)/cos(deg*pi/180) for deg in MISSILE_ANGLES]
 TRAIL_SEQ_FRAME_COUNT=7
 TRAIL_Y_PER_FRAME=6
 WARHEAD_ORIGIN_Y=2
 
-print("TRAIL_X_OFFSETS", TRAIL_X_OFFSETS)
 # MISSILE_ANGLES = [-60,-40,-20, 0, 20, 40, 60]
 
 # 32 limit is due to how trails work (they kind of wrap around but are hidden
 # by the center image, if they were longer it would require special case math
 MISSILE_MAX_DEPTH=40
-MISSILE_Y_SPEED=0.25
+MISSILE_Y_SPEED=0.20
 WARHEAD_FRAMES=3
 
 NUM_CITIES=5
-ALL_CITIES=list(range(NUM_CITIES))
 MAX_WEAPON=4
 MAX_ATTACKS=20
 
-BOOM_FRAMES=[0,1,2,3,2,3,2,3,2,1,0]
-BOOM_RADIUS_POW2=10*10
+#BOOM_FRAMES=[0,1,2,3,2,3,2,3,2,1,0]
+BOOM_FRAMES=[ 4, 3, 2, 3, 2, 3,2, 3,2, 3, 2, 1, 0]
+BOOM_RADIUS=[0,0,10,10,5]
+BOOM_TTL=99#60
 
 palette=bytearray([randint(0,255) for _ in range(1024*6)])
 
 P_FULLSCREEN=0
 P_DISTORTED=2
-def make_sprite(name, x=0, y=0, persp=1):
+def make_sprite(name, x=0, y=0, persp=1, frame=255):
     s=Sprite()
     s.set_strip(STRIPS[name+".png"])
     s.set_perspective(persp)
     s.set_x(x)
     s.set_y(y)
-    s.disable()
+    s.set_frame(frame)
     return s
 
 # SND_WARNING=b"2bam_sencom/test/531488__rickplayer__alarmalert.mp3"
@@ -139,6 +145,7 @@ SND_EMPTY_CLIP=b"2bam_sencom/empty-clip"
 SND_RED_ALERT=b"2bam_sencom/red-alert"
 SND_CITY_EXPLODE=b"2bam_sencom/city-explode" # LPF menos chillon o pitch down
 SND_BOOM=b"2bam_sencom/boom"
+SND_TALLY=b"2bam_sencom/plin"
 SNDS_SPAWN=[
     b"2bam_sencom/chop0",
     b"2bam_sencom/chop1",
@@ -152,7 +159,7 @@ SNDS_SPAWN=[
 def find_color_index(pal, r,g,b):
     for i in range(0, len(pal), 4):
         if pal[i+1] == b and pal[i+2] == g and pal[i+3] == r:
-            print('COLOR FOUND',r,g,b, 'AT', i)
+            #print('COLOR FOUND',r,g,b, 'AT', i)
             return i
 
     print('COLOR NOT FOUND',r,g,b)
@@ -166,15 +173,16 @@ class Entity:
     def step():
         pass
 
-class Boom:
+class Boom(Entity):
     def __init__(self):
         self.sprite=make_sprite("target")
         self.alive=False
         self.do_damage=False
     
-    def reset(self, x,y, ttl):
+    def reset(self, x, y, ttl):
         self.fpst = len(BOOM_FRAMES)/ttl
         self.frame = 0
+        self.radius = 0
         self.x=x
         self.y=y
         self.sprite.set_x(x-self.sprite.width()//2)
@@ -190,26 +198,30 @@ class Boom:
         fi=floor(self.frame)
         if fi == len(BOOM_FRAMES):
             self.alive=False
+            self.do_damage=False
             self.sprite.disable()
             return
         real_frame=BOOM_FRAMES[fi]
-        self.do_damage=real_frame >= 3
+        self.radius=BOOM_RADIUS[real_frame]
+        self.do_damage=self.radius > 0
         self.sprite.set_frame(real_frame)
+
+WH_MODE=2
 
 class Missile:
     angle_index=0
     depth=0
     base_x=0
     hit_ground=False
-    def __init__(self):
+    def __init__(self, warhead_sprite):
         # self._debug=Sprite()
         # self._debug.set_strip(STRIPS["crosshair.png"])
         # self._debug.set_perspective(1)
         # self._debug.set_frame(0)
         
-        self.warhead=Sprite()
+        self.warhead=warhead_sprite
         self.warhead.set_strip(STRIPS["dedo.png"])
-        self.warhead.set_perspective(2)
+        self.warhead.set_perspective(WH_MODE)
         #self.warhead.set_frame(0)
         self.warhead_hw=self.warhead.width()//2
 
@@ -273,7 +285,12 @@ class Missile:
         #wy=42+d+self.warhead.height()
         #wy=(42+d+self.warhead.height())%54
         # wy=d-self.warhead.height()+WARHEAD_ORIGIN_Y
-        wy=d-self.warhead.height()+WARHEAD_ORIGIN_Y
+        if WH_MODE == 2:
+            wy=d-self.warhead.height()+WARHEAD_ORIGIN_Y
+        elif WH_MODE == 1:
+            k=INV_DEEPSPACE[53-MISSILE_MAX_DEPTH]
+            wy=(d*k//MISSILE_MAX_DEPTH)-self.warhead.height()+WARHEAD_ORIGIN_Y
+
         self.warhead.set_x(wx-self.warhead_hw)
         self.warhead.set_y(wy)
         self.warhead.set_frame(d%WARHEAD_FRAMES)
@@ -298,16 +315,16 @@ def find_dead(pool):
 
 class EnemyBomb:
     def __init__(self):
-        self._sp=_sp=Sprite()
-        _sp.set_strip(STRIPS["dedo2.png"])
-        _sp.set_perspective(1)
-        _sp.set_x(0)
-        _sp.set_y(36)
+        self.sprite=sprite=Sprite()
+        sprite.set_strip(STRIPS["dedo2.png"])
+        sprite.set_perspective(1)
+        sprite.set_x(0)
+        sprite.set_y(36)
 
     def step(self):
-        _sp=self._sp
-        _sp.set_x(_sp.x()+1)
-        _sp.set_frame(_sp.x()//4 % 3)
+        sprite=self.sprite
+        sprite.set_x(sprite.x()+1)
+        sprite.set_frame(sprite.x()//4 % 3)
 
 class Anim(Entity):
     def __init__(self, strip_id, frames, duration_secs, **kwargs):
@@ -330,19 +347,23 @@ class Game(Scene):
     quit=False
     score=0
     level=0
-
+    # Normalized cartesian x and y [-1.0, 1.0]
+    aim_cart_x=0
+    aim_cart_y=0.5
 
     def reset(self):
         self.score=0
         self.level=0
 
     def save_score():
-        # TODO
+        HISCORE=max(HISCORE, self.score)
+        # TODO: persist
         pass
 
     def on_enter(self):
         super().on_enter()
-        # TODO: load score
+        # MEMO: This also gets called when the Combat state pops
+        # NO!!: self.reset()
         pass
 
     def step(self):
@@ -386,9 +407,17 @@ class Combat(Scene):
     def on_enter(self):
         super().on_enter()
 
-        self.ents=[]
+        self.tally=False
 
-        self.waves=Waves(level_waves[self.game.level])
+        self.all_cities=ShuffleBag(2*list(range(NUM_CITIES)))
+        self.cities_alive=ShuffleBag(list(range(NUM_CITIES)))
+        self.ents=[]
+        print(self.game.level, 'level')
+        self.waves=Waves(level_waves[min(self.game.level, len(level_waves)-1)])
+
+        self.aim=make_sprite("crosshair", frame=0)
+
+
 
         self.warning=Warning()
         # self.warning.activate()
@@ -462,18 +491,15 @@ class Combat(Scene):
         pal_copy[self.pal_ind_score+1] = 0
         pal_copy[self.pal_ind_score+2] = 0
         pal_copy[self.pal_ind_score+3] = 0
-        if self.pal_ind_blue and self.pal_ind_city:
-            self.pal_copy[self.pal_ind_city+1]=self.pal_copy[self.pal_ind_blue+1]=randint(0,255)
-            self.pal_copy[self.pal_ind_city+2]=self.pal_copy[self.pal_ind_blue+2]=randint(0,255)
-            self.pal_copy[self.pal_ind_city+3]=self.pal_copy[self.pal_ind_blue+3]=randint(0,255)
-            povdisplay.set_palettes(self.pal_copy)
 
-        self.aim=Sprite()
-        self.aim.set_strip(STRIPS["crosshair.png"])
-        self.aim.set_perspective(1)
-        self.aim.set_frame(0)
-        self.aim_x=1
-        self.aim_y=0
+        # TODO: Change by level color!
+        self.set_color_core(randint(0,255)|0x80,0,randint(0,255)|0x80)
+
+
+
+        self.pal_ind_boom=find_color_index(pal_copy, 0, 0xff, 0xf0)
+
+
 
         self.cities=[City(i*255//5) for i in range(NUM_CITIES)]
         self.cities_dead=0
@@ -486,8 +512,9 @@ class Combat(Scene):
         self.core.set_perspective(0)
         # self.core.disable()
 
-        # FIXME: los spawnear trailes por separado (menor prioridad visual z-index)
-        self.missiles=[Missile() for _ in range(MAX_ATTACKS)]
+        # Spawn warheads first so they have more z-order priority
+        warhead_sprites=[Sprite() for _ in range(MAX_ATTACKS)]
+        self.missiles=[Missile(warhead_sprite) for warhead_sprite in warhead_sprites]
 
         #self.bombs=[EnemyBomb()]
         self.bombs=[]
@@ -498,12 +525,19 @@ class Combat(Scene):
         bg_black.set_frame(0)
         bg_black.set_perspective(0)
 
-    def spawn_missile(self, cities_alive, angles):
+    def set_color_core(self,r,g,b):
+        if self.pal_ind_blue and self.pal_ind_city:
+            self.pal_copy[self.pal_ind_city+1]=self.pal_copy[self.pal_ind_blue+1]=b
+            self.pal_copy[self.pal_ind_city+2]=self.pal_copy[self.pal_ind_blue+2]=g
+            self.pal_copy[self.pal_ind_city+3]=self.pal_copy[self.pal_ind_blue+3]=r
+            povdisplay.set_palettes(self.pal_copy)
+
+    def spawn_missile(self, target_cities_bag, angles):
         y_speed = MISSILE_Y_SPEED # TODO: div by level (or overlevel)
         for missile in self.missiles:
             if not missile.alive:
-                if len(cities_alive) > 0:
-                    target_city=choice(cities_alive)
+                if not target_cities_bag.empty:
+                    target_city=target_cities_bag.next()
                     
                     missile.reset(
                         target_city,
@@ -515,7 +549,86 @@ class Combat(Scene):
         print('NOT ENOUGH MISSILES TO SPAWN', len(self.missiles))
 
     def step(self):
+        if self.tally:
+            self.step_tally()
+        else:
+            self.step_play()
 
+
+    def step_tally(self):
+        for boom in self.booms:
+            boom.sprite.disable()
+
+        # if any(city.state == CITY_DYING for city in self.cities) or any(boom.alive for boom in self.booms):
+        #     for city in self.cities:
+        #         city.step()
+        #     for boom in self.booms:
+        #         boom.step()
+        #     return
+
+        self.warning.sprite.disable()
+
+        if self.score.y()>10:
+            self.score.set_y(self.score.y()-1)
+        else:
+            self.score.set_y(0)
+
+            city_moved=False
+            for city in self.cities:
+                if city.state == CITY_OK:
+                    city_moved=True
+                    s=city.sprite
+                    if s.y() > 10:
+                        s.set_y(s.y()-2)
+                        if s.x() < 116:
+                            s.set_x(s.x()+4)
+                        elif s.x() > 120:
+                            s.set_x(s.x()-4)
+                    else:
+                        self.game.score += 1000 # TODO: inflation per level/type
+                        self.score.set_score(self.game.score)
+                        s.disable()
+                        city.state=CITY_DEAD
+                        director.sound_play(SND_TALLY)
+                    break
+            if not city_moved:
+                self.core.set_y(min(self.core.y()+3,255))
+                if self.core.y() == 255:
+                    self.game.level += 1
+                    director.pop()
+                    pass
+
+                # city.step()
+                # if city.state == CITY_OK:
+                #     city.explode()
+                #     self.game.score += 1000 # TODO: inflation per level/type
+                #     self.score.set_score(self.game.score)
+                #     break
+                # elif city.state == CITY_DYING:
+                #     break
+            
+
+        self.update_aim()
+
+
+        if self.pal_ind_score:
+            pal=self.pal_copy
+            pal[self.pal_ind_score+1] = randint(0,128)
+            pal[self.pal_ind_score+2] = randint(0,255)|0x80
+            pal[self.pal_ind_score+3] = randint(0,128)
+            povdisplay.set_palettes(pal)
+
+
+    def step_play(self):
+
+        
+        pal_i=self.pal_ind_boom
+        pal=self.pal_copy
+        if pal_i:
+            pal[pal_i+1]=randint(0,255)|0x80
+            pal[pal_i+2]=randint(0,255)|0x80
+            pal[pal_i+3]=randint(0,255)|0x80
+            povdisplay.set_palettes(pal)
 
         # povdisplay.set_palettes(palette)
         for ent in self.ents:
@@ -529,29 +642,26 @@ class Combat(Scene):
             if not boom.alive:
                 continue
             boom.step()
-            for missile in self.missiles:
-                bx=boom.x & 0xff
-                by=boom.y & 0xff
-                if missile.alive:
-                    dx=(missile.hit_x & 0xff) - bx
-                    dy=(missile.hit_y & 0xff) - by
-                    hit=False
-                    if dx*dx+dy*dy < BOOM_RADIUS_POW2:
-                        hit=True
-                    else:
-                        dx=((missile.hit_x+128) & 0xff)-(bx+128)&0xff
-                        if dx*dx+dy*dy < BOOM_RADIUS_POW2:
+            if boom.do_damage:
+                for missile in self.missiles:
+                    if missile.alive:
+                        dx=(missile.hit_x & 0xff) - (boom.x&0xff)
+                        dy=missile.hit_y - boom.y
+                        hit=False
+                        boom_sq_rd=boom.radius*boom.radius
+                        if dx*dx+dy*dy <= boom_sq_rd:
                             hit=True
-                    if hit:
-                        missile.kill()
-                        self.game.score += 125 # TODO: inflation per level/type
-                        self.score.set_score(self.game.score)
+                        else:
+                            dx=((missile.hit_x+128) & 0xff)-((boom.x+128)&0xff)
+                            if dx*dx+dy*dy <= boom_sq_rd:
+                                hit=True
+                        if hit:
+                            missile.kill()
+                            self.game.score += 125 # TODO: inflation per level/type
+                            self.score.set_score(self.game.score)
 
 
-        cities_alive=[]
         for city_index, city in enumerate(self.cities):
-            if city.state == CITY_OK:
-                cities_alive.append(city_index)
             city.step()
         
         if self.cities_dead == NUM_CITIES:
@@ -561,8 +671,13 @@ class Combat(Scene):
             #raise StopIteration()
             return
 
+
+        frame_enemies_alive=0
+
         for bomb in self.bombs:
-            bomb.step()
+            if bomb.alive:
+                bomb.step()
+                frame_enemies_alive+=1
 
         self.next_missile -= 1
         for missile in self.missiles:
@@ -583,23 +698,29 @@ class Combat(Scene):
             #         continue     
             # else:           
             if missile.alive:    
+                frame_enemies_alive+=1
                 missile.step()
                 if missile.hit_ground:
                     # self.missile.reset(128, randint(0, 6))
                     # missile.reset(randint(0,255), randint(0, 6), MISSILE_Y_SPEED)
                     city = self.cities[missile.target_city]
                     if city.state == CITY_OK:
+                        self.cities_alive.remove(missile.target_city)
                         self.cities_dead+=1
                         if self.cities_dead == NUM_CITIES-1:
                             director.sound_play(SND_RED_ALERT)
+                            self.set_color_core(255,0,0)
+
+
                         director.sound_play(SND_CITY_EXPLODE)
+                        city.explode()
                     else:
                         # TODO: lesser explosion sound
                         # TODO: some lesser explosion anim?
                         self.game.score = max(0, self.game.score-250)
                         self.score.set_score(self.game.score)
+                        city.re_explode()
 
-                    city.explode()
                     missile.kill()
 
 
@@ -607,16 +728,16 @@ class Combat(Scene):
         if next_spawn == W_WARN:
             self.warning.activate()
         elif next_spawn == W_COMPLETE:
-            # TODO!!
-            pass
+            if all(city.state != CITY_DYING for city in self.cities) and frame_enemies_alive==0: 
+                self.tally=True
         elif next_spawn == W_M0:
-            self.spawn_missile(ALL_CITIES, [2]) #[0]
+            self.spawn_missile(self.all_cities, [2]) #[0]
         elif next_spawn == W_M1:
-            self.spawn_missile(ALL_CITIES, [1,2,3]) #[-45, 0, 45]
+            self.spawn_missile(self.all_cities, [1,2,3]) #[-45, 0, 45]
         elif next_spawn == W_M2:
-            self.spawn_missile(ALL_CITIES, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
+            self.spawn_missile(self.all_cities, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
         elif next_spawn == W_M2CA:
-            self.spawn_missile(cities_alive, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
+            self.spawn_missile(self.cities_alive, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
 
         if W_ENEMY_MIN <= next_spawn < W_ENEMY_MAX:
             director.sound_play(choice(SNDS_SPAWN))
@@ -638,7 +759,7 @@ class Combat(Scene):
         if director.was_pressed(director.BUTTON_A):
             boom = find_dead(self.booms)
             if boom is not None:
-                boom.reset(self.aim_a, self.aim_l, 60)
+                boom.reset(self.aim_a, self.aim_l, BOOM_TTL)
                 director.sound_play(SND_BOOM)
             else:
                 director.sound_play(SND_EMPTY_CLIP)
@@ -650,38 +771,44 @@ class Combat(Scene):
             raise StopIteration()
     
     def update_aim(self):
+        ax = self.game.aim_cart_x
+        ay = self.game.aim_cart_y
+
         aim_speed=0.1 if director.is_pressed(director.BUTTON_A) else 0.05
         if director.is_pressed(director.JOY_LEFT):
-            self.aim_x -= aim_speed
+            ax -= aim_speed
         if director.is_pressed(director.JOY_RIGHT):
-            self.aim_x += aim_speed
+            ax += aim_speed
         if director.is_pressed(director.JOY_UP):
-            self.aim_y += aim_speed
+            ay += aim_speed
         if director.is_pressed(director.JOY_DOWN):
-            self.aim_y -= aim_speed
+            ay -= aim_speed
 
-        self.aim_x = min(max(-INV_SQRT2, self.aim_x), INV_SQRT2)
-        self.aim_y = min(max(-INV_SQRT2, self.aim_y), INV_SQRT2)
+        ax = min(max(-INV_SQRT2, ax), INV_SQRT2)
+        ay = min(max(-INV_SQRT2, ay), INV_SQRT2)
         
-        l_p2=round(54*sqrt(self.aim_x**2 + self.aim_y**2))
+        l_p2=round(54*sqrt(ax*ax + ay*ay))
         self.aim_l=l=INV_DEEPSPACE[l_p2]
-        self.aim_a=a=round(192-atan2(self.aim_y,self.aim_x)*128/pi)
+        self.aim_a=a=round(192-atan2(ay,ax)*128/pi)
 
         self.aim.set_x(a - self.aim.width()//2)
         self.aim.set_y(l - self.aim.height()//2)
         if 0<=l<AIM_LIMIT:
             self.aim.set_frame(l//4)
 
+        self.game.aim_cart_x=ax
+        self.game.aim_cart_y=ay
+
 CITY_OK=0
 CITY_DYING=2
 CITY_DEAD=8
 class City:
     def __init__(self, x):
-        self._sp=_sp=Sprite()
-        _sp.set_strip(STRIPS["city.png"])
-        _sp.set_perspective(1)
-        _sp.set_x(x-_sp.width()//2)
-        _sp.set_y(74)
+        self.sprite=sprite=Sprite()
+        sprite.set_strip(STRIPS["city.png"])
+        sprite.set_perspective(1)
+        sprite.set_x(x-sprite.width()//2)
+        sprite.set_y(74)
         self.reset()
 
     def explode(self):
@@ -689,27 +816,30 @@ class City:
             self._t = 0
             self.state = CITY_DYING
     
+    def re_explode(self):
+        if self.state != CITY_OK:
+            self._t = 2
+            self.state = CITY_DYING
 
     def reset(self):
-        self.done=False
         self._t = 0
         self.state = CITY_OK
-        self._sp.set_frame(CITY_OK)
+        self.sprite.set_frame(CITY_OK)
 
     def step(self):
-        _sp=self._sp
+        sprite=self.sprite
         st=self.state
         if st == CITY_OK:
             self._t += SECONDS_PER_STEP/0.25
-            _sp.set_frame(CITY_OK+int(self._t)%2)
+            sprite.set_frame(CITY_OK+int(self._t)%2)
         elif st == CITY_DYING:
             self._t += SECONDS_PER_STEP/0.5
             fi = CITY_DYING+int(self._t)
             if fi == CITY_DEAD:
                 self.state=CITY_DEAD
-                _sp.disable()
+                sprite.disable()
             else:
-                _sp.set_frame(fi)
+                sprite.set_frame(fi)
 
 
 
@@ -730,6 +860,14 @@ class ScoreTopLabel:
         self.base_y=y
         self.frame=0
         self.set_score(0)
+
+    def y(self):
+        return self.base_y
+
+    def set_y(self,v):
+        self.base_y=v
+        for sp in self.digits: 
+            sp.set_y(self.base_y)
 
     def set_score(self,num):
         self.score = num 
@@ -783,28 +921,11 @@ level_waves=[
     ],
 ]
 
-class Waves:
-    def __init__(self, waves):
-        self.step=0
-        self.done=False
-        self.warn=False
-        self.waves=waves
-
-        self.next_waves_i=0
-        self.load_next_wave()
-    
-    def load_next_wave(self):
-        (secs, wave_spawn_amount, bag) = self.waves[self.next_waves_i]
-        print('load wave', self.next_waves_i, secs, wave_spawn_amount, bag)
-        # Max between wanted seconds, and being able to spawn at least all!
-        self.wave_tmr = max(wave_spawn_amount, ceil(STEPS_PER_SECOND*secs))
-        self.spawn_pending=wave_spawn_amount
-        self.spawn_period= 0 if wave_spawn_amount==0 else self.wave_tmr//wave_spawn_amount
-        self.spawn_tmr=0 
-        self.next_spawn_i=0
-        self.bag=bag
+class ShuffleBag:
+    def __init__(self, elems):
+        self.bag=elems.copy()
         self.shuffle()
-        self.next_waves_i += 1
+        self.empty=len(self.bag) == 0
 
     def shuffle(self):
         for i in range(1, len(self.bag)):
@@ -812,6 +933,46 @@ class Waves:
             tmp=self.bag[i]
             self.bag[i]=self.bag[j]
             self.bag[j]=tmp
+        self.next_i=0
+
+    def remove(self, elem):
+        self.bag.remove(elem)
+        self.empty=len(self.bag) == 0
+        self.shuffle()
+
+    def next(self):
+        if self.empty:
+            raise Exception("next on empty ShuffleBag")
+
+        elem = self.bag[self.next_i]
+        self.next_i += 1
+        if self.next_i == len(self.bag):
+            self.shuffle()
+            self.next_i = 0
+        return elem
+
+
+class Waves:
+    def __init__(self, waves):
+        self.step=0
+        self.warn=False
+        self.waves=waves
+
+        self.next_waves_i=0
+        self.load_next_wave()
+    
+    def load_next_wave(self):
+        (secs, wave_spawn_amount, bag_elems) = self.waves[self.next_waves_i]
+        # Max between wanted seconds, and being able to spawn at least the full amount!
+        self.wave_tmr = max(wave_spawn_amount, ceil(STEPS_PER_SECOND*secs))
+        self.spawn_pending=wave_spawn_amount
+        self.spawn_period= 0 if wave_spawn_amount==0 else self.wave_tmr//wave_spawn_amount
+        self.spawn_tmr=0 
+        self.next_spawn_i=0
+        self.bag=ShuffleBag(bag_elems)
+        self.next_waves_i += 1
+
+
 
     def next(self): 
         self.wave_tmr -= 1
@@ -820,18 +981,12 @@ class Waves:
                 return W_COMPLETE
             self.load_next_wave()
 
-        if self.spawn_pending > 0 and len(self.bag) > 0:
+        if self.spawn_pending > 0 and not self.bag.empty:
             self.spawn_tmr -= 1
             if self.spawn_tmr <= 0:
-                to_spawn = self.bag[self.next_spawn_i]
                 self.spawn_tmr = self.spawn_period
-                self.next_spawn_i += 1
-                if self.next_spawn_i == len(self.bag):
-                    self.shuffle()
-                    self.next_spawn_i = 0
                 self.spawn_pending -= 1
-                return to_spawn
-
+                return self.bag.next()
 
         return W_NONE
 
