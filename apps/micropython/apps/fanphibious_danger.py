@@ -1,4 +1,4 @@
-from random import choice, randrange, seed
+from urandom import choice, randrange, seed
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
@@ -10,12 +10,12 @@ MAX_SCALED_COORD = SCALE_FACTOR * MAX_COORD
 
 # Frog states
 ON_GROUND = 0
-ON_TRUNK = 1
+ON_RING = 1
 JUMPING = 2
-ON_GOAL = 3
-ON_WATER = 4
+ON_GOAL = 4
+ON_WATER = 8
 
-# Frog's face direction
+# Frog's face orientation
 DIR_FORWARD = 1
 DIR_BACKWARD = -1
 
@@ -25,7 +25,36 @@ MAX_JUMPING_FRAME = 10
 # Distance between rings
 RINGS_DISTANCE = 20
 
+class Ring:
+    
+    def __init__(self, y=0, speed=0):
 
+        self.y = y
+        self.speed = speed
+        self.object_stack = []
+
+    def insert(self, floating_object, x=None):
+        self.object_stack.append(floating_object)
+        floating_object.sprite.set_y(self.y)
+        if x is not None:
+            floating_object.sprite.set_x(x)
+
+    def step(self):
+        
+        for object in self.object_stack:
+            # Drag floating objects at ring's speed
+            object.sprite.set_scaled_x(object.sprite.scaled_x() + self.speed)
+
+
+class FloatingObject:
+
+    def __init__(self, x=0, sprite=None, buoyancy=None):
+
+        self.sprite = sprite
+        self.sprite.set_scaled_x(x * SCALE_FACTOR)
+        self.buoyancy = buoyancy
+        self.carrying_stack = []
+    
 class MySprite(Sprite):
     
     def __init__(self):
@@ -59,37 +88,28 @@ class Frog(MySprite):
     def __init__(self, scene):
         super().__init__()
         self.scene = scene
-        self.set_strip(stripes["bolas.png"])
+        self.set_strip(stripes["frog16d.png"])
         self.set_frame(0)
         self.state = ON_GROUND
-        self.trunk = None
+        
         self.speed = 0
-        self.direction = DIR_FORWARD
+        self.orientation = DIR_FORWARD
         self.jumping_frame = 0
         self.jumping_speed = RINGS_DISTANCE // MAX_JUMPING_FRAME * SCALE_FACTOR
         self.ring = 0
+        self.next_ring = 1
 
     def step(self):
         self.set_scaled_x(self._scaled_x + self.speed)
 
         
 class Trunk(MySprite):
-    def __init__(self, scene, speed=100, buoyancy=1000):
+    def __init__(self, scene):
         super().__init__()
         self.scene = scene
-        self.set_strip(stripes["trunks.png"])
+        self.set_strip(stripes["trunk32.png"])
         self.set_frame(0)
-        self.speed = speed
-        self.buoyancy = buoyancy
-
         
-    def step(self):
-        self.set_scaled_x(self._scaled_x + self.speed)
-
-        # self.buoyancy -= 1
-        # if (self.buoyancy == 0):
-        #   self.disable()
-
 
 class Enemy(Sprite):
     pass
@@ -108,93 +128,144 @@ class FanphibiousDanger(Scene):
         super(FanphibiousDanger, self).on_enter()
         self.frame_count = 0
 
+        # Create Frog sprite
         self.frog = Frog(self)
         self.frog.set_scaled_x(-16*SCALE_FACTOR)
-        self.frog.set_scaled_y(8*SCALE_FACTOR)
+        self.frog.set_scaled_y(16*SCALE_FACTOR)
 
-
-        vel1 = randrange(32, 512, 8)
+        # Create floating objects' sprites
+        # TODO: programmatically generate more than one object per ring
+        self.trunks = [Trunk(self) for i in range(6)]
         
-        
-        self.trunk1 = Trunk(self, speed=vel1, buoyancy=2750)
-        self.trunk1.set_scaled_x(-16*SCALE_FACTOR)
-        self.trunk1.set_scaled_y(32*SCALE_FACTOR)
-
-        vel2 = randrange(32, 512, 8)
-        self.trunk2 = Trunk(self, speed=vel2, buoyancy=3500)
-        self.trunk2.set_scaled_x(-16*SCALE_FACTOR)
-        self.trunk2.set_scaled_y(52*SCALE_FACTOR)
-        
-        vel3 = randrange(32, 512, 8)
-        self.trunk3 = Trunk(self, speed=vel3)
-        self.trunk3.set_scaled_x(-16*SCALE_FACTOR)
-        self.trunk3.set_scaled_y(72*SCALE_FACTOR)
-
-        self.trunks = [self.trunk1, self.trunk2, self.trunk3]
-        
+        # Create background sprite ("swamp")
         self.swamp = Swamp(self)
 
+        # Random ring's speeds
+        # minimum = 0, maximum = 2 pixels per frame (512 / 256)
+        rings_speed = [randrange(-256, 256, 16) for i in range(3)]
+
+        # Create "rings" to contain floating objects
+        self.rings = [Ring(y=36+i*RINGS_DISTANCE, 
+                           speed=rings_speed[i]) for i in range(3)]
+        
+        # Put one floating object in each ring
+        # TODO: put more than one object per ring
+        for i in range(3):
+            # Put a "trunk"
+            floating_object = FloatingObject(x=randrange(16, 112, 16),
+                                             sprite=self.trunks[2*i])
+            self.rings[i].insert(floating_object)
+            floating_object = FloatingObject(x=randrange(144, 240, 16),
+                                             sprite=self.trunks[2*i + 1])
+            self.rings[i].insert(floating_object)
+            """ floating_object = FloatingObject(x=randrange(165, 235, 10),
+                                             sprite=self.trunks[3*i + 2])
+            self.rings[i].insert(floating_object) """
+            
 
     def step(self):
         
         self.frame_count += 1
 
-        self.frog.step()
-
-        for trunk in self.trunks:
-            trunk.step()
+        # ======================== #
+        #      PROCESS INPUTS      #
+        # ======================== #
         
+        # Button D EXITS the game
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+
+        # Joystick controls frog's MOVEMENT and ORIENTATION
         if director.is_pressed(director.JOY_LEFT):
-            self.frog.set_scaled_x(self.frog.scaled_x() + SCALE_FACTOR)
+            if self.frog.state == ON_GROUND:
+                self.frog.set_scaled_x(self.frog.scaled_x() + SCALE_FACTOR)
+                print("Moving LEFT on GROUND.")
+            else:
+                print("Moving LEFT on FLOATING OBJECT.")
 
         if director.is_pressed(director.JOY_RIGHT):
-            self.frog.set_scaled_x(self.frog.scaled_x() - SCALE_FACTOR)
+            if self.frog.state == ON_GROUND:
+                self.frog.set_scaled_x(self.frog.scaled_x() - SCALE_FACTOR)
+                print("Moving RIGHT on GROUND.")
+            else:
+                print("Moving RIGHT on FLOATING OBJECT.")
 
         if director.is_pressed(director.JOY_UP):
-            self.frog.direction = DIR_FORWARD
+            self.frog.orientation = DIR_FORWARD
+            self.frog.set_frame(0)
             print("Frog is facing FORWARD.")
 
         if director.is_pressed(director.JOY_DOWN):
-            self.frog.direction = DIR_BACKWARD
+            self.frog.orientation = DIR_BACKWARD
+            self.frog.set_frame(2)
             print("Frog is facing BACKWARD.")
 
+        # Button A makes the frog JUMP
         if director.was_pressed(director.BUTTON_A):
             if self.frog.state != JUMPING:
-                if self.frog.state != ON_GROUND: 
+                if (self.frog.state != ON_GROUND) or (self.frog.orientation == DIR_FORWARD):
                     self.frog.state = JUMPING
                     print("Frog is JUMPING.")
-                elif self.frog.direction == DIR_FORWARD:
-                    self.frog.state = JUMPING
-                    print("Frog is JUMPING.")
+                    self.frog.set_frame(self.frog.frame() + 1)
+                    # Frog is aiming to next ring according to its current orientation
+                    self.frog.next_ring = self.frog.ring + self.frog.orientation
 
+        # ======================== #
+        #       PROCESS STATES     #
+        # ======================== #
         if self.frog.state == JUMPING:
-            if self.frog.jumping_frame == MAX_JUMPING_FRAME:
-                
-                self.frog.jumping_frame = 0
-                print("Frog is NOT JUMPING")
-                print(self.frog.scaled_y() / SCALE_FACTOR)
-                
-                # TODO: Check if frog is on trunk or water
-                target = self.frog.collision([self.trunks[self.frog.ring + self.frog.direction - 1]]) 
-                if target is not None:
-                    self.frog.state = ON_TRUNK
-                    self.frog.speed = target.speed
-                    self.frog.trunk = target
-                    self.frog.ring += self.frog.direction
-                else:
-                    self.frog.state = ON_WATER
-                    self.frog.speed = 0
-                    self.frog.trunk = None
-                    self.frog.ring += self.frog.direction
-            else:
-                # Move frog
-                self.frog.set_scaled_y(self.frog.scaled_y() +
-                                       self.frog.direction * self.frog.jumping_speed)
-                # TODO: Animate jump
-                self.frog.jumping_frame += 1
             
-        if director.was_pressed(director.BUTTON_D):
-            self.finished()
+            # Check if frog landed
+            if self.frog.jumping_frame == MAX_JUMPING_FRAME:
+                self.frog.jumping_frame = 0
+                self.frog.set_frame(self.frog.frame()-1)
+                # Decide where the frog has landed
+                if self.frog.next_ring == 0:
+                    self.frog.state = ON_GROUND
+                    print("Frog landed ON GROUND.")
+                elif self.frog.next_ring == 4:
+                    self.frog.state = ON_GOAL
+                    print("Frog landed ON GOAL.")
+                else:
+                    self.frog.state = ON_RING
+                    print("Frog landed ON RING.")
+
+                self.frog.ring = self.frog.next_ring
+
+                if self.frog.state == ON_GROUND or self.frog.state == ON_GOAL:
+                    self.frog.speed = 0
+                else:
+                    # Check if frog landed on a floating object or water
+                    dummy_state = ON_WATER
+                    
+                    for floating_object in self.rings[self.frog.ring - 1].object_stack:
+                        if self.frog.collision((floating_object.sprite,)) is not None:
+                            dummy_state = ON_RING
+                            break
+
+                    self.frog.state = dummy_state
+
+                    if dummy_state == ON_WATER:
+                        print("Frog is ON WATER.")
+                        self.frog.speed = 0
+                    else:
+                        self.frog.speed = self.rings[self.frog.ring - 1].speed
+                        print("Frog is ON FLOATING OBJECT.")
+
+
+            else:
+                # Animate frog while jumping
+                self.frog.set_scaled_y(self.frog.scaled_y() +
+                                       self.frog.orientation * self.frog.jumping_speed)
+                self.frog.jumping_frame += 1                
+
+        # Animate frog
+        self.frog.step()
+
+        # Animate things on rings (except frog)
+        for ring in self.rings:
+            ring.step()
+        
 
     def finished(self):
         director.pop()
