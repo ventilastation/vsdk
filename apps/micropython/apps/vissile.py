@@ -3,7 +3,7 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
-MIRA_VELOCIDAD_HORIZONTAL = 4
+MIRA_VELOCIDAD_HORIZONTAL = 2
 EXPLOSION_FRAMES = 5
 ANCHO_MIRA = 8
 ALTO_MIRA = 8
@@ -43,6 +43,7 @@ class Misil:
         self.sprite.set_frame(0)
         self.sprite.set_perspective(2)
         self.sprite.disable()
+        self.movement_delay = 0  # Usado para ralentizar el avance de los misiles
 
     def activar(self):
         self.sprite.set_x(randrange(90,165))  # Tiene que estar dentro del área que puede cubrir la mira (x > 80 && x < 175)
@@ -54,7 +55,9 @@ class Misil:
 
     def mover(self):
         self.y_actual = self.sprite.y()
-        self.sprite.set_y(self.y_actual + 1)
+        self.movement_delay = self.movement_delay + 1
+        if self.movement_delay % 4 == 0:  # Mover sólo 1 vez cada 4 steps
+            self.sprite.set_y(self.y_actual + 1)
 
 class Cascote:
     def __init__(self):
@@ -133,6 +136,22 @@ class Explosion:
     def desactivar(self):
         self.sprite.disable()
 
+    def colisiones(self, targets):
+        def intersects(x1, w1, x2, w2):
+            delta = min(x1, x2)
+            x1 = (x1 - delta + 128) % 256
+            x2 = (x2 - delta + 128) % 256
+            return x1 < x2 + w2 and x1 + w1 > x2
+        self.collisions = []
+
+        for target in targets:
+            other = target
+            if (intersects(self.sprite.x(), self.sprite.width(), other.sprite.x(), other.sprite.width()) and
+                intersects(self.sprite.y(), self.sprite.height(), other.sprite.y(), other.sprite.height())):
+                self.collisions.append(target)
+            
+        return self.collisions
+
     def animar(self):
         current_frame = self.sprite.frame()
         if current_frame < EXPLOSION_FRAMES - 2:
@@ -141,7 +160,6 @@ class Explosion:
             self.animation_delay = self.animation_delay + 1
         else:
             self.delete = True
-
 
 
 class Vissile(Scene):
@@ -236,7 +254,12 @@ class Vissile(Scene):
                     # TODO Take damage!
                 else:
                     m.mover()
-        
+
+        if len(self.misiles_activos) < 3:
+                m = self.misiles_reserva.pop()
+                m.activar()
+                self.misiles_activos.append(m)
+
         # Actualizar explosiones
         if len(self.explosiones_activas) > 0:
             for e in self.explosiones_activas:
@@ -245,6 +268,12 @@ class Vissile(Scene):
                     self.explosiones_activas.remove(e)
                     self.explosiones_reserva.append(e)
                 else:
+                    for i in range(4):
+                        lm = e.colisiones(self.misiles_activos)
+                        for m in lm:
+                            m.desactivar()
+                            self.misiles_activos.remove(m)
+                            self.misiles_reserva.append(m)
                     e.animar()
         
         
@@ -264,6 +293,7 @@ class Vissile(Scene):
                         self.explosiones_activas.append(e)
                 else:
                     c.mover()
+
 
         # Salir
         if director.was_pressed(director.BUTTON_D):
