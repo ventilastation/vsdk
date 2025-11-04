@@ -3,10 +3,12 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 from urandom import choice, randrange, seed
 
-from apps.tincho_vrunner.niveles import Nivel01, make_me_a_planet
+from apps.tincho_vrunner.tincho_level import make_me_a_planet
+
 
 class Título(Scene):
     stripes_rom = "tincho_vrunner"
+    siguiente = None
 
     def on_enter(self):
         super(Título, self).on_enter()
@@ -18,7 +20,7 @@ class Título(Scene):
 
     def arrancar(self):
         director.pop()
-        director.push(Nivel01())
+        director.push(self.siguiente())
         raise StopIteration()
 
     def step(self):
