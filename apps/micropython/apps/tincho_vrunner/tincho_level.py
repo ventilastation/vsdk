@@ -25,10 +25,22 @@ COLS_CENTERS = [int(TILE_WIDTH * (DAMERO_COLS/2 - 0.5 -c) ) for c in range(DAMER
 # FIXME
 DESFAZAJES = [0, 1, 2, 1, 1, 0, -1, -1]
 
-VELOCIDADES = [1/8, 1/4, 1/2, 1, 2, 3]
+VELOCIDADES = [0, 1/8, 1/4, 1/2, 1, 2, 3]
 VELOCIDAD_POWERUP = 5
 
+DURACIONES = {
+    0: 20,
+    1/8: 50,
+    1/4: 50,
+    1/2: 100,
+    1: 200,
+    2: 200,
+    3: 200,
+    VELOCIDAD_POWERUP: 600,
+}
+
 PLAYER_HORIZONTAL_DELAY = {
+    0: 8,
     1/8: 8,
     1/4: 6,
     1/2: 4,
@@ -39,12 +51,13 @@ PLAYER_HORIZONTAL_DELAY = {
 }
 
 PLAYER_HORIZONTAL_VEL = {
+    0: 1,
     1/8: 1,
     1/4: 1,
     1/2: 1,
-    1: 1,
-    2: 1,
-    3: 2,
+    1: 2,
+    2: 2,
+    3: 3,
     VELOCIDAD_POWERUP: 2,
 }
 
@@ -60,66 +73,7 @@ PROP_DUELE = 1
 PROP_POWER = 2
 
 DEBUG_SIN_DESFAZAJE = False #or True
-
-WIN_ROW = 40
-
-
-
-# TODO: datos del nivel:
-PROPS = {
-    0: [(PROP_REBOTE, 0.2)],
-    1: [(PROP_REBOTE, 0),],
-    2: [(PROP_REBOTE, 0.2)],
-    3: [(PROP_REBOTE, 0)],
-    4: [(PROP_REBOTE, 0.2)],
-    5: [(PROP_DUELE, 0.3), (PROP_DUELE, 0.5)],
-    6: [(PROP_REBOTE, 0.2)],
-    7: [(PROP_REBOTE, 0)],
-    8: [(PROP_REBOTE, 0.2)],
-    9: [(PROP_POWER, 0.5)],
-    #
-    10: [(PROP_REBOTE, 0.8)],
-    11: [(PROP_REBOTE, 1)],
-    12: [(PROP_REBOTE, 0.8)],
-    13: [(PROP_REBOTE, 1)],
-    14: [(PROP_REBOTE, 0.8)],
-    15: [(PROP_REBOTE, 0.5)],
-    16: [(PROP_REBOTE, 0.8)],
-    17: [(PROP_REBOTE, 1)],
-    18: [(PROP_REBOTE, 0.8)],
-    19: [(PROP_REBOTE, 1)],
-    20: [(PROP_REBOTE, 0.2)],
-    21: [(PROP_REBOTE, 0)],
-    22: [(PROP_REBOTE, 0.2)],
-    23: [(PROP_REBOTE, 0)],
-    24: [(PROP_REBOTE, 0.2)],
-    25: [(PROP_REBOTE, 0.5)],
-    26: [(PROP_REBOTE, 0.2)],
-    27: [(PROP_REBOTE, 0)],
-    28: [(PROP_REBOTE, 0.2)],
-    29: [(PROP_REBOTE, 0), (PROP_POWER, 0.5)],
-    30: [(PROP_REBOTE, 0.2)],
-
-    32: [(PROP_REBOTE, 0)],
-    33: [(PROP_REBOTE, 0.2)],
-    34: [(PROP_REBOTE, 0.4)],
-    35: [(PROP_REBOTE, 0.6)],
-    36: [(PROP_DUELE, 0.8)],
-    37: [(PROP_REBOTE, 1)],
-}
-
-TILES = {
-    0: "damero",
-    5: "pasto",
-    10: "damero",
-    15: "pasto",
-    20: "damero",
-    25: "pasto",
-    30: "damero",
-    35: "pasto",
-    WIN_ROW: "damero",
-}
-
+DEBUG_VELOCIDAD = False #or True
 
 def make_me_a_planet(strip):
     planet = Sprite()
@@ -129,16 +83,6 @@ def make_me_a_planet(strip):
     planet.set_y(255)
     planet.set_frame(0)
     return planet
-
-
-def get_tile(tile_y):
-    prev_y = 0
-    for y in sorted(TILES):
-        if y <= tile_y:
-            prev_y = y
-        else:
-            break
-    return TILES[prev_y]
 
 
 def get_damero_strip(tile, _tile_x, tile_y):
@@ -162,15 +106,33 @@ def get_tunel_x_proporcional(sprite, x_prop, width=None):
 def get_tunel_y(_sprite, tile_y):
     return (tile_y + 1) * TILE_HEIGHT
 
-class Nivel01(Scene):
+class TinchoLevel(Scene):
     stripes_rom = "tincho_vrunner"
 
+    siguiente = None
+    patrás = False
+    row_inicial = 0
+    win_row = -1
+    tiempo_límite = 30
+    tiles_info = {}
+    props_info = {}
+
     def on_enter(self):
-        super(Nivel01, self).on_enter()
+        super(TinchoLevel, self).on_enter()
 
         self.cur_frame = 0
-        self.cur_tile_y = 0
+        self.cur_tile_y = self.row_inicial
         self.y_acc = 0
+
+        self.hud_tiempo = []
+        for i in range(2):
+            s = Sprite()
+            s.set_strip(stripes["numeritos.png"])
+            s.set_x(128 - i * (s.width() + 2))
+            s.set_y(0)
+            s.set_frame(0)
+            s.set_perspective(HUD_MODE)
+            self.hud_tiempo.append(s)
 
         self.player = Sprite()
         self.player.set_strip(stripes["tincho_palante.png"])
@@ -192,7 +154,6 @@ class Nivel01(Scene):
         #     tile.set_frame(0)
         #     tile.set_perspective(HUD_MODE)
 
-        # TODO una lista de props
         self.props = []
         for i in range(PROP_SPRITES_LEN):
             prop = Sprite()
@@ -204,56 +165,71 @@ class Nivel01(Scene):
 
         self.poner_props_en_current_cacho_de_tunel()
 
-        self.tiles_suelo = {}
+        self.tiles_suelo = []
         for tile_x in range(DAMERO_COLS):
             for tile_y in range(DAMERO_ROWS):
                 tile = Sprite()
                 tile.set_perspective(TUNNEL_MODE)
-                self.tiles_suelo[(tile_x, tile_y)] = tile
+                self.tiles_suelo.append(tile)
                 tile.set_x(get_tunel_x(tile, tile_x, width=32) + (0 if DEBUG_SIN_DESFAZAJE else DESFAZAJES[tile_y % len(DESFAZAJES)-1]*2))
                 tile.set_y(get_tunel_y(tile, tile_y))
-                t = get_tile(tile_y)
-                tile.set_strip(get_damero_strip(t, tile_x, tile_y))
-                tile.set_frame(get_damero_frame(t, tile_x, tile_y))
+                t = self.get_tile(self.row_inicial + tile_y)
+                tile.set_strip(get_damero_strip(t, tile_x, self.row_inicial + tile_y))
+                tile.set_frame(get_damero_frame(t, tile_x, self.row_inicial + tile_y))
                 tile.tile_x = tile_x
-                tile.tile_y = tile_y
+                tile.tile_y = self.row_inicial + tile_y
 
         make_me_a_planet("negro.png")
 
-        self.run_vel = 1/4
-        self.run_dir = 1
+        self.run_vel = 0 if DEBUG_VELOCIDAD else (VELOCIDADES[-1] if self.patrás else 1/4)
+        self.run_dir = -1 if self.patrás else 1
+        self.actualizar_strip_player()
+
         self.run_acc = 0
         self.con_power = False
 
         self.duration = 1000
-        self.call_later(self.duration, self.acelerar)
+        if not DEBUG_VELOCIDAD:
+            if self.patrás:
+                self.call_later(self.duration, self.ir_patrás)
+            else:
+                self.call_later(self.duration, self.acelerar)
+
         self.ganaste = False
+        self.tiempo_que_falta = self.tiempo_límite
+        self.tirame_las_agujas()
+        self.call_later(1000, self.reducir_un_segundo)
 
     def step(self):
         self.cur_frame = (self.cur_frame + 1) % 256
 
-        self.update_player_frame()
+        dy = 0
 
-        if abs(self.run_vel) >= 1:
-            self.y_acc += self.run_vel
-            self.animar_paisaje(self.run_vel)
+        if self.run_vel >= 1:
+            dy = self.run_vel * self.run_dir
+            self.y_acc += dy
         else:
-            self.run_acc += self.run_vel
+            self.run_acc += self.run_vel * self.run_dir
             entero = int(self.run_acc)
             if entero:
-                self.y_acc += entero
-                self.animar_paisaje(entero)
+                dy = entero
+                self.y_acc += dy
                 self.run_acc = 0
 
-        if abs(self.y_acc) > TILE_HEIGHT:
-            dir = 1 if self.run_vel > 0 else -1
+        cambió_tile = False
+        if abs(self.y_acc) >= TILE_HEIGHT:
             self.y_acc = 0
-            self.cur_tile_y += 1 * dir
-            self.poner_props_en_current_cacho_de_tunel()
-            if not self.ganaste and self.cur_tile_y >= WIN_ROW:
-                print("GANASTE")
-                self.ganaste = True
-                self.camara_lenta()
+            self.cur_tile_y += self.run_dir
+            cambió_tile = True
+
+        self.actualizar_frame_player()
+
+        self.animar_paisaje(dy)
+
+        if cambió_tile:
+            self.poner_props_en_current_cacho_de_tunel(dy)
+            if not self.ganaste and (not self.patrás and self.cur_tile_y >= self.win_row) or (self.patrás and self.cur_tile_y <= self.win_row):
+                self.pasó_la_meta()
 
         if director.was_pressed(director.BUTTON_D): # or director.timedout:
             self.finished()
@@ -262,62 +238,88 @@ class Nivel01(Scene):
             return
 
         x_axis = director.is_pressed(director.JOY_LEFT) - director.is_pressed(director.JOY_RIGHT)
-        if x_axis and not self.cur_frame % PLAYER_HORIZONTAL_DELAY[abs(self.run_vel)]:
-            new_x = self.player_x + x_axis * PLAYER_HORIZONTAL_VEL[abs(self.run_vel)]
+        if x_axis and not self.cur_frame % PLAYER_HORIZONTAL_DELAY[self.run_vel]:
+            new_x = self.player_x + x_axis * PLAYER_HORIZONTAL_VEL[self.run_vel]
             self.player_x = max(min(new_x, MIN_PLAYER_X), MAX_PLAYER_X)
             self.player.set_x(self.player_x)
 
         if self.run_dir > 0:
             self.probar_colisiones()
 
-        # if director.was_pressed(director.BUTTON_A):
-        #     self.powerup()
-
+        if DEBUG_VELOCIDAD:
+            if director.was_pressed(director.BUTTON_A):
+                # self.powerup()
+                self.run_vel = 0
+            if director.was_pressed(director.JOY_LEFT):
+                self.run_dir = -1
+                self.run_vel = 1/4
+            if director.was_pressed(director.JOY_RIGHT):
+                self.run_dir = 1
+                self.run_vel = 1/4
+            if director.was_pressed(director.JOY_DOWN):
+                self.run_dir = -1
+                self.run_vel = 2
+            if director.was_pressed(director.JOY_UP):
+                self.run_dir = 1
+                self.run_vel = 2
 
     def finished(self):
         director.pop()
         raise StopIteration()
 
-    def update_player_frame(self):
+    def get_tile(self, tile_y):
+        prev_y = 0
+        for y in sorted(self.tiles_info):
+            if y <= tile_y:
+                prev_y = y
+            else:
+                break
+        return self.tiles_info[prev_y]
+
+    def actualizar_strip_player(self):
+        s = "tincho_palante.png" if self.run_dir > 0 else "tincho_patras.png"
+        self.player.set_strip(stripes[s])
+
+    def actualizar_frame_player(self):
         if self.player_no_me_duele:
             if self.cur_frame % 2:
                 self.player.disable()
                 return
-        if abs(self.run_vel) == VELOCIDAD_POWERUP:
+        if self.run_vel == VELOCIDAD_POWERUP:
             self.player.set_frame(((self.cur_frame // 4) % 2) + 4)
-        elif abs(self.run_vel) == VELOCIDADES[-1]:
+        elif self.run_vel >= 1/2:
             self.player.set_frame((self.cur_frame // 4) % 4)
-        elif abs(self.run_vel) >= 1:
+        elif self.run_vel >= 1/4:
             self.player.set_frame((self.cur_frame // 8) % 4)
         else:
             self.player.set_frame((self.cur_frame // 16) % 4)
 
     def animar_paisaje(self, dy):
-        for tile in self.tiles_suelo.values():
+        for tile in self.tiles_suelo:
             y = tile.y() - dy
             pega_la_vuelta = False
             if y > ROWS_HEIGHT:
                 tile.set_y(y - ROWS_HEIGHT)
-                tile.tile_y = self.cur_tile_y
+                tile.tile_y = self.cur_tile_y - 1
                 pega_la_vuelta = True
             elif y < 0:
                 tile.set_y(ROWS_HEIGHT + y)
-                tile.tile_y = self.cur_tile_y + DAMERO_ROWS
+                tile.tile_y = self.cur_tile_y + DAMERO_ROWS - 1
                 pega_la_vuelta = True
             else:
                 tile.set_y(y)
-            if pega_la_vuelta:
-                t = get_tile(tile.tile_y)
-                tile.set_strip(get_damero_strip(t, tile.tile_x, tile.tile_y))
-                tile.set_frame(get_damero_frame(t, tile.tile_x, tile.tile_y))
+                if pega_la_vuelta:
+                    t = self.get_tile(tile.tile_y)
+                    tile.set_strip(get_damero_strip(t, tile.tile_x, tile.tile_y))
+                    tile.set_frame(get_damero_frame(t, tile.tile_x, tile.tile_y))
 
         for prop in self.props:
             prop.set_y(prop.y() - dy)
 
-    def poner_props_en_current_cacho_de_tunel(self):
+    def poner_props_en_current_cacho_de_tunel(self, dy=0):
         props_pa_poner = {}
-        for k, v in PROPS.items():
-            if k >= self.cur_tile_y and k < self.cur_tile_y + DAMERO_ROWS:
+        for k, v in self.props_info.items():
+            if k >= self.cur_tile_y-1 and k < self.cur_tile_y + DAMERO_ROWS:
                 props_pa_poner[k] = v
 
         prop_idx = 0
@@ -326,7 +328,7 @@ class Nivel01(Scene):
                 prop = self.props[prop_idx]
                 prop.tile_y = tile_y
                 prop.set_x(get_tunel_x_proporcional(prop, x_prop))
-                prop.set_y(get_tunel_y(prop, tile_y - self.cur_tile_y))
+                prop.set_y(get_tunel_y(prop, tile_y - self.cur_tile_y) - dy)
                 prop.set_frame(tipo_prop)
                 prop_idx += 1
 
@@ -358,40 +360,34 @@ class Nivel01(Scene):
 
     def powerup(self):
         self.con_power = True
-        self.run_vel = VELOCIDAD_POWERUP * self.run_dir
-        self.call_later(self.duration, self.fin_powerup)
+        self.run_vel = VELOCIDAD_POWERUP
+        self.call_later(DURACIONES[self.run_vel], self.fin_powerup)
 
     def fin_powerup(self):
         self.con_power = False
-        self.run_vel = VELOCIDADES[len(VELOCIDADES)-1] * self.run_dir
+        self.run_vel = VELOCIDADES[len(VELOCIDADES)-1]
 
     def acelerar(self):
+        # return
         if self.ganaste:
             return
         if self.con_power:
             self.call_later(self.duration, self.acelerar)
             return
 
-        cur_index = VELOCIDADES.index(abs(self.run_vel))
+        cur_index = VELOCIDADES.index(self.run_vel)
         if cur_index == len(VELOCIDADES)-1:
             return
 
         new_index = cur_index + 1
-        self.run_vel = VELOCIDADES[max(min(new_index, len(VELOCIDADES)-1), 0)] * self.run_dir
-        s = "tincho_palante.png" if self.run_vel > 0 else "tincho_patras.png"
-        self.player.set_strip(stripes[s])
+        self.run_vel = VELOCIDADES[max(min(new_index, len(VELOCIDADES)-1), 0)]
         self.call_later(self.duration, self.acelerar)
-
-    def camara_lenta(self):
-        self.run_dir = 1
-        self.run_vel = 1/16
 
     def ir_patrás_un_rato(self):
         self.run_dir *= -1
-        self.run_vel = self.run_vel * self.run_dir
-        s = "tincho_palante.png" if self.run_vel > 0 else "tincho_patras.png"
-        self.player.set_strip(stripes[s])
-        self.call_later(self.duration // 4, self.desacelerar)
+        self.run_vel = self.run_vel
+        self.actualizar_strip_player()
+        self.call_later(self.duration // 4, self.ir_patrás)
 
     def set_vulnerable(self):
         self.player_no_me_duele = False
@@ -405,25 +401,57 @@ class Nivel01(Scene):
     def fin_patrás(self):
         self.run_dir = 1
         self.run_vel = 1/4
-        s = "tincho_palante.png" if self.run_vel > 0 else "tincho_patras.png"
-        self.player.set_strip(stripes[s])
+        self.player.set_strip(stripes["tincho_palante.png"])
         self.call_later(self.duration // 4, self.acelerar)
 
-    def desacelerar(self):
+    def ir_patrás(self):
         if self.ganaste:
             return
         if self.con_power:
-            self.call_later(self.duration // 4, self.desacelerar)
+            self.call_later(self.duration // 4, self.ir_patrás)
             return
 
-        cur_index = VELOCIDADES.index(abs(self.run_vel))
+        cur_index = VELOCIDADES.index(self.run_vel)
         if cur_index == 0:
             self.fin_patrás()
             return
 
         new_index = cur_index - 1
-        self.run_vel = VELOCIDADES[max(min(new_index, len(VELOCIDADES)-1), 0)] * self.run_dir
-        s = "tincho_palante.png" if self.run_vel > 0 else "tincho_patras.png"
-        self.player.set_strip(stripes[s])
+        self.run_vel = VELOCIDADES[max(min(new_index, len(VELOCIDADES)-1), 0)]
+        self.actualizar_strip_player()
+        self.call_later(DURACIONES[self.run_vel], self.ir_patrás)
 
-        self.call_later(self.duration // 4, self.desacelerar)
+    def pasó_la_meta(self):
+        self.ganaste = True
+        self.run_dir = 1
+        self.run_vel = 1/16
+        self.call_later(self.duration * 5, self.vamos_al_siguiente)
+
+    def vamos_al_siguiente(self):
+        director.pop()
+        director.push(self.siguiente())
+        raise StopIteration()
+
+    def reducir_un_segundo(self):
+        if self.ganaste:
+            return
+        self.tiempo_que_falta -= 1
+        if self.tiempo_que_falta <= 0:
+            print("ALPISTE")
+            director.pop()
+            director.push(self.__class__())
+            raise StopIteration()
+
+        self.tirame_las_agujas()
+
+        self.call_later(1000, self.reducir_un_segundo)
+
+    def tirame_las_agujas(self):
+        i = 0
+        t = self.tiempo_que_falta
+        while t > 0:
+            self.hud_tiempo[i].set_frame(t % 10)
+            t = t // 10
+            i += 1
+        if i == 1:
+            self.hud_tiempo[1].set_frame(0)

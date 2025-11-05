@@ -12,6 +12,7 @@ stripes = [
         strip("props.png", frames=3),
 
         # fondos, parches, etc:
+        strip("numeritos.png", frames=10),
         strip("centro.png", frames=1),
         fullscreen("negro.png"),
         fullscreen("tincho_pescando.png"),
