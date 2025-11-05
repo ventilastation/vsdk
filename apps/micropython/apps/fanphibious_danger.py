@@ -1,4 +1,5 @@
 from urandom import choice, randrange, seed
+import utime
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
@@ -10,7 +11,7 @@ MAX_SCALED_COORD = SCALE_FACTOR * MAX_COORD
 
 # Frog states
 ON_GROUND = 0
-ON_RING = 1
+ON_FLOATING_OBJECT = 1
 JUMPING = 2
 ON_GOAL = 4
 ON_WATER = 8
@@ -25,6 +26,33 @@ MAX_JUMPING_FRAME = 10
 # Distance between rings
 RINGS_DISTANCE = 20
 
+class ScoreBoard:
+    def __init__(self):
+        self.chars = []
+        for n in range(9):
+            s = Sprite()
+            s.set_strip(stripes["numerals.png"])
+            s.set_x(110 + n * 4)
+            s.set_y(0)
+            s.set_frame(10)
+            s.set_perspective(2)
+            self.chars.append(s)
+
+        #self.setscore(0)
+        #self.setlives(3)
+
+    def setscore(self, value):
+        for n, l in enumerate("%04d" % value):
+            v = ord(l) - 0x30
+            self.chars[n].set_frame(v)
+
+    def setlives(self, lives):
+        for n in range(6, 9):
+            if lives > n-6:
+                self.chars[n].set_frame(11)
+            else:
+                self.chars[n].set_frame(10)
+
 class Ring:
     
     def __init__(self, y=0, speed=0):
@@ -37,7 +65,7 @@ class Ring:
         self.object_stack.append(floating_object)
         floating_object.sprite.set_y(self.y)
         if x is not None:
-            floating_object.sprite.set_x(x)
+            floating_object.sprite.set_scaled_x(x * SCALE_FACTOR)
 
     def step(self):
         
@@ -74,11 +102,9 @@ class MySprite(Sprite):
         if new_y != self.y():
             self.set_y(new_y)
 
-    #@property
     def scaled_x(self):
         return self._scaled_x
     
-    #@property
     def scaled_y(self):
         return self._scaled_y
 
@@ -89,8 +115,15 @@ class Frog(MySprite):
         super().__init__()
         self.scene = scene
         self.set_strip(stripes["frog16d.png"])
+        self.reset()
+
+    def step(self):
+        self.set_scaled_x(self._scaled_x + self.speed)
+
+    def reset(self):
         self.set_frame(0)
         self.state = ON_GROUND
+        print ("Frog is ON GROUND.")
         
         self.speed = 0
         self.orientation = DIR_FORWARD
@@ -98,18 +131,26 @@ class Frog(MySprite):
         self.jumping_speed = RINGS_DISTANCE // MAX_JUMPING_FRAME * SCALE_FACTOR
         self.ring = 0
         self.next_ring = 1
+        self.floating_sprite = None
 
-    def step(self):
-        self.set_scaled_x(self._scaled_x + self.speed)
+        self.set_scaled_x(-8 * SCALE_FACTOR)
+        self.set_scaled_y(16 * SCALE_FACTOR)
 
-        
 class Trunk(MySprite):
     def __init__(self, scene):
         super().__init__()
         self.scene = scene
         self.set_strip(stripes["trunk32.png"])
         self.set_frame(0)
-        
+
+class Splash(MySprite):
+
+    def __init__(self, scene):
+        super().__init__()
+        self.scene = scene
+        self.set_strip(stripes["splash.png"])
+        self.set_frame(0)
+        self.disable()
 
 class Enemy(Sprite):
     pass
@@ -126,43 +167,60 @@ class FanphibiousDanger(Scene):
 
     def on_enter(self):
         super(FanphibiousDanger, self).on_enter()
+        
+        seed(int(utime.time()))
+        
         self.frame_count = 0
 
-        # Create Frog sprite
+        self.level = 1
+        self.score = 0
+        self.lives = 3
+
+        # Create score
+        self.scoreboard = ScoreBoard()
+        self.scoreboard.setlives(self.lives)
+        self.scoreboard.setscore(self.score)
+
         self.frog = Frog(self)
-        self.frog.set_scaled_x(-16*SCALE_FACTOR)
-        self.frog.set_scaled_y(16*SCALE_FACTOR)
+        
 
         # Create floating objects' sprites
         # TODO: programmatically generate more than one object per ring
         self.trunks = [Trunk(self) for i in range(6)]
         
+        self.splash = Splash(self)
+
+
         # Create background sprite ("swamp")
         self.swamp = Swamp(self)
 
+
         # Random ring's speeds
         # minimum = 0, maximum = 2 pixels per frame (512 / 256)
-        rings_speed = [randrange(-256, 256, 16) for i in range(3)]
+        rings_speed = [randrange(self.level * 100//2, self.level * 100, 20)*choice([-1, 1]) for i in range(3)]
 
         # Create "rings" to contain floating objects
-        self.rings = [Ring(y=36+i*RINGS_DISTANCE, 
-                           speed=rings_speed[i]) for i in range(3)]
+        self.rings = [Ring(y=36+i*RINGS_DISTANCE, speed=rings_speed[i]) for i in range(3)]
         
         # Put one floating object in each ring
         # TODO: put more than one object per ring
         for i in range(3):
             # Put a "trunk"
-            floating_object = FloatingObject(x=randrange(16, 112, 16),
-                                             sprite=self.trunks[2*i])
+            floating_object = FloatingObject(x=randrange(16, 112, 16), sprite=self.trunks[2*i])
             self.rings[i].insert(floating_object)
-            floating_object = FloatingObject(x=randrange(144, 240, 16),
-                                             sprite=self.trunks[2*i + 1])
+            floating_object = FloatingObject(x=randrange(144, 240, 16), sprite=self.trunks[2*i + 1])
             self.rings[i].insert(floating_object)
-            """ floating_object = FloatingObject(x=randrange(165, 235, 10),
-                                             sprite=self.trunks[3*i + 2])
-            self.rings[i].insert(floating_object) """
-            
+        
+        self.start_music()
 
+        self.time_count = utime.time()
+
+    
+    def start_music(self):
+        director.music_play("fanphibious_danger/music")
+        print("Starting MUSIC.")
+
+          
     def step(self):
         
         self.frame_count += 1
@@ -177,18 +235,22 @@ class FanphibiousDanger(Scene):
 
         # Joystick controls frog's MOVEMENT and ORIENTATION
         if director.is_pressed(director.JOY_LEFT):
-            if self.frog.state == ON_GROUND:
+            if self.frog.state == ON_GROUND or self.frog.state == ON_GOAL:
                 self.frog.set_scaled_x(self.frog.scaled_x() + SCALE_FACTOR)
                 print("Moving LEFT on GROUND.")
-            else:
-                print("Moving LEFT on FLOATING OBJECT.")
+            elif self.frog.state == ON_FLOATING_OBJECT:
+                if self.frog.scaled_x() + (self.frog.width() + 1) * SCALE_FACTOR < self.frog.floating_sprite.scaled_x() + self.frog.floating_sprite.width() * SCALE_FACTOR:
+                    self.frog.set_scaled_x(self.frog.scaled_x() + SCALE_FACTOR)
+                    print("Moving LEFT on FLOATING OBJECT.")
 
         if director.is_pressed(director.JOY_RIGHT):
-            if self.frog.state == ON_GROUND:
+            if self.frog.state == ON_GROUND or self.frog.state == ON_GOAL:
                 self.frog.set_scaled_x(self.frog.scaled_x() - SCALE_FACTOR)
                 print("Moving RIGHT on GROUND.")
-            else:
-                print("Moving RIGHT on FLOATING OBJECT.")
+            elif self.frog.state == ON_FLOATING_OBJECT:
+                if self.frog.scaled_x() - SCALE_FACTOR > self.frog.floating_sprite.scaled_x():
+                    self.frog.set_scaled_x(self.frog.scaled_x() - SCALE_FACTOR)
+                    print("Moving RIGHT on FLOATING OBJECT.")
 
         if director.is_pressed(director.JOY_UP):
             self.frog.orientation = DIR_FORWARD
@@ -217,41 +279,56 @@ class FanphibiousDanger(Scene):
             
             # Check if frog landed
             if self.frog.jumping_frame == MAX_JUMPING_FRAME:
-                self.frog.jumping_frame = 0
-                self.frog.set_frame(self.frog.frame()-1)
-                # Decide where the frog has landed
-                if self.frog.next_ring == 0:
-                    self.frog.state = ON_GROUND
-                    print("Frog landed ON GROUND.")
-                elif self.frog.next_ring == 4:
-                    self.frog.state = ON_GOAL
-                    print("Frog landed ON GOAL.")
-                else:
-                    self.frog.state = ON_RING
-                    print("Frog landed ON RING.")
-
                 self.frog.ring = self.frog.next_ring
 
-                if self.frog.state == ON_GROUND or self.frog.state == ON_GOAL:
+                self.frog.jumping_frame = 0
+                self.frog.set_frame(self.frog.frame() - 1)
+                
+                # Decide where the frog has landed
+                if self.frog.ring == 0:
+                    self.frog.state = ON_GROUND
                     self.frog.speed = 0
+                    print("Frog landed ON GROUND.")
+                elif self.frog.ring == 4:
+                    self.frog.state = ON_GOAL
+                    self.score += 1000
+                    self.scoreboard.setscore(self.score)
+                    self.frog.speed = 0
+                    self.level += 1
+                    self.call_later(250, self.frog.reset)
+                    for ring in self.rings:
+                        ring.speed = randrange(self.level*100//2, self.level*100, 20) * choice([-1, 1])
+                    print("Frog landed ON GOAL.")
                 else:
                     # Check if frog landed on a floating object or water
                     dummy_state = ON_WATER
                     
                     for floating_object in self.rings[self.frog.ring - 1].object_stack:
-                        if self.frog.collision((floating_object.sprite,)) is not None:
-                            dummy_state = ON_RING
+                        floating_sprite = self.frog.collision((floating_object.sprite,))
+                        if floating_sprite is not None:
+                            dummy_state = ON_FLOATING_OBJECT
+                            self.frog.floating_sprite = floating_sprite
                             break
 
                     self.frog.state = dummy_state
+                    self.frog.floating_sprite = floating_sprite
 
                     if dummy_state == ON_WATER:
-                        print("Frog is ON WATER.")
+                        print("Frog landed ON WATER.")
                         self.frog.speed = 0
+                        self.lives -= 1
+                        self.scoreboard.setlives(self.lives)
+                        self.frog.disable()
+                        self.splash.set_scaled_x(self.frog.scaled_x())
+                        self.splash.set_scaled_y(self.frog.scaled_y())
+                        self.splash.set_frame(0)
+                        self.call_later(250, self.frog.reset)
+                        self.call_later(500, self.splash.disable)
                     else:
                         self.frog.speed = self.rings[self.frog.ring - 1].speed
-                        print("Frog is ON FLOATING OBJECT.")
-
+                        print("Frog landed ON FLOATING OBJECT.")
+                        self.score += 2
+                        self.scoreboard.setscore(self.score)
 
             else:
                 # Animate frog while jumping
@@ -265,6 +342,14 @@ class FanphibiousDanger(Scene):
         # Animate things on rings (except frog)
         for ring in self.rings:
             ring.step()
+
+        if (utime.time() - self.time_count) > 11:
+            self.start_music()
+            self.time_count = utime.time()
+            
+        if self.lives == 0:
+            self.finished()
+        
         
 
     def finished(self):
