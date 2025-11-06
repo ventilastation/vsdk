@@ -280,12 +280,12 @@ class Vissile(Scene):
 
         self.nuke = Nuke()
 
-        tierra = Sprite()
-        tierra.set_strip(stripes["tierra.png"])
-        tierra.set_x(192)
-        tierra.set_y(0)
-        tierra.set_frame(0)
-        tierra.set_perspective(2)
+        # tierra = Sprite()
+        # tierra.set_strip(stripes["tierra.png"])
+        # tierra.set_x(192)
+        # tierra.set_y(0)
+        # tierra.set_frame(0)
+        # tierra.set_perspective(2)
 
         cielo = Sprite()
         cielo.set_strip(stripes["cielo.png"])
@@ -293,6 +293,13 @@ class Vissile(Scene):
         cielo.set_y(0)
         cielo.set_frame(0)
         cielo.set_perspective(2)
+
+        marte = Sprite()
+        marte.set_strip(stripes["marte.png"])
+        marte.set_x(0)
+        marte.set_y(0)
+        marte.set_perspective(0)
+        marte.set_frame(0)
 
 
     def step(self):
