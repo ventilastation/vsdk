@@ -61,7 +61,7 @@ class Misil:
     def mover(self):
         self.y_actual = self.sprite.y()
         self.movement_delay = self.movement_delay + 1
-        step = randrange(4,6)
+        step = randrange(3,6)
         if self.movement_delay % step == 0:
             self.sprite.set_y(self.y_actual + 1)
 
@@ -248,6 +248,8 @@ class Vissile(Scene):
         # self.lives = STARTING_LIVES
         self.sc = ScoreVidas(0, STARTING_LIVES)
         
+        director.music_play(b"vissile/play1")
+
         self.state = "start"
         
         self.mira = Mira()
@@ -456,9 +458,9 @@ class Vissile(Scene):
                 self.state = "playing"
                 return
 
-        # # Salir
-        # if director.was_pressed(director.BUTTON_D):
-        #     self.finished()
+        # Salir
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
 
     def finished(self):
         director.pop()
