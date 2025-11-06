@@ -16,8 +16,11 @@ from ventilastation.sprites import Sprite
 
 NUM_BARRAS = 9
 
+class MySprite(Sprite):
+    pass
+
 def gen_sprite(name, x=0):
-    s = Sprite()
+    s = MySprite()
     s.set_strip(stripes[name])
     s.set_frame(0)
     s.og_x = x
