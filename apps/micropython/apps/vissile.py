@@ -287,6 +287,13 @@ class Vissile(Scene):
         # tierra.set_frame(0)
         # tierra.set_perspective(2)
 
+        domo = Sprite()
+        domo.set_strip(stripes["domo.png"])
+        domo.set_x(0)
+        domo.set_y(255)
+        domo.set_perspective(0)
+        domo.set_frame(0)
+
         marte = Sprite()
         marte.set_strip(stripes["marte.png"])
         marte.set_x(0)
@@ -300,6 +307,8 @@ class Vissile(Scene):
         cielo.set_y(0)
         cielo.set_frame(0)
         cielo.set_perspective(2)
+
+
 
 
     def step(self):
