@@ -456,6 +456,9 @@ class Combat(Scene):
     def on_enter(self):
         super().on_enter()
 
+        director.sound_play(SND_NEW_LEVEL)
+
+
         self.tally=False#True
         self.tally_tmr=0
 
@@ -650,13 +653,24 @@ class Combat(Scene):
             if not city_moved:
                 if self.tally_tmr == 0:
                     director.sound_play(SND_TALLY_END)
-                self.tally_tmr += 1
 
-                self.core.set_y(min(self.core.y()+3,255))
+                ti0 = int(self.tally_tmr * 3)
+                self.tally_tmr += 1
+                ti1 = int(self.tally_tmr * 3)
+
+                self.core.set_y(min(164+int((255-164)*self.tally_tmr/(3*STEPS_PER_SECOND)),255))
+
+                if ti0 != ti1:
+                    pal_i=self.pal_ind_blue
+                    pal=self.pal_copy
+                    if pal_i:
+                        pal[pal_i+1]=randint(0,128)+68
+                        pal[pal_i+2]=randint(0,128)+68
+                        pal[pal_i+3]=randint(0,128)+68
+                        povdisplay.set_palettes(pal)
 
                 if self.tally_tmr >= 2.954*STEPS_PER_SECOND:
                     self.game.level += 1
-                    director.sound_play(SND_NEW_LEVEL)
                     director.pop()
 
 
@@ -687,9 +701,9 @@ class Combat(Scene):
         pal_i=self.pal_ind_boom
         pal=self.pal_copy
         if pal_i:
-            pal[pal_i+1]=randint(0,255)|0x80
-            pal[pal_i+2]=randint(0,255)|0x80
-            pal[pal_i+3]=randint(0,255)|0x80
+            pal[pal_i+1]=randint(0,128)+68#|0x80 # FIXME  157 ya se ve gris, 196 blanco favalli
+            pal[pal_i+2]=randint(0,128)+68#|0x80
+            pal[pal_i+3]=randint(0,128)+68#|0x80
             povdisplay.set_palettes(pal)
 
         # povdisplay.set_palettes(palette)

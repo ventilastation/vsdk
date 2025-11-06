@@ -6,7 +6,7 @@ from ventilastation.sprites import Sprite
 
 from math import sqrt, atan2, floor, copysign
 
-GUSANOS=20
+GUSANOS=15
 # !"#$%&'()*+,-./0123456789:;>=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
 class Demo2bam(Scene):
     stripes_rom = "2bam_demo"
@@ -18,8 +18,8 @@ class Demo2bam(Scene):
         seed(ticks_ms())
 
         self.bicho=Sprite()
-        self.label=Label(14,x=48,y=0)
-        self.gusanos=[Gusano(randint(0,255), 10+12*i//GUSANOS, randint(0,1)*180) for i in range(GUSANOS)]
+        self.label=Label(14,x=48,y=4)
+        self.gusanos=[Gusano(randint(-10,10)+255*i//GUSANOS, 5+12*i//GUSANOS, randint(0,1)*180) for i in range(GUSANOS)]
         self.pupila = Sprite()
         self.ojo = Sprite()
 
@@ -139,13 +139,14 @@ class Gusano:
         self.sprite.set_strip(stripes["gusano360.png"])
         self.sprite.set_perspective(1)
         
+        self.vx=-1 if angle<180 else 1
         self.x=x
         self.frame = 0
         self.angle=angle
         self.step()
 
     def step(self):
-        self.x+=randint(-1,1)*randint(1,4)
+        self.x+=self.vx*randint(1,3)
         self.sprite.set_x(int(self.x))
         self.frame=(self.frame+1)%4
         self.sprite.set_frame(self.frame+6*(self.angle//90))
