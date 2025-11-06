@@ -19,7 +19,7 @@ class Demo2bam(Scene):
 
         self.bicho=Sprite()
         self.label=Label(14,x=48,y=0)
-        self.gusanos=[Gusano(randint(0,255), 14+(60-14)*i//GUSANOS, randint(0,2)*90) for i in range(GUSANOS)]
+        self.gusanos=[Gusano(randint(0,255), 10+12*i//GUSANOS, randint(0,1)*180) for i in range(GUSANOS)]
         self.pupila = Sprite()
         self.ojo = Sprite()
 
@@ -94,7 +94,7 @@ class Demo2bam(Scene):
         hw=self.bicho.width()//2
         a=round(-hw+128+128*atan2(y,x)/3.1415)
 
-        self.bicho.set_frame(27-floor(28*a/255))
+        self.bicho.set_frame((27-floor(28*a/255)+26)%28)
         self.bicho.set_x(a)
         self.bicho.set_y(l)
         # print('al', a, l)
