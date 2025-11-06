@@ -363,6 +363,7 @@ class Vissile(Scene):
                             if self.sc.vidas == 0:
                                 director.sound_play(b"vissile/fin")
                                 self.nuke.reset()
+                                self.end_counter = 0
                                 self.state = "lose"
                                 break
                                 # Fin
@@ -421,10 +422,8 @@ class Vissile(Scene):
 
 
         if self.state == "lose":
-
             self.nuke.animar()
             self.failed.set_frame(0)
-            self.pushtostart.set_frame(0)
             self.mira.desactivar()
 
             if len(self.misiles_activos) > 0:
@@ -445,18 +444,23 @@ class Vissile(Scene):
                     self.cascotes_activos.remove(c)
                     self.cascotes_reserva.append(c)
 
-            self.mira.desactivar()
+            if self.end_counter > 90:
 
-            if director.was_pressed(director.BUTTON_A):
-                self.failed.disable()
-                self.pushtostart.disable()
-                self.nuke.desactivar()
-                self.mira.reiniciar()
-                self.sc.score = 0
-                self.sc.vidas = STARTING_LIVES
-                self.sc.actualizar()
-                self.state = "playing"
-                return
+                self.pushtostart.set_frame(0)
+                
+                if director.was_pressed(director.BUTTON_A):
+                    self.end_counter = 0
+                    self.failed.disable()
+                    self.pushtostart.disable()
+                    self.nuke.desactivar()
+                    self.mira.reiniciar()
+                    self.sc.score = 0
+                    self.sc.vidas = STARTING_LIVES
+                    self.sc.actualizar()
+                    self.state = "playing"
+                    return
+            else:
+                self.end_counter = self.end_counter + 1
 
         # Salir
         if director.was_pressed(director.BUTTON_D):
