@@ -12,5 +12,6 @@ stripes = [
         strip("numerals.png", frames=12),
         fullscreen("marte.png"),
         fullscreen("domo.png", radius=6),
+        fullscreen("craters.png", radius=45),
     ),
 ]
