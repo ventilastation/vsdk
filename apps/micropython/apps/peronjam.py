@@ -208,6 +208,7 @@ class PeronJam(Scene):
 
     def finished(self):
         director.pop()        
+        director.music_off()
         raise StopIteration()
 
 
