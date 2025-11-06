@@ -393,6 +393,7 @@ class TinchoLevel(Scene):
         self.con_power = True
         self.run_vel = VELOCIDAD_POWERUP
         self.fondo_amarillo.set_frame(0)
+        director.sound_play("tincho_vrunner/powerup%d" % randrange(3))
         self.call_later(DURACIONES[self.run_vel], self.fin_powerup)
 
     def fin_powerup(self):
@@ -420,7 +421,8 @@ class TinchoLevel(Scene):
         self.call_later(self.duration, self.acelerar)
 
     def ir_patrás_un_rato(self):
-        self.run_dir *= -1
+        director.sound_play("tincho_vrunner/rebota%d" % randrange(3))
+        self.run_dir = -1
         self.run_vel = VELOCIDAD_POWERUP if self.con_power else VELOCIDADES[-1]
         self.actualizar_strip_player()
         self.call_later(self.duration // (2 if self.con_power else 4), self.ir_patrás)
@@ -433,6 +435,7 @@ class TinchoLevel(Scene):
         self.run_vel = min(1/2, self.run_vel)
         self.player_no_me_duele = True
         self.fondo_rojo.set_frame(0)
+        director.sound_play("tincho_vrunner/duele%d" % randrange(3))
         self.call_later(self.duration // 2, self.set_vulnerable)
 
 
