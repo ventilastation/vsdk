@@ -51,8 +51,8 @@ def cosito():
     sp.set_x(0)
     sp.set_y(255)
 
-    sp.init_frame = 6
-    sp.frames = 2
+    # sp.init_frame = 6
+    # sp.frames = 2
 
     return sp
 
@@ -142,6 +142,8 @@ class GameOver(Scene):
         sp.set_x(0)
         sp.set_y(255)
         sp.set_frame(0)
+
+        director.music_play("peronjam/estatizacion")
     
     def step(self):
         if director.was_pressed(director.BUTTON_D) or director.was_pressed(director.BUTTON_A):
@@ -168,6 +170,8 @@ class PeronJam(Scene):
 
         self.speed = SPEED_0
 
+        director.music_play("peronjam/marcha")
+
     def step(self):
         
         dx = director.is_pressed(director.JOY_LEFT) - director.is_pressed(director.JOY_RIGHT)
@@ -184,6 +188,9 @@ class PeronJam(Scene):
         if self.cosito.y() < LIMIT and self.cosito.collision([self.manoi,self.manod]):
             self.score.puntuar()
             self.peron.feliz()
+
+            director.sound_play("peronjam/fx0"+str(randrange(1,6)))
+
             self.cosito.set_y(255)
             self.speed += ACC
             return
@@ -191,6 +198,7 @@ class PeronJam(Scene):
         if self.cosito.y() < 5:
             self.cosito.set_y(255)
             self.peron.triste()
+            director.sound_play("peronjam/traidor")
             if self.score.perder():
                 director.push(GameOver().set_score(self.score.score))
                 raise StopIteration()
