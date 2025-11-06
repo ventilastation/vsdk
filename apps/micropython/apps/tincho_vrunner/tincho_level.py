@@ -3,6 +3,9 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 from urandom import choice, randrange, seed
 
+class MySprite(Sprite):
+    pass
+
 
 FULLSCREEN_MODE = 0
 TUNNEL_MODE = 1
@@ -78,7 +81,7 @@ DEBUG_CUR_TILE_Y = False #or True
 DEBUG_TIEMPO = False #or True
 
 def make_me_a_planet(strip):
-    planet = Sprite()
+    planet = MySprite()
     planet.set_strip(stripes[strip])
     planet.set_perspective(FULLSCREEN_MODE)
     planet.set_x(0)
@@ -149,7 +152,7 @@ class TinchoLevel(Scene):
 
         self.hud_tiempo = []
         for i in range(2):
-            s = Sprite()
+            s = MySprite()
             s.set_strip(stripes["numeritos.png"])
             s.set_x(128 - i * (s.width() + 2))
             s.set_y(0)
@@ -157,7 +160,7 @@ class TinchoLevel(Scene):
             s.set_perspective(HUD_MODE)
             self.hud_tiempo.append(s)
 
-        self.player = Sprite()
+        self.player = MySprite()
         self.player.set_strip(stripes["tincho_palante.png"])
         self.player_x = -(self.player.width() // 2)
         self.player.set_x(self.player_x)
@@ -169,7 +172,7 @@ class TinchoLevel(Scene):
         # self.has_centro = True
         # self.tiles_centro = []
         # for i in range(256 // CENTRO_WIDTH):
-        #     tile = Sprite()
+        #     tile = MySprite()
         #     self.tiles_centro.append(tile)
         #     tile.set_strip(stripes["centro.png"])
         #     tile.set_x(i * CENTRO_WIDTH)
@@ -179,7 +182,7 @@ class TinchoLevel(Scene):
 
         self.props = []
         for i in range(PROP_SPRITES_LEN):
-            prop = Sprite()
+            prop = MySprite()
             prop.set_strip(stripes["props.png"])
             prop.set_perspective(TUNNEL_MODE)
             prop.disable()
@@ -191,7 +194,7 @@ class TinchoLevel(Scene):
         self.tiles_suelo = []
         for tile_x in range(DAMERO_COLS):
             for tile_y in range(DAMERO_ROWS):
-                tile = Sprite()
+                tile = MySprite()
                 tile.set_perspective(TUNNEL_MODE)
                 self.tiles_suelo.append(tile)
                 tile.set_x(get_tunel_x(tile, tile_x, width=32) + (0 if DEBUG_SIN_DESFAZAJE else DESFAZAJES[tile_y % len(DESFAZAJES)-1]*2))
