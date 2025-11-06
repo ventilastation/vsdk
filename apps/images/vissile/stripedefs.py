@@ -6,5 +6,8 @@ stripes = [
         strip("cascote.png", frames=1),
         strip("tierra.png", frames=1),
         strip("cielo.png", frames=1),
+        strip("pushtostart.png", frames=1),
+        strip("failed.png", frames=1),
+        strip("nuke.png", frames=5),
     ),
 ]

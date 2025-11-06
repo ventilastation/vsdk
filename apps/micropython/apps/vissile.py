@@ -4,21 +4,25 @@ from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
 MIRA_VELOCIDAD_HORIZONTAL = 2
-EXPLOSION_FRAMES = 5
+EXPLOSION_FRAMES = 4
 ANCHO_MIRA = 8
 ALTO_MIRA = 8
+STARTING_LIVES = 3
 
 class Mira:
     def __init__(self):
         self.sprite = Sprite()
         self.sprite.set_strip(stripes["mira.png"])
-        self.sprite.set_frame(0)
         self.sprite.set_perspective(2)
         self.reiniciar()
+
+    def desactivar(self):
+        self.sprite.disable()
 
     def reiniciar(self):
         self.sprite.set_x(127 - ANCHO_MIRA//2)
         self.sprite.set_y(23)
+        self.sprite.set_frame(0)
 
     # No llega hasta el plano horizontal porque no van a venir misiles por el piso XD
     def mover_izq(self):
@@ -68,8 +72,6 @@ class Cascote:
         self.sprite.set_perspective(2)
         self.sprite.disable()
         self.delete = True
-
-        print("Cascote inicializado. delete = ", self.delete)
 
     def activar(self, torreta, target_center_x):
         self.torreta = torreta
@@ -162,7 +164,37 @@ class Explosion:
         else:
             self.delete = True
 
+class Nuke:
+    def __init__(self):
+        self.sprite = Sprite()
+        self.sprite.set_strip(stripes["nuke.png"])
+        self.sprite.set_frame(0)
+        self.sprite.set_perspective(2)
+        self.sprite.set_x(128 - self.sprite.width()//2)
+        self.sprite.set_y(36)
+        self.sprite.disable()
+        self.animation_delay = 1  # Contador que se usa para ralentizar la animación
 
+    def reset(self):
+        self.animation_delay = 1 
+        self.sprite.set_frame(0)
+
+    def desactivar(self):
+        self.sprite.disable()
+
+    def animar(self):
+        current_frame = self.sprite.frame()
+
+        if current_frame < EXPLOSION_FRAMES:
+            if self.animation_delay % 8 == 0:
+                self.sprite.set_frame(current_frame+1)
+            
+        else:
+            if self.animation_delay % 8 == 0:
+                self.sprite.set_frame(current_frame-1)
+
+        self.animation_delay = self.animation_delay + 1
+            
 
 class Vissile(Scene):
     stripes_rom = "vissile"
@@ -170,7 +202,9 @@ class Vissile(Scene):
     def on_enter(self):
         super(Vissile, self).on_enter()
         
-        self.lives = 1
+        self.lives = STARTING_LIVES
+        self.score = 0
+        
         self.state = "start"
         
         self.mira = Mira()
@@ -184,12 +218,29 @@ class Vissile(Scene):
         self.misiles_reserva = [Misil(), Misil(), Misil(), Misil()]
         self.misiles_activos = []
         
-        cielo = Sprite()
-        cielo.set_strip(stripes["tierra.png"])
-        cielo.set_x(192)
-        cielo.set_y(0)
-        cielo.set_frame(0)
-        cielo.set_perspective(2)
+        self.pushtostart = Sprite()
+        self.pushtostart.set_strip(stripes["pushtostart.png"])
+        self.pushtostart.set_x(255 - self.pushtostart.width()//2)
+        self.pushtostart.set_y(5)
+        self.pushtostart.set_frame(0)
+        self.pushtostart.set_perspective(2)
+
+        self.failed = Sprite()
+        self.failed.set_strip(stripes["failed.png"])
+        self.failed.set_x(255 - self.failed.width()//2)
+        self.failed.set_y(20)
+        self.failed.set_frame(0)
+        self.failed.set_perspective(2)
+        self.failed.disable()
+
+        self.nuke = Nuke()
+
+        tierra = Sprite()
+        tierra.set_strip(stripes["tierra.png"])
+        tierra.set_x(192)
+        tierra.set_y(0)
+        tierra.set_frame(0)
+        tierra.set_perspective(2)
 
         cielo = Sprite()
         cielo.set_strip(stripes["cielo.png"])
@@ -197,13 +248,16 @@ class Vissile(Scene):
         cielo.set_y(0)
         cielo.set_frame(0)
         cielo.set_perspective(2)
-    
+
 
     def step(self):
 
         if self.state == "start":
+            self.pushtostart.set_frame(0)
+
             if director.was_pressed(director.BUTTON_A):
                 self.state = "playing"
+                self.pushtostart.disable()
                 return
             
         if self.state == "playing":
@@ -265,6 +319,7 @@ class Vissile(Scene):
                             self.lives = self.lives - 1
                             if self.lives == 0:
                                 director.sound_play(b"vissile/fin")
+                                self.nuke.reset()
                                 self.state = "lose"
                                 break
                                 # Fin
@@ -296,6 +351,8 @@ class Vissile(Scene):
                         else:
                             for i in range(4):
                                 lm = e.colisiones(self.misiles_activos)
+                                self.score = self.score + len(lm)
+                                print(self.score)
                                 for m in lm:
                                     m.desactivar()
                                     self.misiles_activos.remove(m)
@@ -327,6 +384,11 @@ class Vissile(Scene):
 
         if self.state == "lose":
 
+            self.nuke.animar()
+
+            self.failed.set_frame(0)
+            self.pushtostart.set_frame(0)
+
             for m in self.misiles_activos:
                     m.desactivar()
                     self.misiles_activos.remove(m)
@@ -342,9 +404,15 @@ class Vissile(Scene):
                 self.cascotes_activos.remove(c)
                 self.cascotes_reserva.append(c)
 
+            self.mira.desactivar()
+
             if director.was_pressed(director.BUTTON_A):
-                
-                self.lives = 1
+                self.failed.disable()
+                self.pushtostart.disable()
+                self.nuke.desactivar()
+                self.mira.reiniciar()
+                self.lives = STARTING_LIVES
+                self.score = 0
                 self.state = "playing"
                 return
 
