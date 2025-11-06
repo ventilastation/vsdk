@@ -256,17 +256,17 @@ class Vissile(Scene):
                 #     self.state = "lose"
                 #     return
 
-            if self.lives > 0:    
+            if self.lives > 0 and self.state == "playing":
 
                 # Actualizar misiles
-                if len(self.misiles_activos) > 0:
+                if len(self.misiles_activos) > 0 and self.state == "playing":
                     for m in self.misiles_activos:
                         if m.sprite.y() > 48:  # Misil llega al domo
                             self.lives = self.lives - 1
                             if self.lives == 0:
                                 director.sound_play(b"vissile/fin")
                                 self.state = "lose"
-                                return  # TODO Abortar step completo
+                                break
                                 # Fin
                                 
                             else:
@@ -279,14 +279,15 @@ class Vissile(Scene):
                         else:
                             m.mover()
 
-                if len(self.misiles_activos) < 3:
+                # Generar nuevos misiles
+                if len(self.misiles_activos) < 3 and self.state == "playing":
                         director.sound_play(b"vissile/misil1")
                         m = self.misiles_reserva.pop()
                         m.activar()
                         self.misiles_activos.append(m)
 
                 # Actualizar explosiones
-                if len(self.explosiones_activas) > 0:
+                if len(self.explosiones_activas) > 0 and self.state == "playing":
                     for e in self.explosiones_activas:
                         if e.delete:
                             e.desactivar()
@@ -302,7 +303,7 @@ class Vissile(Scene):
                             e.animar()
             
                 # Actualizar cascotes
-                if len(self.cascotes_activos) > 0:
+                if len(self.cascotes_activos) > 0 and self.state == "playing":
                     for c in self.cascotes_activos:
                         if c.delete:
                             c.desactivar()
@@ -326,23 +327,23 @@ class Vissile(Scene):
 
         if self.state == "lose":
 
-            if director.was_pressed(director.BUTTON_A):
-                
-                for m in self.misiles_activos:
+            for m in self.misiles_activos:
                     m.desactivar()
                     self.misiles_activos.remove(m)
                     self.misiles_reserva.append(m)
                 
-                for e in self.explosiones_activas:
-                    e.desactivar()
-                    self.explosiones_activas.remove(m)
-                    self.explosiones_reserva.append(m)
+            for e in self.explosiones_activas:
+                e.desactivar()
+                self.explosiones_activas.remove(m)
+                self.explosiones_reserva.append(m)
 
-                for c in self.cascotes_activos:
-                    c.desactivar()
-                    self.cascotes_activos.remove(c)
-                    self.cascotes_reserva.append(c)
+            for c in self.cascotes_activos:
+                c.desactivar()
+                self.cascotes_activos.remove(c)
+                self.cascotes_reserva.append(c)
 
+            if director.was_pressed(director.BUTTON_A):
+                
                 self.lives = 1
                 self.state = "playing"
                 return
