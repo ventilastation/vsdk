@@ -163,7 +163,7 @@ def receive_loop():
 
             elif command == b"traceback":
                 length = args[0]
-                tb = sockfile.read(int(length))
+                tb = conn.read(int(length))
                 print("-------------------------------------")
                 print("Rotor traceback")
                 print("-------------------------------------")

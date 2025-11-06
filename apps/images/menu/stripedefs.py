@@ -1,5 +1,7 @@
 stripes = [
     palettegroup(
+        strip("aaa.png"),
+        strip("fanphibious_danger_2.png", frames=1),
         strip("menu.png", frames=16),
         strip("mygame.png", frames=1),
         strip("peronjam.png", frames=1),
@@ -16,6 +18,10 @@ stripes = [
         strip("tvnel.png", frames=1),
         strip("loviejo-3.png"),
         strip("2bam_demo_menu.png",frames=1),
+        strip("2bam_sencom.png",frames=1),
+        strip("domedefander.png"),
+        strip("tincho_vrunner.png",frames=2),
+        strip("villalugano_games.png"),
         fullscreen("favalli.png"),
     ),
 ]

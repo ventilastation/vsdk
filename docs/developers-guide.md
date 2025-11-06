@@ -15,7 +15,7 @@ In the Ventilastation repo there are a few folders that you'll need to identify,
 * `apps/micropython/apps` is the folder that will hold your code
 * `apps/images` is for your graphic assets
 * `apps/sounds` is for music and sound effects
-* `apps/micropython/roms` - images compiled by the `regenerate-images.sh` script are put into this folder
+* `apps/micropython/roms` - images compiled when starting the emulator are put into this folder
 * `apps/micropython/ventilastation` is a folder with system code
 
 ### VSDK repo, scripts
