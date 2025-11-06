@@ -14,7 +14,7 @@ class Título(Scene):
         super(Título, self).on_enter()
 
         make_me_a_planet("tincho_pescando.png")
-        director.sound_play("tincho_vrunner/tincho_carpincho")
+        # director.sound_play("tincho_vrunner/tincho_carpincho")
 
         self.call_later(5000, self.arrancar)
 
