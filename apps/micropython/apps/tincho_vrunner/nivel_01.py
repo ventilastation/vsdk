@@ -1,6 +1,6 @@
 from apps.tincho_vrunner.tincho_level import TinchoLevel, PROP_REBOTE, PROP_DUELE, PROP_POWER
 
-WIN_ROW = 40
+WIN_ROW = 55
 
 PROPS = {
     0: [(PROP_REBOTE, 0.2)],
@@ -8,57 +8,58 @@ PROPS = {
     2: [(PROP_REBOTE, 0.2)],
     3: [(PROP_REBOTE, 0)],
     4: [(PROP_REBOTE, 0.2)],
-    5: [(PROP_DUELE, 0.3), (PROP_DUELE, 0.5)],
-    6: [(PROP_REBOTE, 0.2)],
-    7: [(PROP_REBOTE, 0)],
-    8: [(PROP_REBOTE, 0.2)],
-    9: [(PROP_POWER, 0.5)],
-    #
-    10: [(PROP_REBOTE, 0.8)],
-    11: [(PROP_REBOTE, 1)],
-    12: [(PROP_REBOTE, 0.8)],
-    13: [(PROP_REBOTE, 1)],
-    14: [(PROP_REBOTE, 0.8)],
-    15: [(PROP_REBOTE, 0.5)],
-    16: [(PROP_REBOTE, 0.8)],
+
+    6: [(PROP_REBOTE, 0.8)],
+    7: [(PROP_REBOTE, 1)],
+    8: [(PROP_REBOTE, 0.8)],
+    9: [(PROP_REBOTE, 1)],
+    10: [(PROP_REBOTE, 0.8), (PROP_DUELE, 0)],
+
+    13: [(PROP_REBOTE, 0.2), (PROP_DUELE, 1)],
+    14: [(PROP_REBOTE, 0), (PROP_REBOTE, 0.4)],
+    15: [(PROP_REBOTE, 0.2)],
+    16: [(PROP_REBOTE, 0), (PROP_REBOTE, 0.4)],
     17: [(PROP_REBOTE, 1)],
     18: [(PROP_REBOTE, 0.8)],
-    19: [(PROP_REBOTE, 1)],
-    20: [(PROP_REBOTE, 0.2)],
-    21: [(PROP_REBOTE, 0)],
-    22: [(PROP_REBOTE, 0.2)],
-    23: [(PROP_REBOTE, 0)],
-    24: [(PROP_REBOTE, 0.2)],
-    25: [(PROP_REBOTE, 0.5)],
-    26: [(PROP_REBOTE, 0.2)],
-    27: [(PROP_REBOTE, 0)],
-    28: [(PROP_REBOTE, 0.2)],
-    29: [(PROP_REBOTE, 0), (PROP_POWER, 0.5)],
-    30: [(PROP_REBOTE, 0.2)],
 
-    32: [(PROP_REBOTE, 0)],
-    33: [(PROP_REBOTE, 0.2)],
-    34: [(PROP_REBOTE, 0.4)],
-    35: [(PROP_REBOTE, 0.6)],
-    36: [(PROP_DUELE, 0.8)],
-    37: [(PROP_REBOTE, 1)],
+    23: [(PROP_DUELE, 0.4)],
+    24: [(PROP_DUELE, 0.2), (PROP_DUELE, 0.6)],
+
+    26: [(PROP_POWER, 0.2), (PROP_POWER, 0.6)],
+    27: [(PROP_POWER, 0.4)],
+
+    29: [(PROP_DUELE, 0.2), (PROP_DUELE, 0.8)],
+    30: [(PROP_DUELE, 0.0), (PROP_DUELE, 1)],
+
+    38: [(PROP_REBOTE, 1)],
+    39: [(PROP_REBOTE, 0.8)],
+    40: [(PROP_REBOTE, 0.6)],
+    41: [(PROP_REBOTE, 0.4)],
+    42: [(PROP_REBOTE, 0.2)],
+
+    45: [(PROP_REBOTE, 0), (PROP_POWER, 1)],
+    46: [(PROP_REBOTE, 0.2)],
+    47: [(PROP_REBOTE, 0.4)],
+    48: [(PROP_REBOTE, 0.6)],
+    49: [(PROP_REBOTE, 1)],
+
+    50: [(PROP_DUELE, 0), (PROP_DUELE, 1)],
+    51: [(PROP_DUELE, 0.2), (PROP_DUELE, 0.8)],
+    53: [(PROP_DUELE, 0.4), (PROP_DUELE, 1)],
 }
 
 TILES = {
-    0: "damero",
-    5: "pasto",
-    10: "damero",
-    15: "pasto",
-    20: "damero",
-    25: "pasto",
-    30: "damero",
-    35: "pasto",
-    WIN_ROW: "damero",
+    0: "fin",
+    3: "pasto",
+    25: "damero",
+    29: "pasto",
+    50: "damero",
+    WIN_ROW: "fin",
 }
 
 class Nivel01(TinchoLevel):
     win_row = WIN_ROW
-    tiempo_límite = 20
+    tiempo_límite = 25
     tiles_info = TILES
     props_info = PROPS
 

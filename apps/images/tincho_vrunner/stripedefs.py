@@ -5,16 +5,17 @@ stripes = [
         strip("tincho_patras.png", frames=6),
 
         # túneles:
-        strip("suelo.png", frames=1),
-        strip("damero.png", frames=2),
+        strip("suelos.png", frames=6),
 
         # props:
-        strip("props.png", frames=3),
+        strip("props.png", frames=7),
 
         # fondos, parches, etc:
         strip("numeritos.png", frames=10),
-        strip("centro.png", frames=1),
+        # strip("centro.png", frames=1),
         fullscreen("negro.png"),
+        fullscreen("rojo.png"),
+        fullscreen("amarillo.png"),
         fullscreen("tincho_pescando.png"),
     )
 ]

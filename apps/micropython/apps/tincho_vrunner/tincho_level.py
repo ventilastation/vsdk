@@ -32,11 +32,11 @@ DURACIONES = {
     0: 20,
     1/8: 50,
     1/4: 50,
-    1/2: 100,
-    1: 200,
-    2: 200,
-    3: 200,
-    VELOCIDAD_POWERUP: 600,
+    1/2: 300,
+    1: 400,
+    2: 600,
+    3: 600,
+    VELOCIDAD_POWERUP: 1200,
 }
 
 PLAYER_HORIZONTAL_DELAY = {
@@ -51,14 +51,14 @@ PLAYER_HORIZONTAL_DELAY = {
 }
 
 PLAYER_HORIZONTAL_VEL = {
-    0: 1,
-    1/8: 1,
-    1/4: 1,
-    1/2: 1,
+    0: 2,
+    1/8: 2,
+    1/4: 2,
+    1/2: 2,
     1: 2,
     2: 2,
-    3: 3,
-    VELOCIDAD_POWERUP: 2,
+    3: 2,
+    VELOCIDAD_POWERUP: 1,
 }
 
 PLAYER_WIDTH = 14
@@ -74,6 +74,8 @@ PROP_POWER = 2
 
 DEBUG_SIN_DESFAZAJE = False #or True
 DEBUG_VELOCIDAD = False #or True
+DEBUG_CUR_TILE_Y = False #or True
+DEBUG_TIEMPO = False #or True
 
 def make_me_a_planet(strip):
     planet = Sprite()
@@ -86,15 +88,36 @@ def make_me_a_planet(strip):
 
 
 def get_damero_strip(tile, _tile_x, tile_y):
-    if tile == "pasto":
-        return stripes["suelo.png"]
-    return stripes["damero.png"]
+    # if tile == "pasto":
+    #     return stripes["suelo2.png"]
+    # return stripes["damero2.png"]
+    return stripes["suelos.png"]
 
 
 def get_damero_frame(tile, tile_x, tile_y):
-    if tile == "damero":
-        return (tile_x + tile_y) % 2
-    return 0
+    if tile == "pasto":
+        return tile_x
+    elif tile == "damero":
+        return 3 + ((tile_x + tile_y) % 2)
+    elif tile == "fin":
+        return 5
+    return 5
+
+def get_prop_frame(prop, x_prop):
+    if prop == PROP_REBOTE:
+        if x_prop < 0.2:
+            return 0
+        elif x_prop <= 0.4:
+            return 1
+        elif x_prop <= 0.6:
+            return 2
+        elif x_prop <= 0.8:
+            return 3
+        return 4
+    elif prop == PROP_DUELE:
+        return 5
+    elif prop == PROP_POWER:
+        return 6
 
 def get_tunel_x(sprite, tile_x, width=None):
     return COLS_CENTERS[tile_x] - (width or sprite.width()) // 2
@@ -179,6 +202,10 @@ class TinchoLevel(Scene):
                 tile.tile_x = tile_x
                 tile.tile_y = self.row_inicial + tile_y
 
+        self.fondo_rojo = make_me_a_planet("rojo.png")
+        self.fondo_rojo.disable()
+        self.fondo_amarillo = make_me_a_planet("amarillo.png")
+        self.fondo_amarillo.disable()
         make_me_a_planet("negro.png")
 
         self.run_vel = 0 if DEBUG_VELOCIDAD else (VELOCIDADES[-1] if self.patrás else 1/4)
@@ -195,10 +222,11 @@ class TinchoLevel(Scene):
             else:
                 self.call_later(self.duration, self.acelerar)
 
-        self.ganaste = False
+        self.terminaste = False
         self.tiempo_que_falta = self.tiempo_límite
         self.tirame_las_agujas()
-        self.call_later(1000, self.reducir_un_segundo)
+        if not DEBUG_VELOCIDAD:
+            self.call_later(1000, self.reducir_un_segundo)
 
     def step(self):
         self.cur_frame = (self.cur_frame + 1) % 256
@@ -220,6 +248,8 @@ class TinchoLevel(Scene):
         if abs(self.y_acc) >= TILE_HEIGHT:
             self.y_acc = 0
             self.cur_tile_y += self.run_dir
+            if DEBUG_CUR_TILE_Y:
+                print("tile: %d" % self.cur_tile_y)
             cambió_tile = True
 
         self.actualizar_frame_player()
@@ -228,13 +258,13 @@ class TinchoLevel(Scene):
 
         if cambió_tile:
             self.poner_props_en_current_cacho_de_tunel(dy)
-            if not self.ganaste and (not self.patrás and self.cur_tile_y >= self.win_row) or (self.patrás and self.cur_tile_y <= self.win_row):
+            if not self.terminaste and (not self.patrás and self.cur_tile_y >= self.win_row) or (self.patrás and self.cur_tile_y <= self.win_row) and not DEBUG_VELOCIDAD:
                 self.pasó_la_meta()
 
         if director.was_pressed(director.BUTTON_D): # or director.timedout:
             self.finished()
 
-        if self.ganaste:
+        if self.terminaste:
             return
 
         x_axis = director.is_pressed(director.JOY_LEFT) - director.is_pressed(director.JOY_RIGHT)
@@ -242,9 +272,6 @@ class TinchoLevel(Scene):
             new_x = self.player_x + x_axis * PLAYER_HORIZONTAL_VEL[self.run_vel]
             self.player_x = max(min(new_x, MIN_PLAYER_X), MAX_PLAYER_X)
             self.player.set_x(self.player_x)
-
-        if self.run_dir > 0:
-            self.probar_colisiones()
 
         if DEBUG_VELOCIDAD:
             if director.was_pressed(director.BUTTON_A):
@@ -262,6 +289,10 @@ class TinchoLevel(Scene):
             if director.was_pressed(director.JOY_UP):
                 self.run_dir = 1
                 self.run_vel = 2
+            return
+
+        if self.run_dir > 0:
+            self.probar_colisiones()
 
     def finished(self):
         director.pop()
@@ -308,10 +339,10 @@ class TinchoLevel(Scene):
                 pega_la_vuelta = True
             else:
                 tile.set_y(y)
-                if pega_la_vuelta:
-                    t = self.get_tile(tile.tile_y)
-                    tile.set_strip(get_damero_strip(t, tile.tile_x, tile.tile_y))
-                    tile.set_frame(get_damero_frame(t, tile.tile_x, tile.tile_y))
+            if pega_la_vuelta:
+                t = self.get_tile(tile.tile_y)
+                tile.set_strip(get_damero_strip(t, tile.tile_x, tile.tile_y))
+                tile.set_frame(get_damero_frame(t, tile.tile_x, tile.tile_y))
 
         for prop in self.props:
             prop.set_y(prop.y() - dy)
@@ -329,7 +360,7 @@ class TinchoLevel(Scene):
                 prop.tile_y = tile_y
                 prop.set_x(get_tunel_x_proporcional(prop, x_prop))
                 prop.set_y(get_tunel_y(prop, tile_y - self.cur_tile_y) - dy)
-                prop.set_frame(tipo_prop)
+                prop.set_frame(get_prop_frame(tipo_prop, x_prop))
                 prop_idx += 1
 
         while prop_idx < len(self.props):
@@ -344,11 +375,11 @@ class TinchoLevel(Scene):
         for prop in self.props:
             if prop.tile_y != self.cur_tile_y + 1:
                 continue
-            if prop.frame() == PROP_REBOTE:
+            if prop.frame() <= 4:# PROP_REBOTE:
                 rebote.append(prop)
-            elif prop.frame() == PROP_DUELE:
+            elif prop.frame() == 5: #PROP_DUELE:
                 duele.append(prop)
-            elif prop.frame() == PROP_POWER:
+            elif prop.frame() == 6: #PROP_POWER:
                 power.append(prop)
 
         if self.player.collision(rebote):
@@ -361,15 +392,19 @@ class TinchoLevel(Scene):
     def powerup(self):
         self.con_power = True
         self.run_vel = VELOCIDAD_POWERUP
+        self.fondo_amarillo.set_frame(0)
         self.call_later(DURACIONES[self.run_vel], self.fin_powerup)
 
     def fin_powerup(self):
         self.con_power = False
         self.run_vel = VELOCIDADES[len(VELOCIDADES)-1]
+        self.fondo_amarillo.disable()
 
     def acelerar(self):
-        # return
-        if self.ganaste:
+        if self.run_dir < 1:
+            self.call_later(self.duration, self.acelerar)
+            return
+        if self.terminaste:
             return
         if self.con_power:
             self.call_later(self.duration, self.acelerar)
@@ -377,6 +412,7 @@ class TinchoLevel(Scene):
 
         cur_index = VELOCIDADES.index(self.run_vel)
         if cur_index == len(VELOCIDADES)-1:
+            self.call_later(self.duration, self.acelerar)
             return
 
         new_index = cur_index + 1
@@ -385,16 +421,18 @@ class TinchoLevel(Scene):
 
     def ir_patrás_un_rato(self):
         self.run_dir *= -1
-        self.run_vel = self.run_vel
+        self.run_vel = VELOCIDAD_POWERUP if self.con_power else VELOCIDADES[-1]
         self.actualizar_strip_player()
-        self.call_later(self.duration // 4, self.ir_patrás)
+        self.call_later(self.duration // (2 if self.con_power else 4), self.ir_patrás)
 
     def set_vulnerable(self):
         self.player_no_me_duele = False
+        self.fondo_rojo.disable()
 
     def bajar_un_cambio(self):
         self.run_vel = min(1/2, self.run_vel)
         self.player_no_me_duele = True
+        self.fondo_rojo.set_frame(0)
         self.call_later(self.duration // 2, self.set_vulnerable)
 
 
@@ -405,7 +443,7 @@ class TinchoLevel(Scene):
         self.call_later(self.duration // 4, self.acelerar)
 
     def ir_patrás(self):
-        if self.ganaste:
+        if self.terminaste:
             return
         if self.con_power:
             self.call_later(self.duration // 4, self.ir_patrás)
@@ -422,9 +460,10 @@ class TinchoLevel(Scene):
         self.call_later(DURACIONES[self.run_vel], self.ir_patrás)
 
     def pasó_la_meta(self):
-        self.ganaste = True
+        self.terminaste = True
         self.run_dir = 1
         self.run_vel = 1/16
+        self.fondo_amarillo.set_frame(0)
         self.call_later(self.duration * 5, self.vamos_al_siguiente)
 
     def vamos_al_siguiente(self):
@@ -432,16 +471,24 @@ class TinchoLevel(Scene):
         director.push(self.siguiente())
         raise StopIteration()
 
+    def vamos_otra_vez(self):
+        director.pop()
+        director.push(self.__class__())
+        raise StopIteration()
+
     def reducir_un_segundo(self):
-        if self.ganaste:
+        if self.terminaste:
             return
         self.tiempo_que_falta -= 1
         if self.tiempo_que_falta <= 0:
-            print("ALPISTE")
-            director.pop()
-            director.push(self.__class__())
-            raise StopIteration()
+            # alpiste, perdiste
+            self.terminaste = True
+            self.fondo_rojo.set_frame(0)
+            self.run_vel = 1/16
+            self.call_later(self.duration * 3, self.vamos_otra_vez)
 
+        if DEBUG_TIEMPO:
+            print("falta: %d" % self.tiempo_que_falta)
         self.tirame_las_agujas()
 
         self.call_later(1000, self.reducir_un_segundo)
@@ -449,6 +496,9 @@ class TinchoLevel(Scene):
     def tirame_las_agujas(self):
         i = 0
         t = self.tiempo_que_falta
+        if t == 0:
+            self.hud_tiempo[0].set_frame(0)
+            return
         while t > 0:
             self.hud_tiempo[i].set_frame(t % 10)
             t = t // 10
