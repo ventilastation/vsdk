@@ -10,5 +10,6 @@ stripes = [
         strip("failed.png", frames=1),
         strip("nuke.png", frames=5),
         strip("numerals.png", frames=12),
+        fullscreen("marte.png"),
     ),
 ]
