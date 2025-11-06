@@ -194,7 +194,49 @@ class Nuke:
                 self.sprite.set_frame(current_frame-1)
 
         self.animation_delay = self.animation_delay + 1
-            
+
+class ScoreVidas():
+
+    def __init__(self, score=0, vidas=STARTING_LIVES):
+        self.score = score
+        self.vidas = vidas
+
+        self.crear_cartel()
+        self.actualizar()
+
+    def puntuar(self):
+        self.score += 1
+        self.actualizar()
+
+    def perder(self):
+        self.vidas -= 1
+        self.actualizar()
+        return (self.vidas <= 0)
+
+    def actualizar(self):
+        print(f"Score: {self.score} - Vidas: {self.vidas}")
+
+        # Score    
+        for n, l in enumerate("%05d" % self.score):
+            v = ord(l) - 0x30
+            self.chars[n].set_frame(v)
+
+        # Vidas
+        for n in range(STARTING_LIVES):
+            self.chars[6+n].set_frame(10 + int(self.vidas > n))
+    
+    def crear_cartel(self):
+        print("crear_cartel")
+        self.chars = []
+        for n in range(9):
+            s = Sprite()
+            s.set_strip(stripes["numerals.png"])
+            s.set_x(110 + n * 4)
+            s.set_y(0)
+            s.set_frame(10)
+            s.set_perspective(2)
+            self.chars.append(s)
+
 
 class Vissile(Scene):
     stripes_rom = "vissile"
@@ -202,8 +244,8 @@ class Vissile(Scene):
     def on_enter(self):
         super(Vissile, self).on_enter()
         
-        self.lives = STARTING_LIVES
-        self.score = 0
+        # self.lives = STARTING_LIVES
+        self.sc = ScoreVidas(0, STARTING_LIVES)
         
         self.state = "start"
         
@@ -278,7 +320,7 @@ class Vissile(Scene):
             # Disparar cascote
             if director.was_pressed(director.BUTTON_A):
 
-                if self.lives > 0:
+                if self.sc.vidas > 0:
 
                     if len(self.cascotes_reserva) > 0:
                     
@@ -310,14 +352,14 @@ class Vissile(Scene):
                 #     self.state = "lose"
                 #     return
 
-            if self.lives > 0 and self.state == "playing":
+            if self.sc.vidas > 0 and self.state == "playing":
 
                 # Actualizar misiles
                 if len(self.misiles_activos) > 0 and self.state == "playing":
                     for m in self.misiles_activos:
                         if m.sprite.y() > 48:  # Misil llega al domo
-                            self.lives = self.lives - 1
-                            if self.lives == 0:
+                            self.sc.perder()
+                            if self.sc.vidas == 0:
                                 director.sound_play(b"vissile/fin")
                                 self.nuke.reset()
                                 self.state = "lose"
@@ -351,10 +393,9 @@ class Vissile(Scene):
                         else:
                             for i in range(4):
                                 lm = e.colisiones(self.misiles_activos)
-                                self.score = self.score + len(lm)
-                                print(self.score)
                                 for m in lm:
                                     m.desactivar()
+                                    self.sc.puntuar()
                                     self.misiles_activos.remove(m)
                                     self.misiles_reserva.append(m)
                             e.animar()
@@ -385,24 +426,26 @@ class Vissile(Scene):
         if self.state == "lose":
 
             self.nuke.animar()
-
             self.failed.set_frame(0)
             self.pushtostart.set_frame(0)
 
-            for m in self.misiles_activos:
+            if len(self.misiles_activos) > 0:
+                for m in self.misiles_activos:
                     m.desactivar()
                     self.misiles_activos.remove(m)
                     self.misiles_reserva.append(m)
                 
-            for e in self.explosiones_activas:
-                e.desactivar()
-                self.explosiones_activas.remove(m)
-                self.explosiones_reserva.append(m)
+            if len(self.explosiones_activas) > 0:
+                for e in self.explosiones_activas:
+                    e.desactivar()
+                    self.explosiones_activas.remove(e)
+                    self.explosiones_reserva.append(e)
 
-            for c in self.cascotes_activos:
-                c.desactivar()
-                self.cascotes_activos.remove(c)
-                self.cascotes_reserva.append(c)
+            if len(self.cascotes_activos) > 0:
+                for c in self.cascotes_activos:
+                    c.desactivar()
+                    self.cascotes_activos.remove(c)
+                    self.cascotes_reserva.append(c)
 
             self.mira.desactivar()
 
@@ -411,8 +454,9 @@ class Vissile(Scene):
                 self.pushtostart.disable()
                 self.nuke.desactivar()
                 self.mira.reiniciar()
-                self.lives = STARTING_LIVES
-                self.score = 0
+                self.sc.score = 0
+                self.sc.vidas = STARTING_LIVES
+                self.sc.actualizar()
                 self.state = "playing"
                 return
 
