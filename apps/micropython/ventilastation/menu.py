@@ -3,6 +3,8 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite, reset_sprites
 
+class MenuSprite(Sprite):
+    pass
 
 class Menu(Scene):
 
@@ -18,7 +20,8 @@ class Menu(Scene):
         self.sprites = []
         self.y_step = 20 #250 // len(self.options)
         for n, (option_id, strip_name, frame) in enumerate(self.options):
-            sprite = Sprite()
+            sprite = MenuSprite()
+            sprite.selected_frame = frame
             sprite.set_x(-32)
             sprite.set_y(int(n * self.y_step))
             sprite.set_perspective(1)
@@ -40,11 +43,13 @@ class Menu(Scene):
             self.selected_index -= 1
             if self.selected_index == -1:
                 self.selected_index = 0
+            print("Selected menu option", self.options[self.selected_index][0])
         if director.was_pressed(director.JOY_UP):
             director.sound_play(b'vyruss/shoot3')
             self.selected_index += 1
             if self.selected_index > len(self.options) - 1:
                 self.selected_index = len(self.options) - 1
+            print("Selected menu option", self.options[self.selected_index][0])
         if (director.was_pressed(director.BUTTON_A) or self.both_console_buttons()):
             director.sound_play(b'vyruss/shoot1')
             try:
@@ -58,12 +63,14 @@ class Menu(Scene):
             if n == self.selected_index:
                 sprite.set_y(0)
                 sprite.set_perspective(2)
+                sprite.set_frame(sprite.selected_frame)
             elif n < self.selected_index:
                 sprite.set_y(255)
                 sprite.set_perspective(1)
+                sprite.disable()
             else:
                 curr_y = sprite.y()
-                dest_y = int((n - self.selected_index) * self.y_step + 30)
+                dest_y = int((n - self.selected_index) * self.y_step + 45)
                 if dest_y < 0:
                     y = 255
                 else:
@@ -71,6 +78,11 @@ class Menu(Scene):
                         y = 255
                     else:
                         y = curr_y - (curr_y - dest_y) // 4
+
+                if 1 < y < 120:
+                    sprite.set_frame(sprite.selected_frame)
+                else:
+                    sprite.disable()
                 sprite.set_y(y)
                 sprite.set_perspective(1)
 
