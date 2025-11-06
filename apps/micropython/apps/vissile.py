@@ -15,6 +15,7 @@ class Mira:
         self.sprite.set_strip(stripes["mira.png"])
         self.sprite.set_perspective(2)
         self.reiniciar()
+        self.desactivar()
 
     def desactivar(self):
         self.sprite.disable()
@@ -299,6 +300,7 @@ class Vissile(Scene):
 
             if director.was_pressed(director.BUTTON_A):
                 self.state = "playing"
+                self.mira.reiniciar()
                 self.pushtostart.disable()
                 return
             
@@ -348,9 +350,6 @@ class Vissile(Scene):
                             elif self.mira.sprite.y() == 33:
                                 c.activar(4, mira_center_x)
                                 self.cascotes_activos.append(c)
-                # else:
-                #     self.state = "lose"
-                #     return
 
             if self.sc.vidas > 0 and self.state == "playing":
 
@@ -418,16 +417,13 @@ class Vissile(Scene):
                         else:
                             c.mover()
 
-        # if self.state == "win":
-
-        #     if director.was_pressed(director.BUTTON_A):
-        #         # TODO Restart
 
         if self.state == "lose":
 
             self.nuke.animar()
             self.failed.set_frame(0)
             self.pushtostart.set_frame(0)
+            self.mira.desactivar()
 
             if len(self.misiles_activos) > 0:
                 for m in self.misiles_activos:
