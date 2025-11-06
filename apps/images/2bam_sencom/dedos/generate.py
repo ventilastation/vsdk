@@ -4,7 +4,7 @@ import math
 from PIL import ImageDraw
 
 
-DEBUG = True
+DEBUG = False
 ANGLES = [0, 45, 65]
 folder = os.path.dirname(__file__)
 
