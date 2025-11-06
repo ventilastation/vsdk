@@ -13,7 +13,7 @@ MAX_SCALED_COORD = SCALE_FACTOR * MAX_COORD
 ON_GROUND = 0
 ON_FLOATING_OBJECT = 1
 JUMPING = 2
-ON_GOAL = 4
+#ON_GOAL = 4
 ON_WATER = 8
 
 # Frog's face orientation
@@ -26,7 +26,9 @@ MAX_JUMPING_FRAME = 10
 # Distance between rings
 RINGS_DISTANCE = 20
 
+
 class ScoreBoard:
+    
     def __init__(self):
         self.chars = []
         for n in range(9):
@@ -53,6 +55,7 @@ class ScoreBoard:
             else:
                 self.chars[n].set_frame(10)
 
+
 class Ring:
     
     def __init__(self, y=0, speed=0):
@@ -76,13 +79,16 @@ class Ring:
 
 class FloatingObject:
 
-    def __init__(self, x=0, sprite=None, buoyancy=None):
+    def __init__(self, x=0, sprite=None, buoyancy=100):
 
         self.sprite = sprite
         self.sprite.set_scaled_x(x * SCALE_FACTOR)
         self.buoyancy = buoyancy
         self.carrying_stack = []
     
+    
+    
+
 class MySprite(Sprite):
     
     def __init__(self):
@@ -119,6 +125,9 @@ class Frog(MySprite):
 
     def step(self):
         self.set_scaled_x(self._scaled_x + self.speed)
+        if self.floating_object is not None:
+            self.time_to_sink -= 1
+
 
     def reset(self):
         self.set_frame(0)
@@ -132,16 +141,25 @@ class Frog(MySprite):
         self.ring = 0
         self.next_ring = 1
         self.floating_sprite = None
+        self.floating_object = None
+        self.time_to_sink = None
 
         self.set_scaled_x(-8 * SCALE_FACTOR)
         self.set_scaled_y(16 * SCALE_FACTOR)
 
+
 class Trunk(MySprite):
+    
     def __init__(self, scene):
         super().__init__()
         self.scene = scene
         self.set_strip(stripes["trunk32.png"])
         self.set_frame(0)
+
+    def restore(self):
+        self.set_frame(0)
+    
+    
 
 class Splash(MySprite):
 
@@ -174,7 +192,7 @@ class FanphibiousDanger(Scene):
 
         self.level = 1
         self.score = 0
-        self.lives = 3
+        self.lives = 8
 
         # Create score
         self.scoreboard = ScoreBoard()
@@ -235,22 +253,29 @@ class FanphibiousDanger(Scene):
 
         # Joystick controls frog's MOVEMENT and ORIENTATION
         if director.is_pressed(director.JOY_LEFT):
-            if self.frog.state == ON_GROUND or self.frog.state == ON_GOAL:
+            if self.frog.state == ON_GROUND: #or self.frog.state == ON_GOAL:
                 self.frog.set_scaled_x(self.frog.scaled_x() + SCALE_FACTOR)
                 print("Moving LEFT on GROUND.")
+                #director.sound_play("fanphibious_danger/step")
+
             elif self.frog.state == ON_FLOATING_OBJECT:
                 if self.frog.scaled_x() + (self.frog.width() + 1) * SCALE_FACTOR < self.frog.floating_sprite.scaled_x() + self.frog.floating_sprite.width() * SCALE_FACTOR:
                     self.frog.set_scaled_x(self.frog.scaled_x() + SCALE_FACTOR)
                     print("Moving LEFT on FLOATING OBJECT.")
+                    #director.sound_play("fanphibious_danger/step")
 
         if director.is_pressed(director.JOY_RIGHT):
-            if self.frog.state == ON_GROUND or self.frog.state == ON_GOAL:
+            if self.frog.state == ON_GROUND: #or self.frog.state == ON_GOAL:
                 self.frog.set_scaled_x(self.frog.scaled_x() - SCALE_FACTOR)
                 print("Moving RIGHT on GROUND.")
+                #director.sound_play("fanphibious_danger/step")
+
             elif self.frog.state == ON_FLOATING_OBJECT:
                 if self.frog.scaled_x() - SCALE_FACTOR > self.frog.floating_sprite.scaled_x():
                     self.frog.set_scaled_x(self.frog.scaled_x() - SCALE_FACTOR)
                     print("Moving RIGHT on FLOATING OBJECT.")
+                    #director.sound_play("fanphibious_danger/step")
+
 
         if director.is_pressed(director.JOY_UP):
             self.frog.orientation = DIR_FORWARD
@@ -268,6 +293,7 @@ class FanphibiousDanger(Scene):
                 if (self.frog.state != ON_GROUND) or (self.frog.orientation == DIR_FORWARD):
                     self.frog.state = JUMPING
                     print("Frog is JUMPING.")
+                    director.sound_play("fanphibious_danger/jump")
                     self.frog.set_frame(self.frog.frame() + 1)
                     # Frog is aiming to next ring according to its current orientation
                     self.frog.next_ring = self.frog.ring + self.frog.orientation
@@ -288,17 +314,25 @@ class FanphibiousDanger(Scene):
                 if self.frog.ring == 0:
                     self.frog.state = ON_GROUND
                     self.frog.speed = 0
+                    self.frog.floating_object = None
+                    self.frog.floating_sprite = None
+                    self.frog.time_to_sink = None
                     print("Frog landed ON GROUND.")
+                
                 elif self.frog.ring == 4:
-                    self.frog.state = ON_GOAL
+                    #self.frog.state = ON_GOAL
                     self.score += 1000
                     self.scoreboard.setscore(self.score)
                     self.frog.speed = 0
                     self.level += 1
                     self.call_later(250, self.frog.reset)
                     for ring in self.rings:
-                        ring.speed = randrange(self.level*100//2, self.level*100, 20) * choice([-1, 1])
+                        ring.speed = randrange(self.level*100//2,
+                                               self.level*100, 20) * choice([-1, 1])
+                    director.sound_play("fanphibious_danger/goal")
+
                     print("Frog landed ON GOAL.")
+                
                 else:
                     # Check if frog landed on a floating object or water
                     dummy_state = ON_WATER
@@ -308,10 +342,15 @@ class FanphibiousDanger(Scene):
                         if floating_sprite is not None:
                             dummy_state = ON_FLOATING_OBJECT
                             self.frog.floating_sprite = floating_sprite
+                            self.frog.floating_object = floating_object
+                            self.frog.time_to_sink = floating_object.buoyancy
                             break
 
                     self.frog.state = dummy_state
-                    self.frog.floating_sprite = floating_sprite
+                    # self.frog.floating_sprite = floating_sprite
+                    
+
+
 
                     if dummy_state == ON_WATER:
                         print("Frog landed ON WATER.")
@@ -324,10 +363,11 @@ class FanphibiousDanger(Scene):
                         self.splash.set_frame(0)
                         self.call_later(250, self.frog.reset)
                         self.call_later(500, self.splash.disable)
+                        director.sound_play("fanphibious_danger/splash")
                     else:
                         self.frog.speed = self.rings[self.frog.ring - 1].speed
                         print("Frog landed ON FLOATING OBJECT.")
-                        self.score += 2
+                        self.score += 100
                         self.scoreboard.setscore(self.score)
 
             else:
@@ -338,6 +378,22 @@ class FanphibiousDanger(Scene):
 
         # Animate frog
         self.frog.step()
+        """ if self.frog.time_to_sink == 0:
+            self.frog.floating_sprite.disable()
+            print("Frog has SUNK.")
+            self.frog.speed = 0
+            self.lives -= 1
+            self.scoreboard.setlives(self.lives)
+            self.frog.disable()
+            self.splash.set_scaled_x(self.frog.scaled_x())
+            self.splash.set_scaled_y(self.frog.scaled_y())
+            self.splash.set_frame(0)
+            sunk_object_sprite = self.frog.floating_sprite
+            self.call_later(600, sunk_object_sprite.restore)
+            self.call_later(250, self.frog.reset)
+            self.call_later(500, self.splash.disable)
+            
+            director.sound_play("fanphibious_danger/splash") """
 
         # Animate things on rings (except frog)
         for ring in self.rings:
@@ -353,6 +409,9 @@ class FanphibiousDanger(Scene):
         
 
     def finished(self):
+        print("GAME OVER.")
+        director.sound_play("fanphibious_danger/gameover")
+        
         director.pop()
         raise StopIteration()
 
