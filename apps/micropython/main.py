@@ -188,9 +188,9 @@ if __name__ == '__main__':
         director.sound_play(b"vyruss/shoot3")
         main()
     except Exception as e:
-        raise
-        # buf = io.StringIO()
-        # sys.print_exception(e, buf)
-        # director.report_traceback(buf.getvalue().encode("utf-8"))
-        # print(buf.getvalue())
-        # #machine.reset()
+        # raise
+        buf = io.StringIO()
+        sys.print_exception(e, buf)
+        director.report_traceback(buf.getvalue().encode("utf-8"))
+        print(buf.getvalue())
+        # machine.reset()
