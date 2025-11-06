@@ -12,6 +12,11 @@ stripes = [
         strip("trail.png",frames=35),
         strip("target.png",frames=5),  
         strip("warning.png",frames=1),  
+        strip("dedo-frames65-neg.png",frames=13),
+        strip("dedo-frames45-neg.png",frames=13),
+        strip("dedo-frames0.png",frames=13),
+        strip("dedo-frames45.png",frames=13),
+        strip("dedo-frames65.png",frames=13),
 
         # strip("font_hiscore_8px_bottom.png",frames=12),  
         # strip("texto_intro.png", frames=1), 

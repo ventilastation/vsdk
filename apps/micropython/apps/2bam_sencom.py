@@ -1,62 +1,91 @@
-# Senile command
+# Senile command v.2511
 # Ayuda al motor del ventilador a evitar que los dedos geriatricos lo atasquen.
 # 2bam.com 2025
 #
+#                              En una galaxia lejana,
+#                                  en el planeta
+#                                 Arg-n-tina ZX25
+#                              ancianos sub medicados
+#                              cegados por atractivos
+#                            colores ingresan sus dedos
+#                            a la imparcial maquinaria...
+#                             
+#                              ¿Quién podra salvar el
+#                                  venti-núcleo?
+#
 # Reglas     Dispararle a los dedos que caen antes de que impacten los motores
-#            magicos del Ventilastation. Si no quedan motores se pierde el juego.
+#            magicos que hacen funcionar el Ventilastation.
+#            Si no quedan motores se pierde el juego.
 #
 # Puntos     +125 puntos  : Dedo destruido
 #            -250 puntos  : Impacto directo al nucleo 
 #            +1000 puntos : Por cada motor que sobreviva hasta el fin del nivel.
-#            NOTA: El impacto a un motor no quita puntos.
+#            NOTA: El impacto enemigo a un motor no quita puntos,
+#                  los proyectiles propios tampoco los afectan.
 #
-# Controles               Flechas : Movimiento
-#            Boton A (emu: SPACE) : Dispara
-#                Mantener boton A : Activa movimiento rapido
+# Controles                      Flechas : Movimiento
+#                   Boton A (emu: SPACE) : Dispara
+#                       Mantener boton A : Activa movimiento rapido
 
-# MEMO: 6-7 pixels near the center may be covered by the fan's cap
+
+
+
+# MEMO: En perspectiva 2, mas al centro que y=54-7, esos ultimos 7px por ahi
+# estan cubiertos por la tapa del ventilador de madrid.
+
+# TODO ^^^: LOSE SCREEN!
+
+
 
 # TODO ^: End of level animation / change level
-#         Score numbers "lifted up" --> y=24
-#         Add buildings alive to score (remove from screen)
-#         Add score per hit rate
-#         (Add inflation multiplier here?)
-#         Is it hiscore? "HI"
-#         Flush effect for sprites
-#         End of level warp fx (paleta y efecto loco del fullscreen
-#         Efecto loco con texto_intro en perspective 2 yendo hacia adentro!
+#         DONE: Score numbers "lifted up" --> y=24
+#         DONE: Add buildings alive to score (remove from screen)
+#         Add score per hit rate - HIT 78% (baja el numbero sube el score)
+#         End of level warp fx (paleta y efecto loco del fullscreen)
+#           - en vez de zoom del core, zoom de una espiral
+#         Is it hiscore? HI SCORE label en tally
+#         NO: Flush effect for sprites
 
 
+# FIXME^^^: extend boom Y using INV_DEEPSPACE_DELTA
 # FIXME^^^: use depth (persp=2) collisions instead!!
 # FIXME^^^: player explosions not always hit right
-# FIXME: Trail for WH_MODE=1 needs perspective lengths
 
-# TODO ^: Better explosions for player - COlor de paleta "glitch" para explosiones tuyas
-# DONE ^: shuffle bag target city (double, triple size bag for less predictability)
-# DONE ^: Red alert 1 building
-# DONE ^: Que tambien haya impacto en el suelo (te resta puntos groso pero no perdes)
-# TODO ^: Wave wait all enemies dead before next step or max_time? -- or stop waiting? min_time
-# TODO ^: Tweak missile Y speed (per level)
+# TODO: Intro (Game) -- Senile command title arriba, hiscore y la historia subiendo fragmentada. Efecto loco con texto_intro en perspective 2 yendo hacia adentro!
+# TODO: Enemigo q cambia de direccion sin estela mas dificil
+# TODO: Enemigo q cae en espiral larga (diagonal polar), da ponele 3 vueltas completas antes de impactar
+# TODO: Enemigo cae en espiral hasta cierto pos-y luego cambia a vertical y cae derecho
+#       --variante que randomiza la diagonal entre centro -45, 0, 45°
+# TODO: "Navecita Bonus", destornillador?
 
-
-# TODO: Intro (Game)
-# TODO: Score change palette to black, then flashy on EOL
-# DONE ^: SFX placeholder
-# TODO^: Level progression
 # TODO^: Define waves
 # TODO: Define overwave
 
-# TODO: Enemigo2 bomba q cambia de direccion sin estela mas dificil
+# FIXME: WH_MODE=1 needs perspective adjusted trail lengths if used
+
+# TODO ^: Tweak missile Y speed (per level)
+# TODO ^: Better explosions for player - COlor de paleta "glitch" para explosiones tuyas
+# TODO ^: Wave wait all enemies dead before next step or max_time? -- or stop waiting? min_time
+
 # TODO: better SFX
 # TODO: Integrate new finger sprites
-# TODO: Finger skins
-# TODO v: Perder "traba" el ventilador (imagen)
-
-# NO: Estela azul para tus misiles/delay?
-# NO: Bonus points con misiles no usados y ciudades no destruidas
+# TODO v: Explosions more like "aim/crosshair" size-compensated for looped damage frames (frame index: depth <-> depth-1)
+# TODO v: Finger skins
+# TODO v: Perder "traba" el ventilador (imagen) -- SFX clank!
+# TODO v: score inflation
 
 # TODO v: animacion (wiggle onda 2bam demo) del score cuando cambia
-# TODO v: almacenar score somehow?
+# TODO v: persistir hiscore somehow?
+# TODO v: End of level music
+
+# DONE^: Level progression
+# DONE ^: shuffle bag target city (double, triple size bag for less predictability)
+# DONE ^: Red alert 1 building
+# DONE ^: Que tambien haya impacto en el suelo (te resta puntos groso pero no perdes)
+# DONE: Score change palette to black, then flashy on EOL
+# DONE ^: SFX placeholder
+# NO: Estela azul para tus misiles/delay?
+# NO: Bonus points con misiles no usados y ciudades no destruidas
 
 # Game scene sprite budget
 #    1 BG fan move (FS)
@@ -98,6 +127,7 @@ INV_SQRT2=0.70710678
 TRAIL_SUB_FRAMES=3
 TRAIL_LINE_HW=1.5
 
+WARHEAD_STRIP_IDS=["dedo-frames65","dedo-frames45","dedo-frames0","dedo-frames45-neg","dedo-frames65-neg"]
 MISSILE_ANGLES =  [-65,-45, 0, 45, 65]
 MISSILE_SINS=[sin(deg*pi/180) for deg in MISSILE_ANGLES]
 TRAIL_FRAME_HEIGHT=40
@@ -115,7 +145,8 @@ WARHEAD_ORIGIN_Y=2
 # by the center image, if they were longer it would require special case math
 MISSILE_MAX_DEPTH=40
 MISSILE_Y_SPEED=0.20
-WARHEAD_FRAMES=3
+WARHEAD_LOOP_START=10
+WARHEAD_LOOP_FRAMES=3
 
 NUM_CITIES=5
 MAX_WEAPON=4
@@ -144,13 +175,17 @@ SND_WARNING=b"2bam_sencom/warning" # TODO: recortar en tiempo
 SND_EMPTY_CLIP=b"2bam_sencom/empty-clip"
 SND_RED_ALERT=b"2bam_sencom/red-alert"
 SND_CITY_EXPLODE=b"2bam_sencom/city-explode" # LPF menos chillon o pitch down
+SND_CORE_HIT=b"2bam_sencom/core-hit"
 SND_BOOM=b"2bam_sencom/boom"
-SND_TALLY=b"2bam_sencom/plin"
+SND_TALLY_CITY=b"2bam_sencom/plin"
+SND_TALLY_POINT=b"2bam_sencom/plinito"
+SND_TALLY_END=b"2bam_sencom/tally-end"
 SNDS_SPAWN=[
     b"2bam_sencom/chop0",
     b"2bam_sencom/chop1",
     b"2bam_sencom/chop2",
 ]
+SND_NEW_LEVEL=b"2bam_sencom/new-level"
 
 #SND_BOOM=b"2bam_sencom/test/434751__djfroyd__monster-kick.wav"
 
@@ -220,6 +255,8 @@ class Missile:
         # self._debug.set_frame(0)
         
         self.warhead=warhead_sprite
+
+        # TODO: Remove this, already done in reset
         self.warhead.set_strip(STRIPS["dedo.png"])
         self.warhead.set_perspective(WH_MODE)
         #self.warhead.set_frame(0)
@@ -242,6 +279,8 @@ class Missile:
         self.hit_ground=False
         self.alive=True
         self.speed=speed
+        self.warhead.set_strip(STRIPS[WARHEAD_STRIP_IDS[angle_index]+".png"])
+        self.warhead_hw=self.warhead.width()//2
         self.warhead.set_frame(0)
         self.step()
 
@@ -291,9 +330,19 @@ class Missile:
             k=INV_DEEPSPACE[53-MISSILE_MAX_DEPTH]
             wy=(d*k//MISSILE_MAX_DEPTH)-self.warhead.height()+WARHEAD_ORIGIN_Y
 
-        self.warhead.set_x(wx-self.warhead_hw)
-        self.warhead.set_y(wy)
-        self.warhead.set_frame(d%WARHEAD_FRAMES)
+        if d < 10:
+            still_off_x = int(sin_rad * 10)
+            still_x=bx+off_x
+            #self.warhead.set_x(bx-self.warhead_hw)
+            self.warhead.set_x(still_x-self.warhead_hw)
+            self.warhead.set_y(0)
+            self.warhead.set_frame(d)
+        else:
+            self.warhead.set_x(wx-self.warhead_hw)
+            #self.warhead.set_x(-self.warhead_hw)
+            self.warhead.set_y(wy)
+            self.warhead.set_frame(WARHEAD_LOOP_START+d%WARHEAD_LOOP_FRAMES)
+
         self.hit_x=wx
         if 0 <= d < 54:
             self.hit_y=INV_DEEPSPACE[54-d] # TODO: lerp [d] y [d+1] usando self.depth?    
@@ -407,13 +456,15 @@ class Combat(Scene):
     def on_enter(self):
         super().on_enter()
 
-        self.tally=False
+        self.tally=False#True
+        self.tally_tmr=0
 
         self.all_cities=ShuffleBag(2*list(range(NUM_CITIES)))
         self.cities_alive=ShuffleBag(list(range(NUM_CITIES)))
         self.ents=[]
         print(self.game.level, 'level')
         self.waves=Waves(level_waves[min(self.game.level, len(level_waves)-1)])
+
 
         self.aim=make_sprite("crosshair", frame=0)
 
@@ -423,7 +474,8 @@ class Combat(Scene):
         # self.warning.activate()
         self.ents.append(self.warning)
 
-        self.score=ScoreTopLabel("font_hiscore_16px_top", digit_count=6, y=42, char_width=16)
+        self.score=ScoreTopLabel("font_hiscore_16px_top", digit_count=6, y=41, char_width=16)
+        self.score.set_score(self.game.score)
 
         seed(ticks_ms())
 
@@ -493,7 +545,11 @@ class Combat(Scene):
         pal_copy[self.pal_ind_score+3] = 0
 
         # TODO: Change by level color!
-        self.set_color_core(randint(0,255)|0x80,0,randint(0,255)|0x80)
+        if self.game.level < len(level_colors):
+            level_color=level_colors[self.game.level]
+        else:
+            level_color=(randint(0,255)|0x80,0,randint(0,255)|0x80)
+        self.set_color_core(*level_color)
 
 
 
@@ -507,7 +563,7 @@ class Combat(Scene):
 
         self.core=Sprite()
         self.core.set_strip(STRIPS["core.png"])
-        self.core.set_y(160)
+        self.core.set_y(164) #160
         self.core.set_frame(0)
         self.core.set_perspective(0)
         # self.core.disable()
@@ -589,14 +645,20 @@ class Combat(Scene):
                         self.score.set_score(self.game.score)
                         s.disable()
                         city.state=CITY_DEAD
-                        director.sound_play(SND_TALLY)
+                        director.sound_play(SND_TALLY_CITY)
                     break
             if not city_moved:
+                if self.tally_tmr == 0:
+                    director.sound_play(SND_TALLY_END)
+                self.tally_tmr += 1
+
                 self.core.set_y(min(self.core.y()+3,255))
-                if self.core.y() == 255:
+
+                if self.tally_tmr >= 2.954*STEPS_PER_SECOND:
                     self.game.level += 1
+                    director.sound_play(SND_NEW_LEVEL)
                     director.pop()
-                    pass
+
 
                 # city.step()
                 # if city.state == CITY_OK:
@@ -719,6 +781,7 @@ class Combat(Scene):
                         # TODO: some lesser explosion anim?
                         self.game.score = max(0, self.game.score-250)
                         self.score.set_score(self.game.score)
+                        director.sound_play(SND_CORE_HIT)
                         city.re_explode()
 
                     missile.kill()
@@ -808,7 +871,8 @@ class City:
         sprite.set_strip(STRIPS["city.png"])
         sprite.set_perspective(1)
         sprite.set_x(x-sprite.width()//2)
-        sprite.set_y(74)
+        sprite.set_y(64)
+        # sprite.set_y(74)
         self.reset()
 
     def explode(self):
@@ -830,7 +894,7 @@ class City:
         sprite=self.sprite
         st=self.state
         if st == CITY_OK:
-            self._t += SECONDS_PER_STEP/0.25
+            self._t += SECONDS_PER_STEP/0.24
             sprite.set_frame(CITY_OK+int(self._t)%2)
         elif st == CITY_DYING:
             self._t += SECONDS_PER_STEP/0.5
@@ -905,20 +969,80 @@ W_B0=20
 W_B1=21
 W_ENEMY_MAX=29
 
+level_colors=[
+    # DO NOT USE RED: Reserved for red alert (last city standing)
+    (0,192,0),      # green
+    (64,192,192),   # cyan
+    (192,192,64),   # yellow
+]
 level_waves=[
     # ------- LEVEL 1 -------
     [
         #  ,----------- Duration seconds (will extend to amount steps if too low)
         # |  ,--------- Amount
         # |  |   ,---- Enemy shuffle bag 
-        ( 3, 0, []          ),
-        (10, 5, [W_M0]      ),
-        ( 3, 0, []          ),
-        ( 4, 4, [W_M0,W_M1] ),
-        ( 3, 0, []          ),
-        ( 2.4, 1, [W_WARN]    ),
-        ( 0, 5, [W_M0]      ),
+
+        # ###
+        # ### DEBUG REMOVE ME
+        # ###
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+
+        ###
+        ###
+        ( 3  ,  0, []          ),
+        (10  ,  5, [W_M0]      ),
+        ( 3  ,  0, []          ),
+        ( 4  ,  4, [W_M0,W_M1] ),
+        ( 3  ,  0, []          ),
+        (2.4 ,  1, [W_WARN]    ),
+        ( 0  ,  5, [W_M0]      ),
     ],
+    # ------- LEVEL 2 -------
+    [
+        #  ,----------- Duration seconds (will extend to amount steps if too low)
+        # |  ,--------- Amount
+        # |  |   ,---- Enemy shuffle bag 
+        ( 3  ,  0, []          ),
+        (10  ,  5, [W_M0]      ),
+        ( 3  ,  0, []          ),
+        ( 1  ,  1, [W_M2] ),
+        ( 4  ,  4, [W_M0,W_M1] ),
+        ( 1  ,  1, [W_M2] ),
+        ( 2  ,  0, []          ),
+        (2.4 ,  1, [W_WARN]    ),
+        ( 0  ,  5, [W_M0]      ),
+        ( 5  ,  0, []          ),
+        ( 0  ,  5, [W_M0]      ),
+        ( 5  ,  0, []          ),
+        ( 0  ,  5, [W_M1]      ),
+    ],    
+    # ------- LEVEL 3 -------
+    [
+        #  ,----------- Duration seconds (will extend to amount steps if too low)
+        # |  ,--------- Amount
+        # |  |   ,---- Enemy shuffle bag 
+        ( 3  ,  0, []          ),
+        (10  ,  5, [W_M1]      ),
+        ( 3  ,  0, []          ),
+        ( 1  ,  1, [W_M2,W_M1] ),
+        ( 4  ,  4, [W_M2,W_M1] ),
+        ( 2  ,  2, [W_M2CA] ),
+        ( 3  ,  0, []          ),
+        ( 10 , 20, [W_M0] ),
+        ( 3  ,  0, []          ),
+        ( 1  ,  1, [W_M2,W_M1] ),
+        ( 4  ,  4, [W_M2,W_M1] ),
+        ( 2  ,  2, [W_M2CA] ),
+        ( 2  ,  0, []          ),
+        (2.4 ,  1, [W_WARN]    ),
+        ( 10  , 20, [W_M2]      ),
+    ],    
 ]
 
 class ShuffleBag:
