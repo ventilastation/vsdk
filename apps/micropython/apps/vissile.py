@@ -294,6 +294,13 @@ class Vissile(Scene):
         domo.set_perspective(0)
         domo.set_frame(0)
 
+        craters = Sprite()
+        craters.set_strip(stripes["craters.png"])
+        craters.set_x(0)
+        craters.set_y(255)
+        craters.set_perspective(0)
+        craters.set_frame(0)
+
         marte = Sprite()
         marte.set_strip(stripes["marte.png"])
         marte.set_x(0)
