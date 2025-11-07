@@ -9,6 +9,7 @@ ANCHO_MIRA = 8
 ALTO_MIRA = 8
 STARTING_LIVES = 3
 
+
 class Mira:
     def __init__(self):
         self.sprite = Sprite()
@@ -41,6 +42,7 @@ class Mira:
     def bajar(self):
         self.sprite.set_y( min(self.sprite.y() + 10, 33))
 
+
 class Misil:
     def __init__(self):
         self.sprite = Sprite()
@@ -64,6 +66,7 @@ class Misil:
         step = randrange(3,6)
         if self.movement_delay % step == 0:
             self.sprite.set_y(self.y_actual + 1)
+
 
 class Cascote:
     def __init__(self):
@@ -118,8 +121,7 @@ class Cascote:
                 self.sprite.set_x(x_actual - 2)
             else:
                 self.delete = True
-            
-            
+             
 
 class Explosion:
     def __init__(self):
@@ -165,6 +167,36 @@ class Explosion:
         else:
             self.delete = True
 
+
+class HitExplosion:
+    def __init__(self):
+        self.sprite = Sprite()
+        self.sprite.set_strip(stripes["nuke.png"])
+        self.sprite.set_frame(0)
+        self.sprite.set_perspective(2)
+        self.sprite.disable()
+        self.delete = True
+        self.animation_delay = 1  # Contador que se usa para ralentizar la animación
+
+    def activar(self, center_x):
+        self.sprite.set_x(center_x - self.sprite.width()//2)
+        self.sprite.set_y(36)
+        self.delete = False
+        self.sprite.set_frame(0)
+
+    def desactivar(self):
+        self.sprite.disable()
+
+    def animar(self):
+        current_frame = self.sprite.frame()
+        if current_frame < 2:
+            if self.animation_delay % 4 == 0:
+                self.sprite.set_frame(current_frame+1)
+            self.animation_delay = self.animation_delay + 1
+        else:
+            self.delete = True
+
+
 class Nuke:
     def __init__(self):
         self.sprite = Sprite()
@@ -196,6 +228,7 @@ class Nuke:
 
         self.animation_delay = self.animation_delay + 1
 
+
 class ScoreVidas():
 
     def __init__(self, score=0, vidas=STARTING_LIVES):
@@ -215,8 +248,6 @@ class ScoreVidas():
         return (self.vidas <= 0)
 
     def actualizar(self):
-        print(f"Score: {self.score} - Vidas: {self.vidas}")
-
         # Score    
         for n, l in enumerate("%05d" % self.score):
             v = ord(l) - 0x30
@@ -227,7 +258,6 @@ class ScoreVidas():
             self.chars[6+n].set_frame(10 + int(self.vidas > n))
     
     def crear_cartel(self):
-        print("crear_cartel")
         self.chars = []
         for n in range(9):
             s = Sprite()
@@ -238,6 +268,53 @@ class ScoreVidas():
             s.set_perspective(2)
             self.chars.append(s)
 
+
+class Dome:
+    def __init__(self):
+        domo = Sprite()
+        domo.set_strip(stripes["domo.png"])
+        domo.set_x(0)
+        domo.set_y(255)
+        domo.set_perspective(0)
+        domo.set_frame(0)
+
+        domo2 = Sprite()
+        domo2.set_strip(stripes["domo2.png"])
+        domo2.set_x(0)
+        domo2.set_y(255)
+        domo2.set_perspective(0)
+        domo2.set_frame(0)
+        domo2.disable()
+
+        domo3 = Sprite()
+        domo3.set_strip(stripes["domo3.png"])
+        domo3.set_x(0)
+        domo3.set_y(255)
+        domo3.set_perspective(0)
+        domo3.set_frame(0)
+        domo3.disable()
+
+        domo4 = Sprite()
+        domo4.set_strip(stripes["domo4.png"])
+        domo4.set_x(0)
+        domo4.set_y(255)
+        domo4.set_perspective(0)
+        domo4.set_frame(0)
+        domo4.disable()
+
+        self.dome_sprites = [domo, domo2, domo3, domo4]
+        self.sprite_index = 0
+
+    def hit(self):
+        self.dome_sprites[self.sprite_index].disable()
+        self.sprite_index = self.sprite_index + 1
+        self.dome_sprites[self.sprite_index].set_frame(0)
+
+    def reset(self):
+        self.dome_sprites[self.sprite_index].disable()
+        self.sprite_index = 0
+        self.dome_sprites[self.sprite_index].set_frame(0)
+            
 
 class Vissile(Scene):
     stripes_rom = "vissile"
@@ -256,6 +333,9 @@ class Vissile(Scene):
 
         self.explosiones_reserva = [Explosion(), Explosion(), Explosion(), Explosion()]
         self.explosiones_activas = []
+
+        self.hit_explosiones_reserva = [HitExplosion(), HitExplosion(), HitExplosion()]
+        self.hit_explosiones_activas = []
 
         self.cascotes_reserva = [Cascote(), Cascote(), Cascote()]
         self.cascotes_activos = []
@@ -280,19 +360,7 @@ class Vissile(Scene):
 
         self.nuke = Nuke()
 
-        # tierra = Sprite()
-        # tierra.set_strip(stripes["tierra.png"])
-        # tierra.set_x(192)
-        # tierra.set_y(0)
-        # tierra.set_frame(0)
-        # tierra.set_perspective(2)
-
-        domo = Sprite()
-        domo.set_strip(stripes["domo.png"])
-        domo.set_x(0)
-        domo.set_y(255)
-        domo.set_perspective(0)
-        domo.set_frame(0)
+        self.dome = Dome()
 
         craters = Sprite()
         craters.set_strip(stripes["craters.png"])
@@ -314,8 +382,6 @@ class Vissile(Scene):
         cielo.set_y(0)
         cielo.set_frame(0)
         cielo.set_perspective(2)
-
-
 
 
     def step(self):
@@ -384,12 +450,14 @@ class Vissile(Scene):
                         if m.sprite.y() > 48:  # Misil llega al domo
                             self.sc.perder()
                             if self.sc.vidas == 0:
+                                # Fin
                                 director.sound_play(b"vissile/fin")
                                 self.nuke.reset()
                                 self.end_counter = 0
+                                self.dome.hit()
                                 self.state = "lose"
                                 break
-                                # Fin
+                                
                                 
                             else:
                                 # Hit
@@ -397,6 +465,11 @@ class Vissile(Scene):
                                 m.desactivar()
                                 self.misiles_activos.remove(m)
                                 self.misiles_reserva.append(m)
+                                self.dome.hit()
+
+                                he = self.hit_explosiones_reserva.pop()
+                                he.activar(m.sprite.x() - m.sprite.width() // 2)
+                                self.hit_explosiones_activas.append(he)
                             
                         else:
                             m.mover()
@@ -424,6 +497,16 @@ class Vissile(Scene):
                                     self.misiles_activos.remove(m)
                                     self.misiles_reserva.append(m)
                             e.animar()
+
+                # Actualizar explosiones en el domo
+                if len(self.hit_explosiones_activas) > 0 and self.state == "playing":
+                    for he in self.hit_explosiones_activas:
+                        if he.delete:
+                            he.desactivar()
+                            self.hit_explosiones_activas.remove(he)
+                            self.hit_explosiones_reserva.append(he)
+                        else:
+                            he.animar()
             
                 # Actualizar cascotes
                 if len(self.cascotes_activos) > 0 and self.state == "playing":
@@ -472,6 +555,7 @@ class Vissile(Scene):
                 self.pushtostart.set_frame(0)
                 
                 if director.was_pressed(director.BUTTON_A):
+                    self.dome.hit()
                     self.end_counter = 0
                     self.failed.disable()
                     self.pushtostart.disable()
