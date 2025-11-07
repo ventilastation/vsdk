@@ -3,6 +3,9 @@
 #
 # Music by: JuanElHongo
 # https://juanelhongo.itch.io/
+#
+# Menu image by: manuq
+# https://github.com/manuq
 
 from urandom import randrange
 from ventilastation.director import director, stripes
