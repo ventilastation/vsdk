@@ -321,7 +321,7 @@ class Vissile(Scene):
 
     def play_music_loop(self):
         print("Playing")
-        director.music_off()
+        # director.music_off()
         director.music_play("vissile/play1")
         self.call_later(58*1000, self.play_music_loop)
 
@@ -331,8 +331,8 @@ class Vissile(Scene):
         # self.lives = STARTING_LIVES
         self.sc = ScoreVidas(0, STARTING_LIVES)
         
-        # self.play_music_loop()
-        director.music_play("vissile/play1")
+        self.play_music_loop()
+        # director.music_play("vissile/play1")
 
         self.state = "start"
         
