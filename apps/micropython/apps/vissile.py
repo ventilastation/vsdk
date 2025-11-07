@@ -1,4 +1,4 @@
-from urandom import choice, randrange, seed
+from urandom import randrange
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
@@ -6,7 +6,6 @@ from ventilastation.sprites import Sprite
 MIRA_VELOCIDAD_HORIZONTAL = 2
 EXPLOSION_FRAMES = 4
 ANCHO_MIRA = 8
-ALTO_MIRA = 8
 STARTING_LIVES = 3
 
 
@@ -43,6 +42,7 @@ class Mira:
         self.sprite.set_y( min(self.sprite.y() + 10, 33))
 
 
+# Proyectiles enemigos
 class Misil:
     def __init__(self):
         self.sprite = Sprite()
@@ -60,14 +60,14 @@ class Misil:
     def desactivar(self):
         self.sprite.disable()
 
-    def mover(self):
+    def animar(self):
         self.y_actual = self.sprite.y()
         self.movement_delay = self.movement_delay + 1
         step = randrange(3,6)
         if self.movement_delay % step == 0:
             self.sprite.set_y(self.y_actual + 1)
 
-
+# Proyectiles que dispara el jugador
 class Cascote:
     def __init__(self):
         self.sprite = Sprite()
@@ -314,10 +314,16 @@ class Dome:
         self.dome_sprites[self.sprite_index].disable()
         self.sprite_index = 0
         self.dome_sprites[self.sprite_index].set_frame(0)
-            
+        
 
 class Vissile(Scene):
     stripes_rom = "vissile"
+
+    def play_music_loop(self):
+        print("Playing")
+        director.music_off()
+        director.music_play("vissile/play1")
+        self.call_later(58*1000, self.play_music_loop)
 
     def on_enter(self):
         super(Vissile, self).on_enter()
@@ -325,7 +331,8 @@ class Vissile(Scene):
         # self.lives = STARTING_LIVES
         self.sc = ScoreVidas(0, STARTING_LIVES)
         
-        director.music_play(b"vissile/play1")
+        # self.play_music_loop()
+        director.music_play("vissile/play1")
 
         self.state = "start"
         
@@ -334,7 +341,7 @@ class Vissile(Scene):
         self.explosiones_reserva = [Explosion(), Explosion(), Explosion(), Explosion()]
         self.explosiones_activas = []
 
-        self.hit_explosiones_reserva = [HitExplosion(), HitExplosion(), HitExplosion()]
+        self.hit_explosiones_reserva = [HitExplosion(), HitExplosion(), HitExplosion(), HitExplosion()]
         self.hit_explosiones_activas = []
 
         self.cascotes_reserva = [Cascote(), Cascote(), Cascote()]
@@ -456,9 +463,7 @@ class Vissile(Scene):
                                 self.end_counter = 0
                                 self.dome.hit()
                                 self.state = "lose"
-                                break
-                                
-                                
+                                break                                
                             else:
                                 # Hit
                                 director.sound_play(b"vissile/hit1")
@@ -472,7 +477,7 @@ class Vissile(Scene):
                                 self.hit_explosiones_activas.append(he)
                             
                         else:
-                            m.mover()
+                            m.animar()
 
                 # Generar nuevos misiles
                 if len(self.misiles_activos) < 3 and self.state == "playing":
@@ -555,7 +560,7 @@ class Vissile(Scene):
                 self.pushtostart.set_frame(0)
                 
                 if director.was_pressed(director.BUTTON_A):
-                    self.dome.hit()
+                    self.dome.reset()
                     self.end_counter = 0
                     self.failed.disable()
                     self.pushtostart.disable()
