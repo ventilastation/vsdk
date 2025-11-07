@@ -1,3 +1,9 @@
+# By: Martín Vukovic
+# https://martinvukovic.com
+#
+# Music by: JuanElHongo
+# https://juanelhongo.itch.io/
+
 from urandom import randrange
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
