@@ -332,7 +332,7 @@ class Vissile(Scene):
         print("Playing")
         # director.music_off()
         director.music_play("vissile/play1")
-        self.call_later(58*1000, self.play_music_loop)
+        self.call_later(451*100, self.play_music_loop)
 
     def on_enter(self):
         super(Vissile, self).on_enter()
