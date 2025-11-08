@@ -114,6 +114,12 @@ class MySprite(Sprite):
     def scaled_y(self):
         return self._scaled_y
 
+class GameOver(Sprite):
+    def __init__(self, scene):
+        super().__init__()
+        self.scene = scene
+        self.set_strip(stripes["gameover.png"])
+        self.set_perspective(2)
 
 class Frog(MySprite):
 
@@ -192,7 +198,7 @@ class FanphibiousDanger(Scene):
 
         self.level = 1
         self.score = 0
-        self.lives = 8
+        self.lives = 3
 
         # Create score
         self.scoreboard = ScoreBoard()
@@ -215,7 +221,19 @@ class FanphibiousDanger(Scene):
 
         # Random ring's speeds
         # minimum = 0, maximum = 2 pixels per frame (512 / 256)
-        rings_speed = [randrange(self.level * 100//2, self.level * 100, 20)*choice([-1, 1]) for i in range(3)]
+        min_speed = self.level * 100//2
+        max_speed = self.level * 100
+        speed_step = (max_speed - min_speed) // 5
+        rings_speed = []
+        speed = randrange(min_speed, 
+                          max_speed, 
+                          speed_step) * choice([-1, 1])
+        for i in range(3):
+            while speed in rings_speed:     # DRY
+                speed = randrange(min_speed,
+                                  max_speed,
+                                  speed_step) * choice([-1, 1])
+            rings_speed.append(speed)
 
         # Create "rings" to contain floating objects
         self.rings = [Ring(y=36+i*RINGS_DISTANCE, speed=rings_speed[i]) for i in range(3)]
@@ -399,9 +417,10 @@ class FanphibiousDanger(Scene):
         for ring in self.rings:
             ring.step()
 
-        if (utime.time() - self.time_count) > 11:
-            self.start_music()
+        if (utime.time() - self.time_count) >= 12:
             self.time_count = utime.time()
+            self.start_music()
+            
             
         if self.lives == 0:
             self.finished()
@@ -410,7 +429,9 @@ class FanphibiousDanger(Scene):
 
     def finished(self):
         print("GAME OVER.")
+
         director.sound_play("fanphibious_danger/gameover")
+
         
         director.pop()
         raise StopIteration()
