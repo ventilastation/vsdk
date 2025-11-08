@@ -10,13 +10,16 @@ AVANCE_PER_LEVEL = 32
 
 REST_TIME = 240.0
 
+class MySprite(Sprite):
+    pass
+
 def everyXTicks(n):
     global TICK_COUNTER
     TICK_COUNTER += 1
     return TICK_COUNTER % n == 0
 
 def make_me_a_planet(strip):
-    planet = Sprite()
+    planet = MySprite()
     planet.set_strip(strip)
     planet.set_perspective(0)
     planet.set_x(0)
@@ -24,7 +27,7 @@ def make_me_a_planet(strip):
     return planet
 
 def make_me_a_planet_nop(strip):
-    planet = Sprite()
+    planet = MySprite()
     planet.set_strip(strip)
     planet.set_perspective(1)
     planet.set_x(8)
@@ -35,7 +38,7 @@ class ScoreBoard:
     def __init__(self):
         self.chars = []
         for n in range(4):
-            s = Sprite()
+            s = MySprite()
             s.set_strip(stripes["numerals.png"])
             s.set_x(118 + n * 5)
             s.set_y(2)
@@ -138,7 +141,7 @@ class Vajon(Scene):
         self.hit = HitVfx()
         self.impact = Impact()
 
-        self.player = Sprite()
+        self.player = MySprite()
         self.player.set_x(0)
         self.player.set_y(24)
         self.player.set_strip(stripes["pj.png"])
@@ -160,13 +163,13 @@ class Vajon(Scene):
             roca = Roca()
             self.rocas.append(roca)
         
-        #self.brazo = Sprite()
+        #self.brazo = MySprite()
         #self.brazo.set_strip(stripes["tentacle2.png"])
         #self.brazo.set_x(100)
         #self.brazo.set_y(32)
         #self.brazo.set_frame(0)
 
-        #self.brazo2 = Sprite()
+        #self.brazo2 = MySprite()
         #self.brazo2.set_strip(stripes["tentacle1.png"])
         #self.brazo2.set_x(0)
         #self.brazo2.set_y(32)
