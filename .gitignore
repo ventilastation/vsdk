@@ -193,3 +193,4 @@ apps/micropython/roms/*.rom
 # Archivos temporales del sistema
 .DS_Store
 Thumbs.db
+apps/micropython/sencom.hi
