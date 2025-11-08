@@ -12,12 +12,14 @@ from ventilastation.shuffler import shuffled
 MAIN_MENU_OPTIONS = [
     # Jam Online Oct 2025
     ('fanphibious_danger', "fanphibious_danger_2.png", 0),
+    ('fanphibious_danger', "fanphibious_danger_2.png", 0),
     ('2bam_sencom', "2bam_sencom.png", 0),
     ('vissile', "domedefander.png", 0),
     ('tincho_vrunner', "tincho_vrunner.png", 0),
     ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
     ('villalugano_games', "villalugano_games.png", 0),
+    ('vajon', "vajon.png", 0),
     # new game by esteban
     ('aaa', 'aaa.png', 0),
 #     # # # 1er Jam 2025
