@@ -37,7 +37,7 @@ MAIN_MENU_OPTIONS = [
 #     # ('vong', "menu.png", 6),
 #     # ('vugo', "menu.png", 7),
 #     # # Gallery
-    ('gallery', "pollitos.png", 0),
+    # ('gallery', "pollitos.png", 0),
     # # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # # Original content
