@@ -10,7 +10,7 @@ PROPS = {
 }
 
 TILES = {
-    5: "fin",
+    0: "fin",
     8: "pasto",
     16: "damero",
     19: "pasto",

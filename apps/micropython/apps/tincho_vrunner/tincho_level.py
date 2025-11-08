@@ -2,6 +2,7 @@ from ventilastation.director import director, PIXELS, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 from urandom import choice, randrange, seed
+import utime
 
 class MySprite(Sprite):
     pass
@@ -75,10 +76,20 @@ PROP_REBOTE = 0
 PROP_DUELE = 1
 PROP_POWER = 2
 
+INFO_CONTROLES = 0
+INFO_GOAL_ADELANTE = 1
+INFO_GOAL_ATRÁS = 2
+INFO_DE_NUEVO = 3
+INFO_PERDISTE = 4
+INFO_GANASTE = 5
+
+INFO_Y = 10
+
 DEBUG_SIN_DESFAZAJE = False #or True
 DEBUG_VELOCIDAD = False #or True
 DEBUG_CUR_TILE_Y = False #or True
 DEBUG_TIEMPO = False #or True
+
 
 def make_me_a_planet(strip):
     planet = MySprite()
@@ -134,6 +145,7 @@ def get_tunel_y(_sprite, tile_y):
 
 class TinchoLevel(Scene):
     stripes_rom = "tincho_vrunner"
+    keep_music = True
 
     siguiente = None
     patrás = False
@@ -143,8 +155,15 @@ class TinchoLevel(Scene):
     tiles_info = {}
     props_info = {}
 
+    def __init__(self, de_nuevo=False):
+        super(TinchoLevel, self).__init__()
+        seed(utime.ticks_ms())
+        self.de_nuevo = de_nuevo
+
     def on_enter(self):
         super(TinchoLevel, self).on_enter()
+
+        director.music_play("tincho_vrunner/1LFD")
 
         self.cur_frame = 0
         self.cur_tile_y = self.row_inicial
@@ -155,10 +174,19 @@ class TinchoLevel(Scene):
             s = MySprite()
             s.set_strip(stripes["numeritos.png"])
             s.set_x(128 - i * (s.width() + 2))
-            s.set_y(0)
+            s.set_y(3)
             s.set_frame(0)
             s.set_perspective(HUD_MODE)
             self.hud_tiempo.append(s)
+
+        self.info = MySprite()
+        self.info.set_strip(stripes["info.png"])
+        self.info.set_x(128 - (self.info.width() // 2))
+        self.info.set_y(INFO_Y)
+        self.info.set_frame(INFO_DE_NUEVO if self.de_nuevo else (INFO_GOAL_ATRÁS if self.patrás else INFO_GOAL_ADELANTE))
+        self.info.set_perspective(HUD_MODE)
+        self.call_later(2000, self.ya_entendí)
+
 
         self.player = MySprite()
         self.player.set_strip(stripes["tincho_palante.png"])
@@ -204,6 +232,16 @@ class TinchoLevel(Scene):
                 tile.set_frame(get_damero_frame(t, tile_x, self.row_inicial + tile_y))
                 tile.tile_x = tile_x
                 tile.tile_y = self.row_inicial + tile_y
+
+        self.nubes = []
+        for i in range(3):
+            n = MySprite()
+            n.set_perspective(TUNNEL_MODE)
+            n.set_strip(stripes["nubes.png"])
+            n.set_frame(randrange(3))
+            n.set_x(randrange(64, 192 - n.width()))
+            n.set_y((156 // 3) * i + randrange(20))
+            self.nubes.append(n)
 
         self.fondo_rojo = make_me_a_planet("rojo.png")
         self.fondo_rojo.disable()
@@ -258,6 +296,11 @@ class TinchoLevel(Scene):
         self.actualizar_frame_player()
 
         self.animar_paisaje(dy)
+
+        if self.cur_frame > 50:
+            f = self.info.frame()
+            if f in [INFO_GOAL_ADELANTE, INFO_GOAL_ATRÁS] and self.cur_frame % 2 == 0:
+                self.info.set_y(self.info.y() + (1 if f == INFO_GOAL_ADELANTE else -1))
 
         if cambió_tile:
             self.poner_props_en_current_cacho_de_tunel(dy)
@@ -350,6 +393,17 @@ class TinchoLevel(Scene):
         for prop in self.props:
             prop.set_y(prop.y() - dy)
 
+        for n in self.nubes:
+            if self.cur_frame % 4 == 0:
+                y = n.y() - 1
+                if y < 0:
+                    n.set_frame(randrange(3))
+                    n.set_x(randrange(64, 192 - n.width()))
+                    n.set_y(150)
+                else:
+                    n.set_y(y)
+
+
     def poner_props_en_current_cacho_de_tunel(self, dy=0):
         props_pa_poner = {}
         for k, v in self.props_info.items():
@@ -391,6 +445,9 @@ class TinchoLevel(Scene):
             self.bajar_un_cambio()
         elif self.player.collision(power):
             self.powerup()
+
+    def ya_entendí(self):
+        self.info.disable()
 
     def powerup(self):
         self.con_power = True
@@ -470,16 +527,19 @@ class TinchoLevel(Scene):
         self.run_dir = 1
         self.run_vel = 1/16
         self.fondo_amarillo.set_frame(0)
+        self.info.set_y(INFO_Y)
+        self.info.set_frame(INFO_GANASTE)
         self.call_later(self.duration * 5, self.vamos_al_siguiente)
 
     def vamos_al_siguiente(self):
         director.pop()
-        director.push(self.siguiente())
+        if self.siguiente:
+            director.push(self.siguiente())
         raise StopIteration()
 
     def vamos_otra_vez(self):
         director.pop()
-        director.push(self.__class__())
+        director.push(self.__class__(de_nuevo=True))
         raise StopIteration()
 
     def reducir_un_segundo(self):
@@ -491,6 +551,8 @@ class TinchoLevel(Scene):
             self.terminaste = True
             self.fondo_rojo.set_frame(0)
             self.run_vel = 1/16
+            self.info.set_y(INFO_Y)
+            self.info.set_frame(INFO_PERDISTE)
             self.call_later(self.duration * 3, self.vamos_otra_vez)
 
         if DEBUG_TIEMPO:
