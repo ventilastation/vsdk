@@ -19,6 +19,11 @@ for angle in ANGLES:
         try:
             while True:
                 frame = im.copy().convert("RGBA")
+
+                # Increase width by 2 pixel — no smoothing
+                # w, h = frame.size
+                # frame = frame.resize((w + 2, h), Image.NEAREST)
+
                 frames.append(frame)
                 im.seek(im.tell() + 1)
         except EOFError:
