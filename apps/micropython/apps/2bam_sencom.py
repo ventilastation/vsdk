@@ -157,6 +157,7 @@ SNDS_SPAWN=[
     b"2bam_sencom/chop2",
 ]
 SND_NEW_LEVEL=b"2bam_sencom/new-level"
+MUS_INTRO=b"2bam_sencom/music-intro"
 
 #SND_BOOM=b"2bam_sencom/test/434751__djfroyd__monster-kick.wav"
 
@@ -385,7 +386,7 @@ class Game(Scene):
         try:
             with open('sencom.hi', 'r') as f:
                 loaded_score=int(f.read())
-                print('Loaded hiscore', loaded_score)
+                # print('Stopiscore', loaded_score)
         except:
             print('Cannot load hiscore from file')
             loaded_score=0
@@ -448,8 +449,22 @@ class Intro(Scene):
     def waitOneSec(self):
         self.enable_input=True
 
+    def waitOneTick(self):
+        # Workaround for music not working when exiting via ESC 
+        self.music_loop()
+        pass
+
+    def on_exit(self):
+        director.music_off()
+
+    def music_loop(self):
+        director.music_play(MUS_INTRO)
+        self.call_later(16296, self.music_loop)
+
     def on_enter(self):
+        # self.music_loop()
         self.enable_input=False
+        self.call_later(100, self.waitOneTick)
         self.call_later(1000, self.waitOneSec)
 
         self.hiscore=Label(font='font8_top', count=9, char_width=8, x=128-8*9//2, y=32)
@@ -519,7 +534,7 @@ class Combat(Scene):
         self.all_cities=ShuffleBag(2*list(range(NUM_CITIES)))
         self.cities_alive=ShuffleBag(list(range(NUM_CITIES)))
         self.ents=[]
-        print(self.game.level, 'level')
+        # print(self.game.level, 'level')
         self.waves=Waves(level_waves[min(self.game.level, len(level_waves)-1)])
 
 
@@ -537,7 +552,7 @@ class Combat(Scene):
         seed(ticks_ms())
 
         over_wave=max(0, self.game.level-len(level_waves)+1)
-        print('over_wave=',over_wave, 'level=',self.game.level)
+        # print('over_wave=',over_wave, 'level=',self.game.level)
         self.missile_y_speed = MISSILE_Y_SPEED + over_wave*0.15*MISSILE_Y_SPEED
 
         # self.texto_intro=Sprite()
@@ -896,7 +911,8 @@ class Combat(Scene):
         
             
         if director.was_pressed(director.BUTTON_D):
-            self.game.quit=True
+            # self.game.quit=True
+            self.game.combat=None
             director.pop()
             raise StopIteration()
     
