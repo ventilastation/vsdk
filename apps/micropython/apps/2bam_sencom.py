@@ -489,7 +489,7 @@ class Intro(Scene):
         for i, s in enumerate(self.story):
             s.set_y(i*10+int(st)%s.height())
             f = int(st/s.height())-i
-            s.set_frame(f if f >= 0 else 255)
+            s.set_frame(f%24 if f >= 0 else 255)
 
         if self.enable_input:
             if director.was_pressed(director.BUTTON_A):
