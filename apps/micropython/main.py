@@ -16,6 +16,7 @@ MAIN_MENU_OPTIONS = [
     ('vissile', "domedefander.png", 0),
     ('tincho_vrunner', "tincho_vrunner.png", 0),
     ('peronjam', "peronjam.png", 0),
+    ('vajon', "vajon.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
     ('villalugano_games', "villalugano_games.png", 0),
     # new game by esteban
@@ -36,7 +37,7 @@ MAIN_MENU_OPTIONS = [
 #     # ('vong', "menu.png", 6),
 #     # ('vugo', "menu.png", 7),
 #     # # Gallery
-    ('gallery', "pollitos.png", 0),
+    # ('gallery', "pollitos.png", 0),
     # # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # # Original content

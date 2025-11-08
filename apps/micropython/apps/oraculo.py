@@ -221,7 +221,7 @@ class Oraculo(Scene):
         self.flecha.set_strip(stripes["flecha.png"])
         self.flecha.set_x(128 - self.flecha.width()//2)
         self.flecha.set_y(24)
-        self.flecha.set_frame(6)
+        self.flecha.set_frame(0)
         self.volocidadBola = 0;
 
         self.ruletas = []
