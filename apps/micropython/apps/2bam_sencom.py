@@ -35,7 +35,7 @@
 # estan cubiertos por la tapa del ventilador de madrid.
 
 # FIXME^: More waves!!
-# FIXME: Fix trails: Hack fix offsets in trails
+# FIXME^: Fix offset hacks to compensate trail length on 65 deg angles
 # TODO: Level XX text
 # TODO: lose screen text
 # TODO: Finger skins
@@ -104,7 +104,7 @@ TRAIL_FRAME_HEIGHT=40
 TRAIL_FRAME_WIDTH=105
 TRAIL_X_OFFSETS=[-(round(TRAIL_FRAME_HEIGHT*sin(deg*pi/180)/cos(deg*pi/180))+(TRAIL_FRAME_WIDTH-2 if deg <= 0 else 2)) for deg in MISSILE_ANGLES]
 #print("TRAIL_X_OFFSETS", TRAIL_X_OFFSETS)
-MISSILE_XXX=[sin(deg*pi/180)/cos(deg*pi/180) for deg in MISSILE_ANGLES]
+MISSILE_ITAN=[sin(deg*pi/180)/cos(deg*pi/180) for deg in MISSILE_ANGLES]
 TRAIL_SEQ_FRAME_COUNT=7
 TRAIL_Y_PER_FRAME=6
 WARHEAD_ORIGIN_Y=2
@@ -244,8 +244,20 @@ class Missile:
         self.angle_index=angle_index
         #self.base_x=base_x-16
         self.target_city=target_city
-        self.base_x=target_x-round(MISSILE_XXX[angle_index]*TRAIL_FRAME_HEIGHT)
-        self.trail.set_x(target_x+TRAIL_X_OFFSETS[angle_index])
+        self.base_x=target_x-round(MISSILE_ITAN[angle_index]*TRAIL_FRAME_HEIGHT)
+
+        trx=target_x+TRAIL_X_OFFSETS[angle_index]
+        # HACK: Super hack a ultimo momento
+        if self.angle_index==1:
+            trx+=3
+        elif self.angle_index==3:
+            trx-=3
+        elif self.angle_index==0:
+            trx+=3
+        elif self.angle_index==4:
+            trx-=3
+        self.trail.set_x(trx)
+
         self.trail_base_frame = TRAIL_SEQ_FRAME_COUNT*angle_index
         self.depth=0
         self.hit_ground=False
@@ -266,6 +278,7 @@ class Missile:
         if self.hit_ground:
             return
 
+
         self.depth+=self.speed
         if self.depth >= MISSILE_MAX_DEPTH:
             self.hit_ground=True
@@ -278,11 +291,15 @@ class Missile:
         if d < TRAIL_Y_PER_FRAME:
             self.trail.disable()
             # TODO: warhead set_frame que se va asomando pero no cambia el Y solo el X
-        else: 
-            self.trail.set_frame(self.trail_base_frame+d//TRAIL_Y_PER_FRAME-1)        
+        else:
+            trf=self.trail_base_frame+d//TRAIL_Y_PER_FRAME-1
+            # HACK: Super hack a ultimo momento
+            # if self.angle_index==0 or self.angle_index==4:
+            #     trf+=1
+            self.trail.set_frame(trf)        
 
 
-        sin_rad=MISSILE_SINS[self.angle_index]
+        # sin_rad=MISSILE_SINS[self.angle_index]
         # off_x_bis = int(bx-self.trail_hw + TRAIL_LINE_HW + sin_rad * (d))#-sin_rad*MISSILE_MAX_DEPTH)
         # self.trail.set_y(d)  # HACK: Wrap around center and hide that with the Core
         # self.trail.set_x( off_x_bis)
@@ -290,26 +307,54 @@ class Missile:
 
         # self.trail.set_frame(d//TRAIL_STEP)
         
-        off_x = int(sin_rad * self.depth)
-        wx=bx+off_x
-        wx=bx+int(MISSILE_XXX[self.angle_index]* self.depth)
+
+        ### WARHEAD ###
+
+        # off_x = int(sin_rad * self.depth)
+        # wx=bx+off_x
+        itan=MISSILE_ITAN[self.angle_index]
+        wx=bx+int(itan * self.depth)          #+2 #FIXME remove+2
         #wy=42+d+self.warhead.height()
         #wy=(42+d+self.warhead.height())%54
         # wy=d-self.warhead.height()+WARHEAD_ORIGIN_Y
         if WH_MODE == 2:
             wy=d-self.warhead.height()+WARHEAD_ORIGIN_Y
         elif WH_MODE == 1:
+            # DEPRECATED
             k=INV_DEEPSPACE[53-MISSILE_MAX_DEPTH]
             wy=(d*k//MISSILE_MAX_DEPTH)-self.warhead.height()+WARHEAD_ORIGIN_Y
+        
+
+        ### ###
 
         if d < 10:
-            still_off_x = int(sin_rad * 10)
-            still_x=bx+off_x
+            # HACK: Super hack a ultimo momento
+            iwx=0
+            iwy=0
+            if self.angle_index==0:
+                iwx += 4
+                iwy = 0
+            elif self.angle_index==4:
+                iwx -= 4
+                iwy = 0
+        
+            #still_off_x = int(sin_rad * 10)
+            still_off_x = int(itan * 10)            
+            still_x=bx+still_off_x+iwx
             #self.warhead.set_x(bx-self.warhead_hw)
             self.warhead.set_x(still_x-self.warhead_hw)
-            self.warhead.set_y(0)
+            self.warhead.set_y(iwy)
             self.warhead.set_frame(d)
         else:
+            # HACK: Super hack a ultimo momento
+            if self.angle_index==0:
+                wx += 4
+                wy -= 2
+            elif self.angle_index==4:
+                wx -= 4
+                wy -= 2
+            
+
             self.warhead.set_x(wx-self.warhead_hw)
             #self.warhead.set_x(-self.warhead_hw)
             self.warhead.set_y(wy)
@@ -640,7 +685,7 @@ class Combat(Scene):
 
 
     def spawn_missile(self, target_cities_bag, angles):
-        y_speed = self.missile_y_speed # TODO: div by level (or overlevel)
+        y_speed = self.missile_y_speed
         for missile in self.missiles:
             if not missile.alive:
                 if not target_cities_bag.empty:
@@ -878,10 +923,14 @@ class Combat(Scene):
         elif next_spawn == W_M0:
             self.spawn_missile(self.all_cities, [2]) #[0]
         elif next_spawn == W_M1:
-            self.spawn_missile(self.all_cities, [1,2,3]) #[-45, 0, 45]
+            self.spawn_missile(self.all_cities, [1,3]) #[-45, 45]
         elif next_spawn == W_M2:
+            self.spawn_missile(self.all_cities, [0,4]) #[-65, 65]
+        elif next_spawn == W_M01:
+            self.spawn_missile(self.all_cities, [1,2,3]) #[-45, 0, 45]
+        elif next_spawn == W_M012:
             self.spawn_missile(self.all_cities, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
-        elif next_spawn == W_M2CA:
+        elif next_spawn == W_M012CA:
             self.spawn_missile(self.cities_alive, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
 
         if W_ENEMY_MIN <= next_spawn < W_ENEMY_MAX:
@@ -963,6 +1012,7 @@ class City:
             self._t = 0
             self.state = CITY_DYING
     
+    # HACK: to get the explosion animation but not re-trigger any other logic
     def re_explode(self):
         if self.state != CITY_OK:
             self._t = 2
@@ -993,9 +1043,7 @@ class City:
         
 
 class ScoreTopLabel:
-    # Score font id should be a strip with 0-9 numbers first and any string you
-    # want to show before the number should be after it in the strip, e.g.
-    # "0123456789HI" will be optionally shown as HI##### in-game.
+    # Score font should be a strip with 0-9 numbers for frames 0-9
     def __init__(self, score_font_id, digit_count, char_width=8, y=0):
         self.digits = []
         x0 = 128-int((digit_count-.5)*char_width/2)
@@ -1047,7 +1095,9 @@ W_ENEMY_MIN=10
 W_M0=10
 W_M1=11
 W_M2=12
-W_M2CA=13 # CITY AIM
+W_M01=13
+W_M012=14
+W_M012CA=15 # CITY AIM
 W_B0=20
 W_B1=21
 W_ENEMY_MAX=29
@@ -1061,9 +1111,6 @@ level_colors=[
 level_waves=[
     # ------- LEVEL 1 -------
     [
-        #  ,----------- Duration seconds (will extend to amount steps if too low)
-        # |  ,--------- Amount
-        # |  |   ,---- Enemy shuffle bag 
 
         # ###
         # ### DEBUG REMOVE ME
@@ -1072,25 +1119,30 @@ level_waves=[
         # ( 2  ,  1, [W_M2]          ),
         # ( 2  ,  1, [W_M2]          ),
         # ( 2  ,  1, [W_M2]          ),
-        # ( 2  ,  1, [W_M2]          ),
-        # ( 2  ,  1, [W_M2]          ),
-        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M1]          ),
+        # ( 2  ,  1, [W_M1]          ),
+        # ( 2  ,  1, [W_M1]          ),
+        # ( 2  ,  1, [W_M1]          ),
 
-        ###
-        ###
+        #  ,------------- Duration seconds (will extend to amount steps if too low)
+        # |     ,-------- Amount
+        # |     |   ,---- Enemy shuffle bag 
         ( 3  ,  0, []          ),
         (10  ,  5, [W_M0]      ),
         ( 3  ,  0, []          ),
         ( 4  ,  4, [W_M0,W_M1] ),
         ( 3  ,  0, []          ),
+        (10  ,  5, [W_M0]      ),
+        ( 3  ,  0, []          ),
         (2.4 ,  1, [W_WARN]    ),
         ( 0  ,  5, [W_M0]      ),
+        #      19 
     ],
     # ------- LEVEL 2 -------
     [
-        #  ,----------- Duration seconds (will extend to amount steps if too low)
-        # |  ,--------- Amount
-        # |  |   ,---- Enemy shuffle bag 
+        #  ,------------- Duration seconds (will extend to amount steps if too low)
+        # |     ,-------- Amount
+        # |     |   ,---- Enemy shuffle bag 
         ( 3  ,  0, []          ),
         (10  ,  5, [W_M0]      ),
         ( 3  ,  0, []          ),
@@ -1103,28 +1155,29 @@ level_waves=[
         ( 5  ,  0, []          ),
         ( 0  ,  5, [W_M0]      ),
         ( 5  ,  0, []          ),
-        ( 0  ,  5, [W_M1]      ),
+        ( 0  ,  5, [W_M0, W_M1]),
+        #      26
     ],    
     # ------- LEVEL 3 -------
     [
-        #  ,----------- Duration seconds (will extend to amount steps if too low)
-        # |  ,--------- Amount
-        # |  |   ,---- Enemy shuffle bag 
+        #  ,------------- Duration seconds (will extend to amount steps if too low)
+        # |     ,-------- Amount
+        # |     |   ,---- Enemy shuffle bag 
         ( 3  ,  0, []          ),
-        (10  ,  5, [W_M1]      ),
+        (10  ,  5, [W_M01]      ),
         ( 3  ,  0, []          ),
-        ( 1  ,  1, [W_M2,W_M1] ),
-        ( 4  ,  4, [W_M2,W_M1] ),
-        ( 2  ,  2, [W_M2CA] ),
+        ( 1  ,  1, [W_M2,W_M01] ),
+        ( 6  ,  4, [W_M2,W_M01] ),
+        ( 2  ,  2, [W_M012CA] ),
         ( 3  ,  0, []          ),
         ( 10 , 20, [W_M0] ),
         ( 3  ,  0, []          ),
         ( 1  ,  1, [W_M2,W_M1] ),
         ( 4  ,  4, [W_M2,W_M1] ),
-        ( 2  ,  2, [W_M2CA] ),
+        ( 2  ,  2, [W_M012CA] ),
         ( 2  ,  0, []          ),
         (2.4 ,  1, [W_WARN]    ),
-        ( 10  , 20, [W_M2]      ),
+        ( 10  , 20, [W_M012]   ),
     ],    
 ]
 
