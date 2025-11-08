@@ -34,11 +34,10 @@
 # MEMO: En perspectiva 2, mas al centro que y=54-7, esos ultimos 7px por ahi
 # estan cubiertos por la tapa del ventilador de madrid.
 
-# TODO: Intro text
-# TODO: Hack fix offsets in trails
+# FIXME^: More waves!!
+# FIXME: Fix trails: Hack fix offsets in trails
 # TODO: Level XX text
 # TODO: lose screen text
-# TODO: Define waves
 # TODO: Finger skins
 # TODO: Wave wait all enemies dead before next step or max_time? -- or stop waiting? min_time
 
@@ -477,9 +476,15 @@ class Intro(Scene):
             f = int(st/s.height())-i
             s.set_frame(f if f >= 0 else 255)
 
-        if self.enable_input and director.was_pressed(director.BUTTON_A):
-            self.game.combat=Combat(self.game)
-            director.pop()
+        if self.enable_input:
+            if director.was_pressed(director.BUTTON_A):
+                self.game.combat=Combat(self.game)
+                director.pop()
+            elif director.was_pressed(director.BUTTON_D):
+                self.game.quit=True
+                director.pop()
+                raise StopIteration()
+
         self.hiscore.step(-1)
 
 

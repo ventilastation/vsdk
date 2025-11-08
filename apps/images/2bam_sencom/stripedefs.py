@@ -25,7 +25,7 @@ stripes = [
     ),
     palettegroup(
         strip("2bam_sencom_top.png", frames=1),
-        strip("texto_intro_strip.png", frames=18),
+        strip("texto_intro_strip.png", frames=24),
 
         # strip("font_hiscore_8px_bottom.png",frames=12),  
         # strip("texto_intro.png", frames=1), 
