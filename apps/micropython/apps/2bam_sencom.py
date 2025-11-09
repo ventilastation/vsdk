@@ -1,62 +1,59 @@
-# Senile command
+# Senile command v.2511
 # Ayuda al motor del ventilador a evitar que los dedos geriatricos lo atasquen.
 # 2bam.com 2025
 #
+#                              En una galaxia lejana,
+#                                  en el planeta
+#                                 Arg-n-tina ZX25
+#                              ancianos sub medicados
+#                              cegados por atractivos
+#                            colores ingresan sus dedos
+#                            a la imparcial maquinaria...
+#                             
+#                              ¿Quién podra salvar el
+#                                  venti-núcleo?
+#
 # Reglas     Dispararle a los dedos que caen antes de que impacten los motores
-#            magicos del Ventilastation. Si no quedan motores se pierde el juego.
+#            magicos que hacen funcionar el Ventilastation.
+#            Si no quedan motores se pierde el juego.
 #
 # Puntos     +125 puntos  : Dedo destruido
 #            -250 puntos  : Impacto directo al nucleo 
 #            +1000 puntos : Por cada motor que sobreviva hasta el fin del nivel.
-#            NOTA: El impacto a un motor no quita puntos.
+#            NOTA: El impacto enemigo a un motor no quita puntos,
+#                  los proyectiles propios tampoco los afectan.
 #
-# Controles               Flechas : Movimiento
-#            Boton A (emu: SPACE) : Dispara
-#                Mantener boton A : Activa movimiento rapido
-
-# MEMO: 6-7 pixels near the center may be covered by the fan's cap
-
-# TODO ^: End of level animation / change level
-#         Score numbers "lifted up" --> y=24
-#         Add buildings alive to score (remove from screen)
-#         Add score per hit rate
-#         (Add inflation multiplier here?)
-#         Is it hiscore? "HI"
-#         Flush effect for sprites
-#         End of level warp fx (paleta y efecto loco del fullscreen
-#         Efecto loco con texto_intro en perspective 2 yendo hacia adentro!
+# Controles                      Flechas : Movimiento
+#                   Boton A (emu: SPACE) : Dispara
+#                       Mantener boton A : Activa movimiento rapido
 
 
-# FIXME^^^: use depth (persp=2) collisions instead!!
-# FIXME^^^: player explosions not always hit right
-# FIXME: Trail for WH_MODE=1 needs perspective lengths
-
-# TODO ^: Better explosions for player - COlor de paleta "glitch" para explosiones tuyas
-# DONE ^: shuffle bag target city (double, triple size bag for less predictability)
-# DONE ^: Red alert 1 building
-# DONE ^: Que tambien haya impacto en el suelo (te resta puntos groso pero no perdes)
-# TODO ^: Wave wait all enemies dead before next step or max_time? -- or stop waiting? min_time
-# TODO ^: Tweak missile Y speed (per level)
 
 
-# TODO: Intro (Game)
-# TODO: Score change palette to black, then flashy on EOL
-# DONE ^: SFX placeholder
-# TODO^: Level progression
-# TODO^: Define waves
-# TODO: Define overwave
 
-# TODO: Enemigo2 bomba q cambia de direccion sin estela mas dificil
-# TODO: better SFX
-# TODO: Integrate new finger sprites
+# MEMO: En perspectiva 2, mas al centro que y=54-7, esos ultimos 7px por ahi
+# estan cubiertos por la tapa del ventilador de madrid.
+
+# FIXME^: More waves!!
+# FIXME^: Fix offset hacks to compensate trail length on 65 deg angles
+# TODO: Level XX text
+# TODO: lose screen text
 # TODO: Finger skins
-# TODO v: Perder "traba" el ventilador (imagen)
+# TODO: Wave wait all enemies dead before next step or max_time? -- or stop waiting? min_time
 
-# NO: Estela azul para tus misiles/delay?
-# NO: Bonus points con misiles no usados y ciudades no destruidas
 
-# TODO v: animacion (wiggle onda 2bam demo) del score cuando cambia
-# TODO v: almacenar score somehow?
+# TODO: Tally - Is it hiscore? HI SCORE label en tally
+# TODO: Tally - Add score per hit rate - HIT 78% (baja el numbero sube el score)
+
+
+# FIXME: extend boom Y using INV_DEEPSPACE_DELTA
+
+# TODO: Intro (Game) -- Senile command title arriba, hiscore y la historia subiendo fragmentada. Efecto loco con texto_intro en perspective 2 yendo hacia adentro!
+# TODO: Enemigo q cae en espiral larga (diagonal polar), da ponele 3 vueltas completas antes de impactar
+# TODO: Enemigo cae en espiral hasta cierto pos-y luego cambia a vertical y cae derecho
+#       --variante que randomiza la diagonal entre centro -45, 0, 45°
+# TODO: "Navecita Bonus", destornillador?
+# TODO: Fix new finger sprites first "peeping" frames in dedos/generate.py
 
 # Game scene sprite budget
 #    1 BG fan move (FS)
@@ -68,9 +65,11 @@
 #   20 missiles (trail+warhead)
 #    1 "WARNING" circle
 #    6 score
+#    1 lose game fan blades
+#    ? tally/lose text
 #    ? bombs
 # ------------------
-#   40 total 
+#   41 total 
 
 from urandom import choice, randint, seed
 from utime import ticks_ms, ticks_diff, ticks_add
@@ -98,13 +97,14 @@ INV_SQRT2=0.70710678
 TRAIL_SUB_FRAMES=3
 TRAIL_LINE_HW=1.5
 
+WARHEAD_STRIP_IDS=["dedo-frames65","dedo-frames45","dedo-frames0","dedo-frames45-neg","dedo-frames65-neg"]
 MISSILE_ANGLES =  [-65,-45, 0, 45, 65]
 MISSILE_SINS=[sin(deg*pi/180) for deg in MISSILE_ANGLES]
 TRAIL_FRAME_HEIGHT=40
 TRAIL_FRAME_WIDTH=105
 TRAIL_X_OFFSETS=[-(round(TRAIL_FRAME_HEIGHT*sin(deg*pi/180)/cos(deg*pi/180))+(TRAIL_FRAME_WIDTH-2 if deg <= 0 else 2)) for deg in MISSILE_ANGLES]
 #print("TRAIL_X_OFFSETS", TRAIL_X_OFFSETS)
-MISSILE_XXX=[sin(deg*pi/180)/cos(deg*pi/180) for deg in MISSILE_ANGLES]
+MISSILE_ITAN=[sin(deg*pi/180)/cos(deg*pi/180) for deg in MISSILE_ANGLES]
 TRAIL_SEQ_FRAME_COUNT=7
 TRAIL_Y_PER_FRAME=6
 WARHEAD_ORIGIN_Y=2
@@ -115,7 +115,8 @@ WARHEAD_ORIGIN_Y=2
 # by the center image, if they were longer it would require special case math
 MISSILE_MAX_DEPTH=40
 MISSILE_Y_SPEED=0.20
-WARHEAD_FRAMES=3
+WARHEAD_LOOP_START=10
+WARHEAD_LOOP_FRAMES=3
 
 NUM_CITIES=5
 MAX_WEAPON=4
@@ -130,12 +131,12 @@ palette=bytearray([randint(0,255) for _ in range(1024*6)])
 
 P_FULLSCREEN=0
 P_DISTORTED=2
-def make_sprite(name, x=0, y=0, persp=1, frame=255):
+def make_sprite(name, x=0, y=None, persp=1, frame=255):
     s=Sprite()
     s.set_strip(STRIPS[name+".png"])
     s.set_perspective(persp)
     s.set_x(x)
-    s.set_y(y)
+    s.set_y(y if y is not None else (255 if persp == P_FULLSCREEN else 0))
     s.set_frame(frame)
     return s
 
@@ -144,13 +145,19 @@ SND_WARNING=b"2bam_sencom/warning" # TODO: recortar en tiempo
 SND_EMPTY_CLIP=b"2bam_sencom/empty-clip"
 SND_RED_ALERT=b"2bam_sencom/red-alert"
 SND_CITY_EXPLODE=b"2bam_sencom/city-explode" # LPF menos chillon o pitch down
+SND_CORE_HIT=b"2bam_sencom/core-hit"
 SND_BOOM=b"2bam_sencom/boom"
-SND_TALLY=b"2bam_sencom/plin"
+SND_TALLY_CITY=b"2bam_sencom/plin"
+SND_TALLY_POINT=b"2bam_sencom/plinito"
+SND_TALLY_END=b"2bam_sencom/tally-end"
+SND_FAN_BROKE=b"2bam_sencom/fan-broke"
 SNDS_SPAWN=[
     b"2bam_sencom/chop0",
     b"2bam_sencom/chop1",
     b"2bam_sencom/chop2",
 ]
+SND_NEW_LEVEL=b"2bam_sencom/new-level"
+MUS_INTRO=b"2bam_sencom/music-intro"
 
 #SND_BOOM=b"2bam_sencom/test/434751__djfroyd__monster-kick.wav"
 
@@ -220,6 +227,8 @@ class Missile:
         # self._debug.set_frame(0)
         
         self.warhead=warhead_sprite
+
+        # TODO: Remove this, already done in reset
         self.warhead.set_strip(STRIPS["dedo.png"])
         self.warhead.set_perspective(WH_MODE)
         #self.warhead.set_frame(0)
@@ -235,13 +244,27 @@ class Missile:
         self.angle_index=angle_index
         #self.base_x=base_x-16
         self.target_city=target_city
-        self.base_x=target_x-round(MISSILE_XXX[angle_index]*TRAIL_FRAME_HEIGHT)
-        self.trail.set_x(target_x+TRAIL_X_OFFSETS[angle_index])
+        self.base_x=target_x-round(MISSILE_ITAN[angle_index]*TRAIL_FRAME_HEIGHT)
+
+        trx=target_x+TRAIL_X_OFFSETS[angle_index]
+        # HACK: Super hack a ultimo momento
+        if self.angle_index==1:
+            trx+=3
+        elif self.angle_index==3:
+            trx-=3
+        elif self.angle_index==0:
+            trx+=3
+        elif self.angle_index==4:
+            trx-=3
+        self.trail.set_x(trx)
+
         self.trail_base_frame = TRAIL_SEQ_FRAME_COUNT*angle_index
         self.depth=0
         self.hit_ground=False
         self.alive=True
         self.speed=speed
+        self.warhead.set_strip(STRIPS[WARHEAD_STRIP_IDS[angle_index]+".png"])
+        self.warhead_hw=self.warhead.width()//2
         self.warhead.set_frame(0)
         self.step()
 
@@ -255,6 +278,7 @@ class Missile:
         if self.hit_ground:
             return
 
+
         self.depth+=self.speed
         if self.depth >= MISSILE_MAX_DEPTH:
             self.hit_ground=True
@@ -267,11 +291,15 @@ class Missile:
         if d < TRAIL_Y_PER_FRAME:
             self.trail.disable()
             # TODO: warhead set_frame que se va asomando pero no cambia el Y solo el X
-        else: 
-            self.trail.set_frame(self.trail_base_frame+d//TRAIL_Y_PER_FRAME-1)        
+        else:
+            trf=self.trail_base_frame+d//TRAIL_Y_PER_FRAME-1
+            # HACK: Super hack a ultimo momento
+            # if self.angle_index==0 or self.angle_index==4:
+            #     trf+=1
+            self.trail.set_frame(trf)        
 
 
-        sin_rad=MISSILE_SINS[self.angle_index]
+        # sin_rad=MISSILE_SINS[self.angle_index]
         # off_x_bis = int(bx-self.trail_hw + TRAIL_LINE_HW + sin_rad * (d))#-sin_rad*MISSILE_MAX_DEPTH)
         # self.trail.set_y(d)  # HACK: Wrap around center and hide that with the Core
         # self.trail.set_x( off_x_bis)
@@ -279,21 +307,59 @@ class Missile:
 
         # self.trail.set_frame(d//TRAIL_STEP)
         
-        off_x = int(sin_rad * self.depth)
-        wx=bx+off_x
-        wx=bx+int(MISSILE_XXX[self.angle_index]* self.depth)
+
+        ### WARHEAD ###
+
+        # off_x = int(sin_rad * self.depth)
+        # wx=bx+off_x
+        itan=MISSILE_ITAN[self.angle_index]
+        wx=bx+int(itan * self.depth)          #+2 #FIXME remove+2
         #wy=42+d+self.warhead.height()
         #wy=(42+d+self.warhead.height())%54
         # wy=d-self.warhead.height()+WARHEAD_ORIGIN_Y
         if WH_MODE == 2:
             wy=d-self.warhead.height()+WARHEAD_ORIGIN_Y
         elif WH_MODE == 1:
+            # DEPRECATED
             k=INV_DEEPSPACE[53-MISSILE_MAX_DEPTH]
             wy=(d*k//MISSILE_MAX_DEPTH)-self.warhead.height()+WARHEAD_ORIGIN_Y
+        
 
-        self.warhead.set_x(wx-self.warhead_hw)
-        self.warhead.set_y(wy)
-        self.warhead.set_frame(d%WARHEAD_FRAMES)
+        ### ###
+
+        if d < 10:
+            # HACK: Super hack a ultimo momento
+            iwx=0
+            iwy=0
+            if self.angle_index==0:
+                iwx += 4
+                iwy = 0
+            elif self.angle_index==4:
+                iwx -= 4
+                iwy = 0
+        
+            #still_off_x = int(sin_rad * 10)
+            still_off_x = int(itan * 10)            
+            still_x=bx+still_off_x+iwx
+            #self.warhead.set_x(bx-self.warhead_hw)
+            self.warhead.set_x(still_x-self.warhead_hw)
+            self.warhead.set_y(iwy)
+            self.warhead.set_frame(d)
+        else:
+            # HACK: Super hack a ultimo momento
+            if self.angle_index==0:
+                wx += 4
+                wy -= 2
+            elif self.angle_index==4:
+                wx -= 4
+                wy -= 2
+            
+
+            self.warhead.set_x(wx-self.warhead_hw)
+            #self.warhead.set_x(-self.warhead_hw)
+            self.warhead.set_y(wy)
+            self.warhead.set_frame(WARHEAD_LOOP_START+d%WARHEAD_LOOP_FRAMES)
+
         self.hit_x=wx
         if 0 <= d < 54:
             self.hit_y=INV_DEEPSPACE[54-d] # TODO: lerp [d] y [d+1] usando self.depth?    
@@ -344,34 +410,58 @@ class Anim(Entity):
 
 
 class Game(Scene):
+    stripes_rom = "2bam_sencom"
+
     quit=False
     score=0
     level=0
     # Normalized cartesian x and y [-1.0, 1.0]
     aim_cart_x=0
     aim_cart_y=0.5
+    combat=None
 
     def reset(self):
         self.score=0
         self.level=0
+        self.combat=None
 
-    def save_score():
-        HISCORE=max(HISCORE, self.score)
-        # TODO: persist
-        pass
+    def load_save_hiscore(self):
+        global HISCORE
+
+        try:
+            with open('sencom.hi', 'r') as f:
+                loaded_score=int(f.read())
+                # print('Stopiscore', loaded_score)
+        except:
+            print('Cannot load hiscore from file')
+            loaded_score=0
+            
+        HISCORE=max(HISCORE, loaded_score, self.score)
+
+        try:
+            with open('sencom.hi', 'w') as f:
+                f.write(str(HISCORE))
+        except:
+            print('Cannot persist hiscore to file')
 
     def on_enter(self):
         super().on_enter()
         # MEMO: This also gets called when the Combat state pops
-        # NO!!: self.reset()
-        pass
+        # NO!!!: self.reset()
+        self.load_save_hiscore()
 
     def step(self):
         if self.quit:
             director.pop()
             raise StopIteration()
         else:
-            director.push(Combat(self))
+            gc.collect()
+            if not self.combat or self.combat.lose:
+                self.reset()
+                director.push(Intro(self))
+            else:
+                director.push(self.combat)
+
 
 class Warning(Entity):
     def __init__(self):
@@ -394,11 +484,80 @@ class Warning(Entity):
                 self.sprite.disable()
                 self.alive=False
 
+class Intro(Scene):
+    stripes_rom = "2bam_sencom"
+
+    def __init__(self, game):
+        super().__init__()
+        self.game=game
+
+    def waitOneSec(self):
+        self.enable_input=True
+
+    def waitOneTick(self):
+        # Workaround for music not working when exiting via ESC 
+        self.music_loop()
+        pass
+
+    def on_exit(self):
+        director.music_off()
+
+    def music_loop(self):
+        director.music_play(MUS_INTRO)
+        self.call_later(16296, self.music_loop)
+
+    def on_enter(self):
+        # self.music_loop()
+        self.enable_input=False
+        self.call_later(100, self.waitOneTick)
+        self.call_later(1000, self.waitOneSec)
+
+        self.hiscore=Label(font='font8_top', count=9, char_width=8, x=128-8*9//2, y=32)
+        self.hiscore.set_text(f'HI {HISCORE:06}')
+
+        title=make_sprite('2bam_sencom_top', y=0, frame=0, persp=P_DISTORTED)
+        title.set_x(128-title.width()//2)
+
+        self.t=0
+        self.story=[make_sprite('texto_intro_strip', persp=P_DISTORTED) for _ in range(5)]
+        for s in self.story:
+            s.set_x(-s.width()//2)
+
+        self.palette=PaletteHelper()
+        self.palette.set_font(0,255,0)
+
+
+    def step(self):
+        self.t+=SECONDS_PER_STEP
+
+        st=self.t*5
+        for i, s in enumerate(self.story):
+            s.set_y(i*10+int(st)%s.height())
+            f = int(st/s.height())-i
+            s.set_frame(f%24 if f >= 0 else 255)
+
+        if self.enable_input:
+            if director.was_pressed(director.BUTTON_A):
+                self.game.combat=Combat(self.game)
+                director.pop()
+            elif director.was_pressed(director.BUTTON_D):
+                self.game.quit=True
+                director.pop()
+                raise StopIteration()
+
+        self.hiscore.step(-1)
+
 
 class Combat(Scene):
     stripes_rom = "2bam_sencom"
 
     next_missile=1
+    lose=0
+
+    def garbage_collect(self):
+        import gc
+        gc.collect()
+        self.call_later(60000, self.garbage_collect)
 
     def __init__(self, game):
         super().__init__()
@@ -407,13 +566,22 @@ class Combat(Scene):
     def on_enter(self):
         super().on_enter()
 
-        self.tally=False
+        self.garbage_collect()
+
+        director.sound_play(SND_NEW_LEVEL)
+        
+        self.lose=0
+
+        # self.lose=1 # FIXME DEBUG TEMP
+        self.tally=False#True
+        self.tally_tmr=0
 
         self.all_cities=ShuffleBag(2*list(range(NUM_CITIES)))
         self.cities_alive=ShuffleBag(list(range(NUM_CITIES)))
         self.ents=[]
-        print(self.game.level, 'level')
+        # print(self.game.level, 'level')
         self.waves=Waves(level_waves[min(self.game.level, len(level_waves)-1)])
+
 
         self.aim=make_sprite("crosshair", frame=0)
 
@@ -423,9 +591,14 @@ class Combat(Scene):
         # self.warning.activate()
         self.ents.append(self.warning)
 
-        self.score=ScoreTopLabel("font_hiscore_16px_top", digit_count=6, y=42, char_width=16)
+        self.score=ScoreTopLabel("font_hiscore_16px_top", digit_count=6, y=41, char_width=16)
+        self.score.set_score(self.game.score)
 
         seed(ticks_ms())
+
+        over_wave=max(0, self.game.level-len(level_waves)+1)
+        # print('over_wave=',over_wave, 'level=',self.game.level)
+        self.missile_y_speed = MISSILE_Y_SPEED + over_wave*0.15*MISSILE_Y_SPEED
 
         # self.texto_intro=Sprite()
         # self.texto_intro.set_strip(STRIPS["texto_intro.png"])
@@ -476,29 +649,17 @@ class Combat(Scene):
 
 
         # Palette cache
-        num_STRIPS, num_palettes = struct.unpack("<HH", director.romdata)
-        offsets = struct.unpack_from("<%dL%dL" % (num_STRIPS, num_palettes), director.romdata, 4)
-        palette_offsets = offsets[num_STRIPS:]
-        self.pal_copy=pal_copy = bytearray(director.romdata[palette_offsets[0]:])
-        
-        self.pal_ind_blue=find_color_index(pal_copy, 0, 7, 250)
-        self.pal_ind_blue=find_color_index(pal_copy, 0, 7, 250)
-        self.pal_ind_city=find_color_index(pal_copy, 147, 0, 255)
-        self.pal_ind_score=find_color_index(pal_copy, 0, 255, 0)
-        pal_copy[self.pal_ind_city+1] = randint(128,255)
-        pal_copy[self.pal_ind_city+2] = randint(128,255)
-        pal_copy[self.pal_ind_city+3] = randint(128,255)
-        pal_copy[self.pal_ind_score+1] = 0
-        pal_copy[self.pal_ind_score+2] = 0
-        pal_copy[self.pal_ind_score+3] = 0
+        self.palette=PaletteHelper()
+        self.palette.set_core_and_cities(randint(128,255),randint(128,255),randint(128,255))
+        self.palette.set_font(0,0,0)
+        self.palette.flush()
 
         # TODO: Change by level color!
-        self.set_color_core(randint(0,255)|0x80,0,randint(0,255)|0x80)
-
-
-
-        self.pal_ind_boom=find_color_index(pal_copy, 0, 0xff, 0xf0)
-
+        if self.game.level < len(level_colors):
+            level_color=level_colors[self.game.level]
+        else:
+            level_color=(randint(0,255)|0x80,0,randint(0,255)|0x80)
+        self.palette.set_core_and_cities(*level_color)
 
 
         self.cities=[City(i*255//5) for i in range(NUM_CITIES)]
@@ -507,7 +668,7 @@ class Combat(Scene):
 
         self.core=Sprite()
         self.core.set_strip(STRIPS["core.png"])
-        self.core.set_y(160)
+        self.core.set_y(164) #160
         self.core.set_frame(0)
         self.core.set_perspective(0)
         # self.core.disable()
@@ -519,21 +680,12 @@ class Combat(Scene):
         #self.bombs=[EnemyBomb()]
         self.bombs=[]
 
-        bg_black=Sprite()
-        bg_black.set_strip(STRIPS["bg_black.png"])
-        bg_black.set_y(255)
-        bg_black.set_frame(0)
-        bg_black.set_perspective(0)
+        self.lose_blades_spr=make_sprite("aspas", persp=P_FULLSCREEN)
+        bg_black=make_sprite("bg_black", persp=P_FULLSCREEN, frame=0)
 
-    def set_color_core(self,r,g,b):
-        if self.pal_ind_blue and self.pal_ind_city:
-            self.pal_copy[self.pal_ind_city+1]=self.pal_copy[self.pal_ind_blue+1]=b
-            self.pal_copy[self.pal_ind_city+2]=self.pal_copy[self.pal_ind_blue+2]=g
-            self.pal_copy[self.pal_ind_city+3]=self.pal_copy[self.pal_ind_blue+3]=r
-            povdisplay.set_palettes(self.pal_copy)
 
     def spawn_missile(self, target_cities_bag, angles):
-        y_speed = MISSILE_Y_SPEED # TODO: div by level (or overlevel)
+        y_speed = self.missile_y_speed
         for missile in self.missiles:
             if not missile.alive:
                 if not target_cities_bag.empty:
@@ -549,15 +701,54 @@ class Combat(Scene):
         print('NOT ENOUGH MISSILES TO SPAWN', len(self.missiles))
 
     def step(self):
-        if self.tally:
+        if self.lose:
+            self.step_lose()
+        elif self.tally:
             self.step_tally()
         else:
             self.step_play()
+        self.palette.flush()
+
+    def step_lose(self):
+        self.common_step_end()
+
+        for city in self.cities:
+            city.step()
+
+
+        if self.lose==1:
+            # Being the last ones will be under everything
+            # TODO: SFX hierros
+            director.sound_play(SND_FAN_BROKE)
+            self.lose_blades_spr.set_frame(0)
+            self.lose_blades_angle=randint(0, 255)
+            self.lose_blades_ang_vel=15
+
+            self.palette.set_font(255,255,255)
+
+        self.lose += 1
+        
+        self.lose_blades_ang_vel=max(0, self.lose_blades_ang_vel-0.2)
+        self.lose_blades_angle-=self.lose_blades_ang_vel
+        self.lose_blades_spr.set_x(floor(self.lose_blades_angle))
+
+        if self.lose >= 7*STEPS_PER_SECOND:
+            director.pop()
+
+
+    def common_step_end(self):
+        if self.score.y()>10:
+            self.score.set_y(self.score.y()-1)
+
+        for boom in self.booms:
+            boom.step()
+
+        self.warning.sprite.disable()
+        self.aim.disable()
 
 
     def step_tally(self):
-        for boom in self.booms:
-            boom.sprite.disable()
+        self.common_step_end()
 
         # if any(city.state == CITY_DYING for city in self.cities) or any(boom.alive for boom in self.booms):
         #     for city in self.cities:
@@ -566,10 +757,11 @@ class Combat(Scene):
         #         boom.step()
         #     return
 
-        self.warning.sprite.disable()
+        self.palette.set_font( randint(0,128),  randint(0,255)|0x80, randint(0,128))
 
         if self.score.y()>10:
-            self.score.set_y(self.score.y()-1)
+            pass
+            #self.score.set_y(self.score.y()-1)
         else:
             self.score.set_y(0)
 
@@ -589,14 +781,25 @@ class Combat(Scene):
                         self.score.set_score(self.game.score)
                         s.disable()
                         city.state=CITY_DEAD
-                        director.sound_play(SND_TALLY)
+                        director.sound_play(SND_TALLY_CITY)
                     break
             if not city_moved:
-                self.core.set_y(min(self.core.y()+3,255))
-                if self.core.y() == 255:
+                if self.tally_tmr == 0:
+                    director.sound_play(SND_TALLY_END)
+
+                ti0 = int(self.tally_tmr * 10)
+                self.tally_tmr += 1
+                ti1 = int(self.tally_tmr * 10)
+
+                self.core.set_y(min(164+int((255-164)*self.tally_tmr/(3*STEPS_PER_SECOND)),255))
+
+                if ti0 != ti1:
+                    self.palette.set_core_and_cities(randint(0,128)+68,randint(0,128)+68,randint(0,128)+68)
+
+                if self.tally_tmr >= 2.954*STEPS_PER_SECOND:
                     self.game.level += 1
                     director.pop()
-                    pass
+
 
                 # city.step()
                 # if city.state == CITY_OK:
@@ -611,24 +814,13 @@ class Combat(Scene):
         self.update_aim()
 
 
-        if self.pal_ind_score:
-            pal=self.pal_copy
-            pal[self.pal_ind_score+1] = randint(0,128)
-            pal[self.pal_ind_score+2] = randint(0,255)|0x80
-            pal[self.pal_ind_score+3] = randint(0,128)
-            povdisplay.set_palettes(pal)
+
 
 
     def step_play(self):
 
-        
-        pal_i=self.pal_ind_boom
-        pal=self.pal_copy
-        if pal_i:
-            pal[pal_i+1]=randint(0,255)|0x80
-            pal[pal_i+2]=randint(0,255)|0x80
-            pal[pal_i+3]=randint(0,255)|0x80
-            povdisplay.set_palettes(pal)
+
+        self.palette.set_boom(randint(0,128)+68,randint(0,128)+68,randint(0,128)+68)   
 
         # povdisplay.set_palettes(palette)
         for ent in self.ents:
@@ -665,10 +857,7 @@ class Combat(Scene):
             city.step()
         
         if self.cities_dead == NUM_CITIES:
-            # TODO: LOSE STATE
-            self.game.reset()
-            director.pop()
-            #raise StopIteration()
+            self.lose=1
             return
 
 
@@ -709,7 +898,7 @@ class Combat(Scene):
                         self.cities_dead+=1
                         if self.cities_dead == NUM_CITIES-1:
                             director.sound_play(SND_RED_ALERT)
-                            self.set_color_core(255,0,0)
+                            self.palette.set_core_and_cities(255,0,0)
 
 
                         director.sound_play(SND_CITY_EXPLODE)
@@ -719,6 +908,7 @@ class Combat(Scene):
                         # TODO: some lesser explosion anim?
                         self.game.score = max(0, self.game.score-250)
                         self.score.set_score(self.game.score)
+                        director.sound_play(SND_CORE_HIT)
                         city.re_explode()
 
                     missile.kill()
@@ -733,10 +923,14 @@ class Combat(Scene):
         elif next_spawn == W_M0:
             self.spawn_missile(self.all_cities, [2]) #[0]
         elif next_spawn == W_M1:
-            self.spawn_missile(self.all_cities, [1,2,3]) #[-45, 0, 45]
+            self.spawn_missile(self.all_cities, [1,3]) #[-45, 45]
         elif next_spawn == W_M2:
+            self.spawn_missile(self.all_cities, [0,4]) #[-65, 65]
+        elif next_spawn == W_M01:
+            self.spawn_missile(self.all_cities, [1,2,3]) #[-45, 0, 45]
+        elif next_spawn == W_M012:
             self.spawn_missile(self.all_cities, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
-        elif next_spawn == W_M2CA:
+        elif next_spawn == W_M012CA:
             self.spawn_missile(self.cities_alive, [0,1,2,3,4]) #[-65,-45, 0, 45, 65]
 
         if W_ENEMY_MIN <= next_spawn < W_ENEMY_MAX:
@@ -766,7 +960,8 @@ class Combat(Scene):
         
             
         if director.was_pressed(director.BUTTON_D):
-            self.game.quit=True
+            # self.game.quit=True
+            self.game.combat=None
             director.pop()
             raise StopIteration()
     
@@ -774,7 +969,7 @@ class Combat(Scene):
         ax = self.game.aim_cart_x
         ay = self.game.aim_cart_y
 
-        aim_speed=0.1 if director.is_pressed(director.BUTTON_A) else 0.05
+        aim_speed=0.065 if director.is_pressed(director.BUTTON_A) else 0.04
         if director.is_pressed(director.JOY_LEFT):
             ax -= aim_speed
         if director.is_pressed(director.JOY_RIGHT):
@@ -808,7 +1003,8 @@ class City:
         sprite.set_strip(STRIPS["city.png"])
         sprite.set_perspective(1)
         sprite.set_x(x-sprite.width()//2)
-        sprite.set_y(74)
+        sprite.set_y(64)
+        # sprite.set_y(74)
         self.reset()
 
     def explode(self):
@@ -816,6 +1012,7 @@ class City:
             self._t = 0
             self.state = CITY_DYING
     
+    # HACK: to get the explosion animation but not re-trigger any other logic
     def re_explode(self):
         if self.state != CITY_OK:
             self._t = 2
@@ -830,7 +1027,7 @@ class City:
         sprite=self.sprite
         st=self.state
         if st == CITY_OK:
-            self._t += SECONDS_PER_STEP/0.25
+            self._t += SECONDS_PER_STEP/0.24
             sprite.set_frame(CITY_OK+int(self._t)%2)
         elif st == CITY_DYING:
             self._t += SECONDS_PER_STEP/0.5
@@ -846,9 +1043,7 @@ class City:
         
 
 class ScoreTopLabel:
-    # Score font id should be a strip with 0-9 numbers first and any string you
-    # want to show before the number should be after it in the strip, e.g.
-    # "0123456789HI" will be optionally shown as HI##### in-game.
+    # Score font should be a strip with 0-9 numbers for frames 0-9
     def __init__(self, score_font_id, digit_count, char_width=8, y=0):
         self.digits = []
         x0 = 128-int((digit_count-.5)*char_width/2)
@@ -900,25 +1095,90 @@ W_ENEMY_MIN=10
 W_M0=10
 W_M1=11
 W_M2=12
-W_M2CA=13 # CITY AIM
+W_M01=13
+W_M012=14
+W_M012CA=15 # CITY AIM
 W_B0=20
 W_B1=21
 W_ENEMY_MAX=29
 
+level_colors=[
+    # DO NOT USE RED: Reserved for red alert (last city standing)
+    (0,192,0),      # green
+    (64,192,192),   # cyan
+    (192,192,64),   # yellow
+]
 level_waves=[
     # ------- LEVEL 1 -------
     [
-        #  ,----------- Duration seconds (will extend to amount steps if too low)
-        # |  ,--------- Amount
-        # |  |   ,---- Enemy shuffle bag 
-        ( 3, 0, []          ),
-        (10, 5, [W_M0]      ),
-        ( 3, 0, []          ),
-        ( 4, 4, [W_M0,W_M1] ),
-        ( 3, 0, []          ),
-        ( 2.4, 1, [W_WARN]    ),
-        ( 0, 5, [W_M0]      ),
+
+        # ###
+        # ### DEBUG REMOVE ME
+        # ###
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M2]          ),
+        # ( 2  ,  1, [W_M1]          ),
+        # ( 2  ,  1, [W_M1]          ),
+        # ( 2  ,  1, [W_M1]          ),
+        # ( 2  ,  1, [W_M1]          ),
+
+        #  ,------------- Duration seconds (will extend to amount steps if too low)
+        # |     ,-------- Amount
+        # |     |   ,---- Enemy shuffle bag 
+        ( 3  ,  0, []          ),
+        (10  ,  5, [W_M0]      ),
+        ( 3  ,  0, []          ),
+        ( 4  ,  4, [W_M0,W_M1] ),
+        ( 3  ,  0, []          ),
+        (10  ,  5, [W_M0]      ),
+        ( 3  ,  0, []          ),
+        (2.4 ,  1, [W_WARN]    ),
+        ( 0  ,  5, [W_M0]      ),
+        #      19 
     ],
+    # ------- LEVEL 2 -------
+    [
+        #  ,------------- Duration seconds (will extend to amount steps if too low)
+        # |     ,-------- Amount
+        # |     |   ,---- Enemy shuffle bag 
+        ( 3  ,  0, []          ),
+        (10  ,  5, [W_M0]      ),
+        ( 3  ,  0, []          ),
+        ( 1  ,  1, [W_M2] ),
+        ( 4  ,  4, [W_M0,W_M1] ),
+        ( 1  ,  1, [W_M2] ),
+        ( 2  ,  0, []          ),
+        (2.4 ,  1, [W_WARN]    ),
+        ( 0  ,  5, [W_M0]      ),
+        ( 5  ,  0, []          ),
+        ( 0  ,  5, [W_M0]      ),
+        ( 5  ,  0, []          ),
+        ( 0  ,  5, [W_M0, W_M1]),
+        #      26
+    ],    
+    # ------- LEVEL 3 -------
+    [
+        #  ,------------- Duration seconds (will extend to amount steps if too low)
+        # |     ,-------- Amount
+        # |     |   ,---- Enemy shuffle bag 
+        ( 3  ,  0, []          ),
+        (10  ,  5, [W_M01]      ),
+        ( 3  ,  0, []          ),
+        ( 1  ,  1, [W_M2,W_M01] ),
+        ( 6  ,  4, [W_M2,W_M01] ),
+        ( 2  ,  2, [W_M012CA] ),
+        ( 3  ,  0, []          ),
+        ( 10 , 20, [W_M0] ),
+        ( 3  ,  0, []          ),
+        ( 1  ,  1, [W_M2,W_M1] ),
+        ( 4  ,  4, [W_M2,W_M1] ),
+        ( 2  ,  2, [W_M012CA] ),
+        ( 2  ,  0, []          ),
+        (2.4 ,  1, [W_WARN]    ),
+        ( 10  , 20, [W_M012]   ),
+    ],    
 ]
 
 class ShuffleBag:
@@ -990,4 +1250,99 @@ class Waves:
 
         return W_NONE
 
+
+class Label:
+    def __init__(self, font, count, char_width=8, x=0, y=0, wiggle=4):
+        self.chars = []
+        for n in range(count):
+            s = Sprite()
+            s.set_strip(STRIPS[font+".png"])
+            m = 1 if x > 64 else -1
+            s.set_x(x + m * n * char_width)
+            s.set_y(y)
+            s.set_perspective(2)
+            self.chars.append(s)
+
+        self.base_y=y
+        self.frame=0
+        self.set_text("")
+
+    def set_text(self, value):
+        chs = self.chars
+        l1 = len(value)
+        l2 = len(chs)
+        i = 0
+        while i < l1:
+            f = ord(value[i]) - 32
+            if not 0<=f<64:
+                f=0
+            chs[i].set_frame(f)
+            i+=1
+        while i < l2:
+            chs[i].set_frame(0)
+            i+=1
+
+    def step(self, wiggle=0):
+        chs=self.chars
+        l=len(chs)
+
+        self.frame += 1
+
+        i = (self.frame//4)%l
+        chs[i].set_y(self.base_y)
+        i = (i+1)%l
+        chs[i].set_y(self.base_y+wiggle)
+
+        # for i in range(0, l):
+            # offset=floor(max(0,min(abs(self.frame-i)*.5,1)*wiggle))
+            # chs[i].set_y(floor(self.base_y + self.frame + i) % wiggle)
+            # chs[i].set_y(self.base_y+offset)
+
+class PaletteHelper:
+    def __init__(self):
+        num_STRIPS, num_palettes = struct.unpack("<HH", director.romdata)
+        offsets = struct.unpack_from("<%dL%dL" % (num_STRIPS, num_palettes), director.romdata, 4)
+        palette_offsets = offsets[num_STRIPS:]
+        self.pal_copy=pal_copy = bytearray(director.romdata[palette_offsets[0]:])
+
+        self.pal_ind_core=find_color_index(pal_copy, 0, 7, 250)
+        self.pal_ind_core=find_color_index(pal_copy, 0, 7, 250)
+        self.pal_ind_city=find_color_index(pal_copy, 147, 0, 255)
+        self.pal_ind_font=find_color_index(pal_copy, 0, 255, 0)
+        self.pal_ind_boom=find_color_index(pal_copy, 0, 0xff, 0xf0)
+        
+        self.dirty=False
+
+    def flush(self):
+        if self.dirty:
+            self.dirty=False
+            povdisplay.set_palettes(self.pal_copy)
+
+    # def set_city(self,r,g,b):
+    #     if self.pal_ind_city is not None:
+    #         self.pal_copy[self.pal_ind_city+1] = b
+    #         self.pal_copy[self.pal_ind_city+2] = g
+    #         self.pal_copy[self.pal_ind_city+3] = r
+    #         self.dirty=True
+
+    def set_font(self,r,g,b):
+        if self. pal_ind_font is not None:
+            self.pal_copy[self.pal_ind_font+1] = b
+            self.pal_copy[self.pal_ind_font+2] = g
+            self.pal_copy[self.pal_ind_font+3] = r
+            self.dirty=True
+
+    def set_boom(self,r,g,b):
+        if self. pal_ind_font is not None:
+            self.pal_copy[self.pal_ind_boom+1] = b
+            self.pal_copy[self.pal_ind_boom+2] = g
+            self.pal_copy[self.pal_ind_boom+3] = r
+            self.dirty=True
+
+    def set_core_and_cities(self,r,g,b):
+        if self.pal_ind_core and self.pal_ind_city:
+            self.pal_copy[self.pal_ind_city+1]=self.pal_copy[self.pal_ind_core+1]=b
+            self.pal_copy[self.pal_ind_city+2]=self.pal_copy[self.pal_ind_core+2]=g
+            self.pal_copy[self.pal_ind_city+3]=self.pal_copy[self.pal_ind_core+3]=r
+            self.dirty=True
 

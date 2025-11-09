@@ -170,3 +170,27 @@ apps/images/mygame
 apps/micropython/roms/*.rom
 
 # *.wav
+
+# --- Visual Studio ---
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Archivos de dependencias o autogenerados
+*.ncb
+*.aps
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+*.cachefile
+
+.vscode/
+.history/
+*.code-workspace
+
+# Archivos temporales del sistema
+.DS_Store
+Thumbs.db
+apps/micropython/sencom.hi

@@ -15,3 +15,9 @@ Así que... ¿porqué no meterlo en un videojuego? ¡Movete, carpincho, movete!
 ## El juego
 
 Este juego fue hecho en dos semanas alocadas para la ventilastation game jam de octubre 2025.
+
+## Créditos
+
+Gráficos y programación: [manuq](https://github.com/manuq)
+
+Música: 1LFD.mp3 por [JuanElHongo](https://juanelhongo.itch.io/)

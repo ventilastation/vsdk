@@ -11,11 +11,12 @@ from ventilastation.shuffler import shuffled
 # (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
     # Jam Online Oct 2025
-    ('fanphibious_danger', "fanphibious_danger_2.png", 0),
-    ('2bam_sencom', "2bam_sencom.png", 0),
     ('vissile', "domedefander.png", 0),
+    ('fanphibious_danger', "fanphibious_danger_2.png", 0),
     ('tincho_vrunner', "tincho_vrunner.png", 0),
     ('peronjam', "peronjam.png", 0),
+    ('2bam_sencom', "2bam_sencom.png", 0),
+    ('vajon', "vajon.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),
     ('villalugano_games', "villalugano_games.png", 0),
     # new game by esteban
@@ -36,19 +37,26 @@ MAIN_MENU_OPTIONS = [
 #     # ('vong', "menu.png", 6),
 #     # ('vugo', "menu.png", 7),
 #     # # Gallery
-    ('gallery', "pollitos.png", 0),
+    # ('gallery', "pollitos.png", 0),
     # # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # # Original content
 #     ('vyruss', "menu.png", 0),
 #     ('ventilagon_game', "menu.png", 1),
 #     ('ventap', "menu.png", 4),
+    ('credits', "menu.png", 3),
+]
+
+SYS_MENU_OPTIONS = [
     ('debugmode', "menu.png", 9),
     # ('calibrate', "menu.png", 8),
     ('tutorial', "menu.png", 10),
-    ('credits', "menu.png", 3),
     ('upgrade', "menu.png", 11),
+    ('vyruss', "menu.png", 0),
+    ('ventilagon_game', "menu.png", 1),
+    ('credits', "menu.png", 3),
 ]
+
 
 def prepare_uploads():
     import os
@@ -75,6 +83,32 @@ def load_app(modulename):
     director.push(main_scene)
     if full_modulename in sys.modules:
         del sys.modules[full_modulename]
+
+
+class SystemMenu(menu.Menu):
+    stripes_rom = "menu"
+    def on_enter(self):
+        self.garbage_collect()
+        super().on_enter()
+    
+    def garbage_collect(self):
+        import gc
+        gc.collect()
+        self.call_later(60000, self.garbage_collect)
+
+    def on_option_pressed(self, option_index):
+        app_chosen = self.options[option_index][0]
+        load_app(app_chosen)
+        raise StopIteration()
+
+    def step(self):
+        super(SystemMenu, self).step()
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+
+    def finished(self):
+        director.pop()
+        raise StopIteration()
 
 class GamesMenu(menu.Menu):
     stripes_rom = "menu"
@@ -141,14 +175,15 @@ class GamesMenu(menu.Menu):
             and director.is_pressed(director.JOY_RIGHT)
             and director.is_pressed(director.BUTTON_A) ):
             from apps.debugmode import DebugMode
-            director.push(DebugMode())
+            director.sound_play("ventilagon/audio/es/superventilagon")
+            director.push(SystemMenu(SYS_MENU_OPTIONS))
             return True
 
         if (director.is_pressed(director.BUTTON_B)
             and director.is_pressed(director.BUTTON_C)
             and director.is_pressed(director.BUTTON_A) ):
-            from apps.calibrate import Calibrate
-            director.push(Calibrate())
+            # from apps.calibrate import Calibrate
+            # director.push(Calibrate())
             return True
 
     def step(self):
@@ -188,9 +223,9 @@ if __name__ == '__main__':
         director.sound_play(b"vyruss/shoot3")
         main()
     except Exception as e:
-        raise
-        # buf = io.StringIO()
-        # sys.print_exception(e, buf)
-        # director.report_traceback(buf.getvalue().encode("utf-8"))
-        # print(buf.getvalue())
-        # #machine.reset()
+        # raise
+        buf = io.StringIO()
+        sys.print_exception(e, buf)
+        director.report_traceback(buf.getvalue().encode("utf-8"))
+        print(buf.getvalue())
+        # machine.reset()
