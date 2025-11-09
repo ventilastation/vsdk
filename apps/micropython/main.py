@@ -17,23 +17,23 @@ MAIN_MENU_OPTIONS = [
     ('peronjam', "peronjam.png", 0),
     ('2bam_sencom', "2bam_sencom.png", 0),
     ('vajon', "vajon.png", 0),
-    ('2bam_demo', "2bam_demo_menu.png", 0),
-    ('villalugano_games', "villalugano_games.png", 0),
+    # ('2bam_demo', "2bam_demo_menu.png", 0),
+    # ('villalugano_games', "villalugano_games.png", 0),
     # new game by esteban
     ('aaa', 'aaa.png', 0),
 #     # # # 1er Jam 2025
 #     # ('vortris', "vortris.png", 0),
-#     ('vailableextreme', "vailableextreme.png", 0),
+    ('vailableextreme', "vailableextreme.png", 0),
 #     # ('vzumaki', "vzumaki.png", 0),
-#     ('vasura_espacial', "vasura_espacial.png", 0),
-#     ('vs', "vs.png", 0),
+    ('vasura_espacial', "vasura_espacial.png", 0),
+    ('vs', "vs.png", 0),
     ('oraculo', "oraculo2.png", 0),
 #     # ('tvnel', "tvnel.png", 0),
-#     ('ventrack', "venti808.png", 0),
+    ('ventrack', "venti808.png", 0),
 #     # # ('tvnel_alecu', "tvnel_alecu.png", 0),
 #     # # ('mygame', "mygame.png", 0),
 #     # # PyCamp 2025
-#     ('vance', "menu.png", 5),
+    ('vance', "menu.png", 5),
 #     # ('vong', "menu.png", 6),
 #     # ('vugo', "menu.png", 7),
 #     # # Gallery
@@ -41,8 +41,8 @@ MAIN_MENU_OPTIONS = [
     # # Flash Party 2023
     # ('vladfarty', "menu.png", 2),
     # # Original content
-#     ('vyruss', "menu.png", 0),
-#     ('ventilagon_game', "menu.png", 1),
+    ('vyruss', "menu.png", 0),
+    ('ventilagon_game', "menu.png", 1),
 #     ('ventap', "menu.png", 4),
     ('credits', "menu.png", 3),
 ]
@@ -150,13 +150,13 @@ class GamesMenu(menu.Menu):
         # self.boot_screen.set_frame(0)
         # self.call_later(1500, self.boot_screen.disable)
         self.loviejo = sprites.Sprite()
-        self.loviejo.set_strip(stripes["loviejo-3.png"])
+        self.loviejo.set_strip(stripes["vslogo.png"])
         self.loviejo.set_perspective(2)
         self.loviejo.set_x(128 - self.loviejo.width() // 2)
         self.loviejo.set_y(0)
         self.loviejo.set_frame(0)
-        self.favalli = make_me_a_planet("favalli.png")
-        self.favalli.set_frame(0)
+        self.fondo = make_me_a_planet("fondo.png")
+        self.fondo.set_frame(0)
         self.garbage_collect()
 
     def garbage_collect(self):
