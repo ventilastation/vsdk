@@ -76,6 +76,33 @@ class Misil:
         if self.movement_delay % step == 0:
             self.sprite.set_y(self.y_actual + 1)
 
+
+# Target
+class Target:
+    def __init__(self):
+        self.sprite = Sprite()
+        self.sprite.set_strip(stripes["target.png"])
+        self.sprite.set_perspective(2)
+        self.sprite.set_frame(0)
+        self.desactivar()
+
+
+    def activar(self, center_x, center_y):
+        self.sprite.set_x(center_x - self.sprite.width()//2)
+        self.sprite.set_y(center_y - self.sprite.height()//2)
+        self.delete = False
+
+    def desactivar(self):
+        self.sprite.disable()
+        self.delete = True
+
+    def mostrar(self):
+        self.sprite.set_frame(0)
+
+    def ocultar(self):
+        self.sprite.disable()
+
+
 # Proyectiles que dispara el jugador
 class Cascote:
     def __init__(self):
@@ -85,6 +112,9 @@ class Cascote:
         self.sprite.set_perspective(2)
         self.sprite.disable()
         self.delete = True
+
+        self.target = Target()
+        self.target_counter = 0
 
     def activar(self, torreta, target_center_x):
         self.torreta = torreta
@@ -96,40 +126,56 @@ class Cascote:
         if torreta == 1:
             self.sprite.set_x(64 - self.sprite.width())
             self.sprite.set_y(13 + 2)
+            self.target.activar(self.target_center_x, 13+4)
         elif torreta == 2:
             self.sprite.set_x(64 - self.sprite.width())
             self.sprite.set_y(23 + 2)
+            self.target.activar(self.target_center_x, 23+4)
         elif torreta == 3:
             self.sprite.set_x(64 - self.sprite.width())
             self.sprite.set_y(33 + 2)
+            self.target.activar(self.target_center_x, 33+4)
         # Torretas derechas, de izquierda a derecha
         elif torreta == 4:
             self.sprite.set_x(192 - self.sprite.width())
             self.sprite.set_y(33 + 2)
+            self.target.activar(self.target_center_x, 33+4)
         elif torreta == 5:
             self.sprite.set_x(192 - self.sprite.width())
             self.sprite.set_y(23 + 2)
+            self.target.activar(self.target_center_x, 23+4)
         elif torreta == 6:
             self.sprite.set_x(192 - self.sprite.width())
-            self.sprite.set_y(13 + 2)        
+            self.sprite.set_y(13 + 2)
+            self.target.activar(self.target_center_x, 13+4)
     
     def desactivar(self):
         self.sprite.disable()
+        self.target_counter = 0
+        self.target.desactivar()
 
     def mover(self):    
         x_actual = self.sprite.x()
         centrer_x = x_actual + (self.sprite.width() // 2)
+
+        if self.target_counter % 2:
+            self.target.mostrar()
+        else:
+            self.target.ocultar()
+        self.target_counter = self.target_counter + 1
 
         if self.torreta == 1 or self.torreta == 2 or self.torreta == 3 :
             if centrer_x <= self.target_center_x:
                 self.sprite.set_x(x_actual + 2)
             else:
                 self.delete = True
+                self.target.desactivar()
         else:
             if centrer_x >= self.target_center_x:
                 self.sprite.set_x(x_actual - 2)
             else:
                 self.delete = True
+                self.target.desactivar()
              
 
 class Explosion:
@@ -437,6 +483,7 @@ class Vissile(Scene):
                         c = self.cascotes_reserva.pop()
                         
                         mira_center_x = self.mira.sprite.x() + (self.mira.sprite.width() // 2)
+
                         if mira_center_x < 128 :
                             if self.mira.sprite.y() == 13:
                                 c.activar(1, mira_center_x)
