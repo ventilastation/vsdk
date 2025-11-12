@@ -23,6 +23,7 @@ stripes = [
         strip("tincho_vrunner.png",frames=2),
         strip("villalugano_games.png"),
         strip("vslogo.png"),
-        fullscreen("fondo.png"),
+        strip("loviejo-3.png"),
+        fullscreen("favalli.png"),
     ),
 ]
