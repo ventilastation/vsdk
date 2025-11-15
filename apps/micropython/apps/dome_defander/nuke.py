@@ -1,7 +1,7 @@
 from ventilastation.director import stripes
 from ventilastation.sprites import Sprite
 
-from .explosion import *
+from .constants import *
 
 class Nuke:
     def __init__(self):

@@ -11,14 +11,16 @@ from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
 
+from .constants import *
 from .mira import Mira
 from .misil import Misil
 from .cascotes import Cascote
 from .explosion import Explosion
 from .hit_explosion import HitExplosion
 from .nuke import Nuke
-from .score_vidas import *
+from .score_vidas import ScoreVidas
 from .dome import Dome
+
 
 def main():
     return DomeDefander()

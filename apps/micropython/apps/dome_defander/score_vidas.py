@@ -1,7 +1,7 @@
 from ventilastation.director import stripes
 from ventilastation.sprites import Sprite
 
-STARTING_LIVES = 3
+from .constants import *
 
 class ScoreVidas():
 

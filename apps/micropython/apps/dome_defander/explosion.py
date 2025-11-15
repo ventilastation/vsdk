@@ -1,7 +1,6 @@
 from ventilastation.director import stripes
 from ventilastation.sprites import Sprite
-
-EXPLOSION_FRAMES = 4
+from .constants import *
 
 class Explosion:
     def __init__(self):
