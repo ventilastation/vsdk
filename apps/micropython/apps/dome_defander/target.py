@@ -1,5 +1,4 @@
-from ventilastation.director import director, stripes
-from ventilastation.scene import Scene
+from ventilastation.director import stripes
 from ventilastation.sprites import Sprite
 
 # Indica dónde va a explotar el cascote de defensa

@@ -7,8 +7,6 @@
 # Menu image by: manuq
 # https://github.com/manuq
 
-from urandom import randrange
-
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite

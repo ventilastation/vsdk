@@ -1,5 +1,4 @@
-from ventilastation.director import director, stripes
-from ventilastation.scene import Scene
+from ventilastation.director import stripes
 from ventilastation.sprites import Sprite
 
 MIRA_VELOCIDAD_HORIZONTAL = 2
