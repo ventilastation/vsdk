@@ -12,7 +12,8 @@ from ventilastation.shuffler import shuffled
 MAIN_MENU_OPTIONS = [
     ('fanphibious_danger', "fanphibious_danger_2.png", 0),
     ('2bam_sencom', "2bam_sencom.png", 0),
-    ('vissile', "domedefander.png", 0),
+    #('vissile', "domedefander.png", 0),
+    ('dome_defander', "domedefander.png", 0),
     ('tincho_vrunner', "tincho_vrunner.png", 0),
     ('peronjam', "peronjam.png", 0),
     ('2bam_demo', "2bam_demo_menu.png", 0),

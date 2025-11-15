@@ -371,23 +371,23 @@ class Dome:
         self.dome_sprites[self.sprite_index].set_frame(0)
         
 
-class Vissile(Scene):
-    stripes_rom = "vissile"
+class DomeDefander(Scene):
+    stripes_rom = "dome_defander"
 
     def play_music_loop(self):
         print("Playing")
         # director.music_off()
-        director.music_play("vissile/play1")
+        director.music_play("dome_defander/play1")
         self.call_later(451*100, self.play_music_loop)
 
     def on_enter(self):
-        super(Vissile, self).on_enter()
+        super(DomeDefander, self).on_enter()
         
         # self.lives = STARTING_LIVES
         self.sc = ScoreVidas(0, STARTING_LIVES)
         
         self.play_music_loop()
-        # director.music_play("vissile/play1")
+        # director.music_play("dome_defander/play1")
 
         self.state = "start"
         
@@ -479,7 +479,7 @@ class Vissile(Scene):
 
                     if len(self.cascotes_reserva) > 0:
                     
-                        director.sound_play(b"vissile/cascote1")
+                        director.sound_play(b"dome_defander/cascote1")
                         c = self.cascotes_reserva.pop()
                         
                         mira_center_x = self.mira.sprite.x() + (self.mira.sprite.width() // 2)
@@ -514,7 +514,7 @@ class Vissile(Scene):
                             self.sc.perder()
                             if self.sc.vidas == 0:
                                 # Fin
-                                director.sound_play(b"vissile/fin")
+                                director.sound_play(b"dome_defander/fin")
                                 self.nuke.reset()
                                 self.end_counter = 0
                                 self.dome.hit()
@@ -522,7 +522,7 @@ class Vissile(Scene):
                                 break                                
                             else:
                                 # Hit
-                                director.sound_play(b"vissile/hit1")
+                                director.sound_play(b"dome_defander/hit1")
                                 m.desactivar()
                                 self.misiles_activos.remove(m)
                                 self.misiles_reserva.append(m)
@@ -537,7 +537,7 @@ class Vissile(Scene):
 
                 # Generar nuevos misiles
                 if len(self.misiles_activos) < 3 and self.state == "playing":
-                        director.sound_play(b"vissile/misil1")
+                        director.sound_play(b"dome_defander/misil1")
                         m = self.misiles_reserva.pop()
                         m.activar()
                         self.misiles_activos.append(m)
@@ -580,7 +580,7 @@ class Vissile(Scene):
                             center_x = c.sprite.x() + (c.sprite.width() // 2)
                             center_y = c.sprite.y() - (c.sprite.height() // 2)
                             if len(self.explosiones_reserva) > 0:
-                                director.sound_play(b"vissile/explosion1")
+                                director.sound_play(b"dome_defander/explosion1")
                                 e = self.explosiones_reserva.pop()
                                 e.activar(center_x, center_y)
                                 self.explosiones_activas.append(e)
@@ -640,4 +640,4 @@ class Vissile(Scene):
 
 
 def main():
-    return Vissile()
+    return DomeDefander()
