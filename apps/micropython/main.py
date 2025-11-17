@@ -11,6 +11,7 @@ from ventilastation.shuffler import shuffled
 # (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
     # Jam Online Oct 2025
+    ('torta50', "menu.png", 2),
     ('vissile', "domedefander.png", 0),
     ('fanphibious_danger', "fanphibious_danger_2.png", 0),
     ('tincho_vrunner', "tincho_vrunner.png", 0),

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="320"
+   height="320"
+   viewBox="0 0 84.666665 84.666666"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   sodipodi:docname="fondo.svg"
+   inkscape:export-filename="fondo.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#2b0640"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showguides="true"
+     inkscape:zoom="2.0535659"
+     inkscape:cx="187.72224"
+     inkscape:cy="171.16568"
+     inkscape:window-width="1920"
+     inkscape:window-height="1017"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1"
+     inkscape:export-bgcolor="#2b0640ff" />
+  <defs
+     id="defs1">
+    <pattern
+       inkscape:collect="always"
+       xlink:href="#circle"
+       preserveAspectRatio="xMidYMid"
+       id="pattern16"
+       patternTransform="translate(307.92203,-100.78567)"
+       x="0"
+       y="0" />
+    <pattern
+       patternUnits="userSpaceOnUse"
+       width="10"
+       height="10"
+       patternTransform="translate(307.92203,-100.78567)"
+       preserveAspectRatio="xMidYMid"
+       id="circle"
+       style="fill:#3f1168"
+       x="0"
+       y="0"
+       inkscape:label="Círculo"
+       inkscape:collect="always"
+       inkscape:isstock="true">
+      <circle
+         style="display:inline;fill-opacity:1;stroke-width:6;stroke-linecap:square;paint-order:markers fill stroke;stop-color:#000000"
+         id="path10"
+         cx="5"
+         cy="5"
+         r="5" />
+    </pattern>
+    <linearGradient
+       id="swatch10"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#2b0640;stop-opacity:1;"
+         offset="0"
+         id="stop10" />
+    </linearGradient>
+  </defs>
+  <g
+     inkscape:label="Capa 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:url(#pattern16);stroke-width:0.264583;fill-opacity:1"
+       id="rect1"
+       width="84.666664"
+       height="84.666664"
+       x="0"
+       y="-7.3378885e-07" />
+    <text
+       xml:space="preserve"
+       style="font-size:16.2248px;line-height:0.8;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffcc00;fill-opacity:1;stroke-width:4.05571"
+       x="41.988712"
+       y="56.15984"
+       id="text1"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:6.77075px;line-height:0.8;font-family:Verdana;-inkscape-font-specification:'Verdana Bold';text-align:center;text-anchor:middle;fill:#ffcc00;fill-opacity:1;stroke-width:4.05571"
+         sodipodi:role="line"
+         id="tspan15"
+         x="41.988712"
+         y="56.15984">LEVEL</tspan><tspan
+         sodipodi:role="line"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:16.2248px;line-height:0.8;font-family:Verdana;-inkscape-font-specification:'Verdana Bold';text-align:center;text-anchor:middle;fill:#ffcc00;fill-opacity:1;stroke-width:4.05571"
+         x="41.988712"
+         y="69.139664"
+         id="tspan3">UP</tspan></text>
+  </g>
+</svg>
