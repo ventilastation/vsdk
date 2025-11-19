@@ -54,7 +54,7 @@ class DomeDefander(Scene):
         self.hit_explosiones_reserva = [HitExplosion(), HitExplosion(), HitExplosion(), HitExplosion()]
         self.hit_explosiones_activas = []
 
-        self.cascotes_reserva = [Cascote(), Cascote(), Cascote()]
+        self.cascotes_reserva = [Cascote(), Cascote()]
         self.cascotes_activos = []
         
         self.misiles_reserva = [Misil(), Misil(), Misil(), Misil()]
