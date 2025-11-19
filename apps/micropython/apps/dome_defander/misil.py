@@ -21,12 +21,12 @@ class Misil:
         self.sprite.set_frame(0)
         
     def desactivar(self):
-        self.sprite.disable()
         if len(self.humo_activos) > 0:
             for h in self.humo_activos:
                 h.desactivar()
                 self.humo_activos.remove(h)
                 self.humo_reserva.append(h)
+        self.sprite.disable()
 
     def animar(self):
         # Animar misil
@@ -37,13 +37,6 @@ class Misil:
         if self.movement_delay % step == 0:
             self.sprite.set_y(self.y_actual + 1)
         
-        # Crear humo
-        if self.y_actual > 5 and self.movement_delay % 4:
-            if len(self.humo_reserva) > 0:
-                h = self.humo_reserva.pop()
-                h.activar(self.x_actual + self.sprite.width() // 2, self.y_actual + self.sprite.height() // 2 - 4)
-                self.humo_activos.append(h)
-        
         # Animar humo
         if len(self.humo_activos) > 0:
             for h in self.humo_activos:
@@ -52,6 +45,13 @@ class Misil:
                     self.humo_reserva.append(h)
                 else:
                     h.animar()
+
+        # Crear humo
+        if self.y_actual > 5 and self.movement_delay % 4:
+            if len(self.humo_reserva) > 0:
+                h = self.humo_reserva.pop()
+                h.activar(self.x_actual + self.sprite.width() // 2, self.y_actual + self.sprite.height() // 2 - 4)
+                self.humo_activos.append(h)
 
 
 class Humo:
@@ -71,8 +71,8 @@ class Humo:
         self.delete = False
         
     def desactivar(self):
-        self.sprite.disable()
         self.delete = True
+        self.sprite.disable()
 
     def animar(self):
         self.animation_delay = self.animation_delay + 1

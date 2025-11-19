@@ -208,8 +208,8 @@ class DomeDefander(Scene):
                             for i in range(4):
                                 lm = e.colisiones(self.misiles_activos)
                                 for m in lm:
-                                    m.desactivar()
                                     self.sc.puntuar()
+                                    m.desactivar()
                                     self.misiles_activos.remove(m)
                                     self.misiles_reserva.append(m)
                             e.animar()
