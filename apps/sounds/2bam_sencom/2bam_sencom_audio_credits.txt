@@ -1,0 +1,17 @@
+2bam's Senile Command uses audio from FreeSound.org by the following authors:
+ - deltacode
+ - dneproman
+ - hard3eat
+ - jofae
+ - jtn191
+ - kinoton
+ - kyles
+ - liamg_sfx
+ - mellau
+ - micahlg
+ - moogy73
+ - raining-0n-satrn
+ - sabacky
+ - scorepion
+ - suonho
+ - zeteny_zpx

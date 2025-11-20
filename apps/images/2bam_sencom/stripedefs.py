@@ -1,14 +1,34 @@
 stripes = [
     palettegroup(
+        fullscreen("bg_black.png"), 
         strip("city.png",frames=8),     
+        fullscreen("core.png"),
+        strip("crosshair.png", frames=28), 
         strip("dedo.png",frames=3),
         strip("dedo2.png",frames=3),
-        strip("crosshair.png", frames=28), 
+        strip("font_hiscore_16px_top.png",frames=13),  
+
         # strip("texto_intro.png", frames=1), 
-        fullscreen("bg_black.png"), 
-        fullscreen("core.png"),
-        strip("trail.png",frames=15),
-        strip("target.png",frames=5), 
+        strip("trail.png",frames=35),
+        strip("target.png",frames=5),  
+        strip("warning.png",frames=1),
+
+        strip("dedo-frames65-neg.png",frames=13),
+        strip("dedo-frames45-neg.png",frames=13),
+        strip("dedo-frames0.png",frames=13),
+        strip("dedo-frames45.png",frames=13),
+        strip("dedo-frames65.png",frames=13),
+        
+        strip("font8_top.png", frames=63),
+        strip("font8_bottom.png", frames=63),
+        fullscreen("aspas.png"),
+    ),
+    palettegroup(
+        strip("2bam_sencom_top.png", frames=1),
+        strip("texto_intro_strip.png", frames=24),
+
+        # strip("font_hiscore_8px_bottom.png",frames=12),  
+        # strip("texto_intro.png", frames=1), 
 
         # strip("bichorot.png", frames=28),
         # strip("gusano360.png", frames=6*4),

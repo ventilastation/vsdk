@@ -1,5 +1,6 @@
 import socket
 import os
+import gc
 import hashlib
 import binascii
 
@@ -33,6 +34,7 @@ def sync_with_server(host, port):
     try:
         server_file.connect((host, port))
         while True:
+            gc.collect()
             line = server_file.readline().split()
             print("Received from server:", line)
             if not line:

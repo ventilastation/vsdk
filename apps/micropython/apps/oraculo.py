@@ -49,7 +49,7 @@ class TimedScene(Scene):
         # print("Later called to finish scene, current time: ", utime.ticks_ms())
         director.pop()
 class FinalScene(TimedScene):
-    duration = 4000
+    duration = 16000
     def __init__(self, text):
         super().__init__()
         self.text = text
@@ -217,11 +217,11 @@ class Oraculo(Scene):
     def on_enter(self):
         super(Oraculo, self).on_enter()
         director.music_play(b"oraculo/ruleta")
-        self.bola = Sprite()
-        self.bola.set_strip(stripes["ball.png"])
-        self.bola.set_x(128 - self.bola.width()//2)
-        self.bola.set_y(16)
-        self.bola.set_frame(6)
+        self.flecha = Sprite()
+        self.flecha.set_strip(stripes["flecha.png"])
+        self.flecha.set_x(128 - self.flecha.width()//2)
+        self.flecha.set_y(24)
+        self.flecha.set_frame(0)
         self.volocidadBola = 0;
 
         self.ruletas = []
@@ -237,7 +237,8 @@ class Oraculo(Scene):
         self.seleccionada = None
 
     def step(self):
-        if director.was_pressed(director.JOY_DOWN):
+        if director.was_pressed(director.JOY_DOWN) or director.was_pressed(director.BUTTON_A):
+            director.sound_play(b"oraculo/click")
             self.detener = True
 
         if self.detener and self.nuevaVelocidad > 0:
@@ -260,7 +261,6 @@ class Oraculo(Scene):
                     min_diff = diff
                     self.seleccionada = ruleta
             if self.seleccionada:
-                director.sound_play(b"oraculo/click")
                 print("Ruleta detenida:", self.seleccionada.nombre)
                 self.wait_timer = utime.ticks_ms()
 

@@ -13,17 +13,17 @@ def make_me_a_planet(strip):
     return planet
 
 
-char_width = 9
-char_height = 12
-display_len = 24
+char_width = 4
+char_height = 6
+display_len = 48
 
 class TextDisplay:
     def __init__(self, y):
         self.chars = []
         for n in range(display_len):
             s = Sprite()
-            s.set_strip(stripes["vga_cp437.png"])
-            s.set_x((192 -n * char_width + (display_len * char_width) // 2) % 256)
+            s.set_strip(stripes["tinyfont_white.png"])
+            s.set_x((192 - n * char_width + (display_len * char_width) // 2) % 256)
             s.set_y(y)
             s.set_frame(10)
             s.set_perspective(2)
@@ -71,9 +71,9 @@ class Upgrade(Scene):
             else:
                 filename = f""
             if writing:
-                self.filename_display.set_strip(stripes["rainbow437.png"])
+                self.filename_display.set_strip(stripes["tinyfont_red.png"])
             else:
-                self.filename_display.set_strip(stripes["vga_cp437.png"])
+                self.filename_display.set_strip(stripes["tinyfont_white.png"])
             self.filename_display.set_value(filename[:display_len])
         except StopIteration:
             self.finished()

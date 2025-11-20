@@ -33,34 +33,36 @@ class Skater(Sprite):
     def stopped_at_left(self):
         self.vx = 0
         self.set_x(64)
-        self.set_y(16)
-        self.set_frame(6)
+        self.set_y(4)
+        self.set_frame(7)
         self.scene.call_later(500, self.turn_right)
 
     def turn_right(self):
-        self.set_frame(7)
+        self.set_frame(6)
+        self.set_y(16)
         self.scene.call_later(200, self.jump_right)
 
     def jump_right(self):
         self.set_x(64-16)
-        self.set_y(32)
+        self.set_y(24)
         self.set_base_frame(0)
         self.vx = -self.skating_speed
 
     def stopped_at_right(self):
         self.vx = 0
         self.set_x(192-32)
-        self.set_y(16)
+        self.set_y(4)
         self.set_frame(4)
         self.scene.call_later(500, self.turn_left)
 
     def turn_left(self):
         self.set_frame(5)
+        self.set_y(16)
         self.scene.call_later(200, self.jump_left)
 
     def jump_left(self):
         self.set_x(192-16)
-        self.set_y(32)
+        self.set_y(24)
         self.set_base_frame(2)
         self.vx = self.skating_speed
 

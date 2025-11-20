@@ -10,41 +10,51 @@ from ventilastation.shuffler import shuffled
 
 # (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
-    ('fanphibious_danger', "fanphibious_danger_2.png", 0),
-    ('2bam_sencom', "2bam_sencom.png", 0),
+    # Jam Online Oct 2025
     ('dome_defander', "domedefander.png", 0),
+    ('fanphibious_danger', "fanphibious_danger_2.png", 0),
     ('tincho_vrunner', "tincho_vrunner.png", 0),
     ('peronjam', "peronjam.png", 0),
-    ('2bam_demo', "2bam_demo_menu.png", 0),
-    ('villalugano_games', "villalugano_games.png", 0),
-    ('upgrade', "pollitos.png", 0),
-    # # # 1er Jam 2025
-    # ('vortris', "vortris.png", 0),
-    # ('vailableextreme', "vailableextreme.png", 0),
-    # ('vzumaki', "vzumaki.png", 0),
-    # ('vasura_espacial', "vasura_espacial.png", 0),
-    # ('vs', "vs.png", 0),
-    # ('oraculo', "oraculo2.png", 0),
-    # ('tvnel', "tvnel.png", 0),
-    # ('ventrack', "venti808.png", 0),
-    # # ('tvnel_alecu', "tvnel_alecu.png", 0),
-    # # ('mygame', "mygame.png", 0),
-    # # PyCamp 2025
-    # ('vance', "menu.png", 5),
-    # ('vong', "menu.png", 6),
-    # ('vugo', "menu.png", 7),
-    # # Gallery
+    ('2bam_sencom', "2bam_sencom.png", 0),
+    # ('vajon', "vajon.png", 0),
+    # ('2bam_demo', "2bam_demo_menu.png", 0),
+    # ('villalugano_games', "villalugano_games.png", 0),
+    # new game by esteban
+    # ('aaa', 'aaa.png', 0),
+#     # # # 1er Jam 2025
+#     # ('vortris', "vortris.png", 0),
+    ('vailableextreme', "vailableextreme.png", 0),
+#     # ('vzumaki', "vzumaki.png", 0),
+    ('vasura_espacial', "vasura_espacial.png", 0),
+    ('vs', "vs.png", 0),
+    ('oraculo', "oraculo2.png", 0),
+#     # ('tvnel', "tvnel.png", 0),
+    ('ventrack', "venti808.png", 0),
+#     # # PyCamp 2025
+    ('vance', "menu.png", 5),
+#     # ('vong', "menu.png", 6),
+#     # ('vugo', "menu.png", 7),
+#     # # Gallery
     # ('gallery', "pollitos.png", 0),
     # # Flash Party 2023
-    # # ('vladfarty', "menu.png", 2),
+    # ('vladfarty', "menu.png", 2),
     # # Original content
-    # # ('vyruss', "menu.png", 0),
-    # # ('ventilagon_game', "menu.png", 1),
-    # # ('ventap', "menu.png", 4),
-    # # ('debugmode', "menu.png", 9),
-    # # ('calibrate', "menu.png", 8),
-    # # ('credits', "menu.png", 3),
+    ('vyruss', "menu.png", 0),
+    ('ventilagon_game', "menu.png", 1),
+#     ('ventap', "menu.png", 4),
+    ('credits', "menu.png", 3),
 ]
+
+SYS_MENU_OPTIONS = [
+    ('debugmode', "menu.png", 9),
+    # ('calibrate', "menu.png", 8),
+    ('tutorial', "menu.png", 10),
+    ('upgrade', "menu.png", 11),
+    ('vyruss', "menu.png", 0),
+    ('ventilagon_game', "menu.png", 1),
+    ('credits', "menu.png", 3),
+]
+
 
 def prepare_uploads():
     import os
@@ -61,7 +71,7 @@ def make_me_a_planet(strip):
     planet.set_strip(stripes[strip])
     planet.set_perspective(0)
     planet.set_x(0)
-    planet.set_y(255)
+    planet.set_y(220)
     return planet
 
 def load_app(modulename):
@@ -71,6 +81,32 @@ def load_app(modulename):
     director.push(main_scene)
     if full_modulename in sys.modules:
         del sys.modules[full_modulename]
+
+
+class SystemMenu(menu.Menu):
+    stripes_rom = "menu"
+    def on_enter(self):
+        self.garbage_collect()
+        super().on_enter()
+    
+    def garbage_collect(self):
+        import gc
+        gc.collect()
+        self.call_later(60000, self.garbage_collect)
+
+    def on_option_pressed(self, option_index):
+        app_chosen = self.options[option_index][0]
+        load_app(app_chosen)
+        raise StopIteration()
+
+    def step(self):
+        super(SystemMenu, self).step()
+        if director.was_pressed(director.BUTTON_D):
+            self.finished()
+
+    def finished(self):
+        director.pop()
+        raise StopIteration()
 
 class GamesMenu(menu.Menu):
     stripes_rom = "menu"
@@ -111,14 +147,20 @@ class GamesMenu(menu.Menu):
         # self.boot_screen = make_me_a_planet(strips.other.ventilastation)
         # self.boot_screen.set_frame(0)
         # self.call_later(1500, self.boot_screen.disable)
+        self.vslogo = sprites.Sprite()
+        self.vslogo.set_strip(stripes["vslogo.png"])
+        self.vslogo.set_perspective(2)
+        self.vslogo.set_x(128 - self.vslogo.width() // 2)
+        self.vslogo.set_y(0)
+        self.vslogo.set_frame(0)
         self.loviejo = sprites.Sprite()
         self.loviejo.set_strip(stripes["loviejo-3.png"])
         self.loviejo.set_perspective(2)
         self.loviejo.set_x(128 - self.loviejo.width() // 2)
-        self.loviejo.set_y(0)
+        self.loviejo.set_y(11)
         self.loviejo.set_frame(0)
-        self.favalli = make_me_a_planet("favalli.png")
-        self.favalli.set_frame(0)
+        self.fondo = make_me_a_planet("favalli.png")
+        self.fondo.set_frame(0)
         self.garbage_collect()
 
     def garbage_collect(self):
@@ -137,14 +179,15 @@ class GamesMenu(menu.Menu):
             and director.is_pressed(director.JOY_RIGHT)
             and director.is_pressed(director.BUTTON_A) ):
             from apps.debugmode import DebugMode
-            director.push(DebugMode())
+            director.sound_play("ventilagon/audio/es/superventilagon")
+            director.push(SystemMenu(SYS_MENU_OPTIONS))
             return True
 
         if (director.is_pressed(director.BUTTON_B)
             and director.is_pressed(director.BUTTON_C)
             and director.is_pressed(director.BUTTON_A) ):
-            from apps.calibrate import Calibrate
-            director.push(Calibrate())
+            # from apps.calibrate import Calibrate
+            # director.push(Calibrate())
             return True
 
     def step(self):
@@ -161,12 +204,12 @@ class GamesMenu(menu.Menu):
                 pass
                 #update_over_the_air()
 
-            if self.pollitos:
+            if self.pollitos and self.pollitos.frame() != 255:
                 self.animation_frames += 1
                 pf = (self.animation_frames // 4) % 5
                 self.pollitos.set_frame(pf)
 
-            if self.es_tincho:
+            if self.es_tincho and self.es_tincho.frame() != 255:
                 self.tincho_frames += 1
                 pf = (self.tincho_frames // 6) % 2
                 self.es_tincho.set_frame(pf)
@@ -184,9 +227,9 @@ if __name__ == '__main__':
         director.sound_play(b"vyruss/shoot3")
         main()
     except Exception as e:
-        raise
-        # buf = io.StringIO()
-        # sys.print_exception(e, buf)
-        # director.report_traceback(buf.getvalue().encode("utf-8"))
-        # print(buf.getvalue())
-        # #machine.reset()
+        # raise
+        buf = io.StringIO()
+        sys.print_exception(e, buf)
+        director.report_traceback(buf.getvalue().encode("utf-8"))
+        print(buf.getvalue())
+        # machine.reset()
