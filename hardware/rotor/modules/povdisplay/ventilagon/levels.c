@@ -118,6 +118,22 @@ PATTERN whirpool[] = {
   0b000000,
 };
 
+PATTERN whirpool_shorter[] = {
+  12,
+  0b011111,
+  0b001111,
+  0b000111,
+  0b000011,
+  0b100001,
+  0b110000,
+  0b011000,
+  0b001100,
+  0b000110,
+  0b000000,
+  0b000000,
+  0b000000,
+};
+
 PATTERN double_whirpool[] = {
   12,
   0b110110,
@@ -305,7 +321,7 @@ const byte * const patterns_level1[] = {
   solo_C,
   solo_D,
   triple_C,
-  whirpool,
+  whirpool_shorter,
   bat,
   ladder,
 };
