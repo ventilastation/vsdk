@@ -11,14 +11,14 @@ from ventilastation import sprites
 import gc
 import struct
 import uos
-
+from ventilastation.hw_config import hall_gpio, irdiode_gpio, led_clk, led_mosi, led_freq
 
 DEBUG = False
 INPUT_TIMEOUT = 15 * 1000  # 62 segundos de inactividad, volver al menu
 
 from ventilastation import povdisplay
 PIXELS = 54
-povdisplay.init(PIXELS)
+povdisplay.init(PIXELS, hall_gpio, irdiode_gpio, led_clk, led_mosi, led_freq)
 povdisplay.set_gamma_mode(1)
 
 try:
