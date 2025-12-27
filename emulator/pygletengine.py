@@ -11,23 +11,9 @@ from vsdk import *
 init_sound()
 init_display()
 
-# spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
-# all_strips = {}
-
-
-LED_DOT = 6
-STARS = COLUMNS // 2
-
-# glLoadIdentity()
-# glEnable(GL_BLEND)
-# #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-# glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_ONE)
-
 class PygletEngine():
     def __init__(self, led_count, comms_send, enable_display=True):
-        self.led_count = led_count
-        self.total_angle = 0
-        self.last_sent = 0
+        self.last_byte_sent = 0
         self.comms_send = comms_send
         led_step = (LED_SIZE / led_count)
         self.enable_display = enable_display
@@ -63,9 +49,9 @@ class PygletEngine():
         def process_input():
             val = encode_input_val()
 
-            if val != self.last_sent:
+            if val != self.last_byte_sent:
                 self.comms_send(bytes([val]))
-                self.last_sent = val
+                self.last_byte_sent = val
 
 
 
@@ -87,7 +73,8 @@ class PygletEngine():
             for column in range(256):
                 limit = len(self.vertex_list.colors)
                 try:
-                    self.vertex_list.colors[:] = render(column)[0:limit]
+                    pixels = render(column)[0:limit]
+                    self.vertex_list.colors[:] = pack_colors(list(repeated(4, pixels)))
                     self.vertex_list.draw(GL_QUADS)
                 except Exception as e:
                     traceback.print_exc()

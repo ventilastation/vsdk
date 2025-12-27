@@ -12,6 +12,8 @@ led_count = PIXELS
 starfield = [(random.randrange(COLUMNS), random.randrange(ROWS)) for n in range(STARS)]
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 all_strips = {}
+qpalette = []
+upalette = []
 
 def change_colors(colors):
     # byteswap all longs
@@ -28,17 +30,11 @@ def unpack_palette(pal):
     fmt_unpack = "<" + "L" * (len(pal)//4)
     return unpack(fmt_unpack, pal)
 
-
 def repeated(n, iterable):
     """Yield each item from `iterable` `n` times."""
     for item in iterable:
         for _ in range(n):
             yield item
-
-
-
-palette = []
-upalette = []
 
 def set_palettes(paldata):
     global palette, upalette
@@ -108,7 +104,8 @@ def render(column):
                             y = deepspace[y]
                         else:
                             y = led_count - 1 - y
-                        pixels[y] = color
+                        if y < led_count:
+                            pixels[y] = color
             else:
                 zleds = deepspace[255-y]
 
@@ -121,69 +118,4 @@ def render(column):
                         color = upalette[index + pal_base]
                         pixels[led] = color
 
-    return pack_colors(repeated(4, pixels))
-
-
-
-def render(column):
-    pixels = [0x00000000] * led_count * 4
-
-    for (x,y) in starfield:
-        if x == column:
-            try:
-                px = deepspace[y] * 4
-                pixels[px:px+4] = [0xff404040] * 4
-            except:
-                print(y, deepspace)
-
-    # el sprite 0 se dibuja arriba de todos los otros
-    for n in range(99, -1, -1):
-        x, y, image, frame, perspective = unpack("BBBBb", spritedata[n*5:n*5+5])
-        if frame == 255:
-            continue
-
-        strip = all_strips.get(image)
-        if not strip:
-            continue
-        w, h, total_frames, pal = unpack("BBBB", strip[0:4])
-        pal_base = 256 * pal
-        if w == 255: w = 256 # caso especial, para los planetas
-        pixeldata = memoryview(strip)[4:]
-
-        frame %= total_frames
-
-        visible_column = get_visible_column(x, w, column)
-        if visible_column != -1:
-            base = visible_column * h + (frame * w * h)
-            if perspective:
-                desde = max(y, 0)
-                hasta = min(y + h, ROWS - 1)
-                comienzo = max( -y, 0)
-                src = base + comienzo
-
-                for y in range(desde, hasta):
-                    index = pixeldata[src]
-                    src += 1
-                    if index != TRANSPARENT_INDEX:
-                        color = upalette[index + pal_base]
-                        if perspective == 1:
-                            y = deepspace[y]
-                        else:
-                            y = led_count - 1 - y
-                        px = y * 4
-                        pixels[px:px+4] = [color] * 4
-            else:
-                zleds = deepspace[255-y]
-
-                for led in range(zleds):
-                    src = led * led_count // zleds
-                    if src >= h:
-                        break
-                    index = pixeldata[base + h - 1 - src]
-                    if index != TRANSPARENT_INDEX:
-                        color = upalette[index + pal_base]
-                        px = led * 4
-                        pixels[px:px+4] = [color] * 4
-
-    return pack_colors(pixels)
-
+    return pixels
