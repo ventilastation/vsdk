@@ -1,11 +1,7 @@
-import config
 import pyglet
-
-
 import math
 import random
 from pyglet.gl import *
-from pyglet.window import key
 from struct import pack, unpack
 from deepspace import deepspace
 
@@ -16,22 +12,6 @@ init_sound()
 
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 all_strips = {}
-
-joysticks = pyglet.input.get_joysticks()
-print(joysticks)
-if joysticks:
-    #import pdb
-    #pdb.set_trace()
-    joystick = joysticks[0]
-    joystick.open()
-else:
-    joystick = None
-
-window = pyglet.window.Window(config=Config(double_buffer=True), fullscreen=config.FULLSCREEN)
-logo = pyglet.image.load("logo.png")
-window.set_icon(logo)
-fps_display = pyglet.window.FPSDisplay(window)
-keys = key.KeyStateHandler()
 
 
 LED_DOT = 6
@@ -49,13 +29,6 @@ glLoadIdentity()
 glEnable(GL_BLEND)
 #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_ONE)
-
-@window.event
-def on_key_press(symbol, modifiers):
-    if symbol == pyglet.window.key.ESCAPE:
-        return pyglet.event.EVENT_HANDLED
-    if symbol == pyglet.window.key.Q:
-        pyglet.app.exit()
 
 
 def change_colors(colors):
@@ -82,11 +55,11 @@ def set_palettes(paldata):
     upalette = unpack_palette(palette)
 
 class PygletEngine():
-    def __init__(self, led_count, keyhandler, enable_display=True):
+    def __init__(self, led_count, comms_send, enable_display=True):
         self.led_count = led_count
         self.total_angle = 0
         self.last_sent = 0
-        self.keyhandler = keyhandler
+        self.comms_send = comms_send
         led_step = (LED_SIZE / led_count)
         self.enable_display = enable_display
         self.help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
@@ -118,45 +91,11 @@ class PygletEngine():
         texture = pyglet.image.load("glow.png").get_texture(rectangle=True)
 
 
-        def send_keys():
-            reset = keys[key.ESCAPE]
-            try:
-                left = joystick.x < -0.5 or joystick.hat_x < -0.5 or joystick.buttons[4]
-                right = joystick.x > 0.5 or joystick.hat_x > 0.5 or joystick.buttons[5]
-                up = joystick.y < -0.5 or joystick.hat_y > 0.5
-                down = joystick.y > 0.5 or joystick.hat_y < -0.5
-
-
-                boton = joystick.buttons[0]  # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
-
-                accel = joystick.z > 0 or keys[key.PAGEUP] or keys[key.P] or joystick.buttons[2]
-                decel = joystick.rz > 0 or keys[key.PAGEDOWN] or keys[key.O] or joystick.buttons[3]
-
-                try:
-                    reset = reset or joystick.buttons[8] or joystick.buttons[1]
-                except:
-                    reset = reset or joystick.buttons[7] or joystick.buttons[1]
-                left = left or keys[key.LEFT] or keys[key.A] or base_button_left()
-                right = right or keys[key.RIGHT] or keys[key.D] or base_button_right()
-                up = up or keys[key.UP] or keys[key.W]
-                down = down or keys[key.DOWN] or keys[key.S]
-                boton = boton or keys[key.SPACE]
-
-            except Exception:
-                left = keys[key.LEFT] or keys[key.A] or base_button_left()
-                right = keys[key.RIGHT] or keys[key.D] or base_button_right()
-                up = keys[key.UP] or keys[key.W]
-                down = keys[key.DOWN] or keys[key.S]
-
-                boton = keys[key.SPACE]
-                accel = keys[key.PAGEUP] or keys[key.P]
-                decel = keys[key.PAGEDOWN] or keys[key.O]
-
-            val = (left << 0 | right << 1 | up << 2 | down << 3 | boton << 4 |
-                    accel << 5 | decel << 6 | reset << 7)
+        def process_input():
+            val = encode_input_val()
 
             if val != self.last_sent:
-                self.keyhandler(bytes([val]))
+                self.comms_send(bytes([val]))
                 self.last_sent = val
 
         self.i = 0
@@ -271,7 +210,7 @@ class PygletEngine():
 
 
         def animate(dt):
-            send_keys()
+            process_input()
             process_sound_queue()
             return
             "FIXME"
@@ -286,4 +225,3 @@ class PygletEngine():
         pyglet.clock.schedule_interval(animate, 1/30.0)
         pyglet.app.run()
 
-window.push_handlers(keys)
