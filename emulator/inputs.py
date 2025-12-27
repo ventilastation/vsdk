@@ -22,7 +22,6 @@ except ImportError:
     def base_button_right():
         return False
 
-fps_display = pyglet.window.FPSDisplay(window)
 keys = key.KeyStateHandler()
 
 def init_inputs():

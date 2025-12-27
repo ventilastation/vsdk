@@ -14,7 +14,7 @@ sounds = {}
 sound_queue = []
 music_player = None
 
-def init_sound():
+def sound_init():
     def load_sounds():
         for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
             for fn in files:
@@ -46,7 +46,7 @@ def playnotes(folder, notes):
 def playmusic(name):
     sound_queue.append(("music", name))
 
-def process_sound_queue():
+def sound_process_queue():
     global music_player
     while sound_queue:
         command, *args = sound_queue.pop()
