@@ -1,7 +1,7 @@
 import pyglet
 from pyglet.window import key
 
-from display import window
+from pygletdraw import window
 
 try:
     # Botones de la base de Super Ventilagon
