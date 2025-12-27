@@ -24,7 +24,9 @@ except ImportError:
 
 fps_display = pyglet.window.FPSDisplay(window)
 keys = key.KeyStateHandler()
-window.push_handlers(keys)
+
+def init_inputs():
+    window.push_handlers(keys)
 
 joysticks = pyglet.input.get_joysticks()
 print(joysticks)

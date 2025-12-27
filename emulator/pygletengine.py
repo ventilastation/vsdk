@@ -71,7 +71,6 @@ class PygletEngine():
 
         @window.event
         def on_draw():
-            print("on_draw")
             if not self.enable_display:
                 return
             window.clear()
@@ -105,6 +104,7 @@ class PygletEngine():
             process_sound_queue()
             return
 
+        init_inputs()
         pyglet.clock.schedule_interval(animate, 1/30.0)
         pyglet.app.run()
 
