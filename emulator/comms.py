@@ -9,7 +9,8 @@ import config
 import struct
 import socket
 import threading
-from pygletengine import all_strips, set_palettes, spritedata, playsound, playmusic, playnotes
+from pygletengine import all_strips, set_palettes, spritedata
+from audio import playsound, playmusic, playnotes
 
 class ConnectionBase:
     def __init__(self):

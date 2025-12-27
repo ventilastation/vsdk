@@ -1,86 +1,21 @@
-import platform
 import config
-import sys
 import pyglet
 
-pyglet.options['vsync'] = "--no-display" not in sys.argv
 
 import math
 import random
-import os
 from pyglet.gl import *
 from pyglet.window import key
 from struct import pack, unpack
 from deepspace import deepspace
 
-try:
-    # Botones de la base de Super Ventilagon
-    import RPi.GPIO as GPIO
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup([9,10], GPIO.IN, GPIO.PUD_UP)
+from inputs import *
+from audio import init_sound, process_sound_queue
 
-    def base_button_left():
-        return GPIO.input(9) == 0
-    
-    def base_button_right():
-        return GPIO.input(10) == 0
-
-except ImportError:
-    def base_button_left():
-        return False
-
-    def base_button_right():
-        return False
-
-if platform.system() != "Windows":
-    # Force using OpenAL since pulse crashes
-    pyglet.options['audio'] = ('openal', 'silent')
-
-# preload all sounds
-sounds = {}
-sound_queue = []
-
-all_strips = {}
-
-SOUNDS_FOLDER = "../apps/sounds"
-
-def load_sounds():
-    for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
-        for fn in files:
-            if fn.endswith(".mp3"):
-                fullname = os.path.join(dirpath, fn)
-                fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
-                try:
-                    sound = pyglet.media.load(fullname + ".wav", streaming=False)
-                    print(fullname + ".wav")
-                except:
-                    try:
-                        sound = pyglet.media.load(fullname, streaming=False)
-                        print(fullname)
-                    except pyglet.media.codecs.wave.WAVEDecodeException:
-                        print("WARNING: sound not found:", fullname)
-
-                sounds[bytes(fn, "latin1")] = sound
-
-    # startup sound
-    sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin1")))
-
-
-import threading
-
-threading.Thread(target=load_sounds, daemon=True).start()
-
-def playsound(name):
-    sound_queue.append(("sound", name))
-
-def playnotes(folder, notes):
-    sound_queue.append(("notes", folder, notes))
-
-def playmusic(name):
-    sound_queue.append(("music", name))
-
+init_sound()
 
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
+all_strips = {}
 
 joysticks = pyglet.input.get_joysticks()
 print(joysticks)
@@ -154,7 +89,6 @@ class PygletEngine():
         self.keyhandler = keyhandler
         led_step = (LED_SIZE / led_count)
         self.enable_display = enable_display
-        self.music_player = None
         self.help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
 
         vertex_pos = []
@@ -338,37 +272,7 @@ class PygletEngine():
 
         def animate(dt):
             send_keys()
-            while sound_queue:
-                command, *args = sound_queue.pop()
-                if command == "sound":
-                    name = args[0]
-                    s = sounds.get(name)
-                    if s:
-                        s.play()
-                    else:
-                        print("WARNING: sound not found:", name)
-                elif command == "music":
-                    name = args[0]
-                    if self.music_player:
-                        self.music_player.pause()
-                    if name != b"off":
-                        s = sounds.get(name)
-                        if s:
-                            self.music_player = s.play()
-                        else:
-                            print("WARNING: music not found:", name)
-                elif command == "notes":
-                    folder, notes = args
-                    to_play = []
-                    for note in notes.split(b";"):
-                        sound = sounds.get(folder + b"/" + note)
-                        if sound:
-                            to_play.append(sound)
-                        else:
-                            print("WARNING: note not found:", folder, note)
-
-                    for s in to_play:
-                        s.play()
+            process_sound_queue()
             return
             "FIXME"
             for n in range(6):
