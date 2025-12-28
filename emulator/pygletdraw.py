@@ -1,10 +1,28 @@
 import math
+import random
 import sys
 import traceback
 
 import pyglet
+import pyglet.math as pm
 from pyglet.gl import Config
-from pyglet.gl import *
+from pyglet.gl import (
+    glActiveTexture,
+    glBindTexture,
+    glEnable,
+    glBlendFunc,
+    glDisable,
+    GL_TEXTURE0,
+    GL_TRIANGLES,
+    GL_BLEND,
+    GL_SRC_ALPHA_SATURATE,
+    GL_ONE,
+    GL_SRC_ALPHA,
+    GL_ONE_MINUS_SRC_ALPHA,
+)
+from pyglet.math import Mat4
+from pyglet.graphics import Group
+from pyglet.graphics.shader import Shader, ShaderProgram
 
 import config
 from vsdk import COLUMNS, pack_colors, repeated, render
@@ -12,24 +30,112 @@ from vsdk import COLUMNS, pack_colors, repeated, render
 
 pyglet.options['vsync'] = "--no-display" not in sys.argv
 
-window = pyglet.window.Window(config=Config(double_buffer=True), fullscreen=config.FULLSCREEN)
+###############################
+# Define a basic Shader Program
+###############################
+_vertex_source = """#version 330 core
+    in vec2 position;
+    in vec3 tex_coords;
+    in vec4 colors;
+    out vec3 texture_coords;
+    out vec4 v_colors;
+
+    uniform WindowBlock 
+    {                       // This UBO is defined on Window creation, and available
+        mat4 projection;    // in all Shaders. You can modify these matrixes with the
+        mat4 view;          // Window.view and Window.projection properties.
+    } window;  
+
+    void main()
+    {
+        gl_Position = window.projection * window.view * vec4(position, 1, 1);
+        texture_coords = tex_coords;
+        v_colors = colors;
+    }
+"""
+
+_fragment_source = """#version 330 core
+    in vec3 texture_coords;
+    in vec4 v_colors;
+    out vec4 final_colors;
+
+    uniform sampler2D our_texture;
+
+    void main()
+    {
+        final_colors = v_colors * texture(our_texture, texture_coords.xy);
+    }
+"""
+
+vert_shader = Shader(_vertex_source, 'vertex')
+frag_shader = Shader(_fragment_source, 'fragment')
+shader_program = ShaderProgram(vert_shader, frag_shader)
+
+#####################################################
+# Define a custom `Group` to encapsulate OpenGL state
+#####################################################
+class RenderGroup(Group):
+    """A Group that enables and binds a Texture and ShaderProgram.
+
+    RenderGroups are equal if their Texture and ShaderProgram
+    are equal.
+    """
+    def __init__(self, texture, program, order=0, parent=None):
+        """Create a RenderGroup.
+
+        :Parameters:
+            `texture` : `~pyglet.image.Texture`
+                Texture to bind.
+            `program` : `~pyglet.graphics.shader.ShaderProgram`
+                ShaderProgram to use.
+            `order` : int
+                Change the order to render above or below other Groups.
+            `parent` : `~pyglet.graphics.Group`
+                Parent group.
+        """
+        super().__init__(order, parent)
+        self.texture = texture
+        self.program = program
+
+    def set_state(self):
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(self.texture.target, self.texture.id)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        # glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_ONE)
+        self.program.use()
+
+    def unset_state(self):
+        glDisable(GL_BLEND)
+
+    def __hash__(self):
+        return hash((self.texture.target, self.texture.id, self.order, self.parent, self.program))
+
+    def __eq__(self, other):
+        return (self.__class__ is other.__class__ and
+                self.texture.target == other.texture.target and
+                self.texture.id == other.texture.id and
+                self.order == other.order and
+                self.program == other.program and
+                self.parent == other.parent)
+
+
+window = pyglet.window.Window(config=Config(double_buffer=True), fullscreen=config.FULLSCREEN, resizable=True)
 logo = pyglet.image.load("logo.png")
 window.set_icon(logo)
 window.set_caption("Ventilastation Emulator")
 fps_display = pyglet.window.FPSDisplay(window)
 help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
+batch = pyglet.graphics.Batch()
 
-LED_SIZE = min(window.width, window.height) / 2
+
+led_count = 54
+LED_SIZE = 100
 vertex_list = None
-texture = None
+texture = pyglet.image.load("glow.png").get_texture(rectangle=True)
+group = RenderGroup(texture, shader_program)
 
 def display_init(led_count):
-    glLoadIdentity()
-    glEnable(GL_BLEND)
-    #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_ONE)
-
-
     led_step = (LED_SIZE / led_count)
     vertex_pos = []
     theta = (math.pi * 2 / COLUMNS)
@@ -42,50 +148,56 @@ def display_init(led_count):
         y2 = y1 + (led_step * 1)
         x3 = arc_chord(y2) * 0.7
         x4 = -x3
-        vertex_pos.extend([x1, y1, x2, y1, x4, y2, x3, y2])
+        vertex_pos.extend([x1, y1, x2, y1, x4, y2,
+                        x1, y1, x4, y2, x3, y2])
         x1, x2 = x3, x4
 
-    vertex_colors = (0, 0, 0, 255) * led_count * 4
-    texture_pos = (0,0, 1,0, 1,1, 0,1) * led_count
+    vertex_colors = (255, 128, 0, 255) * led_count * 6
+    texture_pos = (0.0,0.0,0, 1.0,0.0,0, 1.0,1.0,0, 
+                0.0,0.0,0, 1.0,1.0,0, 0.0,1.0,0) * led_count 
 
     global vertex_list
-    vertex_list = pyglet.graphics.vertex_list(
-        led_count * 4,
-        ('v2f/static', vertex_pos),
-        ('c4B/stream', vertex_colors),
-        ('t2f/static', texture_pos))
+    vertex_list = shader_program.vertex_list(
+        led_count * 6,
+        mode=GL_TRIANGLES,
+        position=('f', vertex_pos),
+        colors=('Bn', vertex_colors),
+        tex_coords=('f', texture_pos),
+        group=group,
+        batch=batch
+    )
 
-    global texture
-    texture = pyglet.image.load("glow.png").get_texture(rectangle=True)
-
-
-def display_resize():
-    global LED_SIZE
-    LED_SIZE = min(window.width, window.height) / 2
-    led_step = (LED_SIZE / led_count)
 
 def display_draw():
     window.clear()
     fps_display.draw()
+    help_label.x = window.width - 5
     help_label.draw()
 
-    angle = -(360.0 / 256.0)
+    rotation_axis = pm.Vec3(0.0, 0.0, -1.0) # The Z-axis
+    angle = math.pi * 2 / COLUMNS
 
-    glTranslatef(window.width / 2, window.height / 2, 0)
-    glRotatef(180, 0, 0, 1)
-    glEnable(texture.target)
-    glBindTexture(texture.target, texture.id)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    for column in range(256):
-        limit = len(vertex_list.colors)
-        try:
-            pixels = render(column)[0:limit]
-            vertex_list.colors[:] = pack_colors(list(repeated(4, pixels)))
-            vertex_list.draw(GL_QUADS)
-        except Exception as e:
-            traceback.print_exc()
-            pass
-        glRotatef(angle, 0, 0, 1)
-    glDisable(texture.target)
-    glRotatef(180, 0, 0, 1)
-    glTranslatef(-window.width / 2, -window.height / 2, 0)
+    smaller_dimension = min(window.width, window.height)
+    x_half = window.width / smaller_dimension * 100
+    y_half = window.height / smaller_dimension * 100
+
+    orig_projection = window.projection
+    orig_view = window.view
+    window.projection = pm.Mat4.orthogonal_projection(-x_half, x_half, -y_half, y_half, -100, 100)
+    window.view = window.view.rotate(math.pi, rotation_axis)
+  
+    try:
+        for column in range(COLUMNS):
+            pixels = render(column) #[0:limit]
+            vertex_colors = []
+            for i in range(led_count):
+                r, g, b = random.random(), random.random(), random.random()
+                for v in range(6):
+                    vertex_colors.extend([r, g, b, 1.0])
+            vertex_colors = pack_colors(list(repeated(6, pixels)))
+            vertex_list.set_attribute_data("colors", vertex_colors)
+            window.view = window.view.rotate(angle, rotation_axis)
+            batch.draw()
+    finally:
+        window.projection = orig_projection
+        window.view = orig_view
