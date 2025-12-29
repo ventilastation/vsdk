@@ -8,6 +8,8 @@ import binascii
 LISTEN_HOST = '0.0.0.0'
 LISTEN_PORT = 9000
 
+SKIP_FILES = {'.DS_Store', 'Thumbs.db', "settings.json"}
+
 def get_folder_path():
     if len(sys.argv) > 1:
         return sys.argv[1]
@@ -26,6 +28,8 @@ def scan_files():
     folder_path = get_folder_path()
     for root, dirs, files in os.walk(folder_path):
         for file in files:
+            if file in SKIP_FILES:
+                continue
             full_path = os.path.join(root, file)
             yield full_path
 
