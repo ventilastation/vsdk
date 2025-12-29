@@ -190,10 +190,10 @@ def display_draw():
         for column in range(COLUMNS):
             pixels = render(column) #[0:limit]
             vertex_colors = []
-            for i in range(led_count):
-                r, g, b = random.random(), random.random(), random.random()
-                for v in range(6):
-                    vertex_colors.extend([r, g, b, 1.0])
+            # for i in range(led_count):
+            #     r, g, b = random.random(), random.random(), random.random()
+            #     for v in range(6):
+            #         vertex_colors.extend([r, g, b, 1.0])
             vertex_colors = pack_colors(list(repeated(6, pixels)))
             vertex_list.set_attribute_data("colors", vertex_colors)
             window.view = window.view.rotate(angle, rotation_axis)
