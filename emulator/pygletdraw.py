@@ -144,7 +144,6 @@ def display_init(led_count):
 
 
     for column in range(COLUMNS):
-        rotmatrix = pm.Mat4().rotate(theta * column, pm.Vec3(0.0, 0.0, 1.0))
         x1, x2 = 0, 0
         for i in range(led_count):
             y1 = led_step * i - (led_step * .3)
@@ -152,17 +151,18 @@ def display_init(led_count):
             x3 = arc_chord(y2) * 0.7
             x4 = -x3
 
-            v1 = pm.Vec2(x1, y1).rotate(-theta * column)
-            v2 = pm.Vec2(x2, y1).rotate(-theta * column)
-            v3 = pm.Vec2(x4, y2).rotate(-theta * column)
-            v4 = pm.Vec2(x3, y2).rotate(-theta * column)
+            angle = -theta * column + math.pi
+            v1 = pm.Vec2(x1, y1).rotate(angle)
+            v2 = pm.Vec2(x2, y1).rotate(angle)
+            v3 = pm.Vec2(x4, y2).rotate(angle)
+            v4 = pm.Vec2(x3, y2).rotate(angle)
             vertex_pos.extend([v1.x, v1.y, v2.x, v2.y, v3.x, v3.y,
                                 v1.x, v1.y, v3.x, v3.y, v4.x, v4.y])
             x1, x2 = x3, x4
 
     vertex_colors = (255, 128, 0, 255) * led_count * 6 * COLUMNS
     texture_pos = (0.0,0.0,0, 1.0,0.0,0, 1.0,1.0,0, 
-                0.0,0.0,0, 1.0,1.0,0, 0.0,1.0,0) * led_count * COLUMNS
+                   0.0,0.0,0, 1.0,1.0,0, 0.0,1.0,0) * led_count * COLUMNS
 
     global vertex_list
     vertex_list = shader_program.vertex_list(
@@ -175,6 +175,9 @@ def display_init(led_count):
         batch=batch
     )
 
+@window.event
+def on_resize(width, height):
+    print(f'The window was resized to {width},{height}')
 
 def display_draw():
     window.clear()
@@ -182,17 +185,12 @@ def display_draw():
     help_label.x = window.width - 5
     help_label.draw()
 
-    rotation_axis = pm.Vec3(0.0, 0.0, -1.0) # The Z-axis
-    angle = math.pi * 2 / COLUMNS
-
     smaller_dimension = min(window.width, window.height)
     x_half = window.width / smaller_dimension * 100
     y_half = window.height / smaller_dimension * 100
 
     orig_projection = window.projection
-    orig_view = window.view
     window.projection = pm.Mat4.orthogonal_projection(-x_half, x_half, -y_half, y_half, -100, 100)
-    window.view = window.view.rotate(math.pi, rotation_axis)
 
     all_pixels = []
     try:
@@ -204,4 +202,3 @@ def display_draw():
         batch.draw()
     finally:
         window.projection = orig_projection
-        window.view = orig_view
