@@ -142,23 +142,31 @@ def display_init(led_count):
     def arc_chord(r):
         return 2 * r * math.sin(theta / 2)
 
-    x1, x2 = 0, 0
-    for i in range(led_count):
-        y1 = led_step * i - (led_step * .3)
-        y2 = y1 + (led_step * 1)
-        x3 = arc_chord(y2) * 0.7
-        x4 = -x3
-        vertex_pos.extend([x1, y1, x2, y1, x4, y2,
-                        x1, y1, x4, y2, x3, y2])
-        x1, x2 = x3, x4
 
-    vertex_colors = (255, 128, 0, 255) * led_count * 6
+    for column in range(COLUMNS):
+        rotmatrix = pm.Mat4().rotate(theta * column, pm.Vec3(0.0, 0.0, 1.0))
+        x1, x2 = 0, 0
+        for i in range(led_count):
+            y1 = led_step * i - (led_step * .3)
+            y2 = y1 + (led_step * 1)
+            x3 = arc_chord(y2) * 0.7
+            x4 = -x3
+
+            v1 = pm.Vec2(x1, y1).rotate(-theta * column)
+            v2 = pm.Vec2(x2, y1).rotate(-theta * column)
+            v3 = pm.Vec2(x4, y2).rotate(-theta * column)
+            v4 = pm.Vec2(x3, y2).rotate(-theta * column)
+            vertex_pos.extend([v1.x, v1.y, v2.x, v2.y, v3.x, v3.y,
+                                v1.x, v1.y, v3.x, v3.y, v4.x, v4.y])
+            x1, x2 = x3, x4
+
+    vertex_colors = (255, 128, 0, 255) * led_count * 6 * COLUMNS
     texture_pos = (0.0,0.0,0, 1.0,0.0,0, 1.0,1.0,0, 
-                0.0,0.0,0, 1.0,1.0,0, 0.0,1.0,0) * led_count 
+                0.0,0.0,0, 1.0,1.0,0, 0.0,1.0,0) * led_count * COLUMNS
 
     global vertex_list
     vertex_list = shader_program.vertex_list(
-        led_count * 6,
+        led_count * 6 * COLUMNS,
         mode=GL_TRIANGLES,
         position=('f', vertex_pos),
         colors=('Bn', vertex_colors),
@@ -185,19 +193,15 @@ def display_draw():
     orig_view = window.view
     window.projection = pm.Mat4.orthogonal_projection(-x_half, x_half, -y_half, y_half, -100, 100)
     window.view = window.view.rotate(math.pi, rotation_axis)
-  
+
+    all_pixels = []
     try:
         for column in range(COLUMNS):
-            pixels = render(column) #[0:limit]
-            vertex_colors = []
-            # for i in range(led_count):
-            #     r, g, b = random.random(), random.random(), random.random()
-            #     for v in range(6):
-            #         vertex_colors.extend([r, g, b, 1.0])
-            vertex_colors = pack_colors(list(repeated(6, pixels)))
-            vertex_list.set_attribute_data("colors", vertex_colors)
-            window.view = window.view.rotate(angle, rotation_axis)
-            batch.draw()
+            all_pixels.extend(render(column))
+
+        vertex_colors = pack_colors(list(repeated(6, all_pixels)))
+        vertex_list.set_attribute_data("colors", vertex_colors)
+        batch.draw()
     finally:
         window.projection = orig_projection
         window.view = orig_view
