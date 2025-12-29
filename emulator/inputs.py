@@ -27,13 +27,42 @@ keys = key.KeyStateHandler()
 def init_inputs():
     window.push_handlers(keys)
 
-joysticks = pyglet.input.get_joysticks()
-print(joysticks)
-if joysticks:
-    joystick = joysticks[0]
-    joystick.open()
+def init_controller(ctrl):
+    global controller
+    controller = ctrl
+    print(f"Controller connected: {ctrl.device.name}")
+    controller.open()
+    @controller.event
+    def on_button_press(controller, button_name):
+        print(f"Button {button_name} pressed")
+
+    @controller.event
+    def on_button_release(controller, button_name):
+        print(f"Button {button_name} released")
+
+    @controller.event
+    def on_dpad_motion(controller, vector):
+        print(f"DPad moved to ({vector.x}, {vector.y})")
+
+controller_man = pyglet.input.ControllerManager()
+
+@controller_man.event
+def on_connect(ctrl):
+    init_controller(ctrl)
+
+@controller_man.event
+def on_disconnect(ctrl):
+    print(f"Controller disconnected: {ctrl.device.name}")
+    global controller
+    controller = None
+
+initial_controllers = controller_man.get_controllers()
+print(initial_controllers)
+if initial_controllers:
+    init_controller(initial_controllers[0])
 else:
-    joystick = None
+    controller = None
+
 
 @window.event
 def on_key_press(symbol, modifiers):
@@ -45,28 +74,25 @@ def on_key_press(symbol, modifiers):
 def encode_input_val():
     reset = keys[key.ESCAPE]
     try:
-        left = joystick.x < -0.5 or joystick.hat_x < -0.5 or joystick.buttons[4]
-        right = joystick.x > 0.5 or joystick.hat_x > 0.5 or joystick.buttons[5]
-        up = joystick.y < -0.5 or joystick.hat_y > 0.5
-        down = joystick.y > 0.5 or joystick.hat_y < -0.5
+        left = controller.leftx < -0.5 or controller.dpad.x < -0.5 # or controller.leftshoulder
+        right = controller.leftx > 0.5 or controller.dpad.x > 0.5 # or controller.rightshoulder
+        up = controller.lefty < -0.5 or controller.dpad.y > 0.5
+        down = controller.lefty > 0.5 or controller.dpad.y < -0.5
 
+        boton = controller.b  # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
 
-        boton = joystick.buttons[0]  # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
+        accel = controller.lefttrigger > 0 or keys[key.PAGEUP] or keys[key.P] or controller.x
+        decel = controller.righttrigger > 0 or keys[key.PAGEDOWN] or keys[key.O] or controller.y
 
-        accel = joystick.z > 0 or keys[key.PAGEUP] or keys[key.P] or joystick.buttons[2]
-        decel = joystick.rz > 0 or keys[key.PAGEDOWN] or keys[key.O] or joystick.buttons[3]
-
-        try:
-            reset = reset or joystick.buttons[8] or joystick.buttons[1]
-        except:
-            reset = reset or joystick.buttons[7] or joystick.buttons[1]
+        reset = reset or controller.back or controller.guide or controller.back
         left = left or keys[key.LEFT] or keys[key.A] or base_button_left()
         right = right or keys[key.RIGHT] or keys[key.D] or base_button_right()
         up = up or keys[key.UP] or keys[key.W]
         down = down or keys[key.DOWN] or keys[key.S]
         boton = boton or keys[key.SPACE]
 
-    except Exception:
+    except Exception as e:
+        print(f"Joystick read error: {e}")
         left = keys[key.LEFT] or keys[key.A] or base_button_left()
         right = keys[key.RIGHT] or keys[key.D] or base_button_right()
         up = keys[key.UP] or keys[key.W]
