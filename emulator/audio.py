@@ -2,8 +2,11 @@ import pyglet
 import platform
 import os
 import threading
+import ffmpeg
 
 SOUNDS_FOLDER = "../apps/sounds"
+
+pyglet.options['debug_media'] = False
 
 if platform.system() == "Windows":
     # default sound is glitchy on my Windows 10
@@ -17,27 +20,44 @@ sounds = {}
 sound_queue = []
 music_player = None
 
+def load_sound(fullname):
+    wavname = fullname + ".wav"
+
+    if (not os.path.exists(wavname)
+        or os.path.getmtime(fullname) > os.path.getmtime(wavname)):
+        print("Converting mp3 to wav:", fullname)
+        (
+            ffmpeg
+            .input(fullname)
+            .output(wavname, format='wav')
+            .run(overwrite_output=True, quiet=True)
+        )
+    # else:
+        # print("Loading:", wavname)
+
+    try:
+        sound = pyglet.media.load(wavname, streaming=False)
+        return sound
+    except pyglet.media.codecs.wave.WAVEDecodeException:
+        print("WARNING: sound cannot be loaded:", wavname)
+        return None
+
+
 def sound_init():
     def load_sounds():
         for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
             for fn in files:
                 if fn.endswith(".mp3"):
                     fullname = os.path.join(dirpath, fn)
+                    sound = load_sound(fullname)
+                    if not sound:
+                        continue
                     fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
-                    try:
-                        sound = pyglet.media.load(fullname + ".wav", streaming=False)
-                        print(fullname + ".wav")
-                    except:
-                        try:
-                            sound = pyglet.media.load(fullname, streaming=False)
-                            print(fullname)
-                        except pyglet.media.codecs.wave.WAVEDecodeException:
-                            print("WARNING: sound not found:", fullname)
-
                     sounds[bytes(fn, "latin1")] = sound
 
         # startup sound
         sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin1")))
+        print("Sound system initialized with", len(sounds), "sounds.")
     threading.Thread(target=load_sounds, daemon=True).start()
 
 def playsound(name):

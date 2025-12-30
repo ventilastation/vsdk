@@ -8,4 +8,4 @@ deepspace = empty + [
     int(PIXELS * pow(float(n) / ROWS, 1/GAMMA) + 0.5)
     for n in range(ROWS-1, -1, -1)
 ]
-print(deepspace)
+# print(deepspace)

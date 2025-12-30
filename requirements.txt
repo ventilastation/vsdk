@@ -1,4 +1,5 @@
-pyglet<2.2
+pyglet
+ffmpeg-python
 gmqtt
 pyserial
 pillow
