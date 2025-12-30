@@ -5,7 +5,10 @@ import threading
 
 SOUNDS_FOLDER = "../apps/sounds"
 
-if platform.system() != "Windows":
+if platform.system() == "Windows":
+    # default sound is glitchy on my Windows 10
+    pyglet.options['audio'] = ('directsound', 'silent')
+else:
     # Force using OpenAL since pulse crashes
     pyglet.options['audio'] = ('openal', 'silent')
 
