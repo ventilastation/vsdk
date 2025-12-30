@@ -4,6 +4,10 @@ import sys
 import traceback
 
 import pyglet
+
+if pyglet.version < "2.0":
+    raise RuntimeError("Pyglet 2.0 or higher is required")
+
 import pyglet.math as pm
 from pyglet.gl import Config
 from pyglet.gl import (
