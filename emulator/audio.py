@@ -2,7 +2,7 @@ import pyglet
 import platform
 import os
 import threading
-import ffmpeg
+from ffmpeg import FFmpeg
 
 SOUNDS_FOLDER = "../apps/sounds"
 
@@ -21,19 +21,29 @@ sound_queue = []
 music_player = None
 
 def load_sound(fullname):
+    size = os.path.getsize(fullname)
+    if size > 200 * 1024:
+        # large file, probably music, don't preload fully, load as streaming
+        try:
+            sound = pyglet.media.load(fullname, streaming=True)
+            return sound
+        except Exception as e:
+            print("WARNING: sound cannot be loaded:", fullname, e)
+            return None
+        
+    # small size, convert to wav if needed and load as non-streaming
     wavname = fullname + ".wav"
 
     if (not os.path.exists(wavname)
         or os.path.getmtime(fullname) > os.path.getmtime(wavname)):
         print("Converting mp3 to wav:", fullname)
-        (
-            ffmpeg
+        ffmpeg = (
+            FFmpeg()
+            .option("y")
             .input(fullname)
-            .output(wavname, format='wav')
-            .run(overwrite_output=True, quiet=True)
+            .output(wavname)
         )
-    # else:
-        # print("Loading:", wavname)
+        ffmpeg.execute()
 
     try:
         sound = pyglet.media.load(wavname, streaming=False)
@@ -83,11 +93,12 @@ def sound_process_queue():
         elif command == "music":
             name = args[0]
             if music_player:
-                music_player.pause()
+                music_player.delete()
             if name != b"off":
                 s = sounds.get(name)
                 if s:
                     print("Playing music:", name)
+                    s.seek(0)
                     music_player = s.play()
                 else:
                     print("WARNING: music not found:", name)
