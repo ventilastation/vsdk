@@ -20,6 +20,11 @@ sounds = {}
 sound_queue = []
 music_player = None
 
+if platform.system() == "Windows":
+    FFMPEG_PATH = "ffmpeg-win/ffmpeg.exe"
+else:
+    FFMPEG_PATH = "ffmpeg"
+
 def load_sound(fullname):
     size = os.path.getsize(fullname)
     if size > 200 * 1024:
@@ -34,23 +39,25 @@ def load_sound(fullname):
     # small size, convert to wav if needed and load as non-streaming
     wavname = fullname + ".wav"
 
-    if (not os.path.exists(wavname)
-        or os.path.getmtime(fullname) > os.path.getmtime(wavname)):
-        print("Converting mp3 to wav:", fullname)
-        ffmpeg = (
-            FFmpeg()
-            .option("y")
-            .input(fullname)
-            .output(wavname)
-        )
-        ffmpeg.execute()
-
     try:
+        if (not os.path.exists(wavname)
+            or os.path.getmtime(fullname) > os.path.getmtime(wavname)):
+            print("Converting mp3 to wav:", fullname)
+            ffmpeg = (
+                FFmpeg(FFMPEG_PATH)
+                .option("y")
+                .input(fullname)
+                .output(wavname)
+            )
+            ffmpeg.execute()
+
         sound = pyglet.media.load(wavname, streaming=False)
         return sound
-    except pyglet.media.codecs.wave.WAVEDecodeException:
-        print("WARNING: sound cannot be loaded:", wavname)
-        return None
+    except Exception as e:
+        print("WARNING: sound cannot be converted/loaded:", fullname, e)
+        raise e
+        sound = pyglet.media.load(fullname, streaming=False)
+        return sound
 
 
 def sound_init():
