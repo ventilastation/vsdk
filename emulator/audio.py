@@ -98,7 +98,10 @@ def sound_process_queue():
                 s = sounds.get(name)
                 if s:
                     print("Playing music:", name)
-                    s.seek(0)
+                    try:
+                        s.seek(0)
+                    except:
+                        pass
                     music_player = s.play()
                 else:
                     print("WARNING: music not found:", name)
