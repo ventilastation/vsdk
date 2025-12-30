@@ -32,17 +32,17 @@ def init_controller(ctrl):
     controller = ctrl
     print(f"Controller connected: {ctrl.device.name}")
     controller.open()
-    @controller.event
-    def on_button_press(controller, button_name):
-        print(f"Button {button_name} pressed")
+    # @controller.event
+    # def on_button_press(controller, button_name):
+    #     print(f"Button {button_name} pressed")
 
-    @controller.event
-    def on_button_release(controller, button_name):
-        print(f"Button {button_name} released")
+    # @controller.event
+    # def on_button_release(controller, button_name):
+    #     print(f"Button {button_name} released")
 
-    @controller.event
-    def on_dpad_motion(controller, vector):
-        print(f"DPad moved to ({vector.x}, {vector.y})")
+    # @controller.event
+    # def on_dpad_motion(controller, vector):
+    #     print(f"DPad moved to ({vector.x}, {vector.y})")
 
 controller_man = pyglet.input.ControllerManager()
 
@@ -72,19 +72,20 @@ def on_key_press(symbol, modifiers):
         pyglet.app.exit()
 
 def encode_input_val():
+    THR = 0.1
     reset = keys[key.ESCAPE]
     try:
-        left = controller.leftx < -0.5 or controller.dpad.x < -0.5 # or controller.leftshoulder
-        right = controller.leftx > 0.5 or controller.dpad.x > 0.5 # or controller.rightshoulder
-        up = controller.lefty < -0.5 or controller.dpad.y > 0.5
-        down = controller.lefty > 0.5 or controller.dpad.y < -0.5
+        left = controller.leftx < -THR or controller.dpad.x < -THR # or controller.leftshoulder
+        right = controller.leftx > THR or controller.dpad.x > THR # or controller.rightshoulder
+        up = controller.lefty > THR or controller.dpad.y > THR
+        down = controller.lefty < -THR or controller.dpad.y < -THR
 
-        boton = controller.b  # or joystick.buttons[4] or joystick.buttons[5] or joystick.buttons[6]
+        boton = controller.a
 
         accel = controller.lefttrigger > 0 or keys[key.PAGEUP] or keys[key.P] or controller.x
         decel = controller.righttrigger > 0 or keys[key.PAGEDOWN] or keys[key.O] or controller.y
 
-        reset = reset or controller.back or controller.guide or controller.back
+        reset = reset or controller.b or controller.guide or controller.back
         left = left or keys[key.LEFT] or keys[key.A] or base_button_left()
         right = right or keys[key.RIGHT] or keys[key.D] or base_button_right()
         up = up or keys[key.UP] or keys[key.W]
@@ -92,7 +93,7 @@ def encode_input_val():
         boton = boton or keys[key.SPACE]
 
     except Exception as e:
-        print(f"Joystick read error: {e}")
+        # print(f"Joystick read error: {e}")
         left = keys[key.LEFT] or keys[key.A] or base_button_left()
         right = keys[key.RIGHT] or keys[key.D] or base_button_right()
         up = keys[key.UP] or keys[key.W]
