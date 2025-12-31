@@ -27,17 +27,20 @@ else:
 
 def load_sound(fullname):
     size = os.path.getsize(fullname)
+    wavname = fullname + ".wav"
+
     if size > 200 * 1024:
         # large file, probably music, don't preload fully, load as streaming
         try:
-            sound = pyglet.media.load(fullname, streaming=True)
-            return sound
+            if os.path.exists(wavname):
+                return pyglet.media.load(wavname, streaming=True)
+            else:
+                return pyglet.media.load(fullname, streaming=True)
         except Exception as e:
             print("WARNING: sound cannot be loaded:", fullname, e)
             return None
         
     # small size, convert to wav if needed and load as non-streaming
-    wavname = fullname + ".wav"
 
     try:
         if (not os.path.exists(wavname)
