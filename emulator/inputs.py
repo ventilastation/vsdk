@@ -72,13 +72,13 @@ def on_key_press(symbol, modifiers):
         pyglet.app.exit()
 
 def encode_input_val():
-    THR = 0.1
+    THR = 0.5
     reset = keys[key.ESCAPE]
     try:
         left = controller.leftx < -THR or controller.dpad.x < -THR # or controller.leftshoulder
         right = controller.leftx > THR or controller.dpad.x > THR # or controller.rightshoulder
-        up = controller.lefty > THR or controller.dpad.y > THR
-        down = controller.lefty < -THR or controller.dpad.y < -THR
+        up = controller.lefty < -THR or controller.dpad.y > THR
+        down = controller.lefty > THR or controller.dpad.y < -THR
 
         boton = controller.a
 
