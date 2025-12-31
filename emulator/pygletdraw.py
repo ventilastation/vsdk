@@ -129,7 +129,7 @@ logo = pyglet.image.load("logo.png")
 window.set_icon(logo)
 window.set_caption("Ventilastation Emulator")
 fps_display = pyglet.window.FPSDisplay(window)
-help_label = pyglet.text.Label("←↕→ SPACE ESC Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
+help_label = pyglet.text.Label("ⓘ help goes here", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
 batch = pyglet.graphics.Batch()
 
 

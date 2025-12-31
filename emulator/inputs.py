@@ -1,7 +1,7 @@
 import pyglet
 from pyglet.window import key
 
-from pygletdraw import window
+from pygletdraw import window, help_label
 
 try:
     # Botones de la base de Super Ventilagon
@@ -46,15 +46,20 @@ def init_controller(ctrl):
 
 controller_man = pyglet.input.ControllerManager()
 
+def update_label():
+    help_label.text = ("joy or " if controller else "") + "keys: ←↕→ SPACE ESC Q"
+
 @controller_man.event
 def on_connect(ctrl):
     init_controller(ctrl)
+    update_label()
 
 @controller_man.event
 def on_disconnect(ctrl):
     print(f"Controller disconnected: {ctrl.device.name}")
     global controller
     controller = None
+    update_label()
 
 initial_controllers = controller_man.get_controllers()
 print(initial_controllers)
@@ -62,7 +67,7 @@ if initial_controllers:
     init_controller(initial_controllers[0])
 else:
     controller = None
-
+update_label()
 
 @window.event
 def on_key_press(symbol, modifiers):
