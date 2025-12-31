@@ -25,42 +25,52 @@ if platform.system() == "Windows":
 else:
     FFMPEG_PATH = "ffmpeg"
 
-def load_sound(fullname):
-    size = os.path.getsize(fullname)
-    wavname = fullname + ".wav"
+def short_name(path):
+    # strip the SOUNDS_FOLDER prefix
+    if path.startswith(SOUNDS_FOLDER):
+        path = path[len(SOUNDS_FOLDER)+1:]
+    return path
 
-    if size > 200 * 1024:
-        # large file, probably music, don't preload fully, load as streaming
-        try:
-            if os.path.exists(wavname):
-                return pyglet.media.load(wavname, streaming=True)
-            else:
-                return pyglet.media.load(fullname, streaming=True)
-        except Exception as e:
-            print("WARNING: sound cannot be loaded:", fullname, e)
-            return None
-        
-    # small size, convert to wav if needed and load as non-streaming
-
+def convert_mp3_to_wav(input_filename, output_filename):
+    print("Converting mp3 to wav:", short_name(input_filename))
     try:
-        if (not os.path.exists(wavname)
-            or os.path.getmtime(fullname) > os.path.getmtime(wavname)):
-            print("Converting mp3 to wav:", fullname)
-            ffmpeg = (
-                FFmpeg(FFMPEG_PATH)
-                .option("y")
-                .input(fullname)
-                .output(wavname)
-            )
-            ffmpeg.execute()
-
-        sound = pyglet.media.load(wavname, streaming=False)
-        return sound
+        ffmpeg = (
+            FFmpeg(FFMPEG_PATH)
+            .option("y")
+            .input(input_filename)
+            .output(output_filename)
+        )
+        ffmpeg.execute()
     except Exception as e:
-        print("WARNING: sound cannot be converted/loaded:", fullname, e)
+        print("ERROR: cannot convert mp3 to wav:", e)
         raise e
-        sound = pyglet.media.load(fullname, streaming=False)
-        return sound
+
+def load_sound(filename_mp3):
+    filename_wav = filename_mp3 + ".wav"
+
+    if os.path.getsize(filename_mp3) > 200 * 1024:
+        # larger file, probably music, don't preload fully, load as streaming
+        if os.path.exists(filename_wav):
+            if is_newer(filename_mp3, filename_wav):
+                convert_mp3_to_wav(filename_mp3, filename_wav)
+            return pyglet.media.load(filename_wav, streaming=True)
+        else:
+            try:
+                return pyglet.media.load(filename_mp3, streaming=True)
+            except Exception:
+                # cannot load the mp3, try converting to wav
+                convert_mp3_to_wav(filename_mp3, filename_wav)
+                return pyglet.media.load(filename_wav, streaming=True)
+    else:
+        # small size, convert to wav if needed and load as non-streaming
+
+        if (not os.path.exists(filename_wav) or is_newer(filename_mp3, filename_wav)):
+            convert_mp3_to_wav(filename_mp3, filename_wav)
+
+        return pyglet.media.load(filename_wav, streaming=False)
+   
+def is_newer(filename_1, filename_2):
+    return os.path.getmtime(filename_1) > os.path.getmtime(filename_2)
 
 
 def sound_init():
