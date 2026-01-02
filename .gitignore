@@ -195,3 +195,6 @@ apps/micropython/roms/*.rom
 Thumbs.db
 apps/micropython/sencom.hi
 apps/micropython/ventilastation/settings.json
+in-progress/boot.py
+emulator/ffmpeg-win/*.dll
+emulator/ffmpeg-win/*.exe

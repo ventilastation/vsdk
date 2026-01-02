@@ -79,7 +79,7 @@ class Menu(Scene):
                     else:
                         y = curr_y - (curr_y - dest_y) // 4
 
-                if 1 < y < 120:
+                if 1 < y < 250:
                     sprite.set_frame(sprite.selected_frame)
                 else:
                     sprite.disable()
