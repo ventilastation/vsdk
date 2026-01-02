@@ -6,7 +6,7 @@ from ventilastation import povdisplay
 
 char_width = 9
 char_height = 12
-display_len = 12
+display_len = 18
 
 class TextDisplay:
     def __init__(self, y):
@@ -52,7 +52,6 @@ class Tutorial(Scene):
         self.doom.set_y(255)
         #self.planeta.set_frame(0)
         #self.planeta.name = "Planeta"   # does not work on the sprite C module
-
         self.bicho = Sprite()
         self.bicho.set_strip(stripes["galaga.png"])
         self.bicho.set_perspective(1)
@@ -101,8 +100,15 @@ class Tutorial(Scene):
             self.activate_next()
             self.display.set_value("Persp: %d" % self.sprite.perspective())
 
+        back = director.was_pressed(director.BUTTON_B)
+        forth = director.was_pressed(director.BUTTON_C)
+
         # SKIP movement if DOOM
         if self.current == len(self.sprites) - 1:
+            if back or forth:
+                new_column_offset = povdisplay.get_column_offset() - back + forth
+                povdisplay.set_column_offset(new_column_offset)
+                self.display.set_value("col off = %d" % povdisplay.get_column_offset())
             return
             
         # Y
@@ -126,11 +132,9 @@ class Tutorial(Scene):
 
         # frame
 
-        back = director.was_pressed(director.BUTTON_B)
-        forth = director.was_pressed(director.BUTTON_C)
 
         if back or forth:
-            new_frame = self.sprite.frame() - back + forth
+            new_rotation = self.sprite.frame() - back + forth
             self.sprite.set_frame(new_frame)
             self.display.set_value("frame = %d" % self.sprite.frame())
 

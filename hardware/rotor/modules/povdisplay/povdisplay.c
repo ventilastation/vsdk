@@ -17,9 +17,14 @@
 #include "gpu.h"
 #include "ventilagon/ventilagon.h"
 
-#define GPIO_HALL     GPIO_NUM_26
-#define GPIO_HALL_B     GPIO_NUM_5
-#define GPIO_DEBUG     GPIO_NUM_18
+// Ventilastation 2 defaults
+int hall_gpio = 4;
+int irdiode_gpio = 6;
+int led_clk = 15;
+int led_mosi = 16;
+uint32_t led_freq = 20000000;
+
+// #define GPIO_DEBUG     GPIO_NUM_18
 
 //#define printf(...) mp_printf(MP_PYTHON_PRINTER, __VA_ARGS__)
 
@@ -104,7 +109,7 @@ void delay(int ms) {
 int color = 0;
 uint32_t count = 0;
 
- 
+
 static void IRAM_ATTR hall_neg_sensed(void* arg)
 {
     int64_t this_turn = esp_timer_get_time();
@@ -123,35 +128,36 @@ static void IRAM_ATTR hall_neg_sensed(void* arg)
 
 static void IRAM_ATTR hall_any_sensed(void* arg)
 {
-    int level = gpio_get_level(GPIO_HALL_B);
+    int level = gpio_get_level(hall_gpio);
     if (level == false) {
         hall_neg_sensed(arg);
     }
-    gpio_set_level(GPIO_NUM_38, level);
+    // gpio_set_level(GPIO_NUM_38, level);
 }
 
 
-void hall_init(int gpio_hall) {
-    gpio_set_direction(gpio_hall, GPIO_MODE_INPUT);
+void hall_init() {
+    gpio_set_direction(hall_gpio, GPIO_MODE_INPUT);
 #ifdef DEBUG_ROTATION
     for (int n = 0; n<DEBUG_BUFFER_SIZE; n++) {
         DEBUG_rotlog[n].now = 0xAA55AA55;
         DEBUG_rotlog[n].turn_duration = 0xFF00FF00;
     }
-    gpio_set_intr_type(gpio_hall, GPIO_INTR_ANYEDGE);
-    // gpio_isr_handler_add(gpio_hall, hall_any_sensed, (void*) gpio_hall);
+    gpio_set_intr_type(hall_gpio, GPIO_INTR_ANYEDGE);
+    gpio_isr_handler_add(hall_gpio, hall_any_sensed, (void*) hall_gpio);
 #else
-    gpio_set_intr_type(gpio_hall, GPIO_INTR_NEGEDGE);
-    // gpio_isr_handler_add(gpio_hall, hall_neg_sensed, (void*) gpio_hall);
+    gpio_set_intr_type(hall_gpio, GPIO_INTR_NEGEDGE);
+    gpio_isr_handler_add(hall_gpio, hall_neg_sensed, (void*) hall_gpio);
 #endif
 }
 
 
 int last_column = 0;
+int column_offset = 0;
 int64_t last_starfield_step = 0;
 void gpu_step() {
     int64_t now = esp_timer_get_time();
-    uint32_t column = ((now - last_turn) * COLUMNS / last_turn_duration) % COLUMNS;
+    uint32_t column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
     if (column != last_column) {
 #if (PROFILE_GPU_STEP)
         int64_t t_start = esp_timer_get_time();
@@ -192,15 +198,13 @@ void coreTask( void * pvParameters ){
     printf("GPU task running on core %d\n", xPortGetCoreID());
 
     // //gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
-    // //hall_init(GPIO_HALL);
-    hall_init(GPIO_HALL_B);
-    gpio_set_direction(GPIO_DEBUG, GPIO_MODE_OUTPUT);
-    gpio_set_direction(GPIO_NUM_38, GPIO_MODE_OUTPUT);
+    hall_init();
+    // gpio_set_direction(GPIO_DEBUG, GPIO_MODE_OUTPUT);
+    // gpio_set_direction(GPIO_NUM_38, GPIO_MODE_OUTPUT);
 
     init_sprites();
 
-    const long freq = 20000000;
-    spiStartBuses(freq);
+    spiStartBuses(led_freq, led_clk, led_mosi);
     spiAcquire();
 
     while(true){
@@ -215,14 +219,23 @@ void coreTask( void * pvParameters ){
 
 bool already_initialized = false;
 
-static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
+
+static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
+    int num_pixels = mp_obj_get_int(args[0]);
+    hall_gpio = mp_obj_get_int(args[1]);
+    irdiode_gpio = mp_obj_get_int(args[2]);
+    led_clk = mp_obj_get_int(args[3]);
+    led_mosi = mp_obj_get_int(args[4]);
+    led_freq = mp_obj_get_int(args[5]);
+
     if (already_initialized) {
         ventilagon_exit();
         return mp_const_none;
     }
     already_initialized = true;
 
-    spi_init(mp_obj_get_int(num_pixels));
+
+    spi_init(num_pixels);
     printf("Micropython running on core %d\n", xPortGetCoreID());
     ventilagon_init();
     //printf("pixels0: %p\n", pixels0);
@@ -241,7 +254,7 @@ static mp_obj_t povdisplay_init(mp_obj_t num_pixels) {
     gamma_mode = 0;
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_init_obj, povdisplay_init);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_init_obj, 6, 6, povdisplay_init);
 
 // ------------------------------
 
@@ -258,6 +271,19 @@ static mp_obj_t povdisplay_set_gamma_mode(mp_obj_t mode) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_gamma_mode_obj, povdisplay_set_gamma_mode);
+
+// ------------------------------
+
+static mp_obj_t povdisplay_set_column_offset(mp_obj_t offset) {
+    column_offset = mp_obj_get_int(offset) % COLUMNS;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_column_offset_obj, povdisplay_set_column_offset);
+
+static mp_obj_t povdisplay_get_column_offset() {
+    return mp_obj_new_int(column_offset);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_column_offset_obj, povdisplay_get_column_offset);
 
 // ------------------------------
 static mp_obj_t povdisplay_getaddress(mp_obj_t sprite_num) {
@@ -288,6 +314,8 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_palettes), (mp_obj_t)&povdisplay_set_palettes_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_gamma_mode), (mp_obj_t)&povdisplay_set_gamma_mode_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_column_offset), (mp_obj_t)&povdisplay_set_column_offset_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_get_column_offset), (mp_obj_t)&povdisplay_get_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_last_turn_duration), (mp_obj_t)&povdisplay_last_turn_duration_obj },
 };
