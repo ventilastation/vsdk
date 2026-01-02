@@ -6,3 +6,7 @@
 void spiStartBuses(uint32_t freq);
 void spiAcquire();
 void spiWriteNL(const void * data_in, size_t len);
+void spiWaitComplete();
+
+// we need esp-idf v5.4 or later to implement this
+// void* spiAlloc(size_t size);

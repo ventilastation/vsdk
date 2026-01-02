@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdint.h>
 #include <esp_system.h>
 #include "gpu.h"
 
@@ -29,8 +30,33 @@ typedef struct {
 } Star;
 Star starfield[STARS];
 
+
+// Romu Pseudorandom Number Generators
+//
+// Copyright 2020 Mark A. Overton
+#define ROTL(d,lrot) ((d<<(lrot)) | (d>>(8*sizeof(d)-(lrot))))
+
+//===== RomuMono32 ===============================================================================
+//
+// 32-bit arithmetic: Suitable only up to 2^26 output-values. Outputs 16-bit numbers.
+// Fixed period of (2^32)-47. Must be seeded using the romuMono32_init function.
+// Capacity = 2^27 bytes. Register pressure = 2. State size = 32 bits.
+
+uint32_t state;
+
+void romuMono32_init (uint32_t seed) {
+   state = (seed & 0x1fffffffu) + 1156979152u;  // Accepts 29 seed-bits.
+}
+
+uint16_t romuMono32_random () {
+   uint16_t result = state >> 16;
+   state *= 3611795771u;  state = ROTL(state,12);
+   return result;
+}
+
+
 int rand_int(int max) {
-    return esp_random() % max;
+    return romuMono32_random() % max;
 }
 
 void calculate_deepspace() {
@@ -52,6 +78,7 @@ void init_sprites() {
 
   calculate_deepspace();
 
+  romuMono32_init(esp_random());
   for (int f = 0; f<STARS; f++) {
     starfield[f].x = rand_int(COLUMNS);
     starfield[f].y = rand_int(ROWS);

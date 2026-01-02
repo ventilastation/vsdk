@@ -279,13 +279,31 @@ void spiAcquire() {
     printf("bus acquisition completed\n");
 }
 
+spi_transaction_t spi_trans;
+
 void spiWriteNL(const void * data_in, size_t len){
     esp_err_t ret;
-    spi_transaction_t transaction = {
-        .length=len*8,
-            .tx_buffer=data_in,
-            //.flags=SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL
-    };
-    ret = spi_device_polling_transmit(spi_handle, &transaction);
+    spi_trans.length = len*8;
+    spi_trans.tx_buffer = data_in;
+    spi_trans.flags = SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL;
+    // spi_transaction_t transaction = {
+    //     .length=len*8,
+    //         .tx_buffer=data_in,
+    //         .flags=SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL
+    // };
+    // ret = spi_device_polling_transmit(spi_handle, &transaction);
+
+    ret = spi_device_queue_trans(spi_handle, &spi_trans, pdMS_TO_TICKS(10));
     ESP_ERROR_CHECK(ret);
 }
+
+void spiWaitComplete() {
+    esp_err_t ret;
+    ret = spi_device_get_trans_result(spi_handle, &spi_trans, pdMS_TO_TICKS(100));
+    ESP_ERROR_CHECK(ret);
+}
+
+// we need esp-idf v5.4 or later for this function
+// void* spiAlloc(size_t size) {
+//     return spi_bus_dma_memory_alloc(LEDS_SPI_HOST, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+// }
