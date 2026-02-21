@@ -20,7 +20,7 @@ MAIN_MENU_OPTIONS = [
     # ('2bam_demo', "2bam_demo_menu.png", 0),
     # ('villalugano_games', "villalugano_games.png", 0),
     # new game by esteban
-    # ('aaa', 'aaa.png', 0),
+    ('aaa', 'aaa.png', 0),
 #     # # # 1er Jam 2025
 #     # ('vortris', "vortris.png", 0),
     ('vailableextreme', "vailableextreme.png", 0),
@@ -49,6 +49,7 @@ SYS_MENU_OPTIONS = [
     ('debugmode', "menu.png", 9),
     # ('calibrate', "menu.png", 8),
     ('tutorial', "menu.png", 10),
+    ('settings', "menu.png", 8),
     ('upgrade', "menu.png", 11),
     ('vyruss', "menu.png", 0),
     ('ventilagon_game', "menu.png", 1),

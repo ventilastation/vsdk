@@ -224,23 +224,18 @@
 
 #define LEDS_SPI_HOST    SPI2_HOST
 
-#define PIN_NUM_MOSI 16
-#define PIN_NUM_CLK  15
-//#define PIN_NUM_MISO 13
-//#define PIN_NUM_CS   40
-
 spi_device_handle_t spi_handle;
 
 
-void spiStartBuses(uint32_t freq) {
+void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi) {
     printf("Initializing bus SPI, handle is %p\n", spi_handle);
 
     esp_err_t ret;
 
     spi_bus_config_t buscfg={
+            .sclk_io_num = led_clk,
+            .mosi_io_num = led_mosi,
             .miso_io_num = -1,
-            .mosi_io_num = PIN_NUM_MOSI,
-            .sclk_io_num = PIN_NUM_CLK,
             .quadwp_io_num = -1,
             .quadhd_io_num = -1,
             .max_transfer_sz = 512,
@@ -254,7 +249,7 @@ void spiStartBuses(uint32_t freq) {
         //vTaskDelay( xDelay );
 
     spi_device_interface_config_t devcfg = {
-            .clock_speed_hz = 20 * 1000 * 1000,     //Clock out at 20 MHz
+            .clock_speed_hz = led_freq,     //Clock out at 20 MHz
             .mode = 0,                              //SPI mode 0
             .spics_io_num = -1,             //CS pin
             .queue_size=10,
