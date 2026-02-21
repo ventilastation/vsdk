@@ -58,7 +58,7 @@ def generate_rom(folder, palettegroups, spritedef_path):
     src_filenames = (folder / filename for group in palettegroups for filename, _ in group)
 
     if all(f.stat().st_mtime <= rom_timestamp for f in chain(src_filenames,[spritedef_path])):
-        print("Skipping", rom_name, file=sys.stderr)
+        # print("Skipping", rom_name, file=sys.stderr)
         return
     print("Generating", rom_name, file=sys.stderr)
 
