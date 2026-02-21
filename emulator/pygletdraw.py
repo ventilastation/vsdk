@@ -65,10 +65,27 @@ _fragment_source = """#version 330 core
 
     uniform sampler2D our_texture;
 
-    void main()
-    {
-        final_colors = v_colors * texture(our_texture, texture_coords.xy);
+    // Pill shape with bloom glow
+    void main() {
+        vec2 uv = texture_coords.xy;
+        vec2 center = vec2(0.5);
+        vec2 p = uv - center;
+        
+        // Pill dimensions
+        float width = 0.1;
+        float height = 0.05;
+        float radius = height;
+        
+        // Distance to pill shape
+        vec2 q = abs(p) - vec2(width - radius, height - radius);
+        float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+        
+        float pill = smoothstep(0.01, -0.01, dist);
+        float glow = exp(-dist * dist * 10.0) * 0.3;
+        
+        final_colors = v_colors * (pill + glow);
     }
+    
 """
 
 vert_shader = Shader(_vertex_source, 'vertex')
@@ -105,8 +122,7 @@ class RenderGroup(Group):
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(self.texture.target, self.texture.id)
         glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        # glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_ONE)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
         self.program.use()
 
     def unset_state(self):
@@ -150,9 +166,9 @@ def display_init(led_count):
     for column in range(COLUMNS):
         x1, x2 = 0, 0
         for i in range(led_count):
-            y1 = led_step * i - (led_step * .3)
-            y2 = y1 + (led_step * 1)
-            x3 = arc_chord(y2) * 0.7
+            y1 = led_step * i - (led_step * 2.5)
+            y2 = y1 + (led_step * 5)
+            x3 = arc_chord(y2) * 3
             x4 = -x3
 
             angle = -theta * column + math.pi
