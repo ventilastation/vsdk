@@ -194,6 +194,7 @@ apps/micropython/roms/*.rom
 .DS_Store
 Thumbs.db
 apps/micropython/sencom.hi
+apps/micropython/ventilastation/settings.json
 in-progress/boot.py
 emulator/ffmpeg-win/*.dll
 emulator/ffmpeg-win/*.exe

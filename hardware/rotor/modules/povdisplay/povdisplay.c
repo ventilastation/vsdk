@@ -32,7 +32,8 @@ uint32_t led_freq = 20000000;
 #define COLUMNS 256
 #define FASTEST_CREDIBLE_TURN 10000 // if the fan is going over 100 FPS, then I don't believe it, and discard the reading
 
-#define DEBUG_ROTATION
+#define DEBUG_ROTATION 0
+#define PROFILE_GPU_STEP 1
 
 #ifdef DEBUG_ROTATION
 #define DEBUG_BUFFER_SIZE 32
@@ -56,7 +57,7 @@ int buf_size;
 bool ventilagon_active = false;
 
 volatile int64_t last_turn = 0;
-volatile int64_t last_turn_duration = 102400;
+volatile int64_t last_turn_duration = 1000000;
 
 extern void render(int n, uint32_t* pixels);
 extern void init_sprites();
@@ -158,19 +159,35 @@ void gpu_step() {
     int64_t now = esp_timer_get_time();
     uint32_t column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
     if (column != last_column) {
-        // gpio_set_level(GPIO_DEBUG, true);
+#if (PROFILE_GPU_STEP)
+        int64_t t_start = esp_timer_get_time();
+#endif
+        spi_write_HSPI();
         render((column + COLUMNS/2) % COLUMNS, extra_buf);
         for(int n=0; n<54; n++) {
             pixels0[n] = extra_buf[53-n];
         }
         render(column, pixels1);
-        // gpio_set_level(GPIO_DEBUG, false);
-        spi_write_HSPI();
+
+        spiWaitComplete();
+#if (PROFILE_GPU_STEP)
+        int64_t t_end = esp_timer_get_time();
+        if (column % 8 == 0) {
+            printf("GPU overlapped spi+render: %d us\n", (int)(t_end - t_start));
+        }
+#endif
         last_column = column;
     }
 
     if (now > last_starfield_step + 20000) {
+#if (PROFILE_GPU_STEP)
+        int64_t t_start = esp_timer_get_time();
+#endif
         step_starfield();
+#if (PROFILE_GPU_STEP)
+        int64_t t_end = esp_timer_get_time();
+        printf("starfield step: %d us.\n", (int)(t_end - t_start));
+#endif
         last_starfield_step = now;
     }
 }
