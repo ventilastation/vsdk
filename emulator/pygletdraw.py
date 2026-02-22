@@ -9,7 +9,7 @@ if pyglet.version < "2.0":
     raise RuntimeError("Pyglet 2.0 or higher is required")
 
 import pyglet.math as pm
-from pyglet.gl import Config
+from pyglet.gl import GL_MAX, GL_SRC_COLOR, Config, glBlendEquation
 from pyglet.gl import (
     glActiveTexture,
     glBindTexture,
@@ -19,10 +19,6 @@ from pyglet.gl import (
     GL_TEXTURE0,
     GL_TRIANGLES,
     GL_BLEND,
-    GL_SRC_ALPHA_SATURATE,
-    GL_ONE,
-    GL_SRC_ALPHA,
-    GL_ONE_MINUS_SRC_ALPHA,
 )
 from pyglet.math import Mat4
 from pyglet.graphics import Group
@@ -122,7 +118,8 @@ class RenderGroup(Group):
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(self.texture.target, self.texture.id)
         glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+        glBlendFunc(GL_SRC_COLOR, GL_SRC_COLOR)
+        glBlendEquation(GL_MAX)
         self.program.use()
 
     def unset_state(self):
@@ -168,7 +165,7 @@ def display_init(led_count):
         for i in range(led_count):
             y1 = led_step * i - (led_step * 2.5)
             y2 = y1 + (led_step * 5)
-            x3 = arc_chord(y2) * 3
+            x3 = arc_chord(y2) * 3.5
             x4 = -x3
 
             angle = -theta * column + math.pi
