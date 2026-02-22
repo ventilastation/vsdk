@@ -33,7 +33,7 @@ uint32_t led_freq = 20000000;
 #define FASTEST_CREDIBLE_TURN 10000 // if the fan is going over 100 FPS, then I don't believe it, and discard the reading
 
 #define DEBUG_ROTATION 0
-#define PROFILE_GPU_STEP 1
+#define PROFILE_GPU_STEP 0
 
 #ifdef DEBUG_ROTATION
 #define DEBUG_BUFFER_SIZE 32
