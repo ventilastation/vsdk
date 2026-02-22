@@ -9,7 +9,7 @@ if pyglet.version < "2.0":
     raise RuntimeError("Pyglet 2.0 or higher is required")
 
 import pyglet.math as pm
-from pyglet.gl import GL_MAX, GL_SRC_COLOR, Config, glBlendEquation
+from pyglet.gl import GL_FUNC_ADD, GL_MAX, GL_SRC_COLOR, Config, glBlendEquation
 from pyglet.gl import (
     glActiveTexture,
     glBindTexture,
@@ -123,6 +123,7 @@ class RenderGroup(Group):
         self.program.use()
 
     def unset_state(self):
+        glBlendEquation(GL_FUNC_ADD)
         glDisable(GL_BLEND)
 
     def __hash__(self):
