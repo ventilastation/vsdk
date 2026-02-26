@@ -51,6 +51,21 @@ class VentilagonIdle(Scene):
 
     def on_enter(self):
         super(VentilagonIdle, self).on_enter()
+
+        self.logo = Sprite()
+        self.logo.set_x(-32)
+        self.logo.set_y(0)
+        self.logo.set_perspective(2)
+        self.logo.set_strip(stripes["empeza.png"])
+        self.logo.set_frame(0)
+
+        self.empeza = Sprite()
+        self.empeza.set_x(128-32)
+        self.empeza.set_y(0)
+        self.empeza.set_perspective(2)
+        self.empeza.set_strip(stripes["super-ventilagon.png"])
+        self.empeza.set_frame(0)
+
         self.idle_screens = [make_me_a_planet(stripes[s]) for s in ["ventilagon-empezar1.png", "ventilagon-empezar2.png"]]
         self.idle_shown = 0
         self.change_idle_screen()

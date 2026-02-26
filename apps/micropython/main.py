@@ -222,10 +222,15 @@ class GamesMenu(menu.Menu):
                 self.es_tincho.set_frame(pf)
 
 def main():
-    # init images
-    menu = GamesMenu(MAIN_MENU_OPTIONS)
-    menu.call_later(700, menu.load_images)
-    director.push(menu)
+    
+    # main = GamesMenu(MAIN_MENU_OPTIONS)
+
+    from apps.ventilagon_game import VentilagonIdle
+    main = VentilagonIdle()
+
+    # # init images
+    main.call_later(700, main.load_images)
+    director.push(main)
     director.run()
 
 if __name__ == '__main__':

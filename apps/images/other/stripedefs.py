@@ -18,6 +18,8 @@ stripes = [
         fullscreen("rotationgrid.png"),
         fullscreen("ventilagon-empezar1.png"),
         fullscreen("ventilagon-empezar2.png"),
+        strip("empeza.png", frames=1),
+        strip("super-ventilagon.png", frames=1),
     ),
     palettegroup(
         fullscreen("bembi.png"),
