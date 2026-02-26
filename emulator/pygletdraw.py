@@ -218,5 +218,7 @@ def display_draw():
         vertex_colors = pack_colors(list(repeated(6, all_pixels)))
         vertex_list.set_attribute_data("colors", vertex_colors)
         batch.draw()
+    except Exception as e:
+        traceback.print_exc()
     finally:
         window.projection = orig_projection
