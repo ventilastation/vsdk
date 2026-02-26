@@ -124,6 +124,7 @@ class TimedScene(Scene):
             self.call_later(self.duration, self.finish_scene)
 
     def on_exit(self):
+        super().on_exit()
         # print("Scene finished: ", self.__class__.__name__,
         #       " duration (ms): ", utime.ticks_diff(utime.ticks_ms(), self.scene_start),
         #       " current time: ", utime.ticks_ms())
