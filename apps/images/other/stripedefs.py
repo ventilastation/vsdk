@@ -16,6 +16,8 @@ stripes = [
         # fullscreen("pyformances_py.png"),
         fullscreen("menatwork.png", radius=40),
         fullscreen("rotationgrid.png"),
+        fullscreen("ventilagon-empezar1.png"),
+        fullscreen("ventilagon-empezar2.png"),
     ),
     palettegroup(
         fullscreen("bembi.png"),
