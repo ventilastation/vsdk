@@ -47,7 +47,8 @@ volatile int DEBUG_rot_item = 0;
 #endif
 
 char* spi_buf;
-uint32_t* extra_buf;
+uint32_t* extra_buf0;
+uint32_t* extra_buf1;
 uint32_t* pixels0;
 uint32_t* pixels1;
 extern uint8_t brillos[PIXELS];
@@ -73,8 +74,9 @@ inline uint32_t max(uint32_t a, uint32_t b) {
 char* init_buffers(int num_pixels) {
     spi_buf=heap_caps_malloc(buf_size, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
     memset(spi_buf, 0xff, buf_size);
-    extra_buf=heap_caps_malloc(buf_size/2, MALLOC_CAP_DEFAULT);
-    memset(extra_buf, 0x01, buf_size/2);
+    extra_buf0=heap_caps_malloc(buf_size, MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT);
+    memset(extra_buf0, 0x01, buf_size);
+    extra_buf1 = extra_buf0 + num_pixels * 4;
     ((uint32_t*)spi_buf)[0]=0;
     pixels0 = (uint32_t*)(spi_buf+4);
     pixels1 = (uint32_t*)(spi_buf+num_pixels*4);
@@ -163,13 +165,15 @@ void gpu_step() {
         int64_t t_start = esp_timer_get_time();
 #endif
         spi_write_HSPI();
-        render((column + COLUMNS/2) % COLUMNS, extra_buf);
-        for(int n=0; n<54; n++) {
-            pixels0[n] = extra_buf[53-n];
-        }
-        render(column, pixels1);
-
+        render((column + COLUMNS/2) % COLUMNS, extra_buf0);
+        render(column, extra_buf1);
         spiWaitComplete();
+
+        // need to wait for spi to finish before overwriting the buffers, because the DMA is reading from them
+        for(int n=0; n<54; n++) {
+            pixels0[n] = extra_buf0[53-n];
+            pixels1[n] = extra_buf1[n];
+        }
 #if (PROFILE_GPU_STEP)
         int64_t t_end = esp_timer_get_time();
         if (column % 8 == 0) {
@@ -240,7 +244,7 @@ static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
     ventilagon_init();
     //printf("pixels0: %p\n", pixels0);
     //printf("pixels1: %p\n", pixels1);
-    //printf("extra_buf: %p\n", extra_buf);
+    //printf("extra_buf0: %p\n", extra_buf0);
 
     xTaskCreatePinnedToCore(
             coreTask,   /* Function to implement the task */

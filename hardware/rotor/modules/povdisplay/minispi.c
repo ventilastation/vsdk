@@ -225,7 +225,7 @@
 #define LEDS_SPI_HOST    SPI2_HOST
 
 spi_device_handle_t spi_handle;
-
+bool spi_ongoing = false;
 
 void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi) {
     printf("Initializing bus SPI, handle is %p\n", spi_handle);
@@ -288,11 +288,15 @@ void spiWriteNL(const void * data_in, size_t len){
     // };
     // ret = spi_device_polling_transmit(spi_handle, &transaction);
 
+    spi_ongoing = true;
     ret = spi_device_queue_trans(spi_handle, &spi_trans, pdMS_TO_TICKS(10));
     ESP_ERROR_CHECK(ret);
 }
 
 void spiWaitComplete() {
+    if (!spi_ongoing) {
+        return;
+    }
     esp_err_t ret;
     ret = spi_device_get_trans_result(spi_handle, &spi_trans, pdMS_TO_TICKS(100));
     ESP_ERROR_CHECK(ret);

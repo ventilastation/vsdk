@@ -110,7 +110,7 @@ int get_visible_column(int sprite_x, int sprite_width, int render_column) {
 }
 
 
-void render(int column, uint32_t* pixels) {
+void render(int column, uint32_t* led_buffer) {
   uint32_t colorbuf[PIXELS];
 
 
@@ -123,7 +123,7 @@ void render(int column, uint32_t* pixels) {
   inline void finish_nogamma() {
     for (int n=0; n<PIXELS; n++) {
       uint32_t color = colorbuf[n];
-      pixels[n] = 0xff |
+      led_buffer[n] = 0xff |
         intensidades[n][(color & 0xff000000) >> 24] << 24 |
         intensidades[n][(color & 0x00ff0000) >> 16] << 16 |
         intensidades[n][(color & 0x0000ff00) >>  8] <<  8;
@@ -134,7 +134,7 @@ void render(int column, uint32_t* pixels) {
     for (int n=0; n<PIXELS; n++) {
       uint32_t color = colorbuf[n];
       int alt_n = intensidades_por_led[n];
-      pixels[n] = (brillos[n] & 0x1f) | 0xe0 |
+      led_buffer[n] = (brillos[n] & 0x1f) | 0xe0 |
         intensidades[alt_n][(color & 0xff000000) >> 24] << 24 |
         intensidades[alt_n][(color & 0x00ff0000) >> 16] << 16 |
         intensidades[alt_n][(color & 0x0000ff00) >>  8] <<  8;

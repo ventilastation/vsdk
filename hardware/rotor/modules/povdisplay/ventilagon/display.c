@@ -14,7 +14,8 @@ int half_ship_width = 50;
 // defined by Ventilastastion
 extern volatile int64_t last_turn;
 extern volatile int64_t last_turn_duration;
-uint32_t* draw_buffer;
+uint32_t* draw_buffer0;
+uint32_t* draw_buffer1;
 
 void handle_interrupt() {
   int64_t this_turn = esp_timer_get_time();
@@ -27,11 +28,12 @@ void handle_interrupt() {
 }
 
 void display_init(){
-   last_column_drawn = -1;
-   drift_pos = 0;
-   drift_speed = 0;
-   calibrating = false;
-   draw_buffer = extra_buf;
+  last_column_drawn = -1;
+  drift_pos = 0;
+  drift_speed = 0;
+  calibrating = false;
+  draw_buffer0 = extra_buf0;
+  draw_buffer1 = extra_buf1;
 }
 
 void display_reset() {
@@ -56,7 +58,7 @@ int display_ship_rows(int current_pos) {
 
   int d1 = abs(nave_pos - current_pos);
   int d2 = abs(((nave_pos + SUBDEGREES / 2) & SUBDEGREES_MASK) -
-           ((current_pos + SUBDEGREES / 2) & SUBDEGREES_MASK));
+              ((current_pos + SUBDEGREES / 2) & SUBDEGREES_MASK));
   if (d1 < half_ship_width || d2 < half_ship_width) {
     return 2;
   }
@@ -106,29 +108,27 @@ void display_tick(int64_t now) {
 
     unsigned int opposed_column = (current_column + (NUM_COLUMNS/2)) % NUM_COLUMNS;
     for (int j=0; j<NUM_ROWS; j++) {
-      draw_buffer[j] = 0x010000ff;
+      draw_buffer0[j] = 0x010000ff;
     }
-    board_draw_column(current_column, draw_buffer);
+    board_draw_column(current_column, draw_buffer0);
     for (int j=0; j<ship_rows; j++) {
-      draw_buffer[ROW_SHIP + j] = SHIP_COLOR;
-    }
-    for(int k=0; k<NUM_ROWS; k++) {
-        pixels0[k] = draw_buffer[NUM_ROWS-k-1];
+      draw_buffer0[ROW_SHIP + j] = SHIP_COLOR;
     }
 
     for (int l=0; l<NUM_ROWS; l++) {
-      draw_buffer[l] = 0x000100ff;
+      draw_buffer1[l] = 0x000100ff;
     }
-    board_draw_column(opposed_column, draw_buffer);
+    board_draw_column(opposed_column, draw_buffer1);
 
     for (int j=0; j<infront_ship_rows; j++) {
-      draw_buffer[ROW_SHIP + j] = SHIP_COLOR;
+      draw_buffer1[ROW_SHIP + j] = SHIP_COLOR;
     }
 
-    for(int m=0; m<NUM_ROWS; m++) {
-        pixels1[m + 54-NUM_ROWS] = draw_buffer[m];
+    spiWaitComplete();
+    for(int k=0; k<NUM_ROWS; k++) {
+        pixels0[k] = draw_buffer0[NUM_ROWS-k-1];
+        pixels1[k + 54-NUM_ROWS] = draw_buffer1[k];
     }
-
     spi_write_HSPI();
   }
 }

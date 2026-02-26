@@ -7,7 +7,8 @@ uint64_t credits_started;
 // defined by Ventilastastion
 extern volatile int64_t last_turn;
 extern volatile int64_t last_turn_duration;
-extern uint32_t* draw_buffer;
+extern uint32_t* draw_buffer0;
+extern uint32_t* draw_buffer1;
 
 //const byte HALL_SENSOR = 2;
 const byte CHAR_WIDTH = 6;
@@ -43,15 +44,15 @@ void credits_draw_column(int visible_column) {
 
   for (int n = 0; n < 8; n++) {
     if (v & (1 << n)) {
-      draw_buffer[n * 2] = color;
-      draw_buffer[n * 2 + 1] = color;
+      draw_buffer0[n * 2] = color;
+      draw_buffer0[n * 2 + 1] = color;
     }
   }
 }
 
 void text_loop2(int64_t now) {
   static int last_column_drawn = 0;
-  int current_column = ((now - last_turn) * 256 / last_turn_duration) % 256;
+  int current_column = (((now - last_turn) * 256 / last_turn_duration) + column_offset) % 256;
 
   // only draw the upper half
   if (current_column != last_column_drawn) {
@@ -59,24 +60,26 @@ void text_loop2(int64_t now) {
     for (int j=0; j<54; j++) {
       pixels0[j] = 0x000000ff;
       pixels1[j] = 0x000000ff;
-      draw_buffer[j] = 0x000000ff;
+      draw_buffer0[j] = 0x000000ff;
     }
 
     if (current_column >= 64 && current_column < 192) {
       int visible_column = current_column - 64;
       credits_draw_column(visible_column);
       for(int k=0; k<16; k++) {
-          pixels1[54 - 16 + k] = draw_buffer[k];
+          pixels1[54 - 16 + k] = draw_buffer0[k];
       }
     } else {
       int visible_column = (current_column + 64) % 256;
       credits_draw_column(visible_column);
       for(int m=0; m<16; m++) {
-          pixels0[15-m] = draw_buffer[m];
+          pixels0[15-m] = draw_buffer0[m];
       }
     }
 
     spi_write_HSPI();
+    spiWaitComplete();
+    
     last_column_drawn = current_column;
   }
 
