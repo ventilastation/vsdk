@@ -70,6 +70,7 @@ class VentilagonIdle(Scene):
         self.idle_shown = 0
         self.change_idle_screen()
         director.reset_timeout()
+        director.sound_play("ventilagon/audio/es/superventilagon")
 
     def change_idle_screen(self):
         for s in self.idle_screens:
