@@ -34,6 +34,10 @@ void display_init(){
   calibrating = false;
   draw_buffer0 = extra_buf0;
   draw_buffer1 = extra_buf1;
+  for (int j=0; j<54; j++) {
+    pixels0[j] = 0x000000ff;
+    pixels1[j] = 0x000000ff;
+  }
 }
 
 void display_reset() {
