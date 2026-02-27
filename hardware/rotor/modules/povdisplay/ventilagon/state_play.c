@@ -91,6 +91,7 @@ void play_loop() {
       audio_play_crash();
       audio_stop_song();
       change_state(&gameover_state);
+      audio_play_game_over();
     }
     last_step = now;
   }
