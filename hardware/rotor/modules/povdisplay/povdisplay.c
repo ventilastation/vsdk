@@ -76,7 +76,7 @@ char* init_buffers(int num_pixels) {
     memset(spi_buf, 0xff, buf_size);
     extra_buf0=heap_caps_malloc(buf_size, MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT);
     memset(extra_buf0, 0x01, buf_size);
-    extra_buf1 = extra_buf0 + num_pixels * 4;
+    extra_buf1 = extra_buf0 + num_pixels;
     ((uint32_t*)spi_buf)[0]=0;
     pixels0 = (uint32_t*)(spi_buf+4);
     pixels1 = (uint32_t*)(spi_buf+num_pixels*4);
