@@ -124,12 +124,12 @@ void display_tick(int64_t now) {
       draw_buffer1[ROW_SHIP + j] = SHIP_COLOR;
     }
 
-    spiWaitComplete();
     for(int k=0; k<NUM_ROWS; k++) {
         pixels0[k] = draw_buffer0[NUM_ROWS-k-1];
         pixels1[k + 54-NUM_ROWS] = draw_buffer1[k];
     }
     spi_write_HSPI();
+    spiWaitComplete();
   }
 }
 
