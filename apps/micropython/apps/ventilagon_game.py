@@ -71,6 +71,7 @@ class VentilagonIdle(Scene):
         self.change_idle_screen()
         director.reset_timeout()
         director.sound_play("ventilagon/audio/es/superventilagon")
+        comms.send(b"arduino attract")
 
     def change_idle_screen(self):
         for s in self.idle_screens:
@@ -90,9 +91,11 @@ class VentilagonIdle(Scene):
     def step(self):
         if director.was_pressed(director.BUTTON_D):
             director.pop()
+            comms.send(b"arduino stop")
             raise StopIteration()
 
         if (director.was_pressed(director.BUTTON_A) or self.both_console_buttons()):
+            comms.send(b"arduino stop")
             director.push(VentilagonGame())
 
         if (director.timedout):

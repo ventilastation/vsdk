@@ -35,7 +35,7 @@ void ventilagon_enter() {
 
   ledbar_reset();
   //audio_stop_song();
-  audio_play_superventilagon();
+  // audio_play_superventilagon();
   change_state(&resetting_state);
   // DEBUG
   // change_state(&credits_state);
