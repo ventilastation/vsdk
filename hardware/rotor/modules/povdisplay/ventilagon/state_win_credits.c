@@ -58,8 +58,8 @@ void text_loop2(int64_t now) {
   if (current_column != last_column_drawn) {
 
     for (int j=0; j<54; j++) {
-      pixels0[j] = 0x000000ff;
-      pixels1[j] = 0x000000ff;
+      dma_pixels0[j] = 0x000000ff;
+      dma_pixels1[j] = 0x000000ff;
       draw_buffer0[j] = 0x000000ff;
     }
 
@@ -67,13 +67,13 @@ void text_loop2(int64_t now) {
       int visible_column = current_column - 64;
       credits_draw_column(visible_column);
       for(int k=0; k<16; k++) {
-          pixels1[54 - 16 + k] = draw_buffer0[k];
+          dma_pixels1[54 - 16 + k] = draw_buffer0[k];
       }
     } else {
       int visible_column = (current_column + 64) % 256;
       credits_draw_column(visible_column);
       for(int m=0; m<16; m++) {
-          pixels0[15-m] = draw_buffer0[m];
+          dma_pixels0[15-m] = draw_buffer0[m];
       }
     }
 

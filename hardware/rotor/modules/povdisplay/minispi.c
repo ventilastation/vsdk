@@ -220,8 +220,6 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 
-//#define printf(...) mp_printf(MP_PYTHON_PRINTER, __VA_ARGS__)
-
 #define LEDS_SPI_HOST    SPI2_HOST
 
 spi_device_handle_t spi_handle;

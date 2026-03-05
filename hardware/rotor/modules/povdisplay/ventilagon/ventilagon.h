@@ -134,10 +134,10 @@ void ventilagon_loop();
 void ventilagon_exit();
 bool ventilagon_is_idle();
 
-extern uint32_t* extra_buf0;
-extern uint32_t* extra_buf1;
-extern uint32_t* pixels0;
-extern uint32_t* pixels1;
+extern uint32_t* draw_buffer0;
+extern uint32_t* draw_buffer1;
+extern uint32_t* dma_pixels0;
+extern uint32_t* dma_pixels1;
 extern int column_offset;
 
 void spi_write_HSPI();

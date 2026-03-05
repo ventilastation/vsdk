@@ -14,8 +14,6 @@ int half_ship_width = 50;
 // defined by Ventilastastion
 extern volatile int64_t last_turn;
 extern volatile int64_t last_turn_duration;
-uint32_t* draw_buffer0;
-uint32_t* draw_buffer1;
 
 void handle_interrupt() {
   int64_t this_turn = esp_timer_get_time();
@@ -32,11 +30,9 @@ void display_init(){
   drift_pos = 0;
   drift_speed = 0;
   calibrating = false;
-  draw_buffer0 = extra_buf0;
-  draw_buffer1 = extra_buf1;
   for (int j=0; j<54; j++) {
-    pixels0[j] = 0x000000ff;
-    pixels1[j] = 0x000000ff;
+    dma_pixels0[j] = 0x000000ff;
+    dma_pixels1[j] = 0x000000ff;
   }
 }
 
@@ -129,8 +125,8 @@ void display_tick(int64_t now) {
     }
 
     for(int k=0; k<NUM_ROWS; k++) {
-        pixels0[k] = draw_buffer0[NUM_ROWS-k-1];
-        pixels1[k + 54-NUM_ROWS] = draw_buffer1[k];
+        dma_pixels0[k] = draw_buffer0[NUM_ROWS-k-1];
+        dma_pixels1[k + 54-NUM_ROWS] = draw_buffer1[k];
     }
     spi_write_HSPI();
     spiWaitComplete();

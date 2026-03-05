@@ -101,7 +101,7 @@ void step_starfield() {
 }
 
 int get_visible_column(int sprite_x, int sprite_width, int render_column) {
-    int sprite_column = sprite_width - 1 - (render_column - sprite_x + COLUMNS) % COLUMNS;
+    int sprite_column = (sprite_width - 1 - (render_column - sprite_x + COLUMNS) % COLUMNS) % COLUMNS;
     if (0 <= sprite_column && sprite_column < sprite_width) {
         return sprite_column;
     } else {
@@ -178,7 +178,7 @@ void render(int column, uint32_t* led_buffer) {
         int comienzo = MAX(-s->y, 0);
         const uint8_t* imagen = is->data + base + comienzo;
 
-        for(int y=desde; y<hasta; y++, imagen++) {
+        for(int y = desde; y < hasta; y++, imagen++) {
           uint8_t color = *imagen;
           if (color != TRANSPARENT) {
             int px_y;
