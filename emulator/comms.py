@@ -254,3 +254,5 @@ except Exception as e:
     def arduino_send(_):
         pass
 
+arduino_send(b"attract")
+
