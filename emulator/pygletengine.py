@@ -47,7 +47,8 @@ class PygletEngine():
         def animate(dt):
             process_input()
             sound_process_queue()
-            step_starfield()
+            if self.enable_display:
+                step_starfield()
 
         init_inputs()
         pyglet.clock.schedule_interval(animate, 1/30.0)
