@@ -9,10 +9,10 @@ from pyglet.gl import *
 import config
 from vsdk import COLUMNS, pack_colors, repeated, render
 
+display_enabled = "--no-display" not in sys.argv
+pyglet.options['vsync'] = display_enabled
 
-pyglet.options['vsync'] = "--no-display" not in sys.argv
-
-window = pyglet.window.Window(config=Config(double_buffer=True), fullscreen=config.FULLSCREEN)
+window = pyglet.window.Window(config=Config(double_buffer=display_enabled), fullscreen=config.FULLSCREEN)
 logo = pyglet.image.load("logo.png")
 window.set_icon(logo)
 window.set_caption("Ventilastation Emulator")
