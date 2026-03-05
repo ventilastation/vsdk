@@ -52,7 +52,7 @@ void update_servo_colors(uint32_t color) {
   pixels.show();
 }
 
-void update_servo_value(long value, long max_val) {
+void update_servo_value(unsigned long value, unsigned long max_val) {
   // rango = (106,13)
   int s = map(value, 0, max_val, 106, 13);
   myservo.write(s);
@@ -109,7 +109,9 @@ void check_timer() {
   if (now - section_init_time > section_duration) {
     advance_section(now);
   }
-  update_servo_value(now - section_init_time, section_duration);
+  if (section_duration != ULONG_MAX) {
+    update_servo_value(now - section_init_time, section_duration);
+  }
 }
 
 void serialEvent() {
