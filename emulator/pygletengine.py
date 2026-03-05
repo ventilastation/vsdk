@@ -1,9 +1,12 @@
 import pyglet
-from pyglet.gl import *
-
-from inputs import *
 from audio import sound_init, sound_process_queue
-from pygletdraw import *
+
+if pyglet.version >= "2.0":
+    from pyglet2x.inputs import *
+    from pyglet2x.pygletdraw import *
+else:
+    from pyglet1x.inputs import *
+    from pyglet1x.pygletdraw import *
 from vsdk import *
 
 sound_init()
