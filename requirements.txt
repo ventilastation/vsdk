@@ -1,4 +1,5 @@
-pyglet
+pyglet<3; "Raspbian" not in platform_version
+pyglet<2; "Raspbian" in platform_version
 python-ffmpeg
 gmqtt
 pyserial

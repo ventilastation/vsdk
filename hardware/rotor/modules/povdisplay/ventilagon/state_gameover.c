@@ -3,7 +3,6 @@ bool keys_pressed;
 
 void gameover_setup() {
   display_calibrate(true);
-  audio_play_game_over();
   serial_send("arduino attract");
   keys_pressed = (boton_cw || boton_ccw);
   is_idle = true;

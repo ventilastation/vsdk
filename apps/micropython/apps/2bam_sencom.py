@@ -500,6 +500,7 @@ class Intro(Scene):
         pass
 
     def on_exit(self):
+        super().on_exit()
         director.music_off()
 
     def music_loop(self):

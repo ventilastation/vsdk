@@ -27,4 +27,4 @@ def received(_):
     pass
 
 def is_idle():
-    return False
+    return True

@@ -24,18 +24,13 @@ int led_clk = 15;
 int led_mosi = 16;
 uint32_t led_freq = 20000000;
 
-// #define GPIO_DEBUG     GPIO_NUM_18
-
-//#define printf(...) mp_printf(MP_PYTHON_PRINTER, __VA_ARGS__)
-
-#define ESP_INTR_FLAG_DEFAULT 0
 #define COLUMNS 256
 #define FASTEST_CREDIBLE_TURN 10000 // if the fan is going over 100 FPS, then I don't believe it, and discard the reading
 
 #define DEBUG_ROTATION 0
 #define PROFILE_GPU_STEP 0
 
-#ifdef DEBUG_ROTATION
+#if DEBUG_ROTATION
 #define DEBUG_BUFFER_SIZE 32
 typedef struct {
     int64_t now;
@@ -46,10 +41,11 @@ DEBUG_rotation_log_entry DEBUG_rotlog[DEBUG_BUFFER_SIZE];
 volatile int DEBUG_rot_item = 0;
 #endif
 
-char* spi_buf;
-uint32_t* extra_buf;
-uint32_t* pixels0;
-uint32_t* pixels1;
+uint32_t* dma_buffer;
+uint32_t* dma_pixels0;
+uint32_t* dma_pixels1;
+uint32_t* draw_buffer0;
+uint32_t* draw_buffer1;
 extern uint8_t brillos[PIXELS];
 extern uint8_t intensidades_por_led[PIXELS];
 
@@ -70,19 +66,19 @@ inline uint32_t max(uint32_t a, uint32_t b) {
     return a;
 }
 
-char* init_buffers(int num_pixels) {
-    spi_buf=heap_caps_malloc(buf_size, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
-    memset(spi_buf, 0xff, buf_size);
-    extra_buf=heap_caps_malloc(buf_size/2, MALLOC_CAP_DEFAULT);
-    memset(extra_buf, 0x01, buf_size/2);
-    ((uint32_t*)spi_buf)[0]=0;
-    pixels0 = (uint32_t*)(spi_buf+4);
-    pixels1 = (uint32_t*)(spi_buf+num_pixels*4);
+void init_buffers(int num_pixels) {
+    dma_buffer = heap_caps_malloc(buf_size, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
+    memset(dma_buffer, 0xff, buf_size);
+    draw_buffer0 = heap_caps_malloc(buf_size, MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT);
+    memset(draw_buffer0, 0x01, buf_size);
+    draw_buffer1 = draw_buffer0 + num_pixels;
+    dma_buffer[0]=0;
+    dma_pixels0 = dma_buffer+1;
+    dma_pixels1 = dma_buffer+num_pixels;
     for(int n=0; n<num_pixels; n++) {
-        pixels0[n] = 0x010000Ff;
-        pixels1[n] = 0x000100Ff;
+        dma_pixels0[n] = 0x010000Ff;
+        dma_pixels1[n] = 0x000100Ff;
     }
-    return spi_buf;
 }
 
 
@@ -93,22 +89,13 @@ void spi_init(int num_pixels) {
 
 
 void spi_write_HSPI() {
-    spiWriteNL(spi_buf, buf_size);
+    spiWriteNL(dma_buffer, buf_size);
 }
 
 void spi_shutdown() {
-    free(spi_buf);
+    free(dma_buffer);
+    free(draw_buffer0);
 }
-
-void delay(int ms) {
-    uint32_t end = esp_timer_get_time() + ms * 1000;
-    while (esp_timer_get_time() < end) {
-    }
-}
-
-int color = 0;
-uint32_t count = 0;
-
 
 static void IRAM_ATTR hall_neg_sensed(void* arg)
 {
@@ -119,7 +106,7 @@ static void IRAM_ATTR hall_neg_sensed(void* arg)
         last_turn = this_turn;
     }
 
-#ifdef DEBUG_ROTATION
+#if DEBUG_ROTATION
     DEBUG_rotlog[DEBUG_rot_item].now = this_turn;
     DEBUG_rotlog[DEBUG_rot_item].turn_duration = this_turn_duration;
     DEBUG_rot_item = (DEBUG_rot_item + 1) % DEBUG_BUFFER_SIZE;
@@ -132,13 +119,12 @@ static void IRAM_ATTR hall_any_sensed(void* arg)
     if (level == false) {
         hall_neg_sensed(arg);
     }
-    // gpio_set_level(GPIO_NUM_38, level);
 }
 
 
 void hall_init() {
     gpio_set_direction(hall_gpio, GPIO_MODE_INPUT);
-#ifdef DEBUG_ROTATION
+#if DEBUG_ROTATION
     for (int n = 0; n<DEBUG_BUFFER_SIZE; n++) {
         DEBUG_rotlog[n].now = 0xAA55AA55;
         DEBUG_rotlog[n].turn_duration = 0xFF00FF00;
@@ -163,13 +149,16 @@ void gpu_step() {
         int64_t t_start = esp_timer_get_time();
 #endif
         spi_write_HSPI();
-        render((column + COLUMNS/2) % COLUMNS, extra_buf);
-        for(int n=0; n<54; n++) {
-            pixels0[n] = extra_buf[53-n];
-        }
-        render(column, pixels1);
+        render((column + COLUMNS/2) % COLUMNS, draw_buffer0);
+        render(column, draw_buffer1);
 
+        // need to wait for spi to finish before overwriting the buffers, because the DMA is reading from them
         spiWaitComplete();
+
+        for(int n=0; n<54; n++) {
+            dma_pixels0[n] = draw_buffer0[53-n];
+            dma_pixels1[n] = draw_buffer1[n];
+        }
 #if (PROFILE_GPU_STEP)
         int64_t t_end = esp_timer_get_time();
         if (column % 8 == 0) {
@@ -194,13 +183,9 @@ void gpu_step() {
  
 
 void coreTask( void * pvParameters ){
-// I suspect we can't print from this thread, perhaps printf is not reentrant?
     printf("GPU task running on core %d\n", xPortGetCoreID());
 
-    // //gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
     hall_init();
-    // gpio_set_direction(GPIO_DEBUG, GPIO_MODE_OUTPUT);
-    // gpio_set_direction(GPIO_NUM_38, GPIO_MODE_OUTPUT);
 
     init_sprites();
 
@@ -238,9 +223,6 @@ static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
     spi_init(num_pixels);
     printf("Micropython running on core %d\n", xPortGetCoreID());
     ventilagon_init();
-    //printf("pixels0: %p\n", pixels0);
-    //printf("pixels1: %p\n", pixels1);
-    //printf("extra_buf: %p\n", extra_buf);
 
     xTaskCreatePinnedToCore(
             coreTask,   /* Function to implement the task */
@@ -250,7 +232,6 @@ static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
             10,          /* Priority of the task */
             NULL,       /* Task handle. */
             GPU_TASK_CORE);  /* Core where the task should run */
-    // printf("task created...\n");
     gamma_mode = 0;
     return mp_const_none;
 }
@@ -288,7 +269,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_column_offset_obj, povdisplay_ge
 // ------------------------------
 static mp_obj_t povdisplay_getaddress(mp_obj_t sprite_num) {
     int num = mp_obj_get_int(sprite_num);
-#ifdef DEBUG_ROTATION
+#if DEBUG_ROTATION
     if (num == 997) {
         return mp_obj_new_int((mp_int_t)(uintptr_t)brillos);
     }

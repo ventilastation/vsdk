@@ -73,6 +73,7 @@ class VasuraEspacial(Scene):
 
 
     def on_exit(self):
+        super().on_exit()
         self.nave.limpiar_eventos()
         self.planet.limpiar_eventos()
 

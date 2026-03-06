@@ -20,7 +20,7 @@ class Scene:
         self.load_images()
 
     def on_exit(self):
-        pass
+        self.pending_calls.clear()
 
     def call_later(self, delay, callable):
         when = utime.ticks_add(utime.ticks_ms(), delay)

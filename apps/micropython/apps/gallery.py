@@ -43,13 +43,12 @@ class TimedScene(Scene):
         if director.was_pressed(director.BUTTON_A) and b and c:
             director.pop()
 
-        left = director.is_pressed(director.JOY_LEFT)
-        right = director.is_pressed(director.JOY_RIGHT)
-        if left and right:
+        left = director.was_pressed(director.JOY_LEFT)
+        right = director.was_pressed(director.JOY_RIGHT)
+        if left or right:
             director.pop()
-            from apps import ventilagon_game
-            director.push(ventilagon_game.VentilagonGame())
             Gallery.farty_step = 0
+            raise StopIteration()
             
         if director.was_pressed(director.BUTTON_D):
             director.pop()
@@ -66,14 +65,22 @@ class Gallery(Scene):
 
     def on_enter(self):
         super(Gallery, self).on_enter()
-        if not director.was_pressed(director.BUTTON_D):
-            self.next_scene()
-        else:
+        if (director.was_pressed(director.BUTTON_D) or
+             director.was_pressed(director.JOY_LEFT) or
+             director.was_pressed(director.JOY_RIGHT)): 
             director.pop()
             raise StopIteration()
+        else:
+            self.next_scene()
 
     def step(self):
         if director.was_pressed(director.BUTTON_D):
+            director.pop()
+            raise StopIteration()
+
+        left = director.was_pressed(director.JOY_LEFT)
+        right = director.was_pressed(director.JOY_RIGHT)
+        if left or right:
             director.pop()
             raise StopIteration()
 

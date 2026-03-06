@@ -32,7 +32,7 @@ class ConnIP(ConnectionBase):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((config.SERVER_IP, config.SERVER_PORT))
         self.sockfile = self.sock.makefile(mode="rb")
-    
+
     def send(self, b):
         if self.sock:
             self.sock.send(b)            
@@ -40,8 +40,16 @@ class ConnIP(ConnectionBase):
 class ConnSerial(ConnectionBase):
     def setup(self):
         import serial
-        device = [f for f in os.listdir("/dev/") if f.startswith(config.SERIAL_DEVICE)][0]
-        self.sock = self.sockfile = serial.Serial("/dev/" + device, 115200)
+        devices = [
+            f for f in os.listdir("/dev/")
+            if f.startswith(config.SERIAL_DEVICE_RASPI2)
+            or f.startswith(config.SERIAL_DEVICE_RASPI3)
+        ]
+        if devices:
+            device = devices[0]
+            self.sock = self.sockfile = serial.Serial("/dev/" + device, 115200)
+        else:
+            raise socket.error("Mondongo")
 
     def send(self, b):
         if self.sockfile:
@@ -245,4 +253,6 @@ except Exception as e:
 
     def arduino_send(_):
         pass
+
+arduino_send(b"attract")
 

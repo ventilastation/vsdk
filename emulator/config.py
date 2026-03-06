@@ -3,7 +3,8 @@ FULLSCREEN = False
 
 
 USE_IP = True
-SERIAL_DEVICE = "ttyUSB"
+SERIAL_DEVICE_RASPI2 = "ttyUSB"
+SERIAL_DEVICE_RASPI3 = "ttyACM"
 
 if len(sys.argv) > 1:
     if sys.argv[1] == "SERIAL":

@@ -27,8 +27,8 @@ from pyglet.graphics.shader import Shader, ShaderProgram
 import config
 from vsdk import COLUMNS, pack_colors, repeated, render
 
-
-pyglet.options['vsync'] = "--no-display" not in sys.argv
+display_enabled = "--no-display" not in sys.argv
+pyglet.options['vsync'] = display_enabled
 
 ###############################
 # Define a basic Shader Program
@@ -138,7 +138,7 @@ class RenderGroup(Group):
                 self.parent == other.parent)
 
 
-window = pyglet.window.Window(config=Config(double_buffer=True), fullscreen=config.FULLSCREEN, resizable=True)
+window = pyglet.window.Window(config=Config(double_buffer=display_enabled), fullscreen=config.FULLSCREEN, resizable=True)
 logo = pyglet.image.load("logo.png")
 window.set_icon(logo)
 window.set_caption("Ventilastation Emulator")

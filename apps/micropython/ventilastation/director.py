@@ -15,8 +15,8 @@ from ventilastation.hw_config import hall_gpio, irdiode_gpio, led_clk, led_mosi,
 from ventilastation import settings
 
 DEBUG = False
-INPUT_TIMEOUT = 15 * 1000  # 62 segundos de inactividad, volver al menu
-
+INPUT_TIMEOUT = 30 * 1000  # 30 segundos de inactividad, mostrar las instrucciones para empezar a jugar
+ 
 settings.load()
 from ventilastation import povdisplay
 PIXELS = 54
@@ -54,6 +54,8 @@ class Director:
 
 
     def push(self, scene):
+        if self.scene_stack:
+            self.scene_stack[-1].on_exit()
         self.scene_stack.append(scene)
         sprites.reset_sprites()
         gc.collect()
@@ -118,6 +120,9 @@ class Director:
             stripes[filename.decode('utf-8')] = n
 
 
+    def reset_timeout(self):
+        self.last_player_action = utime.ticks_ms()
+        self.timedout = False
 
     def run(self):
         while True:
