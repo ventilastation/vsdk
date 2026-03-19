@@ -89,7 +89,7 @@ async function run() {
   try {
     log("Initializing worker runtime");
     const initResult = await bridge.initialize();
-    setCheckStatus("init", "passed", initResult.runtime || "ok");
+    setCheckStatus("init", "passed", initResult?.runtime || "ok");
     log(`Worker initialized: ${JSON.stringify(initResult)}`);
   } catch (error) {
     setCheckStatus("init", "failed", error.message);

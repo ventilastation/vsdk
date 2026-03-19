@@ -36,7 +36,7 @@ class WorkerBridge {
   }
 
   async initialize() {
-    await this.request("initialize");
+    return this.request("initialize");
   }
 
   async exec(code) {
