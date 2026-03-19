@@ -241,12 +241,25 @@ class BrowserHostApp {
   }
 }
 
-function resolveAdapter() {
+async function resolveAdapter() {
   const adapter = window.VentilastationRuntimeAdapter;
   if (adapter && typeof adapter.setButtons === "function" && typeof adapter.exportFrame === "function") {
     return adapter;
   }
+  const createWasmAdapter = window.createVentilastationWasmAdapter;
+  if (typeof createWasmAdapter === "function") {
+    try {
+      const wasmAdapter = await createWasmAdapter();
+      if (wasmAdapter && typeof wasmAdapter.setButtons === "function" && typeof wasmAdapter.exportFrame === "function") {
+        return wasmAdapter;
+      }
+    } catch (error) {
+      console.error("Failed to initialize Ventilastation WASM adapter", error);
+    }
+  }
   return new MockRuntimeAdapter();
 }
 
-new BrowserHostApp(resolveAdapter()).start();
+resolveAdapter().then((adapter) => {
+  new BrowserHostApp(adapter).start();
+});
