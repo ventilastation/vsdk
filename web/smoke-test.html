@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ventilastation WASM Smoke Test</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="stage-panel">
+      <div class="panel-header">
+        <h1>WASM Smoke Test</h1>
+        <div class="status-row">
+          <span class="status-pill" id="overall-status">Pending</span>
+        </div>
+      </div>
+      <div class="inspector-block">
+        <h2>Checks</h2>
+        <div id="check-list" class="summary-grid"></div>
+      </div>
+      <div class="inspector-block">
+        <h2>Latest Frame</h2>
+        <pre id="frame-output"></pre>
+      </div>
+      <div class="legend">
+        <span><strong>Goal</strong> Boot worker, configure browser runtime, import `main`, export one frame</span>
+        <span><strong>Use</strong> Run this before debugging the full host UI</span>
+      </div>
+    </section>
+
+    <section class="inspector-panel">
+      <div class="inspector-block">
+        <h2>Log</h2>
+        <pre id="log-output"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./smoke-test.js"></script>
+</body>
+</html>

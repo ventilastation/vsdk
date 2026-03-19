@@ -25,6 +25,10 @@ python3 -m http.server 8000
 
 Then open `http://localhost:8000/web/`.
 
+For a direct worker/bootstrap check, open:
+
+`http://localhost:8000/web/smoke-test.html`
+
 ## Expected Runtime Adapter
 
 The page looks for `window.VentilastationRuntimeAdapter`.
@@ -106,6 +110,21 @@ The high-level adapter already translates that into:
 - `ventilastation.browser.set_buttons(...)`
 - `ventilastation.browser.export_frame(...)`
 - optionally `ventilastation.browser.export_storage(...)`
+
+## Smoke Test
+
+The smoke test page:
+
+- creates the worker bridge
+- initializes the MicroPython webassembly runtime
+- runs `configure_runtime("browser")`
+- imports `main`
+- calls `ventilastation.browser.export_frame(True)`
+
+Files:
+
+- [web/smoke-test.html](/Users/alecu/ventilastation/vsdk/web/smoke-test.html)
+- [web/smoke-test.js](/Users/alecu/ventilastation/vsdk/web/smoke-test.js)
 
 ## Boot Sequence Used By The Adapter
 
