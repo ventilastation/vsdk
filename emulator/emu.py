@@ -14,7 +14,7 @@ UPY_EXEC = "micropython.exe" if platform.system() == "Windows" else "micropython
 
 try:
     if enable_display:
-        upy = subprocess.Popen([UPY_EXEC, "-X", "heapsize=8m", "main.py"], cwd=UPY_ROOT)  
+        upy = subprocess.Popen([UPY_EXEC, "-X", "heapsize=8m", "main.py", "--platform=desktop"], cwd=UPY_ROOT)
     PygletEngine(led_count, comms.send, enable_display)
 finally:
     comms.shutdown()

@@ -1,14 +1,15 @@
-import ujson
+from ventilastation.runtime import get_platform
+
 SETTINGS_FILE = "ventilastation/settings.json"
 _settings = {}
+
 
 def load():
     global _settings
 
     try:
-        with open(SETTINGS_FILE, "r") as f:
-            _settings = ujson.load(f)
-            return
+        _settings = get_platform().storage.read_json(SETTINGS_FILE)
+        return
     except Exception:
         _settings = {
             "pov_column_offset": 0,
@@ -24,7 +25,6 @@ def set(key, value):
 def save():
     print("Saving settings...")
     try:
-        with open(SETTINGS_FILE, "w") as f:
-            ujson.dump(_settings, f)
+        get_platform().storage.write_json(SETTINGS_FILE, _settings)
     except Exception:
         print("Error saving settings")

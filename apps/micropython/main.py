@@ -2,7 +2,10 @@ import io
 import sys
 import utime
 
-from ventilastation.director import director, stripes
+from ventilastation.director import director, ensure_runtime, stripes
+
+ensure_runtime()
+
 from ventilastation import sprites
 from ventilastation import menu
 from ventilastation import povdisplay
