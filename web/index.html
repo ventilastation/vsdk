@@ -13,9 +13,14 @@
         <h1>Ventilastation Browser Host</h1>
         <div class="status-row">
           <span class="status-pill" id="adapter-name">Mock Runtime</span>
+          <span class="status-pill" id="adapter-source">mock</span>
           <span class="status-pill" id="frame-counter">Frame 0</span>
           <span class="status-pill" id="button-mask">Buttons 0x00</span>
         </div>
+      </div>
+      <div class="inspector-block runtime-banner" id="runtime-banner" hidden>
+        <h2>Runtime Status</h2>
+        <pre id="runtime-message"></pre>
       </div>
       <canvas id="frame-canvas" width="768" height="768"></canvas>
       <div class="legend">

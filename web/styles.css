@@ -44,6 +44,20 @@ body {
   padding: 18px;
 }
 
+.runtime-banner {
+  margin-bottom: 16px;
+}
+
+.runtime-banner.is-error {
+  border-color: rgba(255, 107, 107, 0.25);
+  background: rgba(70, 19, 19, 0.28);
+}
+
+.runtime-banner.is-warning {
+  border-color: rgba(255, 209, 102, 0.25);
+  background: rgba(80, 57, 10, 0.24);
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;

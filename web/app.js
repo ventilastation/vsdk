@@ -74,8 +74,9 @@ class MockRuntimeAdapter {
 }
 
 class BrowserHostApp {
-  constructor(adapter) {
-    this.adapter = adapter;
+  constructor(runtime) {
+    this.adapter = runtime.adapter;
+    this.runtime = runtime;
     this.currentButtons = 0;
     this.assetIndex = new Map();
     this.lastFrame = null;
@@ -83,8 +84,11 @@ class BrowserHostApp {
     this.ctx = this.canvas.getContext("2d");
     this.elements = {
       adapterName: document.querySelector("#adapter-name"),
+      adapterSource: document.querySelector("#adapter-source"),
       frameCounter: document.querySelector("#frame-counter"),
       buttonMask: document.querySelector("#button-mask"),
+      runtimeBanner: document.querySelector("#runtime-banner"),
+      runtimeMessage: document.querySelector("#runtime-message"),
       runtimeSummary: document.querySelector("#runtime-summary"),
       eventLog: document.querySelector("#event-log"),
       spriteLog: document.querySelector("#sprite-log"),
@@ -94,6 +98,8 @@ class BrowserHostApp {
 
   start() {
     this.elements.adapterName.textContent = this.adapter.name;
+    this.elements.adapterSource.textContent = this.runtime.source;
+    this.renderRuntimeStatus();
     this.bindInput();
     this.pollFrame(true);
   }
@@ -215,6 +221,27 @@ class BrowserHostApp {
     }
   }
 
+  renderRuntimeStatus() {
+    const { runtimeBanner, runtimeMessage } = this.elements;
+    runtimeBanner.hidden = false;
+    runtimeBanner.classList.remove("is-error", "is-warning");
+
+    if (this.runtime.source === "wasm") {
+      runtimeMessage.textContent = "Using real MicroPython WASM runtime.";
+      return;
+    }
+
+    if (this.runtime.error) {
+      runtimeBanner.classList.add("is-warning");
+      runtimeMessage.textContent =
+        `Fell back to mock runtime.\n\nReason:\n${this.runtime.error.stack || this.runtime.error.message || String(this.runtime.error)}`;
+      return;
+    }
+
+    runtimeBanner.classList.add("is-warning");
+    runtimeMessage.textContent = "Using mock runtime.";
+  }
+
   renderInspectors(frame) {
     const summary = [
       ["Sprites", frame.sprites.length],
@@ -241,25 +268,26 @@ class BrowserHostApp {
   }
 }
 
-async function resolveAdapter() {
+async function resolveRuntime() {
   const adapter = window.VentilastationRuntimeAdapter;
   if (adapter && typeof adapter.setButtons === "function" && typeof adapter.exportFrame === "function") {
-    return adapter;
+    return { adapter, source: "preloaded" };
   }
   const createWasmAdapter = window.createVentilastationWasmAdapter;
   if (typeof createWasmAdapter === "function") {
     try {
       const wasmAdapter = await createWasmAdapter();
       if (wasmAdapter && typeof wasmAdapter.setButtons === "function" && typeof wasmAdapter.exportFrame === "function") {
-        return wasmAdapter;
+        return { adapter: wasmAdapter, source: "wasm" };
       }
     } catch (error) {
       console.error("Failed to initialize Ventilastation WASM adapter", error);
+      return { adapter: new MockRuntimeAdapter(), source: "mock", error };
     }
   }
-  return new MockRuntimeAdapter();
+  return { adapter: new MockRuntimeAdapter(), source: "mock" };
 }
 
-resolveAdapter().then((adapter) => {
-  new BrowserHostApp(adapter).start();
+resolveRuntime().then((runtime) => {
+  new BrowserHostApp(runtime).start();
 });
