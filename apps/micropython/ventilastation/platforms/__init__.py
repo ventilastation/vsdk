@@ -86,11 +86,19 @@ class HeadlessSprite:
 
     def width(self):
         strip = self.backend.stripes.get(self._state["image_strip"])
-        return strip[0] if strip else 0
+        if strip is None:
+            return 0
+        if isinstance(strip, dict):
+            return strip["width"]
+        return strip[0]
 
     def height(self):
         strip = self.backend.stripes.get(self._state["image_strip"])
-        return strip[1] if strip else 0
+        if strip is None:
+            return 0
+        if isinstance(strip, dict):
+            return strip["height"]
+        return strip[1]
 
     def set_strip(self, strip_number):
         self._state["image_strip"] = strip_number
@@ -131,6 +139,7 @@ class HeadlessSprites:
 
     def new_state(self):
         state = {
+            "slot": len(self._sprites) + 1,
             "x": 0,
             "y": 0,
             "image_strip": 0,
@@ -145,6 +154,160 @@ class HeadlessSprites:
 
     def set_imagestrip(self, number, stripmap):
         self.stripes[number] = stripmap[0:4]
+
+
+class BrowserStorage(MemoryStorage):
+    def export_state(self):
+        exported = {}
+        for filename, content in self.files.items():
+            exported[filename] = dict(content)
+        return exported
+
+    def import_state(self, files):
+        self.files = {}
+        for filename, content in files.items():
+            self.files[filename] = dict(content)
+
+
+class BrowserComms:
+    def __init__(self):
+        self.buttons = 0
+        self.input_updates = []
+        self.input_sequence = 0
+        self.events = []
+
+    def receive(self, _bufsize):
+        return bytes((self.buttons,))
+
+    def send(self, line, data=b""):
+        if isinstance(line, str):
+            line = line.encode("utf-8")
+        line = bytes(line)
+        parts = line.split()
+        command = parts[0].decode("utf-8") if parts else ""
+        args = [p.decode("utf-8") for p in parts[1:]]
+        payload = bytes(data) if data else b""
+
+        event = {
+            "command": command,
+            "args": args,
+        }
+        if payload:
+            event["data"] = payload
+        self.events.append(event)
+
+    def set_buttons(self, buttons):
+        self.buttons = buttons & 0xFF
+        self.input_sequence += 1
+        self.input_updates.append({
+            "sequence": self.input_sequence,
+            "buttons": self.buttons,
+        })
+
+    def drain_input_updates(self):
+        updates = self.input_updates
+        self.input_updates = []
+        return updates
+
+    def drain_events(self):
+        events = self.events
+        self.events = []
+        return events
+
+
+class BrowserDisplay(NullDisplay):
+    def __init__(self, sprites_backend, comms):
+        super().__init__()
+        self.sprites_backend = sprites_backend
+        self.comms = comms
+        self.gamma_mode = 1
+        self.frame = 0
+        self.palette_dirty = False
+
+    def set_gamma_mode(self, mode):
+        self.gamma_mode = mode
+
+    def set_palettes(self, palette):
+        self.palette = bytes(palette)
+        self.palette_dirty = True
+
+    def update(self):
+        self.frame += 1
+
+    def export_frame(self, full=False):
+        exported = {
+            "frame": self.frame,
+            "buttons": self.comms.buttons,
+            "column_offset": self.column_offset,
+            "gamma_mode": self.gamma_mode,
+            "sprites": self.sprites_backend.export_sprites(),
+            "assets": self.sprites_backend.export_assets(full=full),
+            "events": self.comms.drain_events(),
+        }
+        if full or self.palette_dirty:
+            exported["palette"] = self.palette
+        self.palette_dirty = False
+        return exported
+
+
+class BrowserSprites(HeadlessSprites):
+    def __init__(self):
+        super().__init__()
+        self._dirty_strips = set()
+
+    def set_imagestrip(self, number, stripmap):
+        width = stripmap[0]
+        height = stripmap[1]
+        frames = stripmap[2]
+        palette = stripmap[3]
+        if width == 255:
+            width = 256
+        self.stripes[number] = {
+            "width": width,
+            "height": height,
+            "frames": frames,
+            "palette": palette,
+            "data": bytes(stripmap[4:]),
+        }
+        self._dirty_strips.add(number)
+
+    def export_assets(self, full=False):
+        if full:
+            strip_numbers = sorted(self.stripes.keys())
+        else:
+            strip_numbers = sorted(self._dirty_strips)
+
+        assets = []
+        for number in strip_numbers:
+            strip = self.stripes[number]
+            exported = {
+                "slot": number,
+                "width": strip["width"],
+                "height": strip["height"],
+                "frames": strip["frames"],
+                "palette": strip["palette"],
+                "data": strip["data"],
+            }
+            assets.append(exported)
+
+        if not full:
+            self._dirty_strips.clear()
+        return assets
+
+    def export_sprites(self):
+        exported = []
+        for state in self._sprites:
+            if state["frame"] == 255:
+                continue
+            exported.append({
+                "slot": state["slot"],
+                "x": state["x"],
+                "y": state["y"],
+                "image_strip": state["image_strip"],
+                "frame": state["frame"],
+                "perspective": state["perspective"],
+            })
+        return exported
 
 
 class Platform:
@@ -230,12 +393,15 @@ def create_headless_platform():
 
 
 def create_browser_platform():
+    comms = BrowserComms()
+    sprites_backend = BrowserSprites()
+    display = BrowserDisplay(sprites_backend, comms)
     return Platform(
         name="browser",
-        comms=NullComms(),
-        display=NullDisplay(),
-        sprites_backend=HeadlessSprites(),
-        storage=MemoryStorage(),
+        comms=comms,
+        display=display,
+        sprites_backend=sprites_backend,
+        storage=BrowserStorage(),
     )
 
 

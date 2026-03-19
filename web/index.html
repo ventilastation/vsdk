@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ventilastation Browser Host</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="stage-panel">
+      <div class="panel-header">
+        <h1>Ventilastation Browser Host</h1>
+        <div class="status-row">
+          <span class="status-pill" id="adapter-name">Mock Runtime</span>
+          <span class="status-pill" id="frame-counter">Frame 0</span>
+          <span class="status-pill" id="button-mask">Buttons 0x00</span>
+        </div>
+      </div>
+      <canvas id="frame-canvas" width="768" height="768"></canvas>
+      <div class="legend">
+        <span><strong>Keyboard</strong> Arrows + A/B/C/D</span>
+        <span><strong>Canvas</strong> Debug snapshot, not final WebGL</span>
+      </div>
+    </section>
+
+    <section class="inspector-panel">
+      <div class="inspector-block">
+        <h2>Runtime</h2>
+        <div id="runtime-summary" class="summary-grid"></div>
+      </div>
+      <div class="inspector-block">
+        <h2>Recent Events</h2>
+        <pre id="event-log"></pre>
+      </div>
+      <div class="inspector-block">
+        <h2>Sprites</h2>
+        <pre id="sprite-log"></pre>
+      </div>
+      <div class="inspector-block">
+        <h2>Assets</h2>
+        <pre id="asset-log"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
