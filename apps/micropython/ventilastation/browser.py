@@ -28,6 +28,30 @@ def drain_host_events():
     return _browser_platform().comms.drain_events()
 
 
+def _consume_traceback_messages():
+    comms = _browser_platform().comms
+    events = getattr(comms, "events", None)
+    if events is None:
+        return []
+
+    remaining = []
+    messages = []
+    for event in events:
+        if isinstance(event, dict) and event.get("command") == "traceback":
+            payload = event.get("data", b"")
+            if isinstance(payload, str):
+                messages.append(payload)
+                continue
+            try:
+                messages.append(bytes(payload).decode("utf-8"))
+            except Exception:
+                messages.append(str(payload))
+            continue
+        remaining.append(event)
+    comms.events = remaining
+    return messages
+
+
 def export_frame(full=False):
     gc.collect()
     return _browser_platform().display.export_frame(full=full)
@@ -61,10 +85,10 @@ def boot_main():
         main_menu.call_later(700, main_menu.load_images)
         director.push(main_menu)
 
-        from apps.ventilagon_game import VentilagonIdle
-        autostart = VentilagonIdle()
-        autostart.call_later(700, autostart.load_images)
-        director.push(autostart)
+        # from apps.ventilagon_game import VentilagonIdle
+        # autostart = VentilagonIdle()
+        # autostart.call_later(700, autostart.load_images)
+        # director.push(autostart)
 
         _booted = True
         return True
@@ -77,6 +101,12 @@ def boot_main():
 
 def tick(count=1):
     director = __import__("ventilastation.director", None, None, ["director"]).director
-    while count > 0:
-        director.step_once()
-        count -= 1
+    try:
+        while count > 0:
+            director.step_once()
+            count -= 1
+    except Exception as error:
+        messages = _consume_traceback_messages()
+        if messages:
+            raise RuntimeError("Scene lifecycle error\n\n%s" % messages[-1])
+        raise error

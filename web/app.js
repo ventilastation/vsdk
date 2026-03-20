@@ -35,6 +35,9 @@ const {
 
 const FORCE_2D_STORAGE_KEY = "ventilastation.force2dFallback";
 const INSPECTOR_OPEN_STORAGE_KEY = "ventilastation.inspectorOpen.v2";
+const SCENE_STEP_MS = 30;
+const MAX_CATCH_UP_STEPS = 6;
+const MAX_TICK_BACKLOG_MS = SCENE_STEP_MS * MAX_CATCH_UP_STEPS;
 
 function decodePerspective(value) {
   return (value & 0x80) ? value - 0x100 : value;
@@ -404,32 +407,59 @@ class LedRingCanvasRenderer {
         }
 
         const vertexOffset = (column * PIXELS + led) * 12;
-        const x1 = width * 0.5 + positions[vertexOffset] * scale;
-        const y1 = height * 0.5 + positions[vertexOffset + 1] * scale;
-        const x2 = width * 0.5 + positions[vertexOffset + 2] * scale;
-        const y2 = height * 0.5 + positions[vertexOffset + 3] * scale;
-        const x3 = width * 0.5 + positions[vertexOffset + 4] * scale;
-        const y3 = height * 0.5 + positions[vertexOffset + 5] * scale;
-        const x4 = width * 0.5 + positions[vertexOffset + 10] * scale;
-        const y4 = height * 0.5 + positions[vertexOffset + 11] * scale;
+        const p0x = positions[vertexOffset];
+        const p0y = positions[vertexOffset + 1];
+        const p1x = positions[vertexOffset + 2];
+        const p1y = positions[vertexOffset + 3];
+        const p2x = positions[vertexOffset + 4];
+        const p2y = positions[vertexOffset + 5];
+        const p3x = positions[vertexOffset + 10];
+        const p3y = positions[vertexOffset + 11];
 
-        ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${Math.max(alpha, 192) / 255})`;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.lineTo(x3, y3);
-        ctx.lineTo(x4, y4);
-        ctx.closePath();
-        ctx.fill();
+        const centerX = (p0x + p1x + p2x + p3x) * 0.25;
+        const centerY = (p0y + p1y + p2y + p3y) * 0.25;
+        const angle = Math.atan2(-(p1y - p0y), p1x - p0x);
+        const radius = Math.hypot(centerX, centerY);
+        const circumference = 2 * Math.PI * radius;
+        const ledWidth = Math.max(0.35, (circumference / COLUMNS) * scale);
+        let rowSpacing = 0;
+        if (led + 1 < PIXELS) {
+          const nextVertexOffset = (column * PIXELS + led + 1) * 12;
+          const np0x = positions[nextVertexOffset];
+          const np0y = positions[nextVertexOffset + 1];
+          const np1x = positions[nextVertexOffset + 2];
+          const np1y = positions[nextVertexOffset + 3];
+          const np2x = positions[nextVertexOffset + 4];
+          const np2y = positions[nextVertexOffset + 5];
+          const np3x = positions[nextVertexOffset + 10];
+          const np3y = positions[nextVertexOffset + 11];
+          const nextCenterX = (np0x + np1x + np2x + np3x) * 0.25;
+          const nextCenterY = (np0y + np1y + np2y + np3y) * 0.25;
+          rowSpacing = Math.hypot(nextCenterX - centerX, nextCenterY - centerY) * scale;
+        } else if (led > 0) {
+          const prevVertexOffset = (column * PIXELS + led - 1) * 12;
+          const pp0x = positions[prevVertexOffset];
+          const pp0y = positions[prevVertexOffset + 1];
+          const pp1x = positions[prevVertexOffset + 2];
+          const pp1y = positions[prevVertexOffset + 3];
+          const pp2x = positions[prevVertexOffset + 4];
+          const pp2y = positions[prevVertexOffset + 5];
+          const pp3x = positions[prevVertexOffset + 10];
+          const pp3y = positions[prevVertexOffset + 11];
+          const prevCenterX = (pp0x + pp1x + pp2x + pp3x) * 0.25;
+          const prevCenterY = (pp0y + pp1y + pp2y + pp3y) * 0.25;
+          rowSpacing = Math.hypot(centerX - prevCenterX, centerY - prevCenterY) * scale;
+        }
+        const ledHeight = Math.max(0.16, rowSpacing * (2 / 3));
+        const drawX = width * 0.5 + centerX * scale;
+        const drawY = height * 0.5 - centerY * scale;
 
-        ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, 0.18)`;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.lineTo(x3, y3);
-        ctx.lineTo(x4, y4);
-        ctx.closePath();
-        ctx.fill();
+        ctx.save();
+        ctx.translate(drawX, drawY);
+        ctx.rotate(angle);
+        ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${Math.max(alpha, 208) / 255})`;
+        ctx.fillRect(-ledWidth * 0.5, -ledHeight * 0.5, ledWidth, ledHeight);
+        ctx.restore();
       }
     }
   }
@@ -522,6 +552,7 @@ class BrowserHostApp {
   constructor(runtime) {
     this.adapter = runtime.adapter;
     this.runtime = runtime;
+    this.executionError = this.extractProminentError(runtime.error);
     this.currentButtons = 0;
     this.assetIndex = new Map();
     this.assetRenderCache = new Map();
@@ -536,14 +567,22 @@ class BrowserHostApp {
     this.audio = new BrowserAudioHost();
     this.force2dFallback = this.readForce2dPreference();
     this.inspectorOpen = this.readInspectorPreference();
-    this.canvas = document.querySelector("#frame-canvas");
+    this.lastSceneTickAt = null;
+    this.pollRequestId = null;
+    this.pollingHalted = false;
+    this.canvas = document.querySelector("#frame-canvas-gl");
+    this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
     this.renderer = new LedRingWebGLRenderer(this.canvas);
-    this.fallbackRenderer = new LedRingCanvasRenderer(this.canvas, this.renderer.geometry);
+    this.fallbackRenderer = new LedRingCanvasRenderer(this.fallbackCanvas, this.renderer.geometry);
     this.elements = {
       adapterName: document.querySelector("#adapter-name"),
       adapterSource: document.querySelector("#adapter-source"),
       frameCounter: document.querySelector("#frame-counter"),
       buttonMask: document.querySelector("#button-mask"),
+      sceneErrorBanner: document.querySelector("#scene-error-banner"),
+      sceneErrorTitle: document.querySelector("#scene-error-title"),
+      sceneErrorMessage: document.querySelector("#scene-error-message"),
+      sceneErrorDebugButton: document.querySelector("#scene-error-debug-button"),
       runtimeBanner: document.querySelector("#runtime-banner"),
       runtimeMessage: document.querySelector("#runtime-message"),
       inspectorPanel: document.querySelector("#inspector-panel"),
@@ -553,14 +592,33 @@ class BrowserHostApp {
       copyDiagnosticsStatus: document.querySelector("#copy-diagnostics-status"),
       runtimeSummary: document.querySelector("#runtime-summary"),
       force2dFallback: document.querySelector("#force-2d-fallback"),
-      diagnosticLog: document.querySelector("#diagnostic-log"),
-      frameShape: document.querySelector("#frame-shape"),
-      eventLog: document.querySelector("#event-log"),
-      spriteLog: document.querySelector("#sprite-log"),
-      assetLog: document.querySelector("#asset-log"),
     };
     this.copyStatusTimer = null;
     this.refreshCopyDiagnostics();
+  }
+
+  extractProminentError(error) {
+    if (!error) {
+      return null;
+    }
+
+    const sourceText = String(error.message || error.stack || error).trim();
+    if (!sourceText) {
+      return null;
+    }
+
+    const isSceneLifecycleError =
+      sourceText.startsWith("Scene lifecycle error") ||
+      /Scene\.(step|on_enter|on_exit) failed/u.test(sourceText);
+    if (!isSceneLifecycleError) {
+      return null;
+    }
+
+    return {
+      title: "Scene lifecycle error",
+      message: sourceText.replace(/^Scene lifecycle error\s*/u, "").trim(),
+      isSceneLifecycleError: true,
+    };
   }
 
   usesEventStreamProtocol(frame) {
@@ -643,11 +701,25 @@ class BrowserHostApp {
     });
     this.renderRuntimeStatus();
     this.bindInput();
+    this.bindVisibility();
     this.bindCopyDiagnostics();
     this.bindDebugControls();
     this.bindInspectorToggle();
+    this.bindSceneErrorControls();
     this.renderInspectorVisibility();
-    this.pollFrame(true);
+    this.renderCanvasVisibility();
+    this.renderSceneError();
+    this.schedulePoll(true);
+  }
+
+  schedulePoll(full = false) {
+    if (this.pollRequestId !== null || this.pollingHalted) {
+      return;
+    }
+    this.pollRequestId = window.requestAnimationFrame(() => {
+      this.pollRequestId = null;
+      this.pollFrame(full);
+    });
   }
 
   bindInput() {
@@ -683,6 +755,20 @@ class BrowserHostApp {
       this.adapter.setButtons(0);
       this.addDiagnostic("input.blur", { buttons: 0 });
       this.renderStatus();
+    });
+  }
+
+  bindVisibility() {
+    document.addEventListener("visibilitychange", () => {
+      const now = performance.now();
+      if (document.hidden) {
+        this.lastSceneTickAt = now;
+        this.addDiagnostic("timing.pause", { reason: "hidden" });
+        return;
+      }
+      this.lastSceneTickAt = now - SCENE_STEP_MS;
+      this.addDiagnostic("timing.resume", { reason: "visible" });
+      this.schedulePoll(false);
     });
   }
 
@@ -722,9 +808,19 @@ class BrowserHostApp {
         forced2d: this.force2dFallback,
         webglAvailable: this.renderer.available,
       });
+      this.renderCanvasVisibility();
       this.renderStatus();
       this.renderFrame();
     });
+  }
+
+  renderCanvasVisibility() {
+    if (!this.canvas || !this.fallbackCanvas) {
+      return;
+    }
+    const use2d = this.force2dFallback || !this.renderer.available;
+    this.canvas.hidden = use2d;
+    this.fallbackCanvas.hidden = !use2d;
   }
 
   bindInspectorToggle() {
@@ -732,13 +828,26 @@ class BrowserHostApp {
       return;
     }
     this.elements.toggleInspectorButton.addEventListener("click", () => {
-      this.inspectorOpen = !this.inspectorOpen;
-      this.writeInspectorPreference(this.inspectorOpen);
-      this.renderInspectorVisibility();
-      if (this.inspectorOpen && this.lastFrame) {
-        this.renderInspectors(this.lastFrame);
-      }
+      this.setInspectorOpen(!this.inspectorOpen);
     });
+  }
+
+  bindSceneErrorControls() {
+    if (!this.elements.sceneErrorDebugButton) {
+      return;
+    }
+    this.elements.sceneErrorDebugButton.addEventListener("click", () => {
+      this.setInspectorOpen(true);
+    });
+  }
+
+  setInspectorOpen(open) {
+    this.inspectorOpen = Boolean(open);
+    this.writeInspectorPreference(this.inspectorOpen);
+    this.renderInspectorVisibility();
+    if (this.inspectorOpen && this.lastFrame) {
+      this.renderInspectors(this.lastFrame);
+    }
   }
 
   renderInspectorVisibility() {
@@ -746,7 +855,7 @@ class BrowserHostApp {
       return;
     }
     this.elements.inspectorPanel.hidden = !this.inspectorOpen;
-    this.elements.toggleInspectorButton.textContent = this.inspectorOpen ? "Hide" : "Show";
+    this.elements.toggleInspectorButton.textContent = this.inspectorOpen ? "Hide debug" : "Show debug";
     this.elements.toggleInspectorButton.setAttribute("aria-expanded", this.inspectorOpen ? "true" : "false");
   }
 
@@ -826,9 +935,43 @@ class BrowserHostApp {
 
   async pollFrame(full = false) {
     try {
-      if (typeof this.adapter.tick === "function") {
-        await Promise.resolve(this.adapter.tick(1));
+      const now = performance.now();
+      let stepsDue = 0;
+      if (this.lastSceneTickAt === null) {
+        this.lastSceneTickAt = now;
+        stepsDue = 1;
+      } else {
+        const elapsed = now - this.lastSceneTickAt;
+        if (elapsed > MAX_TICK_BACKLOG_MS) {
+          this.addDiagnostic("timing.resync", {
+            elapsedMs: Math.round(elapsed),
+            maxBacklogMs: MAX_TICK_BACKLOG_MS,
+          });
+          this.lastSceneTickAt = now - SCENE_STEP_MS;
+          stepsDue = 1;
+        } else {
+          stepsDue = Math.floor(elapsed / SCENE_STEP_MS);
+        }
       }
+
+      if (stepsDue > MAX_CATCH_UP_STEPS) {
+        this.addDiagnostic("timing.catchup", {
+          requestedSteps: stepsDue,
+          appliedSteps: MAX_CATCH_UP_STEPS,
+        });
+        stepsDue = MAX_CATCH_UP_STEPS;
+      }
+
+      if (stepsDue > 0 && typeof this.adapter.tick === "function") {
+        await Promise.resolve(this.adapter.tick(stepsDue));
+        this.lastSceneTickAt += stepsDue * SCENE_STEP_MS;
+      }
+
+      if (!full && stepsDue === 0 && this.lastFrame) {
+        this.renderFrame();
+        return;
+      }
+
       const frame = await Promise.resolve(this.adapter.exportFrame({ full }));
       if (!frame || typeof frame !== "object") {
         throw new Error(`Invalid frame payload: ${String(frame)}`);
@@ -853,6 +996,13 @@ class BrowserHostApp {
           });
         }
       }
+      this.runtime.error = null;
+      if (this.executionError && this.runtime.source === "wasm") {
+        this.executionError = null;
+        this.pollingHalted = false;
+        this.renderSceneError();
+        this.renderRuntimeStatus();
+      }
       this.lastFrame = frame;
       this.visibleStripSlots = Array.isArray(frame.sprites)
         ? [...new Set(frame.sprites.map((sprite) => sprite.image_strip).filter((slot) => Number.isInteger(slot) && slot > 0))]
@@ -865,15 +1015,20 @@ class BrowserHostApp {
       });
       this.renderFrame();
     } catch (error) {
-      this.runtime.error = error;
+      this.executionError = this.extractProminentError(error);
+      this.runtime.error = this.executionError ? null : error;
+      this.pollingHalted = Boolean(this.executionError?.isSceneLifecycleError);
       this.addDiagnostic("frame.error", {
         message: error.message || String(error),
         stack: error.stack || null,
       });
+      this.renderSceneError();
       this.renderRuntimeStatus();
       console.error("Frame polling failed", error);
     } finally {
-      window.setTimeout(() => this.pollFrame(false), 33);
+      if (!this.pollingHalted) {
+        this.schedulePoll(false);
+      }
     }
   }
 
@@ -893,8 +1048,9 @@ class BrowserHostApp {
     if (!hasPendingVisibleAsset) {
       this.lastRenderedLedPixels = ledPixels;
     }
+    this.renderCanvasVisibility();
     const rendered = !this.force2dFallback && this.renderer.render(ledPixels);
-    if (!rendered && this.fallbackRenderer) {
+    if ((!rendered || this.force2dFallback) && this.fallbackRenderer) {
       this.fallbackRenderer.render(ledPixels);
     }
     this.renderStatus();
@@ -969,20 +1125,43 @@ class BrowserHostApp {
     runtimeBanner.hidden = false;
     runtimeBanner.classList.remove("is-error", "is-warning");
 
+    if (this.executionError) {
+      runtimeBanner.classList.add("is-error");
+      runtimeMessage.textContent = `${this.executionError.title}\n\n${this.executionError.message}`;
+      return;
+    }
+
+    if (this.runtime.error) {
+      runtimeBanner.classList.add("is-error");
+      runtimeMessage.textContent = this.runtime.error.stack || this.runtime.error.message || String(this.runtime.error);
+      return;
+    }
+
     if (this.runtime.source === "wasm") {
       runtimeMessage.textContent = "Using real MicroPython WASM runtime.";
       return;
     }
 
-    if (this.runtime.error) {
-      runtimeBanner.classList.add("is-warning");
-      runtimeMessage.textContent =
-        `Fell back to mock runtime.\n\nReason:\n${this.runtime.error.stack || this.runtime.error.message || String(this.runtime.error)}`;
+    runtimeBanner.classList.add("is-warning");
+    runtimeMessage.textContent = "Using mock runtime.";
+  }
+
+  renderSceneError() {
+    const { sceneErrorBanner, sceneErrorTitle, sceneErrorMessage } = this.elements;
+    if (!sceneErrorBanner || !sceneErrorTitle || !sceneErrorMessage) {
       return;
     }
 
-    runtimeBanner.classList.add("is-warning");
-    runtimeMessage.textContent = "Using mock runtime.";
+    if (!this.executionError) {
+      sceneErrorBanner.hidden = true;
+      sceneErrorTitle.textContent = "Scene lifecycle error";
+      sceneErrorMessage.textContent = "";
+      return;
+    }
+
+    sceneErrorBanner.hidden = false;
+    sceneErrorTitle.textContent = this.executionError.title;
+    sceneErrorMessage.textContent = this.executionError.message;
   }
 
   renderInspectors(frame) {
@@ -1006,17 +1185,8 @@ class BrowserHostApp {
       </div>
     `).join("");
 
-    this.elements.eventLog.textContent = JSON.stringify(frame.events, null, 2);
-    this.elements.spriteLog.textContent = JSON.stringify(frame.sprites, null, 2);
-    this.elements.assetLog.textContent = JSON.stringify([...this.assetIndex.values()].map((asset) => ({
-      ...asset,
-      data: `[${asset.data?.length ?? 0} bytes]`,
-    })), null, 2);
     const frameShape = this.describeFrame(frame);
     this.lastFrameShape = frameShape;
-    const diagnostics = this.diagnostics.slice();
-    this.elements.frameShape.textContent = JSON.stringify(frameShape, null, 2);
-    this.elements.diagnosticLog.textContent = JSON.stringify(diagnostics, null, 2);
     this.refreshCopyDiagnostics();
   }
 
@@ -1061,6 +1231,11 @@ class BrowserHostApp {
       runtimeError: this.runtime.error ? {
         message: this.runtime.error.message || String(this.runtime.error),
         stack: this.runtime.error.stack || null,
+      } : null,
+      executionError: this.executionError ? {
+        title: this.executionError.title,
+        message: this.executionError.message,
+        isSceneLifecycleError: this.executionError.isSceneLifecycleError,
       } : null,
       frameShape,
       diagnostics,

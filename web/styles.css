@@ -46,6 +46,7 @@ body {
 }
 
 .stage-panel {
+  position: relative;
   width: 100vh;
   height: 100vh;
   padding: 0;
@@ -64,6 +65,65 @@ body {
 .runtime-banner.is-warning {
   border-color: rgba(255, 209, 102, 0.25);
   background: rgba(80, 57, 10, 0.24);
+}
+
+.scene-error-banner {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 107, 107, 0.45);
+  background:
+    linear-gradient(180deg, rgba(110, 24, 24, 0.92), rgba(64, 16, 16, 0.92)),
+    rgba(70, 19, 19, 0.28);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.scene-error-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.scene-error-copy strong {
+  color: #ffd7d7;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+}
+
+#scene-error-message {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  color: #fff0f0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  background: rgba(8, 3, 3, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.scene-error-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+#scene-error-debug-button {
+  appearance: none;
+  border: 1px solid rgba(255, 214, 214, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff4f4;
+  padding: 8px 14px;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#scene-error-debug-button:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .debug-title,
@@ -95,7 +155,10 @@ body {
   font-size: 0.8rem;
 }
 
-#frame-canvas {
+#frame-canvas-gl,
+#frame-canvas-2d {
+  position: absolute;
+  inset: 0;
   width: 100vh;
   height: 100vh;
   display: block;
@@ -113,6 +176,11 @@ body {
   margin-top: 14px;
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.debug-meta-header {
+  margin-top: 10px;
+  margin-bottom: 20px;
 }
 
 .inspector-panel-shell {
@@ -222,7 +290,8 @@ textarea {
   }
 
   .stage-panel,
-  #frame-canvas {
+  #frame-canvas-gl,
+  #frame-canvas-2d {
     width: 100vw;
     height: 100vw;
   }

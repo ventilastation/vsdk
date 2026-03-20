@@ -50,6 +50,7 @@ class Director:
         self.last_player_action = utime.ticks_ms()
         self.timedout = False
         self.romdata = None
+        self.palette_data = None
 
         if getattr(platform, "disable_gc", False):
             gc.disable()
@@ -58,13 +59,17 @@ class Director:
             gc.collect()
         self.platform.sprites.reset_sprites()
 
-    def _report_exception(self, error):
+    def _report_exception(self, error, phase=None, scene=None):
         try:
             buf = io.StringIO()
             sys.print_exception(error, buf)
-            content = buf.getvalue().encode("utf-8")
+            details = buf.getvalue()
         except Exception:
-            content = (str(error) + "\n").encode("utf-8")
+            details = str(error) + "\n"
+        if phase or scene is not None:
+            scene_name = scene.__class__.__name__ if scene is not None else "UnknownScene"
+            details = "Scene.%s failed in %s\n\n%s" % (phase or "lifecycle", scene_name, details)
+        content = details.encode("utf-8")
         self.report_traceback(content)
 
     def _enter_scene(self, scene):
@@ -72,14 +77,21 @@ class Director:
         try:
             scene.on_enter()
         except Exception as error:
-            self._report_exception(error)
+            self._report_exception(error, "on_enter", scene)
             raise
         scene._vs_entered = True
+
+    def _exit_scene(self, scene):
+        try:
+            scene.on_exit()
+        except Exception as error:
+            self._report_exception(error, "on_exit", scene)
+            raise
 
     def push(self, scene):
         previous = self.scene_stack[-1] if self.scene_stack else None
         if previous:
-            previous.on_exit()
+            self._exit_scene(previous)
         self.scene_stack.append(scene)
         self.platform.sprites.reset_sprites()
         gc.collect()
@@ -98,7 +110,7 @@ class Director:
 
     def pop(self):
         scene = self.scene_stack.pop()
-        scene.on_exit()
+        self._exit_scene(scene)
         if not scene.keep_music:
             self.music_off()
         self.platform.sprites.reset_sprites()
@@ -143,6 +155,16 @@ class Director:
     def report_traceback(self, content):
         self.platform.comms.send(b"traceback %d" % len(content), content)
 
+    def _set_streaming_rom_compat(self, romlength, header, offsets_raw, palette_offset, palette_data):
+        compat_length = palette_offset + len(palette_data)
+        if compat_length > romlength:
+            compat_length = romlength
+        compat = bytearray(compat_length)
+        compat[0:4] = header
+        compat[4:4 + len(offsets_raw)] = offsets_raw
+        compat[palette_offset:palette_offset + len(palette_data)] = palette_data
+        self.romdata = memoryview(compat)
+
     def _load_rom_streaming(self, filename, romlength):
         stripes.clear()
         romfile = open(filename, "rb")
@@ -157,7 +179,9 @@ class Director:
 
             palette_offset = palette_offsets[0]
             romfile.seek(palette_offset)
-            self.platform.display.set_palettes(romfile.read(romlength - palette_offset))
+            self.palette_data = romfile.read(romlength - palette_offset)
+            self._set_streaming_rom_compat(romlength, header, offsets_raw, palette_offset, self.palette_data)
+            self.platform.display.set_palettes(self.palette_data)
 
             for n, off in enumerate(stripes_offsets):
                 romfile.seek(off)
@@ -178,6 +202,7 @@ class Director:
         romlength = uos.stat(filename)[6]
         if not getattr(self.platform, "disable_gc", False):
             self.romdata = None
+            self.palette_data = None
             self._load_rom_streaming(filename, romlength)
             return
 
@@ -199,7 +224,8 @@ class Director:
         stripes_offsets = offsets[:num_stripes]
         palette_offsets = offsets[num_stripes:]
 
-        self.platform.display.set_palettes(self.romdata[palette_offsets[0]:])
+        self.palette_data = self.romdata[palette_offsets[0]:]
+        self.platform.display.set_palettes(self.palette_data)
 
         for n, off in enumerate(stripes_offsets):
             filename_len = struct.unpack_from("B", self.romdata, off)[0]
@@ -247,6 +273,9 @@ class Director:
             scene.scene_step()
         except StopIteration:
             pass
+        except Exception as error:
+            self._report_exception(error, "step", scene)
+            raise
 
         if self.last_buttons != self.buttons:
             self.last_player_action = now
