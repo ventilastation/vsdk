@@ -570,6 +570,7 @@ class BrowserHostApp {
     this.lastSceneTickAt = null;
     this.pollRequestId = null;
     this.pollingHalted = false;
+    this.renderingPaused = false;
     this.canvas = document.querySelector("#frame-canvas-gl");
     this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
     this.renderer = new LedRingWebGLRenderer(this.canvas);
@@ -583,6 +584,7 @@ class BrowserHostApp {
       sceneErrorTitle: document.querySelector("#scene-error-title"),
       sceneErrorMessage: document.querySelector("#scene-error-message"),
       sceneErrorDebugButton: document.querySelector("#scene-error-debug-button"),
+      toggleRenderingButton: document.querySelector("#toggle-rendering-button"),
       runtimeBanner: document.querySelector("#runtime-banner"),
       runtimeMessage: document.querySelector("#runtime-message"),
       inspectorPanel: document.querySelector("#inspector-panel"),
@@ -704,8 +706,10 @@ class BrowserHostApp {
     this.bindVisibility();
     this.bindCopyDiagnostics();
     this.bindDebugControls();
+    this.bindRenderingToggle();
     this.bindInspectorToggle();
     this.bindSceneErrorControls();
+    this.renderRenderingToggle();
     this.renderInspectorVisibility();
     this.renderCanvasVisibility();
     this.renderSceneError();
@@ -713,7 +717,7 @@ class BrowserHostApp {
   }
 
   schedulePoll(full = false) {
-    if (this.pollRequestId !== null || this.pollingHalted) {
+    if (this.pollRequestId !== null || this.pollingHalted || this.renderingPaused) {
       return;
     }
     this.pollRequestId = window.requestAnimationFrame(() => {
@@ -832,6 +836,15 @@ class BrowserHostApp {
     });
   }
 
+  bindRenderingToggle() {
+    if (!this.elements.toggleRenderingButton) {
+      return;
+    }
+    this.elements.toggleRenderingButton.addEventListener("click", () => {
+      this.setRenderingPaused(!this.renderingPaused);
+    });
+  }
+
   bindSceneErrorControls() {
     if (!this.elements.sceneErrorDebugButton) {
       return;
@@ -848,6 +861,31 @@ class BrowserHostApp {
     if (this.inspectorOpen && this.lastFrame) {
       this.renderInspectors(this.lastFrame);
     }
+  }
+
+  setRenderingPaused(paused) {
+    this.renderingPaused = Boolean(paused);
+    if (this.renderingPaused) {
+      if (this.pollRequestId !== null) {
+        window.cancelAnimationFrame(this.pollRequestId);
+        this.pollRequestId = null;
+      }
+      this.addDiagnostic("timing.pause", { reason: "manual" });
+    } else {
+      this.lastSceneTickAt = performance.now() - SCENE_STEP_MS;
+      this.addDiagnostic("timing.resume", { reason: "manual" });
+      this.schedulePoll(false);
+    }
+    this.renderRenderingToggle();
+  }
+
+  renderRenderingToggle() {
+    const button = this.elements.toggleRenderingButton;
+    if (!button) {
+      return;
+    }
+    button.textContent = this.renderingPaused ? "Resume rendering" : "Stop rendering";
+    button.setAttribute("aria-pressed", this.renderingPaused ? "true" : "false");
   }
 
   renderInspectorVisibility() {

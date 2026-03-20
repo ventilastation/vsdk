@@ -214,6 +214,42 @@ body {
   justify-content: end;
 }
 
+#toggle-rendering-button,
+#toggle-inspector-button {
+  appearance: none;
+  border-radius: 999px;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  padding: 7px 12px;
+}
+
+#toggle-rendering-button {
+  border: 1px solid rgba(255, 209, 102, 0.35);
+  background: rgba(255, 209, 102, 0.12);
+  color: var(--accent-2);
+}
+
+#toggle-rendering-button:hover {
+  background: rgba(255, 209, 102, 0.18);
+}
+
+#toggle-rendering-button[aria-pressed="true"] {
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.12);
+  color: #ffd7d7;
+}
+
+#toggle-inspector-button {
+  border: 1px solid rgba(83, 209, 182, 0.35);
+  background: rgba(83, 209, 182, 0.12);
+  color: var(--accent);
+}
+
+#toggle-inspector-button:hover {
+  background: rgba(83, 209, 182, 0.18);
+}
+
 #copy-diagnostics-button {
   appearance: none;
   border: 1px solid rgba(83, 209, 182, 0.35);
