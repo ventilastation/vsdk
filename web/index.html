@@ -25,14 +25,48 @@
       <canvas id="frame-canvas" width="768" height="768"></canvas>
       <div class="legend">
         <span><strong>Keyboard</strong> Arrows + A/B/C/D</span>
-        <span><strong>Canvas</strong> Debug snapshot, not final WebGL</span>
+        <span><strong>Canvas</strong> WebGL radial preview</span>
       </div>
     </section>
 
-    <section class="inspector-panel">
+    <section class="inspector-panel-shell">
+      <div class="inspector-block">
+        <div class="copy-header">
+          <h2>Debug Panel</h2>
+          <div class="copy-actions">
+            <button type="button" id="toggle-inspector-button" aria-expanded="false">Show</button>
+          </div>
+        </div>
+      </div>
+    <section class="inspector-panel" id="inspector-panel" hidden>
+      <div class="inspector-block">
+        <div class="copy-header">
+          <h2>Copy Diagnostics</h2>
+          <div class="copy-actions">
+            <button type="button" id="copy-diagnostics-button">Copy</button>
+            <span id="copy-diagnostics-status" aria-live="polite"></span>
+          </div>
+        </div>
+        <textarea id="copy-diagnostics" rows="18" readonly></textarea>
+      </div>
       <div class="inspector-block">
         <h2>Runtime</h2>
         <div id="runtime-summary" class="summary-grid"></div>
+      </div>
+      <div class="inspector-block">
+        <h2>Debug Render</h2>
+        <label>
+          <input type="checkbox" id="force-2d-fallback">
+          Force 2D fallback renderer
+        </label>
+      </div>
+      <div class="inspector-block">
+        <h2>Diagnostics</h2>
+        <pre id="diagnostic-log"></pre>
+      </div>
+      <div class="inspector-block">
+        <h2>Frame Shape</h2>
+        <pre id="frame-shape"></pre>
       </div>
       <div class="inspector-block">
         <h2>Recent Events</h2>
@@ -47,10 +81,12 @@
         <pre id="asset-log"></pre>
       </div>
     </section>
+    </section>
   </main>
 
   <script type="module" src="./micropython-bridge.js"></script>
   <script type="module" src="./wasm-adapter.js"></script>
+  <script src="./led-render-core.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

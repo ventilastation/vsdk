@@ -1,5 +1,6 @@
 import os
 import sys
+import uctypes
 
 from ventilastation.runtime import FileStorage, MemoryStorage
 
@@ -216,13 +217,23 @@ class BrowserComms:
 
 
 class BrowserDisplay(NullDisplay):
-    def __init__(self, sprites_backend, comms):
+    def __init__(self, comms):
         super().__init__()
-        self.sprites_backend = sprites_backend
         self.comms = comms
         self.gamma_mode = 1
         self.frame = 0
         self.palette_dirty = False
+        self.palette_version = 0
+        self.palette = b""
+        self.sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
+        self._frame_export = {
+            "frame": 0,
+            "buttons": 0,
+            "column_offset": 0,
+            "gamma_mode": 1,
+            "assets": [],
+            "events": [],
+        }
 
     def set_gamma_mode(self, mode):
         self.gamma_mode = mode
@@ -230,30 +241,74 @@ class BrowserDisplay(NullDisplay):
     def set_palettes(self, palette):
         self.palette = bytes(palette)
         self.palette_dirty = True
+        self.palette_version += 1
+        self.comms.send(b"palette %d" % (len(self.palette) // 1024), self.palette)
+
+    def getaddress(self, sprite_num):
+        return uctypes.addressof(self.sprite_data) + sprite_num * 5
+
+    def set_imagestrip(self, number, stripmap):
+        self.comms.send(b"imagestrip %d %d" % (number, len(stripmap)), stripmap)
 
     def update(self):
         self.frame += 1
+        self.comms.send(b"sprites", self.sprite_data)
 
     def export_frame(self, full=False):
-        exported = {
-            "frame": self.frame,
-            "buttons": self.comms.buttons,
-            "column_offset": self.column_offset,
-            "gamma_mode": self.gamma_mode,
-            "sprites": self.sprites_backend.export_sprites(),
-            "assets": self.sprites_backend.export_assets(full=full),
-            "events": self.comms.drain_events(),
-        }
-        if full or self.palette_dirty:
-            exported["palette"] = self.palette
-        self.palette_dirty = False
+        exported = self._frame_export
+        exported["frame"] = self.frame
+        exported["buttons"] = self.comms.buttons
+        exported["column_offset"] = self.column_offset
+        exported["gamma_mode"] = self.gamma_mode
+        exported["events"] = self.comms.drain_events()
         return exported
+
+    def export_palette_chunk(self, offset=0, chunk_size=2048):
+        if offset < 0:
+            offset = 0
+        end = offset + chunk_size
+        chunk = self.palette[offset:end]
+        if end >= len(self.palette):
+            self.palette_dirty = False
+        return {
+            "offset": offset,
+            "total_length": len(self.palette),
+            "version": self.palette_version,
+            "data": bytes(chunk),
+        }
 
 
 class BrowserSprites(HeadlessSprites):
     def __init__(self):
         super().__init__()
         self._dirty_strips = set()
+        self._dirty_strip_order = []
+        self._sprite_exports = []
+        self._active_sprite_exports = []
+        self._asset_exports = {}
+        self._active_asset_exports = []
+        self._sprite_binary = bytearray()
+        self._active_sprite_count = 0
+
+    def new_state(self):
+        state = super().new_state()
+        self._sprite_exports.append({
+            "slot": state["slot"],
+            "x": 0,
+            "y": 0,
+            "image_strip": 0,
+            "frame": 255,
+            "perspective": 1,
+        })
+        return state
+
+    def reset_sprites(self):
+        super().reset_sprites()
+        self._sprite_exports = []
+        self._active_sprite_exports = []
+        self._active_asset_exports = []
+        self._sprite_binary = bytearray()
+        self._active_sprite_count = 0
 
     def set_imagestrip(self, number, stripmap):
         width = stripmap[0]
@@ -269,45 +324,116 @@ class BrowserSprites(HeadlessSprites):
             "palette": palette,
             "data": bytes(stripmap[4:]),
         }
-        self._dirty_strips.add(number)
+        if number not in self._dirty_strips:
+            self._dirty_strips.add(number)
+            self._dirty_strip_order.append(number)
 
-    def export_assets(self, full=False):
+    def export_assets(self, full=False, max_items=None):
         if full:
             strip_numbers = sorted(self.stripes.keys())
         else:
-            strip_numbers = sorted(self._dirty_strips)
+            if max_items is None:
+                strip_numbers = self._dirty_strip_order[:]
+            else:
+                strip_numbers = self._dirty_strip_order[:max_items]
+        if max_items is not None:
+            strip_numbers = strip_numbers[:max_items]
 
-        assets = []
+        assets = self._active_asset_exports
+        del assets[:]
         for number in strip_numbers:
             strip = self.stripes[number]
-            exported = {
-                "slot": number,
-                "width": strip["width"],
-                "height": strip["height"],
-                "frames": strip["frames"],
-                "palette": strip["palette"],
-                "data": strip["data"],
-            }
+            exported = self._asset_exports.get(number)
+            if exported is None:
+                exported = {
+                    "slot": number,
+                    "width": 0,
+                    "height": 0,
+                    "frames": 0,
+                    "palette": 0,
+                    "data_length": 0,
+                }
+                self._asset_exports[number] = exported
+            exported["slot"] = number
+            exported["width"] = strip["width"]
+            exported["height"] = strip["height"]
+            exported["frames"] = strip["frames"]
+            exported["palette"] = strip["palette"]
+            exported["data_length"] = len(strip["data"])
             assets.append(exported)
 
         if not full:
-            self._dirty_strips.clear()
+            for number in strip_numbers:
+                self._dirty_strips.discard(number)
+            if strip_numbers:
+                del self._dirty_strip_order[:len(strip_numbers)]
         return assets
 
+    def export_asset_chunk(self, slot, offset=0, chunk_size=2048):
+        strip = self.stripes.get(slot)
+        if strip is None:
+            return None
+        data = strip["data"]
+        if offset < 0:
+            offset = 0
+        end = offset + chunk_size
+        return {
+            "slot": slot,
+            "offset": offset,
+            "total_length": len(data),
+            "data": bytes(data[offset:end]),
+        }
+
     def export_sprites(self):
-        exported = []
+        exported = self._active_sprite_exports
+        del exported[:]
+        for index, state in enumerate(self._sprites):
+            if state["frame"] == 255:
+                continue
+            snapshot = self._sprite_exports[index]
+            snapshot["slot"] = state["slot"]
+            snapshot["x"] = state["x"]
+            snapshot["y"] = state["y"]
+            snapshot["image_strip"] = state["image_strip"]
+            snapshot["frame"] = state["frame"]
+            snapshot["perspective"] = state["perspective"]
+            exported.append(snapshot)
+        return exported
+
+    def active_sprite_count(self):
+        return self._active_sprite_count
+
+    def export_sprites_binary(self):
+        exported = self._sprite_binary
+        del exported[:]
+        count = 0
         for state in self._sprites:
             if state["frame"] == 255:
                 continue
-            exported.append({
-                "slot": state["slot"],
-                "x": state["x"],
-                "y": state["y"],
-                "image_strip": state["image_strip"],
-                "frame": state["frame"],
-                "perspective": state["perspective"],
-            })
-        return exported
+            count += 1
+            exported.append(state["slot"] & 0xFF)
+            exported.append(state["frame"] & 0xFF)
+
+            image_strip = state["image_strip"]
+            exported.append(image_strip & 0xFF)
+            exported.append((image_strip >> 8) & 0xFF)
+
+            x = state["x"]
+            if x < 0:
+                x += 65536
+            exported.append(x & 0xFF)
+            exported.append((x >> 8) & 0xFF)
+
+            y = state["y"]
+            if y < 0:
+                y += 65536
+            exported.append(y & 0xFF)
+            exported.append((y >> 8) & 0xFF)
+
+            perspective = state["perspective"]
+            exported.append(perspective & 0xFF)
+        self._active_sprite_count = count
+        return bytes(exported)
 
 
 class Platform:
@@ -319,6 +445,7 @@ class Platform:
         self.storage = storage
         self.hw_config = hw_config or ()
         self.pixels = pixels
+        self.disable_gc = name == "hardware"
 
     def initialize(self, settings_module):
         settings_module.load()
@@ -394,8 +521,8 @@ def create_headless_platform():
 
 def create_browser_platform():
     comms = BrowserComms()
-    sprites_backend = BrowserSprites()
-    display = BrowserDisplay(sprites_backend, comms)
+    sprites_backend = LazyModule("ventilastation.emu_sprites")
+    display = BrowserDisplay(comms)
     return Platform(
         name="browser",
         comms=comms,

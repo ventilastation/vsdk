@@ -4,22 +4,31 @@ const DEFAULT_CONFIG = {
   micropythonWasmUrl: "./vendor/micropython/micropython.wasm",
   runtimeManifestUrl: "./runtime-manifest.json",
   fsRoot: "/apps/micropython",
+  pystack: 8 * 1024,
+  heapsize: 8 * 1024 * 1024,
 };
 
 const PY_BRIDGE_SOURCE = `
 import json
+import ubinascii
 
-def _vs_serialize(value):
+def _vs_serialize_binary(value, binary_mode):
+    if binary_mode != "base64":
+        return {"__bytes_meta__": len(value)}
+    encoded = ubinascii.b2a_base64(bytes(value)).decode().strip()
+    return {"__base64__": encoded}
+
+def _vs_serialize(value, binary_mode):
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
     if isinstance(value, (bytes, bytearray)):
-        return {"__bytes__": list(value)}
+        return _vs_serialize_binary(value, binary_mode)
     if isinstance(value, memoryview):
-        return {"__bytes__": list(value)}
+        return _vs_serialize_binary(value, binary_mode)
     if isinstance(value, (list, tuple, set)):
-        return [_vs_serialize(item) for item in value]
+        return [_vs_serialize(item, binary_mode) for item in value]
     if isinstance(value, dict):
-        return {str(key): _vs_serialize(item) for key, item in value.items()}
+        return {str(key): _vs_serialize(item, binary_mode) for key, item in value.items()}
     return str(value)
 
 def __vs_bridge_call(module_name, function_name, args_json):
@@ -27,7 +36,8 @@ def __vs_bridge_call(module_name, function_name, args_json):
     function = getattr(module, function_name)
     args = json.loads(args_json)
     result = function(*args)
-    return json.dumps(_vs_serialize(result))
+    binary_mode = "base64" if function_name in ("export_asset_chunk", "export_palette_chunk", "export_frame") else "meta"
+    return json.dumps(_vs_serialize(result, binary_mode))
 `;
 
 function dirname(path) {
@@ -43,8 +53,16 @@ function reviveBytes(value) {
   if (!value || typeof value !== "object") {
     return value;
   }
-  if (Object.keys(value).length === 1 && Array.isArray(value.__bytes__)) {
-    return Uint8Array.from(value.__bytes__);
+  if (Object.keys(value).length === 1 && typeof value.__base64__ === "string") {
+    const decoded = atob(value.__base64__);
+    const bytes = new Uint8Array(decoded.length);
+    for (let i = 0; i < decoded.length; i += 1) {
+      bytes[i] = decoded.charCodeAt(i);
+    }
+    return bytes;
+  }
+  if (Object.keys(value).length === 1 && typeof value.__bytes_meta__ === "number") {
+    return { byteLength: value.__bytes_meta__ };
   }
   const revived = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -58,7 +76,6 @@ class MicroPythonRuntime {
     this.config = config;
     this.initialized = false;
     this.mp = null;
-    this.bridgeCall = null;
   }
 
   async initialize() {
@@ -72,14 +89,15 @@ class MicroPythonRuntime {
 
     this.mp = await loadMicroPython({
       url: this.config.micropythonWasmUrl,
+      pystack: this.config.pystack,
+      heapsize: this.config.heapsize,
       stdin: () => null,
       stdout: (line) => console.log("[mp]", line),
       stderr: (line) => console.error("[mp]", line),
     });
 
     await this.populateFilesystem();
-    this.mp.runPython(PY_BRIDGE_SOURCE);
-    this.bridgeCall = this.mp.globals.get("__vs_bridge_call");
+    await this.mp.runPythonAsync(PY_BRIDGE_SOURCE);
     this.initialized = true;
 
     return {
@@ -126,12 +144,16 @@ class MicroPythonRuntime {
 
   async exec(code) {
     this.assertInitialized();
-    return this.mp.runPython(code);
+    return this.mp.runPythonAsync(code);
   }
 
   async call(moduleName, functionName, args) {
     this.assertInitialized();
-    const jsonResult = this.bridgeCall(moduleName, functionName, JSON.stringify(args));
+    await this.mp.runPythonAsync(
+      `__vs_bridge_result = __vs_bridge_call(${JSON.stringify(moduleName)}, ${JSON.stringify(functionName)}, ${JSON.stringify(JSON.stringify(args))})`
+    );
+    const jsonResult = this.mp.globals.get("__vs_bridge_result");
+    this.mp.globals.delete("__vs_bridge_result");
     return reviveBytes(JSON.parse(jsonResult));
   }
 

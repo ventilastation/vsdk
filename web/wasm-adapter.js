@@ -17,11 +17,14 @@ class VentilastationWasmAdapter {
 
     await this.bridge.exec(`
 import sys
+import uos
 if "/apps/micropython" not in sys.path:
     sys.path.insert(0, "/apps/micropython")
+uos.chdir("/apps/micropython")
 from ventilastation.director import configure_runtime
 configure_runtime("browser")
-import ${this.bootModule}
+import ventilastation.browser as __vs_browser
+__vs_browser.boot_main()
 `);
 
     this.bootstrapped = true;
@@ -36,8 +39,20 @@ import ${this.bootModule}
     return this.bridge.call("ventilastation.browser", "export_frame", full);
   }
 
-  exportAssets({ full = false } = {}) {
-    return this.bridge.call("ventilastation.browser", "export_assets", full);
+  exportPaletteChunk({ offset = 0, chunkSize = 2048 } = {}) {
+    return this.bridge.call("ventilastation.browser", "export_palette_chunk", offset, chunkSize);
+  }
+
+  tick(count = 1) {
+    return this.bridge.call("ventilastation.browser", "tick", count);
+  }
+
+  exportAssets({ full = false, maxItems = null } = {}) {
+    return this.bridge.call("ventilastation.browser", "export_assets", full, maxItems);
+  }
+
+  exportAssetChunk(slot, { offset = 0, chunkSize = 2048 } = {}) {
+    return this.bridge.call("ventilastation.browser", "export_asset_chunk", slot, offset, chunkSize);
   }
 
   exportStorage() {

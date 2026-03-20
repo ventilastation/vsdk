@@ -4334,7 +4334,7 @@ var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
   Disabled:3,
   },
   state:0,
-  StackSize:4096,
+  StackSize:131072,
   currData:null,
   handleSleepReturnValue:0,
   exportCallStack:[],
@@ -5872,16 +5872,17 @@ export async function loadMicroPython(options) {
             Module._free(buf);
             return proxy_convert_mp_to_js_obj_jsside_with_free(value);
         },
-        runPythonAsync(code) {
+        async runPythonAsync(code) {
             const len = Module.lengthBytesUTF8(code);
             const buf = Module._malloc(len + 1);
             Module.stringToUTF8(code, buf, len + 1);
             const value = Module._malloc(3 * 4);
-            Module.ccall(
+            await Module.ccall(
                 "mp_js_do_exec_async",
                 "number",
                 ["pointer", "number", "pointer"],
                 [buf, len, value],
+                { async: true },
             );
             Module._free(buf);
             const ret = proxy_convert_mp_to_js_obj_jsside_with_free(value);

@@ -226,8 +226,7 @@ class GamesMenu(menu.Menu):
                 pf = (self.tincho_frames // 6) % 2
                 self.es_tincho.set_frame(pf)
 
-def main():
-    
+def setup():
     main = GamesMenu(MAIN_MENU_OPTIONS)
     main.call_later(700, main.load_images)
     director.push(main)
@@ -238,6 +237,8 @@ def main():
     autostart.call_later(700, autostart.load_images)
     director.push(autostart)
 
+def main():
+    setup()
     director.run()
 
 if __name__ == '__main__':

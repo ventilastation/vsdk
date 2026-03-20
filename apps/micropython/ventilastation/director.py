@@ -49,7 +49,11 @@ class Director:
         self.timedout = False
         self.romdata = None
 
-        gc.disable()
+        if getattr(platform, "disable_gc", False):
+            gc.disable()
+        else:
+            gc.enable()
+            gc.collect()
         self.platform.sprites.reset_sprites()
 
     def push(self, scene):
@@ -103,10 +107,56 @@ class Director:
     def report_traceback(self, content):
         self.platform.comms.send(b"traceback %d" % len(content), content)
 
+    def _load_rom_streaming(self, filename, romlength):
+        stripes.clear()
+        romfile = open(filename, "rb")
+        try:
+            header = romfile.read(4)
+            num_stripes, num_palettes = struct.unpack("<HH", header)
+            offsets_size = (num_stripes + num_palettes) * 4
+            offsets_raw = romfile.read(offsets_size)
+            offsets = struct.unpack("<%dL%dL" % (num_stripes, num_palettes), offsets_raw)
+            stripes_offsets = offsets[:num_stripes]
+            palette_offsets = offsets[num_stripes:]
+
+            palette_offset = palette_offsets[0]
+            romfile.seek(palette_offset)
+            self.platform.display.set_palettes(romfile.read(romlength - palette_offset))
+
+            for n, off in enumerate(stripes_offsets):
+                romfile.seek(off)
+                filename_len = struct.unpack("B", romfile.read(1))[0]
+                metadata = romfile.read(filename_len + 4)
+                filename_bytes = metadata[:filename_len]
+                w = metadata[filename_len]
+                h = metadata[filename_len + 1]
+                frames = metadata[filename_len + 2]
+                width = 256 if w == 255 else w
+                stripmap = metadata[filename_len:] + romfile.read(width * h * frames)
+                self.platform.sprites.set_imagestrip(n, stripmap)
+                stripes[filename_bytes.decode("utf-8")] = n
+        finally:
+            romfile.close()
+
     def load_rom(self, filename):
         romlength = uos.stat(filename)[6]
-        self.romdata = memoryview(bytearray(romlength))
-        open(filename, "rb").readinto(self.romdata)
+        if not getattr(self.platform, "disable_gc", False):
+            self.romdata = None
+            self._load_rom_streaming(filename, romlength)
+            return
+
+        rombuffer = bytearray(romlength)
+        romview = memoryview(rombuffer)
+        romfile = open(filename, "rb")
+        try:
+            try:
+                romfile.readinto(romview)
+            except (AttributeError, OSError):
+                data = romfile.read()
+                rombuffer[:len(data)] = data
+        finally:
+            romfile.close()
+        self.romdata = romview
         stripes.clear()
         num_stripes, num_palettes = struct.unpack("<HH", self.romdata)
         offsets = struct.unpack_from("<%dL%dL" % (num_stripes, num_palettes), self.romdata, 4)
@@ -130,27 +180,34 @@ class Director:
         self.last_player_action = utime.ticks_ms()
         self.timedout = False
 
+    def step_once(self):
+        if not self.scene_stack:
+            return
+
+        scene = self.scene_stack[-1]
+        now = utime.ticks_ms()
+
+        val = self.platform.comms.receive(1)
+        if val:
+            self.buttons = val[0]
+
+        try:
+            scene.scene_step()
+        except StopIteration:
+            pass
+
+        if self.last_buttons != self.buttons:
+            self.last_player_action = now
+            self.last_buttons = self.buttons
+
+        self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
+        self.platform.display.update()
+
     def run(self):
         while True:
-            scene = self.scene_stack[-1]
             now = utime.ticks_ms()
             next_loop = utime.ticks_add(now, 30)
-
-            val = self.platform.comms.receive(1)
-            if val:
-                self.buttons = val[0]
-
-            try:
-                scene.scene_step()
-            except StopIteration:
-                pass
-
-            if self.last_buttons != self.buttons:
-                self.last_player_action = now
-                self.last_buttons = self.buttons
-
-            self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
-            self.platform.display.update()
+            self.step_once()
 
             delay = utime.ticks_diff(next_loop, utime.ticks_ms())
             if delay > 0:
