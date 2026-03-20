@@ -2,6 +2,7 @@ import { loadMicroPython } from "./vendor/micropython/micropython.mjs";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: "./vendor/micropython/micropython.wasm",
+  runtimeBundleUrl: "./runtime-bundle.json",
   runtimeManifestUrl: "./runtime-manifest.json",
   fsRoot: "/apps/micropython",
   pystack: 8 * 1024,
@@ -98,6 +99,15 @@ function reviveBytes(value) {
   return revived;
 }
 
+function decodeBase64(base64) {
+  const decoded = atob(base64);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes;
+}
+
 class MicroPythonRuntime {
   constructor(config) {
     this.config = config;
@@ -135,6 +145,10 @@ class MicroPythonRuntime {
   }
 
   async populateFilesystem() {
+    if (await this.populateFilesystemFromBundle()) {
+      return;
+    }
+
     const response = await fetch(this.config.runtimeManifestUrl, { credentials: "same-origin" });
     if (!response.ok) {
       throw new Error(`Unable to load runtime manifest: ${response.status} ${response.url}`);
@@ -150,6 +164,35 @@ class MicroPythonRuntime {
       this.ensureDir(dirname(targetPath));
       this.mp.FS.writeFile(targetPath, bytes);
     }
+  }
+
+  async populateFilesystemFromBundle() {
+    let response;
+    try {
+      response = await fetch(this.config.runtimeBundleUrl, { credentials: "same-origin" });
+    } catch (_error) {
+      return false;
+    }
+    if (!response.ok) {
+      return false;
+    }
+
+    const bundle = await response.json();
+    if (!bundle || !Array.isArray(bundle.files)) {
+      throw new Error("Invalid runtime bundle format");
+    }
+
+    this.ensureDir("/");
+    this.ensureDir(this.config.fsRoot);
+    for (const entry of bundle.files) {
+      if (!entry || typeof entry.path !== "string" || typeof entry.base64 !== "string") {
+        throw new Error("Invalid runtime bundle entry");
+      }
+      const targetPath = `/${entry.path}`;
+      this.ensureDir(dirname(targetPath));
+      this.mp.FS.writeFile(targetPath, decodeBase64(entry.base64));
+    }
+    return true;
   }
 
   ensureDir(path) {
