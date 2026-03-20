@@ -8,17 +8,37 @@
   const COLUMNS = 256;
   const PIXELS = 54;
   const TRANSPARENT_INDEX = 255;
+  const ROWS = 256;
+  const STARS = COLUMNS / 2;
+  const STAR_COLOR = [64, 64, 64, 255];
   const LED_SIZE = 100;
   const EMPTY_PIXELS = 16;
-  const ROWS = 256 - EMPTY_PIXELS;
+  const DEEPSPACE_ROWS = ROWS - EMPTY_PIXELS;
   const GAMMA = 0.28;
   const DEEPSPACE = new Uint8Array([
     ...new Array(EMPTY_PIXELS).fill(PIXELS),
-    ...Array.from({ length: ROWS }, (_, index) => {
-      const n = ROWS - 1 - index;
-      return Math.round(PIXELS * Math.pow(n / ROWS, 1 / GAMMA));
+    ...Array.from({ length: DEEPSPACE_ROWS }, (_, index) => {
+      const n = DEEPSPACE_ROWS - 1 - index;
+      return Math.round(PIXELS * Math.pow(n / DEEPSPACE_ROWS, 1 / GAMMA));
     }),
   ]);
+
+  function createRng(seed) {
+    let state = seed >>> 0;
+    return function next() {
+      state = (1664525 * state + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  }
+
+  const starfield = (() => {
+    const random = createRng(0x1badf00d);
+    return Array.from({ length: STARS }, () => ({
+      x0: Math.floor(random() * COLUMNS),
+      y0: Math.floor(random() * ROWS),
+      wraps: Array.from({ length: 8 }, () => Math.floor(random() * COLUMNS)),
+    }));
+  })();
 
   function positiveMod(value, modulo) {
     return ((value % modulo) + modulo) % modulo;
@@ -60,18 +80,37 @@
     return positiveMod(frame, totalFrames);
   }
 
+  function drawStarfield(pixels, frameNumber, columnOffset) {
+    const ticks = Math.max(0, Number(frameNumber || 0));
+    for (const star of starfield) {
+      const total = star.y0 - ticks;
+      const wrappedY = positiveMod(total, ROWS);
+      const wrapCount = Math.floor((ticks + (ROWS - 1 - star.y0)) / ROWS);
+      const x = wrapCount <= 0
+        ? star.x0
+        : star.wraps[(wrapCount - 1) % star.wraps.length];
+      const renderColumn = positiveMod(x - columnOffset, COLUMNS);
+      const led = DEEPSPACE[wrappedY];
+      if (led < PIXELS) {
+        setLedColor(pixels, renderColumn, led, STAR_COLOR);
+      }
+    }
+  }
+
   function computeLedFramePixels(frame, assetIndex, palette) {
     const pixels = new Uint8Array(COLUMNS * PIXELS * 4);
     for (let index = 3; index < pixels.length; index += 4) {
       pixels[index] = 255;
     }
 
+    const columnOffset = positiveMod(Number(frame?.column_offset || 0), COLUMNS);
+    drawStarfield(pixels, frame?.frame || 0, columnOffset);
+
     if (!(palette instanceof Uint8Array) || !Array.isArray(frame?.sprites)) {
       return pixels;
     }
 
     const sprites = [...frame.sprites].sort((left, right) => (right.slot || 0) - (left.slot || 0));
-    const columnOffset = positiveMod(Number(frame?.column_offset || 0), COLUMNS);
 
     for (let column = 0; column < COLUMNS; column += 1) {
       const renderColumn = positiveMod(column + columnOffset, COLUMNS);
