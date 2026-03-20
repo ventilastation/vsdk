@@ -49,7 +49,7 @@ class WorkerBridge {
 }
 
 export async function createVentilastationWasmBridge(options = {}) {
-  const workerUrl = options.workerUrl || "./wasm-worker.js";
+  const workerUrl = options.workerUrl || new URL("./wasm-worker.js", import.meta.url).href;
   const worker = new Worker(workerUrl, { type: "module" });
   const bridge = new WorkerBridge(worker);
   return bridge;

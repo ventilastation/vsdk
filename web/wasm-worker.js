@@ -46,6 +46,33 @@ function dirname(path) {
   return index <= 0 ? "/" : normalized.slice(0, index);
 }
 
+function getProjectRootCandidates() {
+  const emulatorBaseUrl = new URL(".", self.location.href);
+  return [
+    emulatorBaseUrl,
+    new URL("../", emulatorBaseUrl),
+  ];
+}
+
+async function fetchFirstAvailable(paths) {
+  const errors = [];
+  for (const baseUrl of getProjectRootCandidates()) {
+    for (const path of paths) {
+      const url = new URL(path.replace(/^\/+/, ""), baseUrl);
+      try {
+        const response = await fetch(url, { credentials: "same-origin" });
+        if (response.ok) {
+          return response;
+        }
+        errors.push(`${response.status} ${url.href}`);
+      } catch (error) {
+        errors.push(`${url.href}: ${error.message || String(error)}`);
+      }
+    }
+  }
+  throw new Error(`Unable to load asset; tried: ${errors.join(", ")}`);
+}
+
 function reviveBytes(value) {
   if (Array.isArray(value)) {
     return value.map(reviveBytes);
@@ -117,11 +144,7 @@ class MicroPythonRuntime {
     this.ensureDir(this.config.fsRoot);
 
     for (const relativePath of manifest.files) {
-      const sourceUrl = new URL(`../${relativePath}`, self.location.href).href;
-      const fileResponse = await fetch(sourceUrl, { credentials: "same-origin" });
-      if (!fileResponse.ok) {
-        throw new Error(`Unable to load runtime file: ${relativePath}`);
-      }
+      const fileResponse = await fetchFirstAvailable([relativePath]);
       const bytes = new Uint8Array(await fileResponse.arrayBuffer());
       const targetPath = `/${relativePath}`;
       this.ensureDir(dirname(targetPath));

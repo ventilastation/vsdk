@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ventilastation Emulator</title>
+  <link rel="icon" type="image/png" href="./web/logo.png">
+  <link rel="stylesheet" href="./web/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="stage-panel">
+      <canvas id="frame-canvas-gl" width="768" height="768"></canvas>
+      <canvas id="frame-canvas-2d" width="768" height="768" hidden></canvas>
+    </section>
+
+    <section class="inspector-panel-shell">
+      <div class="inspector-block">
+        <h1 class="debug-title">Ventilastation Emulator</h1>
+        <div class="debug-meta debug-meta-header">
+          <span><strong>Keyboard</strong> Arrows + Space/O/P/Esc</span>
+        </div>
+        <div class="scene-error-banner" id="scene-error-banner" hidden>
+          <div class="scene-error-copy">
+            <strong id="scene-error-title">Scene lifecycle error</strong>
+            <pre id="scene-error-message"></pre>
+          </div>
+          <div class="scene-error-actions">
+            <button type="button" id="scene-error-debug-button">Open debug</button>
+          </div>
+        </div>
+        <div class="copy-header">
+          <div class="copy-actions">
+            <button type="button" id="toggle-rendering-button" aria-pressed="false">Stop rendering</button>
+            <button type="button" id="toggle-inspector-button" aria-expanded="false">Show debug</button>
+          </div>
+        </div>
+      </div>
+      <section class="inspector-panel" id="inspector-panel" hidden>
+        <div class="inspector-block">
+          <h2>Debug Render</h2>
+          <label>
+            <input type="checkbox" id="force-2d-fallback">
+            Force 2D fallback renderer
+          </label>
+        </div>
+        <div class="inspector-block">
+          <div class="status-row status-row-debug">
+            <span class="status-pill" id="adapter-name">Mock Runtime</span>
+            <span class="status-pill" id="adapter-source">mock</span>
+            <span class="status-pill" id="frame-counter">Frame 0</span>
+            <span class="status-pill" id="button-mask">Buttons 0x00</span>
+          </div>
+          <div class="debug-meta">
+            <span><strong>Canvas</strong> WebGL radial preview</span>
+          </div>
+        </div>
+        <div class="inspector-block runtime-banner" id="runtime-banner" hidden>
+          <h2>Runtime Status</h2>
+          <pre id="runtime-message"></pre>
+        </div>
+        <div class="inspector-block">
+          <div class="copy-header">
+            <h2>Copy Diagnostics</h2>
+            <div class="copy-actions">
+              <button type="button" id="copy-diagnostics-button">Copy</button>
+              <span id="copy-diagnostics-status" aria-live="polite"></span>
+            </div>
+          </div>
+          <textarea id="copy-diagnostics" rows="18" readonly></textarea>
+        </div>
+        <div class="inspector-block">
+          <h2>Runtime</h2>
+          <div id="runtime-summary" class="summary-grid"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="./web/micropython-bridge.js"></script>
+  <script type="module" src="./web/wasm-adapter.js"></script>
+  <script src="./web/led-render-core.js"></script>
+  <script type="module" src="./web/app.js"></script>
+</body>
+</html>

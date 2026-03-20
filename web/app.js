@@ -38,9 +38,31 @@ const INSPECTOR_OPEN_STORAGE_KEY = "ventilastation.inspectorOpen.v2";
 const SCENE_STEP_MS = 30;
 const MAX_CATCH_UP_STEPS = 6;
 const MAX_TICK_BACKLOG_MS = SCENE_STEP_MS * MAX_CATCH_UP_STEPS;
+const EMULATOR_BASE_URL = new URL(".", window.location.href);
+const PROJECT_ROOT_CANDIDATES = [
+  EMULATOR_BASE_URL,
+  new URL("../", EMULATOR_BASE_URL),
+];
 
 function decodePerspective(value) {
   return (value & 0x80) ? value - 0x100 : value;
+}
+
+async function resolveFirstAvailableUrl(paths, { method = "HEAD" } = {}) {
+  for (const baseUrl of PROJECT_ROOT_CANDIDATES) {
+    for (const path of paths) {
+      const url = new URL(path.replace(/^\/+/, ""), baseUrl);
+      try {
+        const response = await fetch(url, { method, credentials: "same-origin" });
+        if (response.ok) {
+          return url.href;
+        }
+      } catch (_error) {
+        // Try the next candidate URL.
+      }
+    }
+  }
+  return null;
 }
 
 function decodeSpriteStateBuffer(buffer) {
@@ -114,21 +136,15 @@ class BrowserAudioHost {
       return this.soundCache.get(normalized);
     }
     const candidates = [
-      `../apps/sounds/${normalized}.mp3`,
-      `../apps/sounds/${normalized}.mp3.wav`,
-      `../apps/sounds/${normalized}.wav`,
-      `../apps/sounds/${normalized}.ogg`,
+      `apps/sounds/${normalized}.mp3`,
+      `apps/sounds/${normalized}.mp3.wav`,
+      `apps/sounds/${normalized}.wav`,
+      `apps/sounds/${normalized}.ogg`,
     ];
-    for (const candidate of candidates) {
-      try {
-        const response = await fetch(candidate, { method: "HEAD", credentials: "same-origin" });
-        if (response.ok) {
-          this.soundCache.set(normalized, candidate);
-          return candidate;
-        }
-      } catch (_error) {
-        // Try next candidate.
-      }
+    const resolved = await resolveFirstAvailableUrl(candidates, { method: "HEAD" });
+    if (resolved) {
+      this.soundCache.set(normalized, resolved);
+      return resolved;
     }
     this.soundCache.set(normalized, null);
     return null;
