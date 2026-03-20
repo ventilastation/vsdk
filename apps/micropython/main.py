@@ -13,14 +13,36 @@ from ventilastation.shuffler import shuffled
 
 # (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
 MAIN_MENU_OPTIONS = [
-        ('ventilagon_game', "menu.png", 1),
+        ('vyruss', "menu.png", 0),
+        ('2bam_sencom', "2bam_sencom.png", 0),
+        ('vasura_espacial', "vasura_espacial.png", 0),
+        # ('gallery', "pollitos.png", 0),
+        ('tincho_vrunner', "tincho_vrunner.png", 0),
+        ('dome_defander', "domedefander.png", 0),
+        ('fanphibious_danger', "fanphibious_danger_2.png", 0),
+        ('peronjam', "peronjam.png", 0),
+        ('aaa', 'aaa.png', 0),
+        ('vailableextreme', "vailableextreme.png", 0),
+        # ('vzumaki', "vzumaki.png", 0),
+        ('vs', "vs.png", 0),
+        # ('oraculo', "oraculo2.png", 0),
+        ('vortris', "vortris.png", 0),
+        ('ventrack', "venti808.png", 0),
+        ('vance', "menu.png", 5),
+        ('vong', "menu.png", 6),
+        ('vugo', "menu.png", 7),
+        ('ventap', "menu.png", 4),
+        # ('vladfarty', "menu.png", 2),
+        ('credits', "menu.png", 3),
+
+        # ('ventilagon_game', "menu.png", 1),
 
     # Jam Online Oct 2025
         # ('dome_defander', "domedefander.png", 0),
         # ('fanphibious_danger', "fanphibious_danger_2.png", 0),
         # ('tincho_vrunner', "tincho_vrunner.png", 0),
         # ('peronjam', "peronjam.png", 0),
-        ('2bam_sencom', "2bam_sencom.png", 0),
+        # ('2bam_sencom', "2bam_sencom.png", 0),
         # ('vajon', "vajon.png", 0),
         # ('2bam_demo', "2bam_demo_menu.png", 0),
         # ('villalugano_games', "villalugano_games.png", 0),
@@ -30,9 +52,9 @@ MAIN_MENU_OPTIONS = [
 
     # 1er Jam 2025
         # ('vortris', "vortris.png", 0),
-        ('vailableextreme', "vailableextreme.png", 0),
+        # ('vailableextreme', "vailableextreme.png", 0),
         # ('vzumaki', "vzumaki.png", 0),
-        ('vasura_espacial', "vasura_espacial.png", 0),
+        # ('vasura_espacial', "vasura_espacial.png", 0),
         # ('vs', "vs.png", 0),
         # ('oraculo', "oraculo2.png", 0),
         # ('tvnel', "tvnel.png", 0),
@@ -50,7 +72,7 @@ MAIN_MENU_OPTIONS = [
         # ('vladfarty', "menu.png", 2),
 
     # Original content
-        ('vyruss', "menu.png", 0),
+        # ('vyruss', "menu.png", 0),
         # ('ventilagon_game', "menu.png", 1),
         # ('ventap', "menu.png", 4),
         # ('credits', "menu.png", 3),
@@ -232,10 +254,10 @@ def setup():
     director.push(main)
 
     # AUTOSTART
-    from apps.ventilagon_game import VentilagonIdle
-    autostart = VentilagonIdle()
-    autostart.call_later(700, autostart.load_images)
-    director.push(autostart)
+    # from apps.ventilagon_game import VentilagonIdle
+    # autostart = VentilagonIdle()
+    # autostart.call_later(700, autostart.load_images)
+    # director.push(autostart)
 
 def main():
     setup()
