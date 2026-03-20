@@ -38,6 +38,7 @@ const INSPECTOR_OPEN_STORAGE_KEY = "ventilastation.inspectorOpen.v2";
 const SCENE_STEP_MS = 30;
 const MAX_CATCH_UP_STEPS = 6;
 const MAX_TICK_BACKLOG_MS = SCENE_STEP_MS * MAX_CATCH_UP_STEPS;
+const TOUCH_STICK_DEAD_ZONE = 0.26;
 const EMULATOR_BASE_URL = new URL(".", window.location.href);
 const PROJECT_ROOT_CANDIDATES = [
   EMULATOR_BASE_URL,
@@ -570,6 +571,8 @@ class BrowserHostApp {
     this.runtime = runtime;
     this.executionError = this.extractProminentError(runtime.error);
     this.currentButtons = 0;
+    this.keyboardButtons = 0;
+    this.touchButtons = 0;
     this.assetIndex = new Map();
     this.assetRenderCache = new Map();
     this.visibleStripSlots = [];
@@ -587,6 +590,7 @@ class BrowserHostApp {
     this.pollRequestId = null;
     this.pollingHalted = false;
     this.renderingPaused = false;
+    this.touchStickPointerId = null;
     this.canvas = document.querySelector("#frame-canvas-gl");
     this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
     this.renderer = new LedRingWebGLRenderer(this.canvas);
@@ -601,6 +605,9 @@ class BrowserHostApp {
       sceneErrorMessage: document.querySelector("#scene-error-message"),
       sceneErrorDebugButton: document.querySelector("#scene-error-debug-button"),
       toggleRenderingButton: document.querySelector("#toggle-rendering-button"),
+      touchStick: document.querySelector("#touch-stick"),
+      touchStickKnob: document.querySelector("#touch-stick-knob"),
+      touchButtons: Array.from(document.querySelectorAll("[data-touch-button]")),
       runtimeBanner: document.querySelector("#runtime-banner"),
       runtimeMessage: document.querySelector("#runtime-message"),
       inspectorPanel: document.querySelector("#inspector-panel"),
@@ -752,8 +759,8 @@ class BrowserHostApp {
         return;
       }
       event.preventDefault();
-      this.currentButtons |= bit;
-      this.adapter.setButtons(this.currentButtons);
+      this.keyboardButtons |= bit;
+      this.syncButtons();
       this.addDiagnostic("input.keydown", { code: event.code, buttons: this.currentButtons });
       this.renderStatus();
     });
@@ -764,18 +771,168 @@ class BrowserHostApp {
         return;
       }
       event.preventDefault();
-      this.currentButtons &= ~bit;
-      this.adapter.setButtons(this.currentButtons);
+      this.keyboardButtons &= ~bit;
+      this.syncButtons();
       this.addDiagnostic("input.keyup", { code: event.code, buttons: this.currentButtons });
       this.renderStatus();
     });
 
     window.addEventListener("blur", () => {
-      this.currentButtons = 0;
-      this.adapter.setButtons(0);
+      this.keyboardButtons = 0;
+      this.touchButtons = 0;
+      this.touchStickPointerId = null;
+      this.renderTouchStick(0, 0);
+      this.renderTouchButtons();
+      this.syncButtons();
       this.addDiagnostic("input.blur", { buttons: 0 });
       this.renderStatus();
     });
+
+    this.bindTouchControls();
+  }
+
+  bindTouchControls() {
+    this.bindTouchStick();
+    this.bindTouchButtons();
+  }
+
+  bindTouchStick() {
+    const stick = this.elements.touchStick;
+    if (!stick) {
+      return;
+    }
+    stick.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse") {
+        return;
+      }
+      event.preventDefault();
+      this.audio.enable();
+      this.touchStickPointerId = event.pointerId;
+      stick.setPointerCapture(event.pointerId);
+      this.updateTouchStickFromPoint(event.clientX, event.clientY);
+    });
+    stick.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== this.touchStickPointerId) {
+        return;
+      }
+      event.preventDefault();
+      this.updateTouchStickFromPoint(event.clientX, event.clientY);
+    });
+    const releaseStick = (event) => {
+      if (event.pointerId !== this.touchStickPointerId) {
+        return;
+      }
+      event.preventDefault();
+      this.touchStickPointerId = null;
+      this.setTouchDirection(0, 0, 0);
+    };
+    stick.addEventListener("pointerup", releaseStick);
+    stick.addEventListener("pointercancel", releaseStick);
+  }
+
+  bindTouchButtons() {
+    for (const button of this.elements.touchButtons) {
+      const buttonName = button.dataset.touchButton;
+      const bit = BUTTONS[buttonName];
+      if (!bit) {
+        continue;
+      }
+      const setPressed = (pressed) => {
+        if (pressed) {
+          this.touchButtons |= bit;
+        } else {
+          this.touchButtons &= ~bit;
+        }
+        button.classList.toggle("is-pressed", pressed);
+        this.syncButtons();
+        this.renderStatus();
+      };
+      button.addEventListener("pointerdown", (event) => {
+        if (event.pointerType === "mouse") {
+          return;
+        }
+        event.preventDefault();
+        this.audio.enable();
+        button.setPointerCapture(event.pointerId);
+        setPressed(true);
+      });
+      const release = (event) => {
+        event.preventDefault();
+        setPressed(false);
+      };
+      button.addEventListener("pointerup", release);
+      button.addEventListener("pointercancel", release);
+    }
+  }
+
+  updateTouchStickFromPoint(clientX, clientY) {
+    const stick = this.elements.touchStick;
+    if (!stick) {
+      return;
+    }
+    const rect = stick.getBoundingClientRect();
+    const centerX = rect.left + rect.width * 0.5;
+    const centerY = rect.top + rect.height * 0.5;
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    const radius = rect.width * 0.34;
+    const distance = Math.hypot(dx, dy);
+    const clampedDistance = Math.min(distance, radius);
+    const angle = distance > 0 ? Math.atan2(dy, dx) : 0;
+    const knobX = Math.cos(angle) * clampedDistance;
+    const knobY = Math.sin(angle) * clampedDistance;
+    this.setTouchDirection(knobX, knobY, radius);
+  }
+
+  setTouchDirection(knobX, knobY, radius) {
+    const magnitude = radius > 0 ? Math.min(1, Math.hypot(knobX, knobY) / radius) : 0;
+    let directionMask = 0;
+    if (magnitude >= TOUCH_STICK_DEAD_ZONE) {
+      const normalizedX = knobX / radius;
+      const normalizedY = knobY / radius;
+      if (normalizedX <= -0.35) {
+        directionMask |= BUTTONS.JOY_LEFT;
+      }
+      if (normalizedX >= 0.35) {
+        directionMask |= BUTTONS.JOY_RIGHT;
+      }
+      if (normalizedY <= -0.35) {
+        directionMask |= BUTTONS.JOY_UP;
+      }
+      if (normalizedY >= 0.35) {
+        directionMask |= BUTTONS.JOY_DOWN;
+      }
+    }
+    this.touchButtons &= ~(BUTTONS.JOY_LEFT | BUTTONS.JOY_RIGHT | BUTTONS.JOY_UP | BUTTONS.JOY_DOWN);
+    this.touchButtons |= directionMask;
+    this.renderTouchStick(knobX, knobY);
+    this.syncButtons();
+    this.renderStatus();
+  }
+
+  renderTouchStick(x, y) {
+    const knob = this.elements.touchStickKnob;
+    if (!knob) {
+      return;
+    }
+    knob.style.setProperty("--stick-x", `${Math.round(x)}px`);
+    knob.style.setProperty("--stick-y", `${Math.round(y)}px`);
+  }
+
+  renderTouchButtons() {
+    for (const button of this.elements.touchButtons) {
+      const buttonName = button.dataset.touchButton;
+      const bit = BUTTONS[buttonName];
+      if (!bit) {
+        continue;
+      }
+      button.classList.toggle("is-pressed", Boolean(this.touchButtons & bit));
+    }
+  }
+
+  syncButtons() {
+    this.currentButtons = (this.keyboardButtons | this.touchButtons) & 0xff;
+    this.adapter.setButtons(this.currentButtons);
   }
 
   bindVisibility() {
