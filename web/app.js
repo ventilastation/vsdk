@@ -781,8 +781,6 @@ class BrowserHostApp {
       this.keyboardButtons = 0;
       this.touchButtons = 0;
       this.touchStickPointerId = null;
-      this.renderTouchStick(0, 0);
-      this.renderTouchButtons();
       this.syncButtons();
       this.addDiagnostic("input.blur", { buttons: 0 });
       this.renderStatus();
@@ -843,7 +841,6 @@ class BrowserHostApp {
         } else {
           this.touchButtons &= ~bit;
         }
-        button.classList.toggle("is-pressed", pressed);
         this.syncButtons();
         this.renderStatus();
       };
@@ -926,13 +923,46 @@ class BrowserHostApp {
       if (!bit) {
         continue;
       }
-      button.classList.toggle("is-pressed", Boolean(this.touchButtons & bit));
+      button.classList.toggle("is-pressed", Boolean(this.currentButtons & bit));
     }
+  }
+
+  renderTouchStickFromButtons() {
+    const stick = this.elements.touchStick;
+    if (!stick) {
+      return;
+    }
+    let x = 0;
+    let y = 0;
+    if (this.currentButtons & BUTTONS.JOY_LEFT) {
+      x -= 1;
+    }
+    if (this.currentButtons & BUTTONS.JOY_RIGHT) {
+      x += 1;
+    }
+    if (this.currentButtons & BUTTONS.JOY_UP) {
+      y -= 1;
+    }
+    if (this.currentButtons & BUTTONS.JOY_DOWN) {
+      y += 1;
+    }
+    if (!x && !y) {
+      this.renderTouchStick(0, 0);
+      return;
+    }
+    const magnitude = Math.hypot(x, y) || 1;
+    const visualRadius = stick.getBoundingClientRect().width * 0.2;
+    this.renderTouchStick(
+      (x / magnitude) * visualRadius,
+      (y / magnitude) * visualRadius,
+    );
   }
 
   syncButtons() {
     this.currentButtons = (this.keyboardButtons | this.touchButtons) & 0xff;
     this.adapter.setButtons(this.currentButtons);
+    this.renderTouchButtons();
+    this.renderTouchStickFromButtons();
   }
 
   bindVisibility() {
