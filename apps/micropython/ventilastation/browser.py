@@ -32,17 +32,6 @@ def export_frame(full=False):
     gc.collect()
     return _browser_platform().display.export_frame(full=full)
 
-def export_palette_chunk(offset=0, chunk_size=2048):
-    return None
-
-
-def export_assets(full=False, max_items=None):
-    return []
-
-
-def export_asset_chunk(slot, offset=0, chunk_size=2048):
-    return None
-
 
 def export_storage():
     return _browser_platform().storage.export_state()

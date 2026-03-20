@@ -36,33 +36,6 @@ const {
 const FORCE_2D_STORAGE_KEY = "ventilastation.force2dFallback";
 const INSPECTOR_OPEN_STORAGE_KEY = "ventilastation.inspectorOpen.v2";
 
-function decodeSigned16(low, high) {
-  let value = low | (high << 8);
-  if (value & 0x8000) {
-    value -= 0x10000;
-  }
-  return value;
-}
-
-function decodeLegacySpriteBuffer(buffer) {
-  if (!(buffer instanceof Uint8Array)) {
-    return [];
-  }
-  const stride = 9;
-  const sprites = [];
-  for (let offset = 0; offset + stride <= buffer.length; offset += stride) {
-    sprites.push({
-      slot: buffer[offset],
-      frame: buffer[offset + 1],
-      image_strip: buffer[offset + 2] | (buffer[offset + 3] << 8),
-      x: decodeSigned16(buffer[offset + 4], buffer[offset + 5]),
-      y: decodeSigned16(buffer[offset + 6], buffer[offset + 7]),
-      perspective: (buffer[offset + 8] & 0x80) ? buffer[offset + 8] - 0x100 : buffer[offset + 8],
-    });
-  }
-  return sprites;
-}
-
 function decodePerspective(value) {
   return (value & 0x80) ? value - 0x100 : value;
 }
@@ -113,6 +86,115 @@ function decodeImageStripPayload(slot, payload) {
     loadedBytes: data.length,
     data,
   };
+}
+
+class BrowserAudioHost {
+  constructor() {
+    this.enabled = false;
+    this.musicPlayer = null;
+    this.soundCache = new Map();
+    this.pendingMusic = null;
+  }
+
+  enable() {
+    this.enabled = true;
+    if (this.pendingMusic !== null) {
+      const name = this.pendingMusic;
+      this.pendingMusic = null;
+      this.playMusic(name);
+    }
+  }
+
+  async resolveUrl(name) {
+    const normalized = String(name).replace(/^\/+/, "");
+    if (this.soundCache.has(normalized)) {
+      return this.soundCache.get(normalized);
+    }
+    const candidates = [
+      `../apps/sounds/${normalized}.mp3`,
+      `../apps/sounds/${normalized}.mp3.wav`,
+      `../apps/sounds/${normalized}.wav`,
+      `../apps/sounds/${normalized}.ogg`,
+    ];
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(candidate, { method: "HEAD", credentials: "same-origin" });
+        if (response.ok) {
+          this.soundCache.set(normalized, candidate);
+          return candidate;
+        }
+      } catch (_error) {
+        // Try next candidate.
+      }
+    }
+    this.soundCache.set(normalized, null);
+    return null;
+  }
+
+  async playSound(name) {
+    if (!this.enabled) {
+      return;
+    }
+    const url = await this.resolveUrl(name);
+    if (!url) {
+      return;
+    }
+    const audio = new Audio(url);
+    audio.preload = "auto";
+    try {
+      await audio.play();
+    } catch (_error) {
+      return;
+    }
+  }
+
+  async playMusic(name) {
+    if (name === "off") {
+      this.stopMusic();
+      return;
+    }
+    if (!this.enabled) {
+      this.pendingMusic = name;
+      return;
+    }
+    const url = await this.resolveUrl(name);
+    if (!url) {
+      return;
+    }
+    this.stopMusic();
+    const audio = new Audio(url);
+    audio.preload = "auto";
+    this.musicPlayer = audio;
+    try {
+      await audio.play();
+    } catch (_error) {
+      if (this.musicPlayer === audio) {
+        this.pendingMusic = name;
+      }
+    }
+  }
+
+  async playNotes(folder, notes) {
+    if (!this.enabled) {
+      return;
+    }
+    for (const note of notes.split(";")) {
+      if (!note) {
+        continue;
+      }
+      this.playSound(`${folder}/${note}`);
+    }
+  }
+
+  stopMusic() {
+    this.pendingMusic = null;
+    if (!this.musicPlayer) {
+      return;
+    }
+    this.musicPlayer.pause();
+    this.musicPlayer.currentTime = 0;
+    this.musicPlayer = null;
+  }
 }
 
 class LedRingWebGLRenderer {
@@ -451,6 +533,7 @@ class BrowserHostApp {
     this.lastFrameShape = null;
     this.lastRenderedLedPixels = null;
     this.diagnostics = [];
+    this.audio = new BrowserAudioHost();
     this.force2dFallback = this.readForce2dPreference();
     this.inspectorOpen = this.readInspectorPreference();
     this.canvas = document.querySelector("#frame-canvas");
@@ -506,6 +589,20 @@ class BrowserHostApp {
       if (!event || typeof event !== "object") {
         continue;
       }
+      if (event.command === "sound") {
+        this.audio.playSound((event.args || []).join(" "));
+        continue;
+      }
+      if (event.command === "music") {
+        this.audio.playMusic((event.args || []).join(" "));
+        continue;
+      }
+      if (event.command === "notes") {
+        const folder = event.args?.[0] || "";
+        const notes = event.args?.[1] || "";
+        this.audio.playNotes(folder, notes);
+        continue;
+      }
       if (event.command === "palette" && event.data instanceof Uint8Array) {
         this.palette = event.data;
         this.paletteLoadedBytes = event.data.length;
@@ -554,7 +651,10 @@ class BrowserHostApp {
   }
 
   bindInput() {
+    const enableAudio = () => this.audio.enable();
+    window.addEventListener("pointerdown", enableAudio, { once: true });
     window.addEventListener("keydown", (event) => {
+      this.audio.enable();
       const bit = KEY_TO_BUTTON.get(event.code);
       if (!bit) {
         return;
@@ -735,8 +835,6 @@ class BrowserHostApp {
       }
       if (this.usesEventStreamProtocol(frame)) {
         this.processFrameEvents(frame);
-      } else if (frame.sprites instanceof Uint8Array) {
-        frame.sprites = decodeLegacySpriteBuffer(frame.sprites);
       } else if (!Array.isArray(frame.sprites)) {
         frame.sprites = [];
       }
@@ -776,205 +874,6 @@ class BrowserHostApp {
       console.error("Frame polling failed", error);
     } finally {
       window.setTimeout(() => this.pollFrame(false), 33);
-    }
-  }
-
-  async drainPaletteUpdates(frame) {
-    if (!(this.palette instanceof Uint8Array) && frame.palette instanceof Uint8Array) {
-      this.palette = frame.palette;
-      this.paletteVersion = Number(frame.palette_version || 0);
-      this.paletteLoadedBytes = frame.palette.length;
-    }
-    if (typeof this.adapter.exportPaletteChunk !== "function") {
-      return;
-    }
-    const paletteLength = Number(frame.palette_length || 0);
-    const paletteVersion = Number(frame.palette_version || 0);
-    const paletteDirty = Boolean(frame.palette_dirty);
-    if (!paletteLength) {
-      return;
-    }
-    if (!(this.palette instanceof Uint8Array) || this.palette.length !== paletteLength || this.paletteVersion !== paletteVersion) {
-      this.palette = new Uint8Array(paletteLength);
-      this.paletteVersion = paletteVersion;
-      this.paletteLoadedBytes = 0;
-      this.assetChunkQueue = [];
-      this.assetChunkInFlight = false;
-      this.assetRenderCache.clear();
-    }
-    if (!paletteDirty && this.paletteLoadedBytes >= paletteLength) {
-      return;
-    }
-    if (this.paletteLoadInFlight) {
-      return;
-    }
-    this.paletteLoadInFlight = true;
-    try {
-      let iterations = 0;
-      while (this.paletteLoadedBytes < paletteLength && iterations < 4) {
-        const chunk = await Promise.resolve(
-          this.adapter.exportPaletteChunk({ offset: this.paletteLoadedBytes, chunkSize: 2048 })
-        );
-        if (!chunk || !(chunk.data instanceof Uint8Array)) {
-          return;
-        }
-        this.palette.set(chunk.data, chunk.offset);
-        this.paletteLoadedBytes = chunk.offset + chunk.data.length;
-        iterations += 1;
-      }
-    } finally {
-      this.paletteLoadInFlight = false;
-    }
-  }
-
-  async drainAssetUpdates(full = false) {
-    if (typeof this.adapter.exportAssets !== "function" && Array.isArray(this.lastFrame?.assets) && this.lastFrame.assets.length) {
-      for (const asset of this.lastFrame.assets) {
-        this.assetIndex.set(asset.slot, {
-          ...asset,
-          dataLength: asset.data?.length ?? 0,
-          data: asset.data ?? null,
-          loadedBytes: asset.data?.length ?? 0,
-        });
-      }
-      return;
-    }
-    if (typeof this.adapter.exportAssets !== "function") {
-      return;
-    }
-    const needsVisibleAsset = this.visibleStripSlots.some((slot) => {
-      const asset = this.assetIndex.get(slot);
-      return !asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength;
-    });
-    if (!full && !needsVisibleAsset && this.assetChunkQueue.length === 0 && (this.assetMetadataPollFrame % 12) !== 0) {
-      return;
-    }
-    const maxItems = full ? 1 : 2;
-    for (;;) {
-      const assets = await Promise.resolve(this.adapter.exportAssets({ full: false, maxItems }));
-      if (!Array.isArray(assets) || assets.length === 0) {
-        return;
-      }
-      for (const asset of assets) {
-        const existing = this.assetIndex.get(asset.slot);
-        const dataLength = asset.data_length ?? existing?.dataLength ?? 0;
-        const metadataChanged = !existing ||
-          existing.width !== asset.width ||
-          existing.height !== asset.height ||
-          existing.frames !== asset.frames ||
-          existing.palette !== asset.palette ||
-          existing.dataLength !== dataLength;
-        const normalized = {
-          ...existing,
-          ...asset,
-          dataLength,
-          data: metadataChanged ? null : (existing?.data ?? null),
-          loadedBytes: metadataChanged ? 0 : (existing?.loadedBytes ?? 0),
-        };
-        if (metadataChanged || !(normalized.data instanceof Uint8Array) || normalized.data.length !== normalized.dataLength) {
-          normalized.data = new Uint8Array(normalized.dataLength);
-          normalized.loadedBytes = 0;
-        }
-        this.assetIndex.set(asset.slot, normalized);
-        this.assetRenderCache.delete(asset.slot);
-        this.queueAssetForLoading(asset.slot);
-      }
-      await this.drainAssetChunks();
-      if (assets.length < maxItems) {
-        return;
-      }
-    }
-  }
-
-  queueAssetForLoading(slot) {
-    if (this.assetChunkQueue.includes(slot)) {
-      return;
-    }
-    const asset = this.assetIndex.get(slot);
-    if (!asset || !asset.dataLength || asset.loadedBytes >= asset.dataLength) {
-      return;
-    }
-    this.assetChunkQueue.push(slot);
-  }
-
-  prioritizeVisibleAssetChunks() {
-    if (!this.visibleStripSlots.length || !this.assetChunkQueue.length) {
-      return;
-    }
-    const priority = [];
-    const remaining = [];
-    for (const slot of this.assetChunkQueue) {
-      if (this.visibleStripSlots.includes(slot)) {
-        priority.push(slot);
-      } else {
-        remaining.push(slot);
-      }
-    }
-    for (const slot of this.visibleStripSlots) {
-      if (!priority.includes(slot)) {
-        const asset = this.assetIndex.get(slot);
-        if (asset && asset.dataLength && asset.loadedBytes < asset.dataLength) {
-          priority.push(slot);
-        }
-      }
-    }
-    this.assetChunkQueue = [...priority, ...remaining];
-  }
-
-  async drainAssetChunks() {
-    if (this.assetChunkInFlight || typeof this.adapter.exportAssetChunk !== "function") {
-      return;
-    }
-    this.assetChunkInFlight = true;
-    try {
-      this.prioritizeVisibleAssetChunks();
-      const hasPendingVisibleAsset = this.visibleStripSlots.some((slot) => {
-        const asset = this.assetIndex.get(slot);
-        return asset && asset.dataLength && asset.loadedBytes < asset.dataLength;
-      });
-      const maxIterations = hasPendingVisibleAsset ? 12 : 6;
-      let iterations = 0;
-      while (this.assetChunkQueue.length && iterations < maxIterations) {
-        const slot = this.assetChunkQueue.shift();
-        const asset = this.assetIndex.get(slot);
-        if (!asset || !asset.dataLength || asset.loadedBytes >= asset.dataLength) {
-          iterations += 1;
-          continue;
-        }
-        const chunk = await Promise.resolve(
-          this.adapter.exportAssetChunk(slot, { offset: asset.loadedBytes, chunkSize: 2048 })
-        );
-        if (!chunk || !(chunk.data instanceof Uint8Array)) {
-          iterations += 1;
-          continue;
-        }
-        if (!(asset.data instanceof Uint8Array) || chunk.total_length !== asset.dataLength) {
-          asset.dataLength = chunk.total_length;
-          asset.data = new Uint8Array(asset.dataLength);
-          asset.loadedBytes = 0;
-        }
-        if (chunk.offset < 0 || chunk.offset + chunk.data.length > asset.data.length) {
-          this.addDiagnostic("asset.chunk_bounds", {
-            slot,
-            offset: chunk.offset,
-            chunkLength: chunk.data.length,
-            dataLength: asset.data.length,
-            totalLength: chunk.total_length,
-          });
-          iterations += 1;
-          continue;
-        }
-        asset.data.set(chunk.data, chunk.offset);
-        asset.loadedBytes = chunk.offset + chunk.data.length;
-        this.assetIndex.set(slot, asset);
-        this.assetRenderCache.delete(slot);
-        if (asset.loadedBytes < asset.dataLength) {
-          this.assetChunkQueue.push(slot);
-        }
-        iterations += 1;
-      }
-    } finally {
-      this.assetChunkInFlight = false;
     }
   }
 

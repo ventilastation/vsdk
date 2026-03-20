@@ -3,30 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ventilastation Browser Host</title>
+  <title>Ventilastation Emulator</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <main class="app-shell">
     <section class="stage-panel">
-      <div class="panel-header">
-        <h1>Ventilastation Browser Host</h1>
-        <div class="status-row">
-          <span class="status-pill" id="adapter-name">Mock Runtime</span>
-          <span class="status-pill" id="adapter-source">mock</span>
-          <span class="status-pill" id="frame-counter">Frame 0</span>
-          <span class="status-pill" id="button-mask">Buttons 0x00</span>
-        </div>
-      </div>
-      <div class="inspector-block runtime-banner" id="runtime-banner" hidden>
-        <h2>Runtime Status</h2>
-        <pre id="runtime-message"></pre>
-      </div>
       <canvas id="frame-canvas" width="768" height="768"></canvas>
-      <div class="legend">
-        <span><strong>Keyboard</strong> Arrows + A/B/C/D</span>
-        <span><strong>Canvas</strong> WebGL radial preview</span>
-      </div>
     </section>
 
     <section class="inspector-panel-shell">
@@ -39,6 +22,23 @@
         </div>
       </div>
     <section class="inspector-panel" id="inspector-panel" hidden>
+      <div class="inspector-block">
+        <h1 class="debug-title">Ventilastation Emulator</h1>
+        <div class="status-row status-row-debug">
+          <span class="status-pill" id="adapter-name">Mock Runtime</span>
+          <span class="status-pill" id="adapter-source">mock</span>
+          <span class="status-pill" id="frame-counter">Frame 0</span>
+          <span class="status-pill" id="button-mask">Buttons 0x00</span>
+        </div>
+        <div class="debug-meta">
+          <span><strong>Keyboard</strong> Arrows + Space/O/P/Esc</span>
+          <span><strong>Canvas</strong> WebGL radial preview</span>
+        </div>
+      </div>
+      <div class="inspector-block runtime-banner" id="runtime-banner" hidden>
+        <h2>Runtime Status</h2>
+        <pre id="runtime-message"></pre>
+      </div>
       <div class="inspector-block">
         <div class="copy-header">
           <h2>Copy Diagnostics</h2>

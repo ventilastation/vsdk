@@ -8,6 +8,7 @@
   --accent-2: #ffd166;
   --danger: #ff6b6b;
   --canvas: #06080c;
+  --sidebar-width: 380px;
 }
 
 * {
@@ -30,12 +31,12 @@ body {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 420px);
-  gap: 20px;
-  padding: 20px;
+  grid-template-columns: 100vh minmax(320px, var(--sidebar-width));
+  gap: 0;
+  min-height: 100vh;
+  align-items: start;
 }
 
-.stage-panel,
 .inspector-panel {
   background: rgba(23, 27, 34, 0.82);
   border: 1px solid var(--panel-border);
@@ -45,7 +46,10 @@ body {
 }
 
 .stage-panel {
-  padding: 18px;
+  width: 100vh;
+  height: 100vh;
+  padding: 0;
+  margin: 0;
 }
 
 .runtime-banner {
@@ -62,15 +66,7 @@ body {
   background: rgba(80, 57, 10, 0.24);
 }
 
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: start;
-  margin-bottom: 16px;
-}
-
-.panel-header h1,
+.debug-title,
 .inspector-block h2 {
   margin: 0;
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
@@ -83,7 +79,11 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: end;
+  justify-content: start;
+}
+
+.status-row-debug {
+  margin-top: 12px;
 }
 
 .status-pill {
@@ -96,23 +96,28 @@ body {
 }
 
 #frame-canvas {
-  width: 100%;
-  aspect-ratio: 1;
+  width: 100vh;
+  height: 100vh;
   display: block;
   background:
     radial-gradient(circle at center, rgba(83, 209, 182, 0.06), transparent 52%),
     var(--canvas);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0;
+  border: none;
 }
 
-.legend {
+.debug-meta {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 14px;
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.inspector-panel-shell {
+  padding: 12px;
+  min-height: 100vh;
 }
 
 .inspector-panel {
@@ -216,18 +221,23 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .panel-header,
-  .legend,
-  .copy-header {
-    flex-direction: column;
+  .stage-panel,
+  #frame-canvas {
+    width: 100vw;
+    height: 100vw;
   }
 
-  .status-row {
-    justify-content: start;
+  .debug-meta,
+  .copy-header {
+    flex-direction: column;
   }
 
   .copy-actions {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .inspector-panel-shell {
+    min-height: auto;
   }
 }

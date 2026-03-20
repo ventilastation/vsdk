@@ -1,5 +1,7 @@
 import gc
+import io
 import struct
+import sys
 import uos
 import utime
 
@@ -56,13 +58,43 @@ class Director:
             gc.collect()
         self.platform.sprites.reset_sprites()
 
+    def _report_exception(self, error):
+        try:
+            buf = io.StringIO()
+            sys.print_exception(error, buf)
+            content = buf.getvalue().encode("utf-8")
+        except Exception:
+            content = (str(error) + "\n").encode("utf-8")
+        self.report_traceback(content)
+
+    def _enter_scene(self, scene):
+        scene._vs_entered = False
+        try:
+            scene.on_enter()
+        except Exception as error:
+            self._report_exception(error)
+            raise
+        scene._vs_entered = True
+
     def push(self, scene):
-        if self.scene_stack:
-            self.scene_stack[-1].on_exit()
+        previous = self.scene_stack[-1] if self.scene_stack else None
+        if previous:
+            previous.on_exit()
         self.scene_stack.append(scene)
         self.platform.sprites.reset_sprites()
         gc.collect()
-        scene.on_enter()
+        try:
+            self._enter_scene(scene)
+        except Exception:
+            self.scene_stack.pop()
+            self.platform.sprites.reset_sprites()
+            if previous:
+                try:
+                    gc.collect()
+                    self._enter_scene(previous)
+                except Exception:
+                    self.scene_stack.pop()
+            raise
 
     def pop(self):
         scene = self.scene_stack.pop()
@@ -71,7 +103,11 @@ class Director:
             self.music_off()
         self.platform.sprites.reset_sprites()
         if self.scene_stack:
-            self.scene_stack[-1].on_enter()
+            try:
+                self._enter_scene(self.scene_stack[-1])
+            except Exception:
+                self.scene_stack.pop()
+                raise
         return scene
 
     def is_pressed(self, button):
@@ -186,6 +222,22 @@ class Director:
 
         scene = self.scene_stack[-1]
         now = utime.ticks_ms()
+
+        if not getattr(scene, "_vs_entered", False):
+            self.platform.sprites.reset_sprites()
+            gc.collect()
+            try:
+                self._enter_scene(scene)
+            except Exception:
+                self.scene_stack.pop()
+                self.platform.sprites.reset_sprites()
+                if self.scene_stack:
+                    try:
+                        gc.collect()
+                        self._enter_scene(self.scene_stack[-1])
+                    except Exception:
+                        self.scene_stack.pop()
+                raise
 
         val = self.platform.comms.receive(1)
         if val:

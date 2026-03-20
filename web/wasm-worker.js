@@ -36,7 +36,7 @@ def __vs_bridge_call(module_name, function_name, args_json):
     function = getattr(module, function_name)
     args = json.loads(args_json)
     result = function(*args)
-    binary_mode = "base64" if function_name in ("export_asset_chunk", "export_palette_chunk", "export_frame") else "meta"
+    binary_mode = "base64" if function_name == "export_frame" else "meta"
     return json.dumps(_vs_serialize(result, binary_mode))
 `;
 

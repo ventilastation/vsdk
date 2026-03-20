@@ -39,20 +39,8 @@ __vs_browser.boot_main()
     return this.bridge.call("ventilastation.browser", "export_frame", full);
   }
 
-  exportPaletteChunk({ offset = 0, chunkSize = 2048 } = {}) {
-    return this.bridge.call("ventilastation.browser", "export_palette_chunk", offset, chunkSize);
-  }
-
   tick(count = 1) {
     return this.bridge.call("ventilastation.browser", "tick", count);
-  }
-
-  exportAssets({ full = false, maxItems = null } = {}) {
-    return this.bridge.call("ventilastation.browser", "export_assets", full, maxItems);
-  }
-
-  exportAssetChunk(slot, { offset = 0, chunkSize = 2048 } = {}) {
-    return this.bridge.call("ventilastation.browser", "export_asset_chunk", slot, offset, chunkSize);
   }
 
   exportStorage() {

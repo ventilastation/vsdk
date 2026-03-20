@@ -57,17 +57,6 @@ class TimedScene(Scene):
     def finish_scene(self):
         director.pop()
 
-    def ensure_animation_state(self):
-        if not hasattr(self, "animation_frames"):
-            self.animation_frames = 0
-        if not hasattr(self, "current_sprites"):
-            self.current_sprites = []
-        if not hasattr(self, "animations"):
-            return False
-        if not hasattr(self, "current_animation"):
-            self.current_animation = 0
-        return True
-
 
 class Gallery(Scene):
     def __init__(self):
@@ -308,8 +297,6 @@ class Bambi(TimedScene):
         self.current_animation = (self.current_animation + 1) % len(self.animations)
 
     def step(self):
-        if not self.ensure_animation_state():
-            return
         self.animation_frames += 1
 
         new_sprites = [] 
@@ -351,8 +338,6 @@ class PlacaBambi(TimedScene):
         self.current_animation = (self.current_animation + 1) % len(self.animations)
 
     def step(self):
-        if not self.ensure_animation_state():
-            return
         self.animation_frames += 1
 
         new_sprites = [] 
@@ -399,8 +384,6 @@ class Rose(TimedScene):
         self.current_animation = (self.current_animation + 1) % len(self.animations)
 
     def step(self):
-        if not self.ensure_animation_state():
-            return
         self.animation_frames += 1
 
         new_sprites = [] 
@@ -450,8 +433,6 @@ class MilaLHHL(TimedScene):
         self.current_animation = (self.current_animation + 1) % len(self.animations)
 
     def step(self):
-        if not self.ensure_animation_state():
-            return
         self.animation_frames += 1
 
         new_sprites = [] 
@@ -484,10 +465,6 @@ class Bembidiona(TimedScene):
         self.jere.set_frame(0)
 
     def step(self):
-        if not hasattr(self, "animation_frames"):
-            self.animation_frames = 0
-        if not hasattr(self, "pollitos"):
-            return
         self.animation_frames += 1
         pf = (self.animation_frames // 4) % 5
         self.pollitos.set_frame(pf)

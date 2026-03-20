@@ -222,9 +222,6 @@ class BrowserDisplay(NullDisplay):
         self.comms = comms
         self.gamma_mode = 1
         self.frame = 0
-        self.palette_dirty = False
-        self.palette_version = 0
-        self.palette = b""
         self.sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
         self._frame_export = {
             "frame": 0,
@@ -239,10 +236,8 @@ class BrowserDisplay(NullDisplay):
         self.gamma_mode = mode
 
     def set_palettes(self, palette):
-        self.palette = bytes(palette)
-        self.palette_dirty = True
-        self.palette_version += 1
-        self.comms.send(b"palette %d" % (len(self.palette) // 1024), self.palette)
+        palette = bytes(palette)
+        self.comms.send(b"palette %d" % (len(palette) // 1024), palette)
 
     def getaddress(self, sprite_num):
         return uctypes.addressof(self.sprite_data) + sprite_num * 5
@@ -262,178 +257,6 @@ class BrowserDisplay(NullDisplay):
         exported["gamma_mode"] = self.gamma_mode
         exported["events"] = self.comms.drain_events()
         return exported
-
-    def export_palette_chunk(self, offset=0, chunk_size=2048):
-        if offset < 0:
-            offset = 0
-        end = offset + chunk_size
-        chunk = self.palette[offset:end]
-        if end >= len(self.palette):
-            self.palette_dirty = False
-        return {
-            "offset": offset,
-            "total_length": len(self.palette),
-            "version": self.palette_version,
-            "data": bytes(chunk),
-        }
-
-
-class BrowserSprites(HeadlessSprites):
-    def __init__(self):
-        super().__init__()
-        self._dirty_strips = set()
-        self._dirty_strip_order = []
-        self._sprite_exports = []
-        self._active_sprite_exports = []
-        self._asset_exports = {}
-        self._active_asset_exports = []
-        self._sprite_binary = bytearray()
-        self._active_sprite_count = 0
-
-    def new_state(self):
-        state = super().new_state()
-        self._sprite_exports.append({
-            "slot": state["slot"],
-            "x": 0,
-            "y": 0,
-            "image_strip": 0,
-            "frame": 255,
-            "perspective": 1,
-        })
-        return state
-
-    def reset_sprites(self):
-        super().reset_sprites()
-        self._sprite_exports = []
-        self._active_sprite_exports = []
-        self._active_asset_exports = []
-        self._sprite_binary = bytearray()
-        self._active_sprite_count = 0
-
-    def set_imagestrip(self, number, stripmap):
-        width = stripmap[0]
-        height = stripmap[1]
-        frames = stripmap[2]
-        palette = stripmap[3]
-        if width == 255:
-            width = 256
-        self.stripes[number] = {
-            "width": width,
-            "height": height,
-            "frames": frames,
-            "palette": palette,
-            "data": bytes(stripmap[4:]),
-        }
-        if number not in self._dirty_strips:
-            self._dirty_strips.add(number)
-            self._dirty_strip_order.append(number)
-
-    def export_assets(self, full=False, max_items=None):
-        if full:
-            strip_numbers = sorted(self.stripes.keys())
-        else:
-            if max_items is None:
-                strip_numbers = self._dirty_strip_order[:]
-            else:
-                strip_numbers = self._dirty_strip_order[:max_items]
-        if max_items is not None:
-            strip_numbers = strip_numbers[:max_items]
-
-        assets = self._active_asset_exports
-        del assets[:]
-        for number in strip_numbers:
-            strip = self.stripes[number]
-            exported = self._asset_exports.get(number)
-            if exported is None:
-                exported = {
-                    "slot": number,
-                    "width": 0,
-                    "height": 0,
-                    "frames": 0,
-                    "palette": 0,
-                    "data_length": 0,
-                }
-                self._asset_exports[number] = exported
-            exported["slot"] = number
-            exported["width"] = strip["width"]
-            exported["height"] = strip["height"]
-            exported["frames"] = strip["frames"]
-            exported["palette"] = strip["palette"]
-            exported["data_length"] = len(strip["data"])
-            assets.append(exported)
-
-        if not full:
-            for number in strip_numbers:
-                self._dirty_strips.discard(number)
-            if strip_numbers:
-                del self._dirty_strip_order[:len(strip_numbers)]
-        return assets
-
-    def export_asset_chunk(self, slot, offset=0, chunk_size=2048):
-        strip = self.stripes.get(slot)
-        if strip is None:
-            return None
-        data = strip["data"]
-        if offset < 0:
-            offset = 0
-        end = offset + chunk_size
-        return {
-            "slot": slot,
-            "offset": offset,
-            "total_length": len(data),
-            "data": bytes(data[offset:end]),
-        }
-
-    def export_sprites(self):
-        exported = self._active_sprite_exports
-        del exported[:]
-        for index, state in enumerate(self._sprites):
-            if state["frame"] == 255:
-                continue
-            snapshot = self._sprite_exports[index]
-            snapshot["slot"] = state["slot"]
-            snapshot["x"] = state["x"]
-            snapshot["y"] = state["y"]
-            snapshot["image_strip"] = state["image_strip"]
-            snapshot["frame"] = state["frame"]
-            snapshot["perspective"] = state["perspective"]
-            exported.append(snapshot)
-        return exported
-
-    def active_sprite_count(self):
-        return self._active_sprite_count
-
-    def export_sprites_binary(self):
-        exported = self._sprite_binary
-        del exported[:]
-        count = 0
-        for state in self._sprites:
-            if state["frame"] == 255:
-                continue
-            count += 1
-            exported.append(state["slot"] & 0xFF)
-            exported.append(state["frame"] & 0xFF)
-
-            image_strip = state["image_strip"]
-            exported.append(image_strip & 0xFF)
-            exported.append((image_strip >> 8) & 0xFF)
-
-            x = state["x"]
-            if x < 0:
-                x += 65536
-            exported.append(x & 0xFF)
-            exported.append((x >> 8) & 0xFF)
-
-            y = state["y"]
-            if y < 0:
-                y += 65536
-            exported.append(y & 0xFF)
-            exported.append((y >> 8) & 0xFF)
-
-            perspective = state["perspective"]
-            exported.append(perspective & 0xFF)
-        self._active_sprite_count = count
-        return bytes(exported)
 
 
 class Platform:
