@@ -3,6 +3,7 @@ class WorkerBridge {
     this.worker = worker;
     this.nextId = 1;
     this.pending = new Map();
+    this.listeners = new Map();
 
     this.worker.addEventListener("message", (event) => {
       const message = event.data;
@@ -12,6 +13,9 @@ class WorkerBridge {
 
       const { id, ok, result, error } = message;
       if (!this.pending.has(id)) {
+        if (typeof message.type === "string") {
+          this.emit(message.type, message);
+        }
         return;
       }
 
@@ -24,6 +28,26 @@ class WorkerBridge {
         reject(new Error(error || "Unknown worker bridge error"));
       }
     });
+  }
+
+  on(type, listener) {
+    if (!this.listeners.has(type)) {
+      this.listeners.set(type, new Set());
+    }
+    this.listeners.get(type).add(listener);
+    return () => {
+      this.listeners.get(type)?.delete(listener);
+    };
+  }
+
+  emit(type, message) {
+    const listeners = this.listeners.get(type);
+    if (!listeners || !listeners.size) {
+      return;
+    }
+    for (const listener of listeners) {
+      listener(message);
+    }
   }
 
   request(type, payload = {}) {
@@ -45,6 +69,22 @@ class WorkerBridge {
 
   call(moduleName, functionName, ...args) {
     return this.request("call", { moduleName, functionName, args });
+  }
+
+  setButtons(bitmask) {
+    return this.request("set_buttons", { bitmask });
+  }
+
+  startRuntimeLoop(options = {}) {
+    return this.request("start_runtime_loop", options);
+  }
+
+  stopRuntimeLoop() {
+    return this.request("stop_runtime_loop");
+  }
+
+  requestFullFrame() {
+    return this.request("request_full_frame");
   }
 }
 

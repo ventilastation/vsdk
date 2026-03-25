@@ -4,6 +4,7 @@ class VentilastationWasmAdapter {
     this.name = options.name || "MicroPython WASM";
     this.bootModule = options.bootModule || "main";
     this.bootstrapped = false;
+    this.usesWorkerFrameStream = true;
   }
 
   async init() {
@@ -15,24 +16,15 @@ class VentilastationWasmAdapter {
       await this.bridge.initialize();
     }
 
-    await this.bridge.exec(`
-import sys
-import uos
-if "/apps/micropython" not in sys.path:
-    sys.path.insert(0, "/apps/micropython")
-uos.chdir("/apps/micropython")
-from ventilastation.director import configure_runtime
-configure_runtime("browser")
-import ventilastation.browser as __vs_browser
-__vs_browser.boot_main()
-`);
-
     this.bootstrapped = true;
     return this;
   }
 
   setButtons(bitmask) {
-    this.bridge.call("ventilastation.browser", "set_buttons", bitmask);
+    if (typeof this.bridge.setButtons === "function") {
+      return this.bridge.setButtons(bitmask);
+    }
+    return this.bridge.call("ventilastation.browser", "set_buttons", bitmask);
   }
 
   exportFrame({ full = false } = {}) {
@@ -49,6 +41,26 @@ __vs_browser.boot_main()
 
   importStorage(files) {
     return this.bridge.call("ventilastation.browser", "import_storage", files);
+  }
+
+  onFrame(listener) {
+    return this.bridge.on("frame", (message) => listener(message.frame, message));
+  }
+
+  onRuntimeError(listener) {
+    return this.bridge.on("runtime_error", (message) => listener(message.error || null));
+  }
+
+  startLoop({ full = true } = {}) {
+    return this.bridge.startRuntimeLoop({ full });
+  }
+
+  stopLoop() {
+    return this.bridge.stopRuntimeLoop();
+  }
+
+  requestFullFrame() {
+    return this.bridge.requestFullFrame();
   }
 }
 

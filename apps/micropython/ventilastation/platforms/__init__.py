@@ -197,8 +197,14 @@ class BrowserComms:
         self.input_updates = []
         self.input_sequence = 0
         self.events = []
+        self.worker_host = None
 
     def receive(self, _bufsize):
+        if self.worker_host is not None:
+            try:
+                self.set_buttons(self.worker_host.get_buttons())
+            except Exception:
+                pass
         return bytes((self.buttons,))
 
     def send(self, line, data=b""):
@@ -216,15 +222,27 @@ class BrowserComms:
         }
         if payload:
             event["data"] = payload
+        if self.worker_host is not None:
+            try:
+                self.worker_host.post_command(line.decode("utf-8"), payload)
+                return
+            except Exception:
+                pass
         self.events.append(event)
 
     def set_buttons(self, buttons):
-        self.buttons = buttons & 0xFF
+        normalized = buttons & 0xFF
+        if normalized == self.buttons:
+            return
+        self.buttons = normalized
         self.input_sequence += 1
         self.input_updates.append({
             "sequence": self.input_sequence,
             "buttons": self.buttons,
         })
+
+    def set_worker_host(self, worker_host):
+        self.worker_host = worker_host
 
     def drain_input_updates(self):
         updates = self.input_updates
@@ -241,6 +259,7 @@ class BrowserDisplay(NullDisplay):
     def __init__(self, comms):
         super().__init__()
         self.comms = comms
+        self.worker_host = None
         self.gamma_mode = 1
         self.frame = 0
         self.sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
@@ -277,6 +296,18 @@ class BrowserDisplay(NullDisplay):
             "python_profile": None,
         }
 
+    def set_worker_host(self, worker_host):
+        self.worker_host = worker_host
+
+    def _post_command(self, line, data=b""):
+        if self.worker_host is None:
+            return False
+        try:
+            self.worker_host.post_command(line, data)
+            return True
+        except Exception:
+            return False
+
     def set_gamma_mode(self, mode):
         self.gamma_mode = mode
 
@@ -287,6 +318,7 @@ class BrowserDisplay(NullDisplay):
         self.palette = palette
         self.palette_version += 1
         self.palette_dirty = True
+        self._post_command("palette %d %d" % (len(palette), self.palette_version), palette)
 
     def getaddress(self, sprite_num):
         return uctypes.addressof(self.sprite_data) + sprite_num * 5
@@ -301,9 +333,34 @@ class BrowserDisplay(NullDisplay):
         self.asset_data[number] = stripmap
         self.assets[number] = asset
         self.dirty_asset_slots.add(number)
+        self._post_command("imagestrip %d %d" % (number, len(stripmap)), stripmap)
 
     def update(self):
         self.frame += 1
+        if self.worker_host is None:
+            return
+        full = bool(self.worker_host.consume_full_frame_request())
+        if full and self.palette:
+            self._post_command("palette %d %d" % (len(self.palette), self.palette_version), self.palette)
+        asset_slots = sorted(self.assets) if full else sorted(self.dirty_asset_slots)
+        for slot in asset_slots:
+            stripmap = self.asset_data.get(slot)
+            if stripmap is not None:
+                self._post_command("imagestrip %d %d" % (slot, len(stripmap)), stripmap)
+        self._post_command("sprites", bytes(self.sprite_data))
+        self._post_command(
+            "frame %d %d %d %d %d %d %d" % (
+                self.frame,
+                self.comms.buttons,
+                self.gamma_mode,
+                self.column_offset,
+                len(self.palette),
+                self.palette_version,
+                1 if (full or self.palette_dirty) else 0,
+            )
+        )
+        self.palette_dirty = False
+        self.dirty_asset_slots = set()
 
     def _decode_imagestrip(self, slot, stripmap):
         if len(stripmap) < 4:
@@ -424,6 +481,12 @@ class Platform:
         self.display.init(self.pixels, *self.hw_config)
         self.display.set_gamma_mode(1)
         self.display.set_column_offset(settings_module.get("pov_column_offset", 0))
+
+    def set_worker_host(self, worker_host):
+        if hasattr(self.comms, "set_worker_host"):
+            self.comms.set_worker_host(worker_host)
+        if hasattr(self.display, "set_worker_host"):
+            self.display.set_worker_host(worker_host)
 
 
 class LazyModule:

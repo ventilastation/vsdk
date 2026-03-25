@@ -135,6 +135,7 @@
     "apps/micropython/ventilastation/sprites.py",
     "apps/micropython/ventilastation/sync.py",
     "apps/micropython/ventilastation/test_shuffler.py",
+    "apps/micropython/ventilastation/wasm_bridge.py",
     "apps/micropython/ventilastation/wincomms.py"
   ]
 }

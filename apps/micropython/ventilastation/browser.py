@@ -171,6 +171,12 @@ def boot_main():
     )
 
 
+def configure_worker_host(worker_host):
+    if isinstance(worker_host, str):
+        worker_host = __import__(worker_host)
+    _browser_platform().set_worker_host(worker_host)
+
+
 def tick(count=1):
     director = __import__("ventilastation.director", None, None, ["director"]).director
     try:

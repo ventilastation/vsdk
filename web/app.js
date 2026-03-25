@@ -700,7 +700,6 @@ class BrowserHostApp {
     this.pendingMinFps = null;
     this.lastFpsDisplayUpdateAt = null;
     this.renderProfileSamples = [];
-    this.executionProfileSamples = [];
     this.lastCanvasClientSize = null;
     this.lowFpsSinceAt = null;
     this.diagnostics = [];
@@ -718,6 +717,8 @@ class BrowserHostApp {
     this.pollingHalted = false;
     this.renderingPaused = false;
     this.touchStickPointerId = null;
+    this.unsubscribeWorkerFrame = null;
+    this.unsubscribeWorkerRuntimeError = null;
     this.canvas = document.querySelector("#frame-canvas-gl");
     this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
     this.renderer = new LedRingWebGLRenderer(this.canvas);
@@ -729,6 +730,7 @@ class BrowserHostApp {
       frameCounter: document.querySelector("#frame-counter"),
       buttonMask: document.querySelector("#button-mask"),
       gamepadStatus: document.querySelector("#gamepad-status"),
+      webglScaleStatus: document.querySelector("#webgl-scale-status"),
       sceneErrorBanner: document.querySelector("#scene-error-banner"),
       sceneErrorTitle: document.querySelector("#scene-error-title"),
       sceneErrorMessage: document.querySelector("#scene-error-message"),
@@ -868,7 +870,26 @@ class BrowserHostApp {
     this.renderInspectorVisibility();
     this.renderCanvasVisibility();
     this.renderSceneError();
-    this.schedulePoll(true);
+    if (this.adapter.usesWorkerFrameStream && typeof this.adapter.onFrame === "function") {
+      this.unsubscribeWorkerFrame = this.adapter.onFrame((frame) => {
+        this.handleWorkerFrame(frame);
+      });
+      this.unsubscribeWorkerRuntimeError = this.adapter.onRuntimeError?.((error) => {
+        if (!error) {
+          return;
+        }
+        const normalizedError = new Error(error.message || String(error));
+        normalizedError.stack = error.stack || normalizedError.stack;
+        this.executionError = this.extractProminentError(normalizedError);
+        this.runtime.error = this.executionError ? null : normalizedError;
+        this.pollingHalted = Boolean(this.executionError?.isSceneLifecycleError);
+        this.renderSceneError();
+        this.renderRuntimeStatus();
+      }) || null;
+      void this.adapter.startLoop({ full: true });
+    } else {
+      this.schedulePoll(true);
+    }
   }
 
   schedulePoll(full = false) {
@@ -1215,11 +1236,18 @@ class BrowserHostApp {
       if (document.hidden) {
         this.lastSceneTickAt = now;
         this.addDiagnostic("timing.pause", { reason: "hidden" });
+        if (this.adapter.usesWorkerFrameStream && typeof this.adapter.stopLoop === "function") {
+          void this.adapter.stopLoop();
+        }
         return;
       }
       this.lastSceneTickAt = now - SCENE_STEP_MS;
       this.addDiagnostic("timing.resume", { reason: "visible" });
-      this.schedulePoll(false);
+      if (this.adapter.usesWorkerFrameStream && typeof this.adapter.startLoop === "function") {
+        void this.adapter.startLoop({ full: false });
+      } else {
+        this.schedulePoll(false);
+      }
     });
   }
 
@@ -1254,7 +1282,6 @@ class BrowserHostApp {
         this.force2dFallback = Boolean(this.elements.force2dFallback.checked);
         this.writeForce2dPreference(this.force2dFallback);
         this.renderProfileSamples = [];
-        this.executionProfileSamples = [];
         this.addDiagnostic("renderer.mode", {
           forced2d: this.force2dFallback,
           webglAvailable: this.renderer.available,
@@ -1285,7 +1312,6 @@ class BrowserHostApp {
         this.rendererProfiling = Boolean(this.elements.enableRendererProfiling.checked);
         this.writeRendererProfilingPreference(this.rendererProfiling);
         this.renderProfileSamples = [];
-        this.executionProfileSamples = [];
         this.addDiagnostic("renderer.profiling", {
           enabled: this.rendererProfiling,
         });
@@ -1330,7 +1356,6 @@ class BrowserHostApp {
     this.renderer.resolutionScale = resolvedScale;
     this.lowFpsSinceAt = null;
     this.renderProfileSamples = [];
-    this.executionProfileSamples = [];
     if (persist) {
       this.writeWebglResolutionScalePreference(this.webglResolutionScalePreference);
     }
@@ -1472,11 +1497,18 @@ class BrowserHostApp {
         window.cancelAnimationFrame(this.pollRequestId);
         this.pollRequestId = null;
       }
+      if (this.adapter.usesWorkerFrameStream && typeof this.adapter.stopLoop === "function") {
+        void this.adapter.stopLoop();
+      }
       this.addDiagnostic("timing.pause", { reason: "manual" });
     } else {
       this.lastSceneTickAt = performance.now() - SCENE_STEP_MS;
       this.addDiagnostic("timing.resume", { reason: "manual" });
-      this.schedulePoll(false);
+      if (this.adapter.usesWorkerFrameStream && typeof this.adapter.startLoop === "function") {
+        void this.adapter.startLoop({ full: false });
+      } else {
+        this.schedulePoll(false);
+      }
     }
     this.renderRenderingToggle();
   }
@@ -1638,9 +1670,81 @@ class BrowserHostApp {
     return text;
   }
 
+  applyFrame(frame) {
+    if (!frame || typeof frame !== "object") {
+      throw new Error(`Invalid frame payload: ${String(frame)}`);
+    }
+    if (this.usesEventStreamProtocol(frame)) {
+      this.processFrameEvents(frame);
+    } else if (!Array.isArray(frame.sprites)) {
+      frame.sprites = [];
+    }
+    if (
+      frame.palette instanceof Uint8Array &&
+      (
+        !(this.palette instanceof Uint8Array) ||
+        Boolean(frame.palette_dirty) ||
+        Number(frame.palette_version || 0) !== this.paletteVersion
+      )
+    ) {
+      this.palette = frame.palette;
+      this.paletteVersion = Number(frame.palette_version || 0);
+      this.paletteLoadedBytes = frame.palette.length;
+      this.assetRenderCache.clear();
+    }
+    if (Array.isArray(frame.assets) && frame.assets.length) {
+      for (const asset of frame.assets) {
+        this.assetIndex.set(asset.slot, {
+          ...asset,
+          dataLength: asset.data?.length ?? 0,
+          loadedBytes: asset.data?.length ?? 0,
+          data: asset.data ?? null,
+        });
+      }
+    }
+    this.runtime.error = null;
+    if (this.executionError && this.runtime.source === "wasm") {
+      this.executionError = null;
+      this.pollingHalted = false;
+      this.renderSceneError();
+      this.renderRuntimeStatus();
+    }
+    this.lastFrame = frame;
+    this.visibleStripSlots = Array.isArray(frame.sprites)
+      ? [...new Set(frame.sprites.map((sprite) => sprite.image_strip).filter((slot) => Number.isInteger(slot) && slot > 0))]
+      : [];
+    this.addDiagnostic("frame.ok", {
+      frame: frame.frame,
+      sprites: Array.isArray(frame.sprites) ? frame.sprites.length : -1,
+      assets: this.assetIndex.size,
+      hasPalette: this.palette instanceof Uint8Array,
+    });
+  }
+
+  handleWorkerFrame(frame) {
+    try {
+      const gamepadChanged = this.updateGamepadButtons();
+      this.applyFrame(frame);
+      this.renderFrame();
+      if (gamepadChanged) {
+        this.renderStatus();
+      }
+    } catch (error) {
+      this.executionError = this.extractProminentError(error);
+      this.runtime.error = this.executionError ? null : error;
+      this.pollingHalted = Boolean(this.executionError?.isSceneLifecycleError);
+      this.addDiagnostic("frame.error", {
+        message: error.message || String(error),
+        stack: error.stack || null,
+      });
+      this.renderSceneError();
+      this.renderRuntimeStatus();
+      console.error("Worker frame handling failed", error);
+    }
+  }
+
   async pollFrame(full = false) {
     try {
-      const pollStartedAt = this.rendererProfiling ? performance.now() : 0;
       const gamepadChanged = this.updateGamepadButtons();
       const now = performance.now();
       let stepsDue = 0;
@@ -1669,27 +1773,12 @@ class BrowserHostApp {
         stepsDue = MAX_CATCH_UP_STEPS;
       }
 
-      let tickMs = 0;
       if (stepsDue > 0 && typeof this.adapter.tick === "function") {
-        const tickStartedAt = this.rendererProfiling ? performance.now() : 0;
         await Promise.resolve(this.adapter.tick(stepsDue));
-        if (this.rendererProfiling) {
-          tickMs = performance.now() - tickStartedAt;
-        }
         this.lastSceneTickAt += stepsDue * SCENE_STEP_MS;
       }
 
       if (!full && stepsDue === 0 && this.lastFrame) {
-        if (this.rendererProfiling) {
-          this.recordExecutionProfile({
-            mode: "render_only",
-            stepsDue,
-            tickMs: 0,
-            exportFrameMs: 0,
-            framePrepMs: 0,
-            totalMs: performance.now() - pollStartedAt,
-          });
-        }
         this.renderFrame();
         if (gamepadChanged) {
           this.renderStatus();
@@ -1697,68 +1786,8 @@ class BrowserHostApp {
         return;
       }
 
-      const exportStartedAt = this.rendererProfiling ? performance.now() : 0;
       const frame = await Promise.resolve(this.adapter.exportFrame({ full }));
-      const exportFrameMs = this.rendererProfiling ? performance.now() - exportStartedAt : 0;
-      if (!frame || typeof frame !== "object") {
-        throw new Error(`Invalid frame payload: ${String(frame)}`);
-      }
-      const framePrepStartedAt = this.rendererProfiling ? performance.now() : 0;
-      if (this.usesEventStreamProtocol(frame)) {
-        this.processFrameEvents(frame);
-      } else if (!Array.isArray(frame.sprites)) {
-        frame.sprites = [];
-      }
-      if (
-        frame.palette instanceof Uint8Array &&
-        (
-          !(this.palette instanceof Uint8Array) ||
-          Boolean(frame.palette_dirty) ||
-          Number(frame.palette_version || 0) !== this.paletteVersion
-        )
-      ) {
-        this.palette = frame.palette;
-        this.paletteVersion = Number(frame.palette_version || 0);
-        this.paletteLoadedBytes = frame.palette.length;
-        this.assetRenderCache.clear();
-      }
-      if (Array.isArray(frame.assets) && frame.assets.length) {
-        for (const asset of frame.assets) {
-          this.assetIndex.set(asset.slot, {
-            ...asset,
-            dataLength: asset.data?.length ?? 0,
-            loadedBytes: asset.data?.length ?? 0,
-            data: asset.data ?? null,
-          });
-        }
-      }
-      this.runtime.error = null;
-      if (this.executionError && this.runtime.source === "wasm") {
-        this.executionError = null;
-        this.pollingHalted = false;
-        this.renderSceneError();
-        this.renderRuntimeStatus();
-      }
-      this.lastFrame = frame;
-      this.visibleStripSlots = Array.isArray(frame.sprites)
-        ? [...new Set(frame.sprites.map((sprite) => sprite.image_strip).filter((slot) => Number.isInteger(slot) && slot > 0))]
-        : [];
-      if (this.rendererProfiling) {
-        this.recordExecutionProfile({
-          mode: full ? "full" : "frame",
-          stepsDue,
-          tickMs,
-          exportFrameMs,
-          framePrepMs: performance.now() - framePrepStartedAt,
-          totalMs: performance.now() - pollStartedAt,
-        });
-      }
-      this.addDiagnostic("frame.ok", {
-        frame: frame.frame,
-        sprites: Array.isArray(frame.sprites) ? frame.sprites.length : -1,
-        assets: this.assetIndex.size,
-        hasPalette: this.palette instanceof Uint8Array,
-      });
+      this.applyFrame(frame);
       this.renderFrame();
     } catch (error) {
       this.executionError = this.extractProminentError(error);
@@ -1866,16 +1895,6 @@ class BrowserHostApp {
     }
   }
 
-  recordExecutionProfile(sample) {
-    this.executionProfileSamples.push({
-      at: performance.now(),
-      ...sample,
-    });
-    if (this.executionProfileSamples.length > RENDER_PROFILE_SAMPLE_LIMIT) {
-      this.executionProfileSamples.shift();
-    }
-  }
-
   getRenderProfileSnapshot() {
     if (!this.rendererProfiling || !this.renderProfileSamples.length) {
       return null;
@@ -1901,23 +1920,6 @@ class BrowserHostApp {
         drawMs: summarizeProfileValues(samples, "rendererDetail.drawMs"),
         drawnLedCount: latest.rendererDetail?.drawnLedCount ?? null,
       },
-    };
-  }
-
-  getExecutionProfileSnapshot() {
-    if (!this.rendererProfiling || !this.executionProfileSamples.length) {
-      return null;
-    }
-    const samples = this.executionProfileSamples;
-    const latest = samples[samples.length - 1];
-    return {
-      sampleCount: samples.length,
-      mode: latest.mode,
-      stepsDue: summarizeProfileValues(samples, "stepsDue"),
-      tickMs: summarizeProfileValues(samples, "tickMs"),
-      exportFrameMs: summarizeProfileValues(samples, "exportFrameMs"),
-      framePrepMs: summarizeProfileValues(samples, "framePrepMs"),
-      totalMs: summarizeProfileValues(samples, "totalMs"),
     };
   }
 
@@ -1984,6 +1986,11 @@ class BrowserHostApp {
         ? "Gamepad none"
         : `Gamepad ${this.activeGamepadIndex + 1}`;
     }
+    if (this.elements.webglScaleStatus) {
+      this.elements.webglScaleStatus.textContent = this.webglResolutionScalePreference === WEBGL_RESOLUTION_SCALE_AUTO
+        ? `Scale Auto ${Math.round(this.webglResolutionScale * 100)}%`
+        : `Scale ${Math.round(this.webglResolutionScale * 100)}%`;
+    }
     if (this.elements.frameCounter) {
       this.elements.frameCounter.textContent = this.displayedFps === null
         ? "FPS --"
@@ -2040,7 +2047,6 @@ class BrowserHostApp {
       return;
     }
     const profile = this.getRenderProfileSnapshot();
-    const executionProfile = this.getExecutionProfileSnapshot();
     const summary = [
       ["Sprites", frame.sprites.length],
       ["Assets", this.assetIndex.size],
@@ -2074,57 +2080,6 @@ class BrowserHostApp {
         ]);
       }
     }
-    if (executionProfile) {
-      summary.push(
-        ["Poll Samples", executionProfile.sampleCount],
-        ["Poll Total", `${formatProfileMs(executionProfile.totalMs?.avg)} avg / ${formatProfileMs(executionProfile.totalMs?.max)} max`],
-        ["Tick", `${formatProfileMs(executionProfile.tickMs?.avg)} avg / ${formatProfileMs(executionProfile.tickMs?.max)} max`],
-        ["Export", `${formatProfileMs(executionProfile.exportFrameMs?.avg)} avg / ${formatProfileMs(executionProfile.exportFrameMs?.max)} max`],
-        ["Frame Prep", `${formatProfileMs(executionProfile.framePrepMs?.avg)} avg / ${formatProfileMs(executionProfile.framePrepMs?.max)} max`],
-        ["Steps Due", executionProfile.stepsDue ? `${executionProfile.stepsDue.avg.toFixed(2)} avg / ${executionProfile.stepsDue.max.toFixed(0)} max` : "--"],
-      );
-    }
-    if (frame.python_profile && typeof frame.python_profile === "object") {
-      summary.push(
-        [
-          "Py Export",
-          `${formatProfileMs(frame.python_profile.browserExportMs)} avg / ${formatProfileMs(frame.python_profile.browserExportMsMax)} max`,
-        ],
-        [
-          "Py Display",
-          `${formatProfileMs(frame.python_profile.displayExportMs)} avg / ${formatProfileMs(frame.python_profile.displayExportMsMax)} max`,
-        ],
-        [
-          "Py Sprites",
-          `${formatProfileMs(frame.python_profile.spritesDecodeMs)} avg / ${formatProfileMs(frame.python_profile.spritesDecodeMsMax)} max`,
-        ],
-        [
-          "Py Assets",
-          `${formatProfileMs(frame.python_profile.assetsAssembleMs)} avg / ${formatProfileMs(frame.python_profile.assetsAssembleMsMax)} max`,
-        ],
-      );
-    }
-    if (frame.worker_js_profile && typeof frame.worker_js_profile === "object") {
-      summary.push(
-        [
-          "JS RunPython",
-          `${formatProfileMs(frame.worker_js_profile.runPythonAsyncMs)} avg / ${formatProfileMs(frame.worker_js_profile.runPythonAsyncMsMax)} max`,
-        ],
-        [
-          "JS Parse",
-          `${formatProfileMs(frame.worker_js_profile.jsonParseMs)} avg / ${formatProfileMs(frame.worker_js_profile.jsonParseMsMax)} max`,
-        ],
-        [
-          "JS Revive",
-          `${formatProfileMs(frame.worker_js_profile.reviveBytesMs)} avg / ${formatProfileMs(frame.worker_js_profile.reviveBytesMsMax)} max`,
-        ],
-        [
-          "JS Post",
-          `${formatProfileMs(frame.worker_js_profile.postMessageMs)} avg / ${formatProfileMs(frame.worker_js_profile.postMessageMsMax)} max`,
-        ],
-      );
-    }
-
     this.elements.runtimeSummary.innerHTML = summary.map(([label, value]) => `
       <div class="summary-card">
         <strong>${label}</strong>
@@ -2140,7 +2095,6 @@ class BrowserHostApp {
   describeFrame(frame) {
     const firstAsset = this.assetIndex.size ? this.assetIndex.values().next().value : null;
     const renderProfile = this.getRenderProfileSnapshot();
-    const executionProfile = this.getExecutionProfileSnapshot();
     const dpr = window.devicePixelRatio || 1;
     return {
       frameType: typeof frame,
@@ -2176,10 +2130,7 @@ class BrowserHostApp {
         width: this.fallbackCanvas.width,
         height: this.fallbackCanvas.height,
       } : null,
-      pythonProfile: frame.python_profile ?? null,
-      workerJsProfile: frame.worker_js_profile ?? null,
       renderProfile,
-      executionProfile,
     };
   }
 
