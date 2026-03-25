@@ -20,6 +20,22 @@ const KEY_TO_BUTTON = new Map([
   ["Escape", BUTTONS.BUTTON_D],
 ]);
 
+const GAMEPAD_FACE_BUTTONS = new Map([
+  [0, BUTTONS.BUTTON_A],
+  [2, BUTTONS.BUTTON_B],
+  [3, BUTTONS.BUTTON_C],
+  [1, BUTTONS.BUTTON_D],
+  [8, BUTTONS.BUTTON_D],
+  [16, BUTTONS.BUTTON_D],
+]);
+
+const GAMEPAD_DPAD_BUTTONS = new Map([
+  [14, BUTTONS.JOY_LEFT],
+  [15, BUTTONS.JOY_RIGHT],
+  [12, BUTTONS.JOY_UP],
+  [13, BUTTONS.JOY_DOWN],
+]);
+
 const LedRenderCore = globalThis.VentilastationLedRenderCore;
 if (!LedRenderCore) {
   throw new Error("Missing VentilastationLedRenderCore");
@@ -34,11 +50,16 @@ const {
 } = LedRenderCore;
 
 const FORCE_2D_STORAGE_KEY = "ventilastation.force2dFallback";
+const INVERT_GAMEPAD_Y_STORAGE_KEY = "ventilastation.invertGamepadY.v1";
 const INSPECTOR_OPEN_STORAGE_KEY = "ventilastation.inspectorOpen.v2";
+const RENDERER_PROFILING_STORAGE_KEY = "ventilastation.rendererProfiling.v1";
 const SCENE_STEP_MS = 30;
 const MAX_CATCH_UP_STEPS = 6;
 const MAX_TICK_BACKLOG_MS = SCENE_STEP_MS * MAX_CATCH_UP_STEPS;
 const TOUCH_STICK_DEAD_ZONE = 0.26;
+const GAMEPAD_AXIS_DEAD_ZONE = 0.35;
+const FPS_DISPLAY_INTERVAL_MS = 500;
+const RENDER_PROFILE_SAMPLE_LIMIT = 60;
 const EMULATOR_BASE_URL = new URL(".", window.location.href);
 const PROJECT_ROOT_CANDIDATES = [
   EMULATOR_BASE_URL,
@@ -47,6 +68,28 @@ const PROJECT_ROOT_CANDIDATES = [
 
 function decodePerspective(value) {
   return (value & 0x80) ? value - 0x100 : value;
+}
+
+function formatProfileMs(value) {
+  return value === null || value === undefined ? "--" : `${value.toFixed(2)} ms`;
+}
+
+function getNestedValue(source, path) {
+  return path.split(".").reduce((value, key) => (value == null ? value : value[key]), source);
+}
+
+function summarizeProfileValues(samples, key) {
+  const values = samples
+    .map((sample) => getNestedValue(sample, key))
+    .filter((value) => typeof value === "number" && Number.isFinite(value));
+  if (!values.length) {
+    return null;
+  }
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return {
+    avg: total / values.length,
+    max: Math.max(...values),
+  };
 }
 
 async function resolveFirstAvailableUrl(paths, { method = "HEAD" } = {}) {
@@ -221,6 +264,7 @@ class LedRingWebGLRenderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.geometry = createLedRingGeometry();
+    this.lastProfile = null;
     this.gl = canvas.getContext("webgl", {
       alpha: true,
       antialias: true,
@@ -353,12 +397,16 @@ class LedRingWebGLRenderer {
 
   render(ledPixels) {
     if (!this.available) {
+      this.lastProfile = null;
       return false;
     }
 
+    const startedAt = performance.now();
     const { width, height } = this.resize();
+    const afterResizeAt = performance.now();
     const gl = this.gl;
     this.clear();
+    const afterClearAt = performance.now();
     gl.useProgram(this.program);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
@@ -370,7 +418,10 @@ class LedRingWebGLRenderer {
     gl.vertexAttribPointer(this.attribs.texCoord, 2, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, repeatLedColors(ledPixels, 6), gl.DYNAMIC_DRAW);
+    const colorBytes = repeatLedColors(ledPixels, 6);
+    const afterColorExpandAt = performance.now();
+    gl.bufferData(gl.ARRAY_BUFFER, colorBytes, gl.DYNAMIC_DRAW);
+    const afterUploadAt = performance.now();
     gl.enableVertexAttribArray(this.attribs.color);
     gl.vertexAttribPointer(this.attribs.color, 4, gl.UNSIGNED_BYTE, true, 0, 0);
 
@@ -378,6 +429,17 @@ class LedRingWebGLRenderer {
     gl.uniform2f(this.uniforms.center, width * 0.5, height * 0.5);
     gl.uniform1f(this.uniforms.scale, Math.min(width, height) / 200);
     gl.drawArrays(gl.TRIANGLES, 0, this.geometry.vertexCount);
+    const finishedAt = performance.now();
+    this.lastProfile = {
+      resizeMs: afterResizeAt - startedAt,
+      clearMs: afterClearAt - afterResizeAt,
+      colorExpandMs: afterColorExpandAt - afterClearAt,
+      uploadMs: afterUploadAt - afterColorExpandAt,
+      drawSubmitMs: finishedAt - afterUploadAt,
+      totalMs: finishedAt - startedAt,
+      vertexCount: this.geometry.vertexCount,
+      colorBytes: colorBytes.length,
+    };
     return true;
   }
 }
@@ -387,6 +449,75 @@ class LedRingCanvasRenderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.geometry = geometry;
+    this.ledLayout = this.buildLedLayout();
+    this.lastProfile = null;
+  }
+
+  buildLedLayout() {
+    const positions = this.geometry.positions;
+    const layout = new Array(COLUMNS * PIXELS);
+
+    for (let column = 0; column < COLUMNS; column += 1) {
+      for (let led = 0; led < PIXELS; led += 1) {
+        const index = column * PIXELS + led;
+        const vertexOffset = index * 12;
+        const p0x = positions[vertexOffset];
+        const p0y = positions[vertexOffset + 1];
+        const p1x = positions[vertexOffset + 2];
+        const p1y = positions[vertexOffset + 3];
+        const p2x = positions[vertexOffset + 4];
+        const p2y = positions[vertexOffset + 5];
+        const p3x = positions[vertexOffset + 10];
+        const p3y = positions[vertexOffset + 11];
+
+        const centerX = (p0x + p1x + p2x + p3x) * 0.25;
+        const centerY = (p0y + p1y + p2y + p3y) * 0.25;
+        const angle = Math.atan2(-(p1y - p0y), p1x - p0x);
+        const radius = Math.hypot(centerX, centerY);
+        const widthWorld = (2 * Math.PI * radius) / COLUMNS;
+
+        let rowSpacingWorld = 0;
+        if (led + 1 < PIXELS) {
+          const nextIndex = index + 1;
+          const nextVertexOffset = nextIndex * 12;
+          const np0x = positions[nextVertexOffset];
+          const np0y = positions[nextVertexOffset + 1];
+          const np1x = positions[nextVertexOffset + 2];
+          const np1y = positions[nextVertexOffset + 3];
+          const np2x = positions[nextVertexOffset + 4];
+          const np2y = positions[nextVertexOffset + 5];
+          const np3x = positions[nextVertexOffset + 10];
+          const np3y = positions[nextVertexOffset + 11];
+          const nextCenterX = (np0x + np1x + np2x + np3x) * 0.25;
+          const nextCenterY = (np0y + np1y + np2y + np3y) * 0.25;
+          rowSpacingWorld = Math.hypot(nextCenterX - centerX, nextCenterY - centerY);
+        } else if (led > 0) {
+          const prevIndex = index - 1;
+          const prevVertexOffset = prevIndex * 12;
+          const pp0x = positions[prevVertexOffset];
+          const pp0y = positions[prevVertexOffset + 1];
+          const pp1x = positions[prevVertexOffset + 2];
+          const pp1y = positions[prevVertexOffset + 3];
+          const pp2x = positions[prevVertexOffset + 4];
+          const pp2y = positions[prevVertexOffset + 5];
+          const pp3x = positions[prevVertexOffset + 10];
+          const pp3y = positions[prevVertexOffset + 11];
+          const prevCenterX = (pp0x + pp1x + pp2x + pp3x) * 0.25;
+          const prevCenterY = (pp0y + pp1y + pp2y + pp3y) * 0.25;
+          rowSpacingWorld = Math.hypot(centerX - prevCenterX, centerY - prevCenterY);
+        }
+
+        layout[index] = {
+          centerX,
+          centerY,
+          angle,
+          widthWorld,
+          heightWorld: rowSpacingWorld * (2 / 3),
+        };
+      }
+    }
+
+    return layout;
   }
 
   resize() {
@@ -402,83 +533,52 @@ class LedRingCanvasRenderer {
 
   render(ledPixels) {
     if (!this.ctx) {
+      this.lastProfile = null;
       return;
     }
+    const startedAt = performance.now();
     const { width, height } = this.resize();
+    const afterResizeAt = performance.now();
     const scale = Math.min(width, height) / 200;
     const ctx = this.ctx;
-    const positions = this.geometry.positions;
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#05070b";
     ctx.fillRect(0, 0, width, height);
 
-    for (let column = 0; column < COLUMNS; column += 1) {
-      for (let led = 0; led < PIXELS; led += 1) {
-        const colorOffset = (column * PIXELS + led) * 4;
-        const red = ledPixels[colorOffset];
-        const green = ledPixels[colorOffset + 1];
-        const blue = ledPixels[colorOffset + 2];
-        const alpha = ledPixels[colorOffset + 3];
-        if (!red && !green && !blue) {
-          continue;
-        }
+    let drawnLedCount = 0;
 
-        const vertexOffset = (column * PIXELS + led) * 12;
-        const p0x = positions[vertexOffset];
-        const p0y = positions[vertexOffset + 1];
-        const p1x = positions[vertexOffset + 2];
-        const p1y = positions[vertexOffset + 3];
-        const p2x = positions[vertexOffset + 4];
-        const p2y = positions[vertexOffset + 5];
-        const p3x = positions[vertexOffset + 10];
-        const p3y = positions[vertexOffset + 11];
-
-        const centerX = (p0x + p1x + p2x + p3x) * 0.25;
-        const centerY = (p0y + p1y + p2y + p3y) * 0.25;
-        const angle = Math.atan2(-(p1y - p0y), p1x - p0x);
-        const radius = Math.hypot(centerX, centerY);
-        const circumference = 2 * Math.PI * radius;
-        const ledWidth = Math.max(0.35, (circumference / COLUMNS) * scale);
-        let rowSpacing = 0;
-        if (led + 1 < PIXELS) {
-          const nextVertexOffset = (column * PIXELS + led + 1) * 12;
-          const np0x = positions[nextVertexOffset];
-          const np0y = positions[nextVertexOffset + 1];
-          const np1x = positions[nextVertexOffset + 2];
-          const np1y = positions[nextVertexOffset + 3];
-          const np2x = positions[nextVertexOffset + 4];
-          const np2y = positions[nextVertexOffset + 5];
-          const np3x = positions[nextVertexOffset + 10];
-          const np3y = positions[nextVertexOffset + 11];
-          const nextCenterX = (np0x + np1x + np2x + np3x) * 0.25;
-          const nextCenterY = (np0y + np1y + np2y + np3y) * 0.25;
-          rowSpacing = Math.hypot(nextCenterX - centerX, nextCenterY - centerY) * scale;
-        } else if (led > 0) {
-          const prevVertexOffset = (column * PIXELS + led - 1) * 12;
-          const pp0x = positions[prevVertexOffset];
-          const pp0y = positions[prevVertexOffset + 1];
-          const pp1x = positions[prevVertexOffset + 2];
-          const pp1y = positions[prevVertexOffset + 3];
-          const pp2x = positions[prevVertexOffset + 4];
-          const pp2y = positions[prevVertexOffset + 5];
-          const pp3x = positions[prevVertexOffset + 10];
-          const pp3y = positions[prevVertexOffset + 11];
-          const prevCenterX = (pp0x + pp1x + pp2x + pp3x) * 0.25;
-          const prevCenterY = (pp0y + pp1y + pp2y + pp3y) * 0.25;
-          rowSpacing = Math.hypot(centerX - prevCenterX, centerY - prevCenterY) * scale;
-        }
-        const ledHeight = Math.max(0.16, rowSpacing * (2 / 3));
-        const drawX = width * 0.5 + centerX * scale;
-        const drawY = height * 0.5 - centerY * scale;
-
-        ctx.save();
-        ctx.translate(drawX, drawY);
-        ctx.rotate(angle);
-        ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${Math.max(alpha, 208) / 255})`;
-        ctx.fillRect(-ledWidth * 0.5, -ledHeight * 0.5, ledWidth, ledHeight);
-        ctx.restore();
+    for (let index = 0; index < this.ledLayout.length; index += 1) {
+      const colorOffset = index * 4;
+      const red = ledPixels[colorOffset];
+      const green = ledPixels[colorOffset + 1];
+      const blue = ledPixels[colorOffset + 2];
+      const alpha = ledPixels[colorOffset + 3];
+      if (!red && !green && !blue) {
+        continue;
       }
+      drawnLedCount += 1;
+
+      const layout = this.ledLayout[index];
+      const ledWidth = Math.max(0.35, layout.widthWorld * scale);
+      const ledHeight = Math.max(0.16, layout.heightWorld * scale);
+      const drawX = width * 0.5 + layout.centerX * scale;
+      const drawY = height * 0.5 - layout.centerY * scale;
+
+      ctx.save();
+      ctx.translate(drawX, drawY);
+      ctx.rotate(layout.angle);
+      ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${Math.max(alpha, 208) / 255})`;
+      ctx.fillRect(-ledWidth * 0.5, -ledHeight * 0.5, ledWidth, ledHeight);
+      ctx.restore();
     }
+
+    const finishedAt = performance.now();
+    this.lastProfile = {
+      resizeMs: afterResizeAt - startedAt,
+      drawMs: finishedAt - afterResizeAt,
+      totalMs: finishedAt - startedAt,
+      drawnLedCount,
+    };
   }
 }
 
@@ -573,6 +673,8 @@ class BrowserHostApp {
     this.currentButtons = 0;
     this.keyboardButtons = 0;
     this.touchButtons = 0;
+    this.gamepadButtons = 0;
+    this.activeGamepadIndex = null;
     this.assetIndex = new Map();
     this.assetRenderCache = new Map();
     this.visibleStripSlots = [];
@@ -582,9 +684,17 @@ class BrowserHostApp {
     this.lastFrame = null;
     this.lastFrameShape = null;
     this.lastRenderedLedPixels = null;
+    this.lastRenderAt = null;
+    this.displayedFps = null;
+    this.pendingMinFps = null;
+    this.lastFpsDisplayUpdateAt = null;
+    this.renderProfileSamples = [];
+    this.executionProfileSamples = [];
     this.diagnostics = [];
     this.audio = new BrowserAudioHost();
     this.force2dFallback = this.readForce2dPreference();
+    this.invertGamepadY = this.readInvertGamepadYPreference();
+    this.rendererProfiling = this.readRendererProfilingPreference();
     this.inspectorOpen = this.readInspectorPreference();
     this.lastSceneTickAt = null;
     this.pollRequestId = null;
@@ -600,6 +710,7 @@ class BrowserHostApp {
       adapterSource: document.querySelector("#adapter-source"),
       frameCounter: document.querySelector("#frame-counter"),
       buttonMask: document.querySelector("#button-mask"),
+      gamepadStatus: document.querySelector("#gamepad-status"),
       sceneErrorBanner: document.querySelector("#scene-error-banner"),
       sceneErrorTitle: document.querySelector("#scene-error-title"),
       sceneErrorMessage: document.querySelector("#scene-error-message"),
@@ -617,6 +728,8 @@ class BrowserHostApp {
       copyDiagnosticsStatus: document.querySelector("#copy-diagnostics-status"),
       runtimeSummary: document.querySelector("#runtime-summary"),
       force2dFallback: document.querySelector("#force-2d-fallback"),
+      invertGamepadY: document.querySelector("#invert-gamepad-y"),
+      enableRendererProfiling: document.querySelector("#enable-renderer-profiling"),
     };
     this.copyStatusTimer = null;
     this.refreshCopyDiagnostics();
@@ -780,13 +893,125 @@ class BrowserHostApp {
     window.addEventListener("blur", () => {
       this.keyboardButtons = 0;
       this.touchButtons = 0;
+      this.gamepadButtons = 0;
       this.touchStickPointerId = null;
       this.syncButtons();
       this.addDiagnostic("input.blur", { buttons: 0 });
       this.renderStatus();
     });
 
+    this.bindGamepadControls();
     this.bindTouchControls();
+  }
+
+  bindGamepadControls() {
+    window.addEventListener("gamepadconnected", (event) => {
+      const gamepad = event.gamepad;
+      this.selectActiveGamepad();
+      this.addDiagnostic("input.gamepad.connected", {
+        index: gamepad.index,
+        id: gamepad.id,
+        mapping: gamepad.mapping || "unknown",
+      });
+      this.renderStatus();
+    });
+
+    window.addEventListener("gamepaddisconnected", (event) => {
+      const gamepad = event.gamepad;
+      const wasActive = gamepad.index === this.activeGamepadIndex;
+      if (wasActive) {
+        this.activeGamepadIndex = null;
+        this.gamepadButtons = 0;
+      }
+      this.selectActiveGamepad();
+      this.addDiagnostic("input.gamepad.disconnected", {
+        index: gamepad.index,
+        id: gamepad.id,
+        wasActive,
+      });
+      this.syncButtons();
+      this.renderStatus();
+    });
+
+    this.selectActiveGamepad();
+  }
+
+  getConnectedGamepads() {
+    if (typeof navigator.getGamepads !== "function") {
+      return [];
+    }
+    return Array.from(navigator.getGamepads()).filter(Boolean);
+  }
+
+  selectActiveGamepad() {
+    const gamepads = this.getConnectedGamepads();
+    const activeGamepad = gamepads.find((gamepad) => gamepad.index === this.activeGamepadIndex);
+    if (activeGamepad) {
+      return activeGamepad;
+    }
+    const nextGamepad = gamepads[0] || null;
+    const previousIndex = this.activeGamepadIndex;
+    this.activeGamepadIndex = nextGamepad ? nextGamepad.index : null;
+    if (previousIndex !== this.activeGamepadIndex) {
+      this.addDiagnostic("input.gamepad.active", {
+        index: this.activeGamepadIndex,
+        id: nextGamepad?.id || null,
+      });
+    }
+    return nextGamepad;
+  }
+
+  readGamepadButtons() {
+    const gamepad = this.selectActiveGamepad();
+    if (!gamepad) {
+      return 0;
+    }
+
+    let buttons = 0;
+
+    for (const [index, bit] of GAMEPAD_FACE_BUTTONS) {
+      if (gamepad.buttons[index]?.pressed) {
+        buttons |= bit;
+      }
+    }
+
+    for (const [index, bit] of GAMEPAD_DPAD_BUTTONS) {
+      if (gamepad.buttons[index]?.pressed) {
+        buttons |= bit;
+      }
+    }
+
+    const axisX = gamepad.axes[0] || 0;
+    const rawAxisY = gamepad.axes[1] || 0;
+    const axisY = this.invertGamepadY ? -rawAxisY : rawAxisY;
+    if (axisX <= -GAMEPAD_AXIS_DEAD_ZONE) {
+      buttons |= BUTTONS.JOY_LEFT;
+    }
+    if (axisX >= GAMEPAD_AXIS_DEAD_ZONE) {
+      buttons |= BUTTONS.JOY_RIGHT;
+    }
+    if (axisY <= -GAMEPAD_AXIS_DEAD_ZONE) {
+      buttons |= BUTTONS.JOY_UP;
+    }
+    if (axisY >= GAMEPAD_AXIS_DEAD_ZONE) {
+      buttons |= BUTTONS.JOY_DOWN;
+    }
+
+    return buttons & 0xff;
+  }
+
+  updateGamepadButtons() {
+    const nextButtons = this.readGamepadButtons();
+    if (nextButtons === this.gamepadButtons) {
+      return false;
+    }
+    this.gamepadButtons = nextButtons;
+    this.syncButtons();
+    this.addDiagnostic("input.gamepad.state", {
+      activeIndex: this.activeGamepadIndex,
+      buttons: this.gamepadButtons,
+    });
+    return true;
   }
 
   bindTouchControls() {
@@ -959,7 +1184,7 @@ class BrowserHostApp {
   }
 
   syncButtons() {
-    this.currentButtons = (this.keyboardButtons | this.touchButtons) & 0xff;
+    this.currentButtons = (this.keyboardButtons | this.touchButtons | this.gamepadButtons) & 0xff;
     this.adapter.setButtons(this.currentButtons);
     this.renderTouchButtons();
     this.renderTouchStickFromButtons();
@@ -1004,21 +1229,54 @@ class BrowserHostApp {
   }
 
   bindDebugControls() {
-    if (!this.elements.force2dFallback) {
-      return;
-    }
-    this.elements.force2dFallback.checked = this.force2dFallback;
-    this.elements.force2dFallback.addEventListener("change", () => {
-      this.force2dFallback = Boolean(this.elements.force2dFallback.checked);
-      this.writeForce2dPreference(this.force2dFallback);
-      this.addDiagnostic("renderer.mode", {
-        forced2d: this.force2dFallback,
-        webglAvailable: this.renderer.available,
+    if (this.elements.force2dFallback) {
+      this.elements.force2dFallback.checked = this.force2dFallback;
+      this.elements.force2dFallback.addEventListener("change", () => {
+        this.force2dFallback = Boolean(this.elements.force2dFallback.checked);
+        this.writeForce2dPreference(this.force2dFallback);
+        this.renderProfileSamples = [];
+        this.executionProfileSamples = [];
+        this.addDiagnostic("renderer.mode", {
+          forced2d: this.force2dFallback,
+          webglAvailable: this.renderer.available,
+        });
+        this.renderCanvasVisibility();
+        this.renderStatus();
+        this.renderFrame();
       });
-      this.renderCanvasVisibility();
-      this.renderStatus();
-      this.renderFrame();
-    });
+    }
+
+    if (this.elements.invertGamepadY) {
+      this.elements.invertGamepadY.checked = this.invertGamepadY;
+      this.elements.invertGamepadY.addEventListener("change", () => {
+        this.invertGamepadY = Boolean(this.elements.invertGamepadY.checked);
+        this.writeInvertGamepadYPreference(this.invertGamepadY);
+        this.addDiagnostic("input.gamepad.invert_y", {
+          enabled: this.invertGamepadY,
+        });
+        if (this.updateGamepadButtons()) {
+          this.renderStatus();
+        }
+      });
+    }
+
+    if (this.elements.enableRendererProfiling) {
+      this.elements.enableRendererProfiling.checked = this.rendererProfiling;
+      this.elements.enableRendererProfiling.addEventListener("change", () => {
+        this.rendererProfiling = Boolean(this.elements.enableRendererProfiling.checked);
+        this.writeRendererProfilingPreference(this.rendererProfiling);
+        this.renderProfileSamples = [];
+        this.executionProfileSamples = [];
+        this.addDiagnostic("renderer.profiling", {
+          enabled: this.rendererProfiling,
+        });
+        if (this.lastFrame) {
+          this.renderInspectors(this.lastFrame);
+        } else {
+          this.refreshCopyDiagnostics();
+        }
+      });
+    }
   }
 
   renderCanvasVisibility() {
@@ -1087,7 +1345,7 @@ class BrowserHostApp {
     if (!button) {
       return;
     }
-    button.textContent = this.renderingPaused ? "Resume rendering" : "Stop rendering";
+    button.textContent = this.renderingPaused ? "Resume emulator" : "Pause emulator";
     button.setAttribute("aria-pressed", this.renderingPaused ? "true" : "false");
   }
 
@@ -1096,7 +1354,7 @@ class BrowserHostApp {
       return;
     }
     this.elements.inspectorPanel.hidden = !this.inspectorOpen;
-    this.elements.toggleInspectorButton.textContent = this.inspectorOpen ? "Hide debug" : "Show debug";
+    this.elements.toggleInspectorButton.textContent = this.inspectorOpen ? "Hide options" : "Show options";
     this.elements.toggleInspectorButton.setAttribute("aria-expanded", this.inspectorOpen ? "true" : "false");
   }
 
@@ -1114,6 +1372,46 @@ class BrowserHostApp {
         localStorage.setItem(FORCE_2D_STORAGE_KEY, "1");
       } else {
         localStorage.removeItem(FORCE_2D_STORAGE_KEY);
+      }
+    } catch (_error) {
+      return;
+    }
+  }
+
+  readInvertGamepadYPreference() {
+    try {
+      return localStorage.getItem(INVERT_GAMEPAD_Y_STORAGE_KEY) === "1";
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  writeInvertGamepadYPreference(enabled) {
+    try {
+      if (enabled) {
+        localStorage.setItem(INVERT_GAMEPAD_Y_STORAGE_KEY, "1");
+      } else {
+        localStorage.removeItem(INVERT_GAMEPAD_Y_STORAGE_KEY);
+      }
+    } catch (_error) {
+      return;
+    }
+  }
+
+  readRendererProfilingPreference() {
+    try {
+      return localStorage.getItem(RENDERER_PROFILING_STORAGE_KEY) === "1";
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  writeRendererProfilingPreference(enabled) {
+    try {
+      if (enabled) {
+        localStorage.setItem(RENDERER_PROFILING_STORAGE_KEY, "1");
+      } else {
+        localStorage.removeItem(RENDERER_PROFILING_STORAGE_KEY);
       }
     } catch (_error) {
       return;
@@ -1176,6 +1474,8 @@ class BrowserHostApp {
 
   async pollFrame(full = false) {
     try {
+      const pollStartedAt = this.rendererProfiling ? performance.now() : 0;
+      const gamepadChanged = this.updateGamepadButtons();
       const now = performance.now();
       let stepsDue = 0;
       if (this.lastSceneTickAt === null) {
@@ -1203,20 +1503,41 @@ class BrowserHostApp {
         stepsDue = MAX_CATCH_UP_STEPS;
       }
 
+      let tickMs = 0;
       if (stepsDue > 0 && typeof this.adapter.tick === "function") {
+        const tickStartedAt = this.rendererProfiling ? performance.now() : 0;
         await Promise.resolve(this.adapter.tick(stepsDue));
+        if (this.rendererProfiling) {
+          tickMs = performance.now() - tickStartedAt;
+        }
         this.lastSceneTickAt += stepsDue * SCENE_STEP_MS;
       }
 
       if (!full && stepsDue === 0 && this.lastFrame) {
+        if (this.rendererProfiling) {
+          this.recordExecutionProfile({
+            mode: "render_only",
+            stepsDue,
+            tickMs: 0,
+            exportFrameMs: 0,
+            framePrepMs: 0,
+            totalMs: performance.now() - pollStartedAt,
+          });
+        }
         this.renderFrame();
+        if (gamepadChanged) {
+          this.renderStatus();
+        }
         return;
       }
 
+      const exportStartedAt = this.rendererProfiling ? performance.now() : 0;
       const frame = await Promise.resolve(this.adapter.exportFrame({ full }));
+      const exportFrameMs = this.rendererProfiling ? performance.now() - exportStartedAt : 0;
       if (!frame || typeof frame !== "object") {
         throw new Error(`Invalid frame payload: ${String(frame)}`);
       }
+      const framePrepStartedAt = this.rendererProfiling ? performance.now() : 0;
       if (this.usesEventStreamProtocol(frame)) {
         this.processFrameEvents(frame);
       } else if (!Array.isArray(frame.sprites)) {
@@ -1248,6 +1569,16 @@ class BrowserHostApp {
       this.visibleStripSlots = Array.isArray(frame.sprites)
         ? [...new Set(frame.sprites.map((sprite) => sprite.image_strip).filter((slot) => Number.isInteger(slot) && slot > 0))]
         : [];
+      if (this.rendererProfiling) {
+        this.recordExecutionProfile({
+          mode: full ? "full" : "frame",
+          stepsDue,
+          tickMs,
+          exportFrameMs,
+          framePrepMs: performance.now() - framePrepStartedAt,
+          totalMs: performance.now() - pollStartedAt,
+        });
+      }
       this.addDiagnostic("frame.ok", {
         frame: frame.frame,
         sprites: Array.isArray(frame.sprites) ? frame.sprites.length : -1,
@@ -1279,23 +1610,140 @@ class BrowserHostApp {
       return;
     }
 
+    this.updateDisplayedFps();
+    const startedAt = this.rendererProfiling ? performance.now() : 0;
+
     const hasPendingVisibleAsset = this.visibleStripSlots.some((slot) => {
       const asset = this.assetIndex.get(slot);
       return !asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength;
     });
+    const beforePixelsAt = this.rendererProfiling ? performance.now() : 0;
     const ledPixels = hasPendingVisibleAsset && this.lastRenderedLedPixels
       ? this.lastRenderedLedPixels
       : computeLedFramePixels(frame, this.assetIndex, this.palette);
+    const afterPixelsAt = this.rendererProfiling ? performance.now() : 0;
     if (!hasPendingVisibleAsset) {
       this.lastRenderedLedPixels = ledPixels;
     }
     this.renderCanvasVisibility();
+    const beforeRendererAt = this.rendererProfiling ? performance.now() : 0;
     const rendered = !this.force2dFallback && this.renderer.render(ledPixels);
     if ((!rendered || this.force2dFallback) && this.fallbackRenderer) {
       this.fallbackRenderer.render(ledPixels);
     }
+    const afterRendererAt = this.rendererProfiling ? performance.now() : 0;
+    if (this.rendererProfiling) {
+      this.recordRenderProfile({
+        renderer: rendered && !this.force2dFallback ? "webgl" : "canvas",
+        totalMs: afterRendererAt - startedAt,
+        computePixelsMs: afterPixelsAt - beforePixelsAt,
+        rendererMs: afterRendererAt - beforeRendererAt,
+        rendererDetail: rendered && !this.force2dFallback
+          ? this.renderer.lastProfile
+          : this.fallbackRenderer?.lastProfile || null,
+      });
+    }
     this.renderStatus();
     this.renderInspectors(frame);
+  }
+
+  updateDisplayedFps() {
+    const now = performance.now();
+    if (this.lastRenderAt !== null) {
+      const elapsedMs = now - this.lastRenderAt;
+      if (elapsedMs > 0) {
+        const instantaneousFps = 1000 / elapsedMs;
+        this.pendingMinFps = this.pendingMinFps === null
+          ? instantaneousFps
+          : Math.min(this.pendingMinFps, instantaneousFps);
+      }
+    }
+
+    if (this.lastFpsDisplayUpdateAt === null) {
+      this.lastFpsDisplayUpdateAt = now;
+    }
+
+    if (this.displayedFps === null && this.pendingMinFps !== null) {
+      this.displayedFps = this.pendingMinFps;
+      this.pendingMinFps = null;
+      this.lastFpsDisplayUpdateAt = now;
+    } else if (this.pendingMinFps !== null && now - this.lastFpsDisplayUpdateAt >= FPS_DISPLAY_INTERVAL_MS) {
+      this.displayedFps = this.pendingMinFps;
+      this.pendingMinFps = null;
+      this.lastFpsDisplayUpdateAt = now;
+    }
+
+    if (now < this.lastFpsDisplayUpdateAt) {
+      this.lastFpsDisplayUpdateAt = now;
+      this.pendingMinFps = null;
+    }
+
+    this.lastRenderAt = now;
+  }
+
+  recordRenderProfile(sample) {
+    this.renderProfileSamples.push({
+      at: performance.now(),
+      ...sample,
+    });
+    if (this.renderProfileSamples.length > RENDER_PROFILE_SAMPLE_LIMIT) {
+      this.renderProfileSamples.shift();
+    }
+  }
+
+  recordExecutionProfile(sample) {
+    this.executionProfileSamples.push({
+      at: performance.now(),
+      ...sample,
+    });
+    if (this.executionProfileSamples.length > RENDER_PROFILE_SAMPLE_LIMIT) {
+      this.executionProfileSamples.shift();
+    }
+  }
+
+  getRenderProfileSnapshot() {
+    if (!this.rendererProfiling || !this.renderProfileSamples.length) {
+      return null;
+    }
+    const samples = this.renderProfileSamples;
+    const latest = samples[samples.length - 1];
+    return {
+      sampleCount: samples.length,
+      renderer: latest.renderer,
+      totalMs: summarizeProfileValues(samples, "totalMs"),
+      computePixelsMs: summarizeProfileValues(samples, "computePixelsMs"),
+      rendererMs: summarizeProfileValues(samples, "rendererMs"),
+      detail: latest.renderer === "webgl" ? {
+        resizeMs: summarizeProfileValues(samples, "rendererDetail.resizeMs"),
+        clearMs: summarizeProfileValues(samples, "rendererDetail.clearMs"),
+        colorExpandMs: summarizeProfileValues(samples, "rendererDetail.colorExpandMs"),
+        uploadMs: summarizeProfileValues(samples, "rendererDetail.uploadMs"),
+        drawSubmitMs: summarizeProfileValues(samples, "rendererDetail.drawSubmitMs"),
+        colorBytes: latest.rendererDetail?.colorBytes ?? null,
+        vertexCount: latest.rendererDetail?.vertexCount ?? null,
+      } : {
+        resizeMs: summarizeProfileValues(samples, "rendererDetail.resizeMs"),
+        drawMs: summarizeProfileValues(samples, "rendererDetail.drawMs"),
+        drawnLedCount: latest.rendererDetail?.drawnLedCount ?? null,
+      },
+    };
+  }
+
+  getExecutionProfileSnapshot() {
+    if (!this.rendererProfiling || !this.executionProfileSamples.length) {
+      return null;
+    }
+    const samples = this.executionProfileSamples;
+    const latest = samples[samples.length - 1];
+    return {
+      sampleCount: samples.length,
+      mode: latest.mode,
+      stepsDue: summarizeProfileValues(samples, "stepsDue"),
+      tickMs: summarizeProfileValues(samples, "tickMs"),
+      exportFrameMs: summarizeProfileValues(samples, "exportFrameMs"),
+      framePrepMs: summarizeProfileValues(samples, "framePrepMs"),
+      totalMs: summarizeProfileValues(samples, "totalMs"),
+    };
   }
 
   getAssetFrameImage(asset, frameNumber) {
@@ -1356,8 +1804,15 @@ class BrowserHostApp {
 
   renderStatus() {
     this.elements.buttonMask.textContent = `Buttons 0x${this.currentButtons.toString(16).padStart(2, "0")}`;
-    if (this.lastFrame) {
-      this.elements.frameCounter.textContent = `Frame ${this.lastFrame.frame}`;
+    if (this.elements.gamepadStatus) {
+      this.elements.gamepadStatus.textContent = this.activeGamepadIndex === null
+        ? "Gamepad none"
+        : `Gamepad ${this.activeGamepadIndex + 1}`;
+    }
+    if (this.elements.frameCounter) {
+      this.elements.frameCounter.textContent = this.displayedFps === null
+        ? "FPS --"
+        : `FPS ${this.displayedFps.toFixed(1)}`;
     }
   }
 
@@ -1409,6 +1864,8 @@ class BrowserHostApp {
     if (!this.inspectorOpen) {
       return;
     }
+    const profile = this.getRenderProfileSnapshot();
+    const executionProfile = this.getExecutionProfileSnapshot();
     const summary = [
       ["Sprites", frame.sprites.length],
       ["Assets", this.assetIndex.size],
@@ -1416,8 +1873,39 @@ class BrowserHostApp {
       ["Column Offset", frame.column_offset],
       ["Gamma", frame.gamma_mode],
       ["Buttons", `0x${frame.buttons.toString(16).padStart(2, "0")}`],
+      ["Gamepad", this.activeGamepadIndex === null ? "None" : `Controller ${this.activeGamepadIndex + 1}`],
       ["Renderer", this.force2dFallback ? "2D fallback" : this.renderer.available ? "WebGL" : "2D fallback"],
     ];
+    if (profile) {
+      summary.push(
+        ["Profile Samples", profile.sampleCount],
+        ["Frame Total", `${formatProfileMs(profile.totalMs?.avg)} avg / ${formatProfileMs(profile.totalMs?.max)} max`],
+        ["Pixels", `${formatProfileMs(profile.computePixelsMs?.avg)} avg / ${formatProfileMs(profile.computePixelsMs?.max)} max`],
+        ["Renderer Cost", `${formatProfileMs(profile.rendererMs?.avg)} avg / ${formatProfileMs(profile.rendererMs?.max)} max`],
+      );
+      if (profile.renderer === "webgl") {
+        summary.push(
+          ["Color Expand", `${formatProfileMs(profile.detail.colorExpandMs?.avg)} avg / ${formatProfileMs(profile.detail.colorExpandMs?.max)} max`],
+          ["Upload", `${formatProfileMs(profile.detail.uploadMs?.avg)} avg / ${formatProfileMs(profile.detail.uploadMs?.max)} max`],
+          ["Draw Submit", `${formatProfileMs(profile.detail.drawSubmitMs?.avg)} avg / ${formatProfileMs(profile.detail.drawSubmitMs?.max)} max`],
+        );
+      } else {
+        summary.push([
+          "Canvas Draw",
+          `${formatProfileMs(profile.detail.drawMs?.avg)} avg / ${formatProfileMs(profile.detail.drawMs?.max)} max`,
+        ]);
+      }
+    }
+    if (executionProfile) {
+      summary.push(
+        ["Poll Samples", executionProfile.sampleCount],
+        ["Poll Total", `${formatProfileMs(executionProfile.totalMs?.avg)} avg / ${formatProfileMs(executionProfile.totalMs?.max)} max`],
+        ["Tick", `${formatProfileMs(executionProfile.tickMs?.avg)} avg / ${formatProfileMs(executionProfile.tickMs?.max)} max`],
+        ["Export", `${formatProfileMs(executionProfile.exportFrameMs?.avg)} avg / ${formatProfileMs(executionProfile.exportFrameMs?.max)} max`],
+        ["Frame Prep", `${formatProfileMs(executionProfile.framePrepMs?.avg)} avg / ${formatProfileMs(executionProfile.framePrepMs?.max)} max`],
+        ["Steps Due", executionProfile.stepsDue ? `${executionProfile.stepsDue.avg.toFixed(2)} avg / ${executionProfile.stepsDue.max.toFixed(0)} max` : "--"],
+      );
+    }
 
     this.elements.runtimeSummary.innerHTML = summary.map(([label, value]) => `
       <div class="summary-card">
@@ -1433,6 +1921,9 @@ class BrowserHostApp {
 
   describeFrame(frame) {
     const firstAsset = this.assetIndex.size ? this.assetIndex.values().next().value : null;
+    const renderProfile = this.getRenderProfileSnapshot();
+    const executionProfile = this.getExecutionProfileSnapshot();
+    const dpr = window.devicePixelRatio || 1;
     return {
       frameType: typeof frame,
       keys: Object.keys(frame || {}),
@@ -1448,6 +1939,25 @@ class BrowserHostApp {
         ...firstAsset,
         data: `[${firstAsset.data?.length ?? 0} bytes]`,
       } : null,
+      viewport: {
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        devicePixelRatio: dpr,
+      },
+      webglCanvas: this.canvas ? {
+        clientWidth: this.canvas.clientWidth,
+        clientHeight: this.canvas.clientHeight,
+        width: this.canvas.width,
+        height: this.canvas.height,
+      } : null,
+      fallbackCanvas: this.fallbackCanvas ? {
+        clientWidth: this.fallbackCanvas.clientWidth,
+        clientHeight: this.fallbackCanvas.clientHeight,
+        width: this.fallbackCanvas.width,
+        height: this.fallbackCanvas.height,
+      } : null,
+      renderProfile,
+      executionProfile,
     };
   }
 
@@ -1463,6 +1973,15 @@ class BrowserHostApp {
   }
 
   buildDiagnosticBundle(frameShape, diagnostics) {
+    const exportedDiagnostics = this.rendererProfiling
+      ? diagnostics.filter((entry) => (
+        entry?.type === "renderer.profiling" ||
+        entry?.type === "renderer.mode" ||
+        entry?.type === "timing.resync" ||
+        entry?.type === "timing.catchup" ||
+        entry?.type === "frame.error"
+      ))
+      : diagnostics;
     const bundle = {
       generatedAt: new Date().toISOString(),
       runtimeStatus: this.elements.runtimeMessage.textContent,
@@ -1479,7 +1998,7 @@ class BrowserHostApp {
         isSceneLifecycleError: this.executionError.isSceneLifecycleError,
       } : null,
       frameShape,
-      diagnostics,
+      diagnostics: exportedDiagnostics,
     };
     return JSON.stringify(bundle, null, 2);
   }

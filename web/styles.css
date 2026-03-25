@@ -354,6 +354,17 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.settings-block {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .copy-header,
 .copy-actions {
   display: flex;

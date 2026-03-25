@@ -5,6 +5,7 @@ This directory is a minimal static shell for the future WASM runtime.
 It currently provides:
 
 - event-driven keyboard input mapped to the Ventilastation button bitmask
+- Gamepad API input mapped to the same button bitmask, using the first connected controller
 - a pull-based frame polling loop
 - a debug canvas that renders exported sprite state
 - inspector panels for runtime events, sprites, and assets

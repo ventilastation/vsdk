@@ -40,6 +40,7 @@
         <h1 class="debug-title">Ventilastation Emulator</h1>
         <div class="debug-meta debug-meta-header">
           <span><strong>Keyboard</strong> Arrows + Space/O/P/Esc</span>
+          <span><strong>Gamepad</strong> D-pad/Left Stick + Face Buttons</span>
         </div>
         <div class="scene-error-banner" id="scene-error-banner" hidden>
           <div class="scene-error-copy">
@@ -52,25 +53,34 @@
         </div>
         <div class="copy-header">
           <div class="copy-actions">
-            <button type="button" id="toggle-rendering-button" aria-pressed="false">Stop rendering</button>
-            <button type="button" id="toggle-inspector-button" aria-expanded="false">Show debug</button>
+            <button type="button" id="toggle-rendering-button" aria-pressed="false">Pause emulator</button>
+            <button type="button" id="toggle-inspector-button" aria-expanded="false">Show options</button>
           </div>
         </div>
       </div>
     <section class="inspector-panel" id="inspector-panel" hidden>
-      <div class="inspector-block">
-        <h2>Debug Render</h2>
-        <label>
+      <div class="inspector-block settings-block">
+        <h2>Settings</h2>
+        <label class="settings-option">
           <input type="checkbox" id="force-2d-fallback">
           Force 2D fallback renderer
+        </label>
+        <label class="settings-option">
+          <input type="checkbox" id="invert-gamepad-y">
+          Invert gamepad Y axis
+        </label>
+        <label class="settings-option">
+          <input type="checkbox" id="enable-renderer-profiling">
+          Enable renderer profiling
         </label>
       </div>
       <div class="inspector-block">
         <div class="status-row status-row-debug">
           <span class="status-pill" id="adapter-name">Mock Runtime</span>
           <span class="status-pill" id="adapter-source">mock</span>
-          <span class="status-pill" id="frame-counter">Frame 0</span>
+          <span class="status-pill" id="frame-counter">FPS --</span>
           <span class="status-pill" id="button-mask">Buttons 0x00</span>
+          <span class="status-pill" id="gamepad-status">Gamepad none</span>
         </div>
         <div class="debug-meta">
           <span><strong>Canvas</strong> WebGL radial preview</span>
