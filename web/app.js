@@ -1672,10 +1672,18 @@ class BrowserHostApp {
       } else if (!Array.isArray(frame.sprites)) {
         frame.sprites = [];
       }
-      if (!(this.palette instanceof Uint8Array) && frame.palette instanceof Uint8Array) {
+      if (
+        frame.palette instanceof Uint8Array &&
+        (
+          !(this.palette instanceof Uint8Array) ||
+          Boolean(frame.palette_dirty) ||
+          Number(frame.palette_version || 0) !== this.paletteVersion
+        )
+      ) {
         this.palette = frame.palette;
         this.paletteVersion = Number(frame.palette_version || 0);
         this.paletteLoadedBytes = frame.palette.length;
+        this.assetRenderCache.clear();
       }
       if (Array.isArray(frame.assets) && frame.assets.length) {
         for (const asset of frame.assets) {
@@ -2037,6 +2045,26 @@ class BrowserHostApp {
         ["Steps Due", executionProfile.stepsDue ? `${executionProfile.stepsDue.avg.toFixed(2)} avg / ${executionProfile.stepsDue.max.toFixed(0)} max` : "--"],
       );
     }
+    if (frame.python_profile && typeof frame.python_profile === "object") {
+      summary.push(
+        [
+          "Py Export",
+          `${formatProfileMs(frame.python_profile.browserExportMs)} avg / ${formatProfileMs(frame.python_profile.browserExportMsMax)} max`,
+        ],
+        [
+          "Py Display",
+          `${formatProfileMs(frame.python_profile.displayExportMs)} avg / ${formatProfileMs(frame.python_profile.displayExportMsMax)} max`,
+        ],
+        [
+          "Py Sprites",
+          `${formatProfileMs(frame.python_profile.spritesDecodeMs)} avg / ${formatProfileMs(frame.python_profile.spritesDecodeMsMax)} max`,
+        ],
+        [
+          "Py Assets",
+          `${formatProfileMs(frame.python_profile.assetsAssembleMs)} avg / ${formatProfileMs(frame.python_profile.assetsAssembleMsMax)} max`,
+        ],
+      );
+    }
 
     this.elements.runtimeSummary.innerHTML = summary.map(([label, value]) => `
       <div class="summary-card">
@@ -2088,6 +2116,7 @@ class BrowserHostApp {
         width: this.fallbackCanvas.width,
         height: this.fallbackCanvas.height,
       } : null,
+      pythonProfile: frame.python_profile ?? null,
       renderProfile,
       executionProfile,
     };

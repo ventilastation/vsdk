@@ -5,12 +5,13 @@ const DEFAULT_CONFIG = {
   runtimeBundleUrl: "./runtime-bundle.json",
   runtimeManifestUrl: "./runtime-manifest.json",
   fsRoot: "/apps/micropython",
-  pystack: 8 * 1024,
+  pystack: 32 * 1024,
   heapsize: 8 * 1024 * 1024,
 };
 
 const PY_BRIDGE_SOURCE = `
 import json
+import sys
 import ubinascii
 
 def _vs_serialize_binary(value, binary_mode):
@@ -39,6 +40,14 @@ def __vs_bridge_call(module_name, function_name, args_json):
     result = function(*args)
     binary_mode = "base64" if function_name == "export_frame" else "meta"
     return json.dumps(_vs_serialize(result, binary_mode))
+
+def __vs_bridge_invoke(module_name, function_name, args_json):
+    try:
+        return json.dumps({"ok": True, "result": json.loads(__vs_bridge_call(module_name, function_name, args_json))})
+    except Exception as error:
+        error_type = sys.exc_info()[0]
+        error_name = getattr(error_type, "__name__", str(error_type))
+        return json.dumps({"ok": False, "error": error_name + ": " + str(error)})
 `;
 
 function dirname(path) {
@@ -61,7 +70,10 @@ async function fetchFirstAvailable(paths) {
     for (const path of paths) {
       const url = new URL(path.replace(/^\/+/, ""), baseUrl);
       try {
-        const response = await fetch(url, { credentials: "same-origin" });
+        const response = await fetch(url, {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
         if (response.ok) {
           return response;
         }
@@ -149,7 +161,10 @@ class MicroPythonRuntime {
       return;
     }
 
-    const response = await fetch(this.config.runtimeManifestUrl, { credentials: "same-origin" });
+    const response = await fetch(this.config.runtimeManifestUrl, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
     if (!response.ok) {
       throw new Error(`Unable to load runtime manifest: ${response.status} ${response.url}`);
     }
@@ -169,7 +184,10 @@ class MicroPythonRuntime {
   async populateFilesystemFromBundle() {
     let response;
     try {
-      response = await fetch(this.config.runtimeBundleUrl, { credentials: "same-origin" });
+      response = await fetch(this.config.runtimeBundleUrl, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
     } catch (_error) {
       return false;
     }
@@ -216,11 +234,18 @@ class MicroPythonRuntime {
   async call(moduleName, functionName, args) {
     this.assertInitialized();
     await this.mp.runPythonAsync(
-      `__vs_bridge_result = __vs_bridge_call(${JSON.stringify(moduleName)}, ${JSON.stringify(functionName)}, ${JSON.stringify(JSON.stringify(args))})`
+      `__vs_bridge_result = __vs_bridge_invoke(${JSON.stringify(moduleName)}, ${JSON.stringify(functionName)}, ${JSON.stringify(JSON.stringify(args))})`
     );
     const jsonResult = this.mp.globals.get("__vs_bridge_result");
     this.mp.globals.delete("__vs_bridge_result");
-    return reviveBytes(JSON.parse(jsonResult));
+    const bridgeResult = JSON.parse(jsonResult);
+    if (!bridgeResult || typeof bridgeResult !== "object") {
+      throw new Error("Invalid bridge response from MicroPython runtime");
+    }
+    if (!bridgeResult.ok) {
+      throw new Error(bridgeResult.error || "Unknown MicroPython bridge error");
+    }
+    return reviveBytes(bridgeResult.result);
   }
 
   assertInitialized() {
@@ -237,8 +262,32 @@ async function createRuntime(config = {}) {
 
 let runtime = null;
 
+function collectTransferables(value, transferables = [], seen = new Set()) {
+  if (value instanceof Uint8Array) {
+    const buffer = value.buffer;
+    if (!seen.has(buffer)) {
+      seen.add(buffer);
+      transferables.push(buffer);
+    }
+    return transferables;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectTransferables(entry, transferables, seen);
+    }
+    return transferables;
+  }
+  if (value && typeof value === "object") {
+    for (const entry of Object.values(value)) {
+      collectTransferables(entry, transferables, seen);
+    }
+  }
+  return transferables;
+}
+
 function success(id, result = null) {
-  self.postMessage({ id, ok: true, result });
+  const transferables = collectTransferables(result);
+  self.postMessage({ id, ok: true, result }, transferables);
 }
 
 function failure(id, error) {

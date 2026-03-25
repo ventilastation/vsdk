@@ -1,8 +1,29 @@
 import os
 import sys
 import uctypes
+try:
+    import utime as _time
+except ImportError:
+    import time as _time
 
 from ventilastation.runtime import FileStorage, MemoryStorage
+
+
+def _ticks_us():
+    ticks_us = getattr(_time, "ticks_us", None)
+    if ticks_us is not None:
+        return ticks_us()
+    perf_counter = getattr(_time, "perf_counter", None)
+    if perf_counter is not None:
+        return int(perf_counter() * 1000000)
+    return 0
+
+
+def _ticks_diff_us(end, start):
+    ticks_diff = getattr(_time, "ticks_diff", None)
+    if ticks_diff is not None:
+        return ticks_diff(end, start)
+    return end - start
 
 
 class NullComms:
@@ -223,13 +244,37 @@ class BrowserDisplay(NullDisplay):
         self.gamma_mode = 1
         self.frame = 0
         self.sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
+        self.palette_version = 0
+        self.palette_dirty = False
+        self.asset_data = {}
+        self.assets = {}
+        self.dirty_asset_slots = set()
+        self._profile_totals = {
+            "sampleCount": 0,
+            "displayExportUs": 0,
+            "displayExportUsMax": 0,
+            "paletteAttachUs": 0,
+            "paletteAttachUsMax": 0,
+            "assetsAssembleUs": 0,
+            "assetsAssembleUsMax": 0,
+            "eventsDrainUs": 0,
+            "eventsDrainUsMax": 0,
+            "spritesDecodeUs": 0,
+            "spritesDecodeUsMax": 0,
+        }
         self._frame_export = {
             "frame": 0,
             "buttons": 0,
             "column_offset": 0,
             "gamma_mode": 1,
+            "palette_length": 0,
+            "palette_version": 0,
+            "palette_dirty": False,
+            "palette": None,
             "assets": [],
             "events": [],
+            "sprites": [],
+            "python_profile": None,
         }
 
     def set_gamma_mode(self, mode):
@@ -237,25 +282,129 @@ class BrowserDisplay(NullDisplay):
 
     def set_palettes(self, palette):
         palette = bytes(palette)
-        self.comms.send(b"palette %d" % (len(palette) // 1024), palette)
+        if palette == self.palette:
+            return
+        self.palette = palette
+        self.palette_version += 1
+        self.palette_dirty = True
 
     def getaddress(self, sprite_num):
         return uctypes.addressof(self.sprite_data) + sprite_num * 5
 
     def set_imagestrip(self, number, stripmap):
-        self.comms.send(b"imagestrip %d %d" % (number, len(stripmap)), stripmap)
+        stripmap = bytes(stripmap)
+        if self.asset_data.get(number) == stripmap:
+            return
+        asset = self._decode_imagestrip(number, stripmap)
+        if asset is None:
+            return
+        self.asset_data[number] = stripmap
+        self.assets[number] = asset
+        self.dirty_asset_slots.add(number)
 
     def update(self):
         self.frame += 1
-        self.comms.send(b"sprites", self.sprite_data)
+
+    def _decode_imagestrip(self, slot, stripmap):
+        if len(stripmap) < 4:
+            return None
+        width = stripmap[0]
+        if width == 255:
+            width = 256
+        return {
+            "slot": slot,
+            "width": width,
+            "height": stripmap[1],
+            "frames": stripmap[2] or 1,
+            "palette": stripmap[3] or 0,
+            "data": stripmap[4:],
+        }
+
+    def _decode_sprites(self):
+        sprites = []
+        sprite_data = self.sprite_data
+        for offset in range(0, len(sprite_data), 5):
+            frame = sprite_data[offset + 3]
+            if frame == 255:
+                continue
+            perspective = sprite_data[offset + 4]
+            if perspective >= 128:
+                perspective -= 256
+            sprites.append({
+                "slot": offset // 5,
+                "x": sprite_data[offset],
+                "y": sprite_data[offset + 1],
+                "image_strip": sprite_data[offset + 2],
+                "frame": frame,
+                "perspective": perspective,
+            })
+        return sprites
 
     def export_frame(self, full=False):
+        started_at = _ticks_us()
         exported = self._frame_export
+        palette_started_at = _ticks_us()
         exported["frame"] = self.frame
         exported["buttons"] = self.comms.buttons
         exported["column_offset"] = self.column_offset
         exported["gamma_mode"] = self.gamma_mode
+        exported["palette_length"] = len(self.palette)
+        exported["palette_version"] = self.palette_version
+        exported["palette_dirty"] = full or self.palette_dirty
+        exported["palette"] = self.palette if (full or self.palette_dirty) else None
+        after_palette_at = _ticks_us()
+        assets_started_at = after_palette_at
+        if full:
+            asset_slots = sorted(self.assets)
+        else:
+            asset_slots = sorted(self.dirty_asset_slots)
+        exported["assets"] = [self.assets[slot] for slot in asset_slots if slot in self.assets]
+        after_assets_at = _ticks_us()
         exported["events"] = self.comms.drain_events()
+        after_events_at = _ticks_us()
+        exported["sprites"] = self._decode_sprites()
+        finished_at = _ticks_us()
+        display_export_us = _ticks_diff_us(finished_at, started_at)
+        palette_attach_us = _ticks_diff_us(after_palette_at, palette_started_at)
+        assets_assemble_us = _ticks_diff_us(after_assets_at, assets_started_at)
+        events_drain_us = _ticks_diff_us(after_events_at, after_assets_at)
+        sprites_decode_us = _ticks_diff_us(finished_at, after_events_at)
+        profile = self._profile_totals
+        profile["sampleCount"] += 1
+        profile["displayExportUs"] += display_export_us
+        profile["paletteAttachUs"] += palette_attach_us
+        profile["assetsAssembleUs"] += assets_assemble_us
+        profile["eventsDrainUs"] += events_drain_us
+        profile["spritesDecodeUs"] += sprites_decode_us
+        if display_export_us > profile["displayExportUsMax"]:
+            profile["displayExportUsMax"] = display_export_us
+        if palette_attach_us > profile["paletteAttachUsMax"]:
+            profile["paletteAttachUsMax"] = palette_attach_us
+        if assets_assemble_us > profile["assetsAssembleUsMax"]:
+            profile["assetsAssembleUsMax"] = assets_assemble_us
+        if events_drain_us > profile["eventsDrainUsMax"]:
+            profile["eventsDrainUsMax"] = events_drain_us
+        if sprites_decode_us > profile["spritesDecodeUsMax"]:
+            profile["spritesDecodeUsMax"] = sprites_decode_us
+        sample_count = profile["sampleCount"] or 1
+        exported["python_profile"] = {
+            "displayExportMs": profile["displayExportUs"] / sample_count / 1000.0,
+            "displayExportMsMax": profile["displayExportUsMax"] / 1000.0,
+            "paletteAttachMs": profile["paletteAttachUs"] / sample_count / 1000.0,
+            "paletteAttachMsMax": profile["paletteAttachUsMax"] / 1000.0,
+            "assetsAssembleMs": profile["assetsAssembleUs"] / sample_count / 1000.0,
+            "assetsAssembleMsMax": profile["assetsAssembleUsMax"] / 1000.0,
+            "eventsDrainMs": profile["eventsDrainUs"] / sample_count / 1000.0,
+            "eventsDrainMsMax": profile["eventsDrainUsMax"] / 1000.0,
+            "spritesDecodeMs": profile["spritesDecodeUs"] / sample_count / 1000.0,
+            "spritesDecodeMsMax": profile["spritesDecodeUsMax"] / 1000.0,
+            "sampleCount": sample_count,
+            "assetCount": len(exported["assets"]),
+            "spriteCount": len(exported["sprites"]),
+            "full": bool(full),
+        }
+        self.palette_dirty = False
+        self.dirty_asset_slots = set()
         return exported
 
 
