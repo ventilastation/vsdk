@@ -115,11 +115,7 @@ class Director:
             self.music_off()
         self.platform.sprites.reset_sprites()
         if self.scene_stack:
-            try:
-                self._enter_scene(self.scene_stack[-1])
-            except Exception:
-                self.scene_stack.pop()
-                raise
+            self._enter_scene(self.scene_stack[-1])
         return scene
 
     def is_pressed(self, button):
@@ -284,8 +280,11 @@ class Director:
         self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
         self.platform.display.update()
 
-    def run(self):
+    def run(self, should_continue=None):
         while True:
+            if should_continue is not None and not should_continue():
+                utime.sleep_ms(10)
+                continue
             now = utime.ticks_ms()
             next_loop = utime.ticks_add(now, 30)
             self.step_once()

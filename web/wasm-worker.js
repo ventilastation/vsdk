@@ -23,6 +23,7 @@ __vs_wasm_bridge.boot_runtime()
 `;
 
 const PY_BRIDGE_CALL_SOURCE = "__vs_bridge_result = __vs_wasm_bridge.invoke_from_globals()";
+const PY_STEP_SOURCE = "__vs_wasm_bridge.step(__vs_step_count)";
 
 function dirname(path) {
   const normalized = path.replace(/\\/g, "/");
@@ -336,6 +337,16 @@ class MicroPythonRuntime {
     return result;
   }
 
+  async step(count = 1) {
+    this.assertInitialized();
+    this.mp.globals.set("__vs_step_count", Number(count) || 0);
+    try {
+      return await this.mp.runPythonAsync(PY_STEP_SOURCE);
+    } finally {
+      this.mp.globals.delete("__vs_step_count");
+    }
+  }
+
   assertInitialized() {
     if (!this.initialized || !this.mp) {
       throw new Error("WASM worker runtime has not been initialized");
@@ -551,9 +562,7 @@ async function runRuntimeLoopIteration() {
     }
 
     if (stepsDue > 0) {
-      await enqueueRuntimeWork(async () => (
-        runtime.call("ventilastation.wasm_bridge", "step", [stepsDue])
-      ));
+      await enqueueRuntimeWork(async () => runtime.step(stepsDue));
       runtimeLoop.lastSceneTickAt += stepsDue * SCENE_STEP_MS;
     }
   } catch (error) {

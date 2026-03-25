@@ -1,3 +1,4 @@
+import gc
 import json
 import sys
 import ubinascii
@@ -40,7 +41,11 @@ def step(count=1):
     from ventilastation.director import director
     remaining = int(count)
     while remaining > 0:
-        director.step_once()
+        try:
+            director.step_once()
+        except MemoryError:
+            gc.collect()
+            director.step_once()
         remaining -= 1
     return None
 
