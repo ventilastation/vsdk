@@ -53,6 +53,7 @@ const FORCE_2D_STORAGE_KEY = "ventilastation.force2dFallback";
 const INVERT_GAMEPAD_Y_STORAGE_KEY = "ventilastation.invertGamepadY.v1";
 const INSPECTOR_OPEN_STORAGE_KEY = "ventilastation.inspectorOpen.v2";
 const RENDERER_PROFILING_STORAGE_KEY = "ventilastation.rendererProfiling.v1";
+const WEBGL_RESOLUTION_SCALE_STORAGE_KEY = "ventilastation.webglResolutionScale.v1";
 const SCENE_STEP_MS = 30;
 const MAX_CATCH_UP_STEPS = 6;
 const MAX_TICK_BACKLOG_MS = SCENE_STEP_MS * MAX_CATCH_UP_STEPS;
@@ -60,6 +61,10 @@ const TOUCH_STICK_DEAD_ZONE = 0.26;
 const GAMEPAD_AXIS_DEAD_ZONE = 0.35;
 const FPS_DISPLAY_INTERVAL_MS = 500;
 const RENDER_PROFILE_SAMPLE_LIMIT = 60;
+const DEFAULT_WEBGL_RESOLUTION_SCALE = 1;
+const WEBGL_RESOLUTION_SCALES = [1, 0.75, 0.5, 0.375, 0.25];
+const WEBGL_AUTO_SCALE_MIN_FPS = 20;
+const WEBGL_AUTO_SCALE_WAIT_MS = 3000;
 const EMULATOR_BASE_URL = new URL(".", window.location.href);
 const PROJECT_ROOT_CANDIDATES = [
   EMULATOR_BASE_URL,
@@ -265,6 +270,7 @@ class LedRingWebGLRenderer {
     this.canvas = canvas;
     this.geometry = createLedRingGeometry();
     this.lastProfile = null;
+    this.resolutionScale = DEFAULT_WEBGL_RESOLUTION_SCALE;
     this.gl = canvas.getContext("webgl", {
       alpha: true,
       antialias: true,
@@ -375,8 +381,11 @@ class LedRingWebGLRenderer {
 
   resize() {
     const dpr = window.devicePixelRatio || 1;
-    const width = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
-    const height = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
+    const scale = Number.isFinite(this.resolutionScale) && this.resolutionScale > 0
+      ? this.resolutionScale
+      : DEFAULT_WEBGL_RESOLUTION_SCALE;
+    const width = Math.max(1, Math.round(this.canvas.clientWidth * dpr * scale));
+    const height = Math.max(1, Math.round(this.canvas.clientHeight * dpr * scale));
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
@@ -384,7 +393,7 @@ class LedRingWebGLRenderer {
     if (this.gl) {
       this.gl.viewport(0, 0, width, height);
     }
-    return { width, height };
+    return { width, height, scale };
   }
 
   clear() {
@@ -402,7 +411,7 @@ class LedRingWebGLRenderer {
     }
 
     const startedAt = performance.now();
-    const { width, height } = this.resize();
+    const { width, height, scale } = this.resize();
     const afterResizeAt = performance.now();
     const gl = this.gl;
     this.clear();
@@ -437,6 +446,7 @@ class LedRingWebGLRenderer {
       uploadMs: afterUploadAt - afterColorExpandAt,
       drawSubmitMs: finishedAt - afterUploadAt,
       totalMs: finishedAt - startedAt,
+      resolutionScale: scale,
       vertexCount: this.geometry.vertexCount,
       colorBytes: colorBytes.length,
     };
@@ -690,11 +700,14 @@ class BrowserHostApp {
     this.lastFpsDisplayUpdateAt = null;
     this.renderProfileSamples = [];
     this.executionProfileSamples = [];
+    this.lastCanvasClientSize = null;
+    this.lowFpsSinceAt = null;
     this.diagnostics = [];
     this.audio = new BrowserAudioHost();
     this.force2dFallback = this.readForce2dPreference();
     this.invertGamepadY = this.readInvertGamepadYPreference();
     this.rendererProfiling = this.readRendererProfilingPreference();
+    this.webglResolutionScale = this.readWebglResolutionScalePreference();
     this.inspectorOpen = this.readInspectorPreference();
     this.lastSceneTickAt = null;
     this.pollRequestId = null;
@@ -704,6 +717,7 @@ class BrowserHostApp {
     this.canvas = document.querySelector("#frame-canvas-gl");
     this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
     this.renderer = new LedRingWebGLRenderer(this.canvas);
+    this.renderer.resolutionScale = this.webglResolutionScale;
     this.fallbackRenderer = new LedRingCanvasRenderer(this.fallbackCanvas, this.renderer.geometry);
     this.elements = {
       adapterName: document.querySelector("#adapter-name"),
@@ -730,6 +744,7 @@ class BrowserHostApp {
       force2dFallback: document.querySelector("#force-2d-fallback"),
       invertGamepadY: document.querySelector("#invert-gamepad-y"),
       enableRendererProfiling: document.querySelector("#enable-renderer-profiling"),
+      webglResolutionScale: document.querySelector("#webgl-resolution-scale"),
     };
     this.copyStatusTimer = null;
     this.refreshCopyDiagnostics();
@@ -1277,6 +1292,98 @@ class BrowserHostApp {
         }
       });
     }
+
+    if (this.elements.webglResolutionScale) {
+      this.elements.webglResolutionScale.value = String(this.webglResolutionScale);
+      this.elements.webglResolutionScale.addEventListener("change", () => {
+        const nextScale = Number.parseFloat(this.elements.webglResolutionScale.value);
+        const resolvedScale = Number.isFinite(nextScale) && nextScale > 0
+          ? nextScale
+          : DEFAULT_WEBGL_RESOLUTION_SCALE;
+        this.applyWebglResolutionScale(resolvedScale, { reason: "manual", persist: true });
+        if (this.lastFrame) {
+          this.renderFrame();
+        } else {
+          this.renderStatus();
+          this.refreshCopyDiagnostics();
+        }
+      });
+    }
+  }
+
+  applyWebglResolutionScale(scale, { reason = "manual", persist = true } = {}) {
+    const resolvedScale = WEBGL_RESOLUTION_SCALES.includes(scale)
+      ? scale
+      : DEFAULT_WEBGL_RESOLUTION_SCALE;
+    this.webglResolutionScale = resolvedScale;
+    this.renderer.resolutionScale = resolvedScale;
+    this.lowFpsSinceAt = null;
+    this.renderProfileSamples = [];
+    this.executionProfileSamples = [];
+    if (persist) {
+      this.writeWebglResolutionScalePreference(resolvedScale);
+    }
+    if (this.elements.webglResolutionScale) {
+      this.elements.webglResolutionScale.value = String(resolvedScale);
+    }
+    this.addDiagnostic("renderer.resolution_scale", {
+      scale: resolvedScale,
+      reason,
+      persist,
+    });
+  }
+
+  getNextLowerWebglResolutionScale() {
+    const currentIndex = WEBGL_RESOLUTION_SCALES.indexOf(this.webglResolutionScale);
+    if (currentIndex === -1) {
+      return null;
+    }
+    return WEBGL_RESOLUTION_SCALES[currentIndex + 1] || null;
+  }
+
+  syncAdaptiveWebglResolution(now = performance.now()) {
+    if (!this.canvas || this.force2dFallback || !this.renderer.available) {
+      this.lowFpsSinceAt = null;
+      return;
+    }
+
+    const clientWidth = this.canvas.clientWidth;
+    const clientHeight = this.canvas.clientHeight;
+    const currentSize = `${clientWidth}x${clientHeight}`;
+    if (this.lastCanvasClientSize !== currentSize) {
+      this.lastCanvasClientSize = currentSize;
+      this.applyWebglResolutionScale(DEFAULT_WEBGL_RESOLUTION_SCALE, {
+        reason: "display_change",
+        persist: true,
+      });
+      return;
+    }
+
+    if (this.displayedFps === null || this.displayedFps >= WEBGL_AUTO_SCALE_MIN_FPS) {
+      this.lowFpsSinceAt = null;
+      return;
+    }
+
+    if (this.lowFpsSinceAt === null) {
+      this.lowFpsSinceAt = now;
+      return;
+    }
+
+    if (now - this.lowFpsSinceAt < WEBGL_AUTO_SCALE_WAIT_MS) {
+      return;
+    }
+
+    const nextScale = this.getNextLowerWebglResolutionScale();
+    if (!nextScale) {
+      this.lowFpsSinceAt = null;
+      return;
+    }
+
+    this.applyWebglResolutionScale(nextScale, {
+      reason: "auto_low_fps",
+      persist: true,
+    });
+    this.lowFpsSinceAt = now;
   }
 
   renderCanvasVisibility() {
@@ -1412,6 +1519,28 @@ class BrowserHostApp {
         localStorage.setItem(RENDERER_PROFILING_STORAGE_KEY, "1");
       } else {
         localStorage.removeItem(RENDERER_PROFILING_STORAGE_KEY);
+      }
+    } catch (_error) {
+      return;
+    }
+  }
+
+  readWebglResolutionScalePreference() {
+    try {
+      const rawValue = localStorage.getItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY);
+      const parsed = Number.parseFloat(rawValue ?? "");
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_WEBGL_RESOLUTION_SCALE;
+    } catch (_error) {
+      return DEFAULT_WEBGL_RESOLUTION_SCALE;
+    }
+  }
+
+  writeWebglResolutionScalePreference(scale) {
+    try {
+      if (scale === DEFAULT_WEBGL_RESOLUTION_SCALE) {
+        localStorage.removeItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY);
+      } else {
+        localStorage.setItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY, String(scale));
       }
     } catch (_error) {
       return;
@@ -1611,6 +1740,7 @@ class BrowserHostApp {
     }
 
     this.updateDisplayedFps();
+    this.syncAdaptiveWebglResolution();
     const startedAt = this.rendererProfiling ? performance.now() : 0;
 
     const hasPendingVisibleAsset = this.visibleStripSlots.some((slot) => {
@@ -1875,6 +2005,7 @@ class BrowserHostApp {
       ["Buttons", `0x${frame.buttons.toString(16).padStart(2, "0")}`],
       ["Gamepad", this.activeGamepadIndex === null ? "None" : `Controller ${this.activeGamepadIndex + 1}`],
       ["Renderer", this.force2dFallback ? "2D fallback" : this.renderer.available ? "WebGL" : "2D fallback"],
+      ["WebGL Scale", `${Math.round(this.webglResolutionScale * 100)}%`],
     ];
     if (profile) {
       summary.push(
@@ -1944,6 +2075,7 @@ class BrowserHostApp {
         innerHeight: window.innerHeight,
         devicePixelRatio: dpr,
       },
+      webglResolutionScale: this.webglResolutionScale,
       webglCanvas: this.canvas ? {
         clientWidth: this.canvas.clientWidth,
         clientHeight: this.canvas.clientHeight,

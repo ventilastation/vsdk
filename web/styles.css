@@ -365,6 +365,20 @@ body {
   gap: 10px;
 }
 
+.settings-option-select {
+  justify-content: space-between;
+}
+
+.settings-option-select select {
+  appearance: none;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 19, 26, 0.9);
+  color: inherit;
+  font: inherit;
+  padding: 6px 10px;
+}
+
 .copy-header,
 .copy-actions {
   display: flex;
