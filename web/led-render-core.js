@@ -52,25 +52,34 @@
     return -1;
   }
 
-  function getPaletteColor(palette, paletteIndex, colorIndex) {
-    const base = (paletteIndex * 256 + colorIndex) * 4;
-    return [
-      palette[base + 3] || 0,
-      palette[base + 2] || 0,
-      palette[base + 1] || 0,
-      255,
-    ];
+  function getLedOffset(column, led) {
+    if (column < 0 || column >= COLUMNS || led < 0 || led >= PIXELS) {
+      return -1;
+    }
+    return (column * PIXELS + led) * 4;
   }
 
-  function setLedColor(buffer, column, led, rgba) {
-    if (column < 0 || column >= COLUMNS || led < 0 || led >= PIXELS) {
+  function setLedColor(buffer, column, led, red, green, blue, alpha) {
+    const offset = getLedOffset(column, led);
+    if (offset === -1) {
       return;
     }
-    const offset = (column * PIXELS + led) * 4;
-    buffer[offset] = rgba[0];
-    buffer[offset + 1] = rgba[1];
-    buffer[offset + 2] = rgba[2];
-    buffer[offset + 3] = rgba[3];
+    buffer[offset] = red;
+    buffer[offset + 1] = green;
+    buffer[offset + 2] = blue;
+    buffer[offset + 3] = alpha;
+  }
+
+  function setLedColorFromPalette(buffer, palette, paletteIndex, colorIndex, column, led) {
+    const offset = getLedOffset(column, led);
+    if (offset === -1) {
+      return;
+    }
+    const paletteOffset = (paletteIndex * 256 + colorIndex) * 4;
+    buffer[offset] = palette[paletteOffset + 3] || 0;
+    buffer[offset + 1] = palette[paletteOffset + 2] || 0;
+    buffer[offset + 2] = palette[paletteOffset + 1] || 0;
+    buffer[offset + 3] = 255;
   }
 
   function getFrameIndex(frame, totalFrames) {
@@ -92,7 +101,7 @@
       const renderColumn = positiveMod(x - columnOffset, COLUMNS);
       const led = DEEPSPACE[wrappedY];
       if (led < PIXELS) {
-        setLedColor(pixels, renderColumn, led, STAR_COLOR);
+        setLedColor(pixels, renderColumn, led, STAR_COLOR[0], STAR_COLOR[1], STAR_COLOR[2], STAR_COLOR[3]);
       }
     }
   }
@@ -131,6 +140,7 @@
 
         const frameIndex = getFrameIndex(sprite.frame || 0, totalFrames);
         const base = visibleColumn * height + frameIndex * width * height;
+        const paletteIndex = asset.palette || 0;
 
         if (sprite.perspective) {
           const desde = Math.max(sprite.y || 0, 0);
@@ -144,7 +154,7 @@
             }
             const led = sprite.perspective === 1 ? DEEPSPACE[y] : PIXELS - 1 - y;
             if (led < PIXELS) {
-              setLedColor(pixels, column, led, getPaletteColor(palette, asset.palette || 0, colorIndex));
+              setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);
             }
           }
           continue;
@@ -160,7 +170,7 @@
           if (colorIndex === TRANSPARENT_INDEX) {
             continue;
           }
-          setLedColor(pixels, column, led, getPaletteColor(palette, asset.palette || 0, colorIndex));
+          setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);
         }
       }
     }

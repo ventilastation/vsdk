@@ -46,7 +46,6 @@ const {
   PIXELS,
   computeLedFramePixels,
   createLedRingGeometry,
-  repeatLedColors,
 } = LedRenderCore;
 
 const FORCE_2D_STORAGE_KEY = "ventilastation.force2dFallback";
@@ -96,6 +95,22 @@ function summarizeProfileValues(samples, key) {
     avg: total / values.length,
     max: Math.max(...values),
   };
+}
+
+function fillRepeatedLedColors(ledPixels, repeatedWords, multiplier) {
+  const ledWords = new Uint32Array(
+    ledPixels.buffer,
+    ledPixels.byteOffset,
+    ledPixels.byteLength / 4
+  );
+  let dest = 0;
+  for (let index = 0; index < ledWords.length; index += 1) {
+    const word = ledWords[index];
+    for (let repeat = 0; repeat < multiplier; repeat += 1) {
+      repeatedWords[dest] = word;
+      dest += 1;
+    }
+  }
 }
 
 async function resolveFirstAvailableUrl(paths, { method = "HEAD" } = {}) {
@@ -272,6 +287,9 @@ class LedRingWebGLRenderer {
     this.geometry = createLedRingGeometry();
     this.lastProfile = null;
     this.resolutionScale = DEFAULT_WEBGL_RESOLUTION_SCALE;
+    this.displayWidth = canvas.clientWidth || 0;
+    this.displayHeight = canvas.clientHeight || 0;
+    this.lastDevicePixelRatio = null;
     this.gl = canvas.getContext("webgl", {
       alpha: true,
       antialias: true,
@@ -336,6 +354,8 @@ class LedRingWebGLRenderer {
     this.colorBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.geometry.vertexCount * 4, gl.DYNAMIC_DRAW);
+    this.colorBytes = new Uint8Array(this.geometry.vertexCount * 4);
+    this.colorWords = new Uint32Array(this.colorBytes.buffer);
 
     this.attribs = {
       position: gl.getAttribLocation(this.program, "a_position"),
@@ -355,6 +375,11 @@ class LedRingWebGLRenderer {
     } else {
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
     }
+  }
+
+  setDisplaySize(width, height) {
+    this.displayWidth = Math.max(0, Number(width) || 0);
+    this.displayHeight = Math.max(0, Number(height) || 0);
   }
 
   createShader(type, source) {
@@ -385,11 +410,12 @@ class LedRingWebGLRenderer {
     const scale = Number.isFinite(this.resolutionScale) && this.resolutionScale > 0
       ? this.resolutionScale
       : DEFAULT_WEBGL_RESOLUTION_SCALE;
-    const width = Math.max(1, Math.round(this.canvas.clientWidth * dpr * scale));
-    const height = Math.max(1, Math.round(this.canvas.clientHeight * dpr * scale));
-    if (this.canvas.width !== width || this.canvas.height !== height) {
+    const width = Math.max(1, Math.round(this.displayWidth * dpr * scale));
+    const height = Math.max(1, Math.round(this.displayHeight * dpr * scale));
+    if (this.canvas.width !== width || this.canvas.height !== height || this.lastDevicePixelRatio !== dpr) {
       this.canvas.width = width;
       this.canvas.height = height;
+      this.lastDevicePixelRatio = dpr;
     }
     if (this.gl) {
       this.gl.viewport(0, 0, width, height);
@@ -428,9 +454,9 @@ class LedRingWebGLRenderer {
     gl.vertexAttribPointer(this.attribs.texCoord, 2, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
-    const colorBytes = repeatLedColors(ledPixels, 6);
+    fillRepeatedLedColors(ledPixels, this.colorWords, 6);
     const afterColorExpandAt = performance.now();
-    gl.bufferData(gl.ARRAY_BUFFER, colorBytes, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, this.colorBytes, gl.DYNAMIC_DRAW);
     const afterUploadAt = performance.now();
     gl.enableVertexAttribArray(this.attribs.color);
     gl.vertexAttribPointer(this.attribs.color, 4, gl.UNSIGNED_BYTE, true, 0, 0);
@@ -449,7 +475,7 @@ class LedRingWebGLRenderer {
       totalMs: finishedAt - startedAt,
       resolutionScale: scale,
       vertexCount: this.geometry.vertexCount,
-      colorBytes: colorBytes.length,
+      colorBytes: this.colorBytes.length,
     };
     return true;
   }
@@ -462,6 +488,14 @@ class LedRingCanvasRenderer {
     this.geometry = geometry;
     this.ledLayout = this.buildLedLayout();
     this.lastProfile = null;
+    this.displayWidth = canvas.clientWidth || 0;
+    this.displayHeight = canvas.clientHeight || 0;
+    this.lastDevicePixelRatio = null;
+  }
+
+  setDisplaySize(width, height) {
+    this.displayWidth = Math.max(0, Number(width) || 0);
+    this.displayHeight = Math.max(0, Number(height) || 0);
   }
 
   buildLedLayout() {
@@ -533,11 +567,12 @@ class LedRingCanvasRenderer {
 
   resize() {
     const dpr = window.devicePixelRatio || 1;
-    const width = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
-    const height = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
-    if (this.canvas.width !== width || this.canvas.height !== height) {
+    const width = Math.max(1, Math.round(this.displayWidth * dpr));
+    const height = Math.max(1, Math.round(this.displayHeight * dpr));
+    if (this.canvas.width !== width || this.canvas.height !== height || this.lastDevicePixelRatio !== dpr) {
       this.canvas.width = width;
       this.canvas.height = height;
+      this.lastDevicePixelRatio = dpr;
     }
     return { width, height };
   }
@@ -701,6 +736,9 @@ class BrowserHostApp {
     this.lastFpsDisplayUpdateAt = null;
     this.renderProfileSamples = [];
     this.lastCanvasClientSize = null;
+    this.lastAppliedCanvasClientSize = null;
+    this.canvasDisplaySize = { width: 0, height: 0 };
+    this.fallbackCanvasDisplaySize = { width: 0, height: 0 };
     this.lowFpsSinceAt = null;
     this.diagnostics = [];
     this.audio = new BrowserAudioHost();
@@ -719,6 +757,7 @@ class BrowserHostApp {
     this.touchStickPointerId = null;
     this.unsubscribeWorkerFrame = null;
     this.unsubscribeWorkerRuntimeError = null;
+    this.canvasResizeObserver = null;
     this.canvas = document.querySelector("#frame-canvas-gl");
     this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
     this.renderer = new LedRingWebGLRenderer(this.canvas);
@@ -848,6 +887,42 @@ class BrowserHostApp {
     frame.events = remainingEvents;
   }
 
+  refreshCanvasDisplayMetrics() {
+    const webglWidth = this.canvas?.clientWidth || 0;
+    const webglHeight = this.canvas?.clientHeight || 0;
+    const fallbackWidth = this.fallbackCanvas?.clientWidth || 0;
+    const fallbackHeight = this.fallbackCanvas?.clientHeight || 0;
+
+    this.canvasDisplaySize = { width: webglWidth, height: webglHeight };
+    this.fallbackCanvasDisplaySize = { width: fallbackWidth, height: fallbackHeight };
+    this.lastCanvasClientSize = `${webglWidth}x${webglHeight}`;
+
+    this.renderer?.setDisplaySize(webglWidth, webglHeight);
+    this.fallbackRenderer?.setDisplaySize(fallbackWidth, fallbackHeight);
+  }
+
+  bindCanvasResizeObserver() {
+    this.refreshCanvasDisplayMetrics();
+
+    const handleResize = () => {
+      this.refreshCanvasDisplayMetrics();
+    };
+
+    if (typeof ResizeObserver === "function") {
+      this.canvasResizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      if (this.canvas) {
+        this.canvasResizeObserver.observe(this.canvas);
+      }
+      if (this.fallbackCanvas) {
+        this.canvasResizeObserver.observe(this.fallbackCanvas);
+      }
+    }
+
+    window.addEventListener("resize", handleResize);
+  }
+
   start() {
     this.elements.adapterName.textContent = this.adapter.name;
     this.elements.adapterSource.textContent = this.runtime.source;
@@ -866,6 +941,7 @@ class BrowserHostApp {
     this.bindRenderingToggle();
     this.bindInspectorToggle();
     this.bindSceneErrorControls();
+    this.bindCanvasResizeObserver();
     this.renderRenderingToggle();
     this.renderInspectorVisibility();
     this.renderCanvasVisibility();
@@ -1406,11 +1482,9 @@ class BrowserHostApp {
       return;
     }
 
-    const clientWidth = this.canvas.clientWidth;
-    const clientHeight = this.canvas.clientHeight;
-    const currentSize = `${clientWidth}x${clientHeight}`;
-    if (this.lastCanvasClientSize !== currentSize) {
-      this.lastCanvasClientSize = currentSize;
+    const currentSize = this.lastCanvasClientSize;
+    if (this.lastAppliedCanvasClientSize !== currentSize) {
+      this.lastAppliedCanvasClientSize = currentSize;
       this.applyWebglResolutionScale(DEFAULT_WEBGL_RESOLUTION_SCALE, {
         reason: "display_change",
         persist: false,
@@ -2119,14 +2193,14 @@ class BrowserHostApp {
       webglResolutionScalePreference: this.webglResolutionScalePreference,
       webglResolutionScale: this.webglResolutionScale,
       webglCanvas: this.canvas ? {
-        clientWidth: this.canvas.clientWidth,
-        clientHeight: this.canvas.clientHeight,
+        clientWidth: this.canvasDisplaySize.width,
+        clientHeight: this.canvasDisplaySize.height,
         width: this.canvas.width,
         height: this.canvas.height,
       } : null,
       fallbackCanvas: this.fallbackCanvas ? {
-        clientWidth: this.fallbackCanvas.clientWidth,
-        clientHeight: this.fallbackCanvas.clientHeight,
+        clientWidth: this.fallbackCanvasDisplaySize.width,
+        clientHeight: this.fallbackCanvasDisplaySize.height,
         width: this.fallbackCanvas.width,
         height: this.fallbackCanvas.height,
       } : null,
