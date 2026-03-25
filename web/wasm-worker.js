@@ -120,6 +120,55 @@ function decodeBase64(base64) {
   return bytes;
 }
 
+const exportWorkerProfileTotals = {
+  sampleCount: 0,
+  totalCallMs: 0,
+  totalCallMsMax: 0,
+  runPythonAsyncMs: 0,
+  runPythonAsyncMsMax: 0,
+  globalsGetMs: 0,
+  globalsGetMsMax: 0,
+  jsonParseMs: 0,
+  jsonParseMsMax: 0,
+  reviveBytesMs: 0,
+  reviveBytesMsMax: 0,
+  transferCollectMs: 0,
+  transferCollectMsMax: 0,
+  postMessageMs: 0,
+  postMessageMsMax: 0,
+};
+
+function updateWorkerProfileMetric(sumKey, maxKey, value) {
+  exportWorkerProfileTotals[sumKey] += value;
+  if (value > exportWorkerProfileTotals[maxKey]) {
+    exportWorkerProfileTotals[maxKey] = value;
+  }
+}
+
+function getExportWorkerProfileSnapshot() {
+  const sampleCount = exportWorkerProfileTotals.sampleCount;
+  if (!sampleCount) {
+    return null;
+  }
+  return {
+    sampleCount,
+    totalCallMs: exportWorkerProfileTotals.totalCallMs / sampleCount,
+    totalCallMsMax: exportWorkerProfileTotals.totalCallMsMax,
+    runPythonAsyncMs: exportWorkerProfileTotals.runPythonAsyncMs / sampleCount,
+    runPythonAsyncMsMax: exportWorkerProfileTotals.runPythonAsyncMsMax,
+    globalsGetMs: exportWorkerProfileTotals.globalsGetMs / sampleCount,
+    globalsGetMsMax: exportWorkerProfileTotals.globalsGetMsMax,
+    jsonParseMs: exportWorkerProfileTotals.jsonParseMs / sampleCount,
+    jsonParseMsMax: exportWorkerProfileTotals.jsonParseMsMax,
+    reviveBytesMs: exportWorkerProfileTotals.reviveBytesMs / sampleCount,
+    reviveBytesMsMax: exportWorkerProfileTotals.reviveBytesMsMax,
+    transferCollectMs: exportWorkerProfileTotals.transferCollectMs / sampleCount,
+    transferCollectMsMax: exportWorkerProfileTotals.transferCollectMsMax,
+    postMessageMs: exportWorkerProfileTotals.postMessageMs / sampleCount,
+    postMessageMsMax: exportWorkerProfileTotals.postMessageMsMax,
+  };
+}
+
 class MicroPythonRuntime {
   constructor(config) {
     this.config = config;
@@ -233,19 +282,34 @@ class MicroPythonRuntime {
 
   async call(moduleName, functionName, args) {
     this.assertInitialized();
+    const callStartedAt = functionName === "export_frame" ? performance.now() : 0;
     await this.mp.runPythonAsync(
       `__vs_bridge_result = __vs_bridge_invoke(${JSON.stringify(moduleName)}, ${JSON.stringify(functionName)}, ${JSON.stringify(JSON.stringify(args))})`
     );
+    const afterRunPythonAt = functionName === "export_frame" ? performance.now() : 0;
     const jsonResult = this.mp.globals.get("__vs_bridge_result");
     this.mp.globals.delete("__vs_bridge_result");
+    const afterGlobalsGetAt = functionName === "export_frame" ? performance.now() : 0;
     const bridgeResult = JSON.parse(jsonResult);
+    const afterJsonParseAt = functionName === "export_frame" ? performance.now() : 0;
     if (!bridgeResult || typeof bridgeResult !== "object") {
       throw new Error("Invalid bridge response from MicroPython runtime");
     }
     if (!bridgeResult.ok) {
       throw new Error(bridgeResult.error || "Unknown MicroPython bridge error");
     }
-    return reviveBytes(bridgeResult.result);
+    const result = reviveBytes(bridgeResult.result);
+    if (functionName === "export_frame" && result && typeof result === "object") {
+      const afterReviveAt = performance.now();
+      exportWorkerProfileTotals.sampleCount += 1;
+      updateWorkerProfileMetric("totalCallMs", "totalCallMsMax", afterReviveAt - callStartedAt);
+      updateWorkerProfileMetric("runPythonAsyncMs", "runPythonAsyncMsMax", afterRunPythonAt - callStartedAt);
+      updateWorkerProfileMetric("globalsGetMs", "globalsGetMsMax", afterGlobalsGetAt - afterRunPythonAt);
+      updateWorkerProfileMetric("jsonParseMs", "jsonParseMsMax", afterJsonParseAt - afterGlobalsGetAt);
+      updateWorkerProfileMetric("reviveBytesMs", "reviveBytesMsMax", afterReviveAt - afterJsonParseAt);
+      result.worker_js_profile = getExportWorkerProfileSnapshot();
+    }
+    return result;
   }
 
   assertInitialized() {
@@ -286,7 +350,20 @@ function collectTransferables(value, transferables = [], seen = new Set()) {
 }
 
 function success(id, result = null) {
+  const transferStartedAt = result && typeof result === "object" && result.worker_js_profile
+    ? performance.now()
+    : 0;
   const transferables = collectTransferables(result);
+  if (result && typeof result === "object" && result.worker_js_profile) {
+    const afterCollectAt = performance.now();
+    updateWorkerProfileMetric("transferCollectMs", "transferCollectMsMax", afterCollectAt - transferStartedAt);
+    result.worker_js_profile = getExportWorkerProfileSnapshot();
+    const postStartedAt = performance.now();
+    self.postMessage({ id, ok: true, result }, transferables);
+    const afterPostAt = performance.now();
+    updateWorkerProfileMetric("postMessageMs", "postMessageMsMax", afterPostAt - postStartedAt);
+    return;
+  }
   self.postMessage({ id, ok: true, result }, transferables);
 }
 

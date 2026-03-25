@@ -61,6 +61,7 @@ const TOUCH_STICK_DEAD_ZONE = 0.26;
 const GAMEPAD_AXIS_DEAD_ZONE = 0.35;
 const FPS_DISPLAY_INTERVAL_MS = 500;
 const RENDER_PROFILE_SAMPLE_LIMIT = 60;
+const WEBGL_RESOLUTION_SCALE_AUTO = "auto";
 const DEFAULT_WEBGL_RESOLUTION_SCALE = 1;
 const WEBGL_RESOLUTION_SCALES = [1, 0.75, 0.5, 0.375, 0.25];
 const WEBGL_AUTO_SCALE_MIN_FPS = 20;
@@ -707,7 +708,10 @@ class BrowserHostApp {
     this.force2dFallback = this.readForce2dPreference();
     this.invertGamepadY = this.readInvertGamepadYPreference();
     this.rendererProfiling = this.readRendererProfilingPreference();
-    this.webglResolutionScale = this.readWebglResolutionScalePreference();
+    this.webglResolutionScalePreference = this.readWebglResolutionScalePreference();
+    this.webglResolutionScale = this.webglResolutionScalePreference === WEBGL_RESOLUTION_SCALE_AUTO
+      ? DEFAULT_WEBGL_RESOLUTION_SCALE
+      : this.webglResolutionScalePreference;
     this.inspectorOpen = this.readInspectorPreference();
     this.lastSceneTickAt = null;
     this.pollRequestId = null;
@@ -1294,13 +1298,20 @@ class BrowserHostApp {
     }
 
     if (this.elements.webglResolutionScale) {
-      this.elements.webglResolutionScale.value = String(this.webglResolutionScale);
+      this.elements.webglResolutionScale.value = String(this.webglResolutionScalePreference);
       this.elements.webglResolutionScale.addEventListener("change", () => {
-        const nextScale = Number.parseFloat(this.elements.webglResolutionScale.value);
-        const resolvedScale = Number.isFinite(nextScale) && nextScale > 0
-          ? nextScale
-          : DEFAULT_WEBGL_RESOLUTION_SCALE;
-        this.applyWebglResolutionScale(resolvedScale, { reason: "manual", persist: true });
+        const nextValue = this.elements.webglResolutionScale.value;
+        if (nextValue === WEBGL_RESOLUTION_SCALE_AUTO) {
+          this.setWebglResolutionScalePreference(WEBGL_RESOLUTION_SCALE_AUTO, { reason: "manual_auto", persist: true });
+          this.applyWebglResolutionScale(DEFAULT_WEBGL_RESOLUTION_SCALE, { reason: "manual_auto", persist: false });
+        } else {
+          const nextScale = Number.parseFloat(nextValue);
+          const resolvedScale = Number.isFinite(nextScale) && nextScale > 0
+            ? nextScale
+            : DEFAULT_WEBGL_RESOLUTION_SCALE;
+          this.setWebglResolutionScalePreference(resolvedScale, { reason: "manual_fixed", persist: true });
+          this.applyWebglResolutionScale(resolvedScale, { reason: "manual_fixed", persist: false });
+        }
         if (this.lastFrame) {
           this.renderFrame();
         } else {
@@ -1321,13 +1332,32 @@ class BrowserHostApp {
     this.renderProfileSamples = [];
     this.executionProfileSamples = [];
     if (persist) {
-      this.writeWebglResolutionScalePreference(resolvedScale);
+      this.writeWebglResolutionScalePreference(this.webglResolutionScalePreference);
     }
     if (this.elements.webglResolutionScale) {
-      this.elements.webglResolutionScale.value = String(resolvedScale);
+      this.elements.webglResolutionScale.value = String(this.webglResolutionScalePreference);
     }
     this.addDiagnostic("renderer.resolution_scale", {
+      preference: this.webglResolutionScalePreference,
       scale: resolvedScale,
+      reason,
+      persist,
+    });
+  }
+
+  setWebglResolutionScalePreference(value, { reason = "manual", persist = true } = {}) {
+    const resolvedPreference = value === WEBGL_RESOLUTION_SCALE_AUTO
+      ? WEBGL_RESOLUTION_SCALE_AUTO
+      : (WEBGL_RESOLUTION_SCALES.includes(value) ? value : DEFAULT_WEBGL_RESOLUTION_SCALE);
+    this.webglResolutionScalePreference = resolvedPreference;
+    if (persist) {
+      this.writeWebglResolutionScalePreference(resolvedPreference);
+    }
+    if (this.elements.webglResolutionScale) {
+      this.elements.webglResolutionScale.value = String(resolvedPreference);
+    }
+    this.addDiagnostic("renderer.resolution_scale_preference", {
+      preference: resolvedPreference,
       reason,
       persist,
     });
@@ -1346,6 +1376,10 @@ class BrowserHostApp {
       this.lowFpsSinceAt = null;
       return;
     }
+    if (this.webglResolutionScalePreference !== WEBGL_RESOLUTION_SCALE_AUTO) {
+      this.lowFpsSinceAt = null;
+      return;
+    }
 
     const clientWidth = this.canvas.clientWidth;
     const clientHeight = this.canvas.clientHeight;
@@ -1354,7 +1388,7 @@ class BrowserHostApp {
       this.lastCanvasClientSize = currentSize;
       this.applyWebglResolutionScale(DEFAULT_WEBGL_RESOLUTION_SCALE, {
         reason: "display_change",
-        persist: true,
+        persist: false,
       });
       return;
     }
@@ -1528,19 +1562,22 @@ class BrowserHostApp {
   readWebglResolutionScalePreference() {
     try {
       const rawValue = localStorage.getItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY);
+      if (rawValue === null || rawValue === WEBGL_RESOLUTION_SCALE_AUTO) {
+        return WEBGL_RESOLUTION_SCALE_AUTO;
+      }
       const parsed = Number.parseFloat(rawValue ?? "");
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_WEBGL_RESOLUTION_SCALE;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : WEBGL_RESOLUTION_SCALE_AUTO;
     } catch (_error) {
-      return DEFAULT_WEBGL_RESOLUTION_SCALE;
+      return WEBGL_RESOLUTION_SCALE_AUTO;
     }
   }
 
-  writeWebglResolutionScalePreference(scale) {
+  writeWebglResolutionScalePreference(scalePreference) {
     try {
-      if (scale === DEFAULT_WEBGL_RESOLUTION_SCALE) {
-        localStorage.removeItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY);
+      if (scalePreference === WEBGL_RESOLUTION_SCALE_AUTO) {
+        localStorage.setItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY, WEBGL_RESOLUTION_SCALE_AUTO);
       } else {
-        localStorage.setItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY, String(scale));
+        localStorage.setItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY, String(scalePreference));
       }
     } catch (_error) {
       return;
@@ -2013,7 +2050,9 @@ class BrowserHostApp {
       ["Buttons", `0x${frame.buttons.toString(16).padStart(2, "0")}`],
       ["Gamepad", this.activeGamepadIndex === null ? "None" : `Controller ${this.activeGamepadIndex + 1}`],
       ["Renderer", this.force2dFallback ? "2D fallback" : this.renderer.available ? "WebGL" : "2D fallback"],
-      ["WebGL Scale", `${Math.round(this.webglResolutionScale * 100)}%`],
+      ["WebGL Scale", this.webglResolutionScalePreference === WEBGL_RESOLUTION_SCALE_AUTO
+        ? `Auto (${Math.round(this.webglResolutionScale * 100)}%)`
+        : `${Math.round(this.webglResolutionScale * 100)}%`],
     ];
     if (profile) {
       summary.push(
@@ -2065,6 +2104,26 @@ class BrowserHostApp {
         ],
       );
     }
+    if (frame.worker_js_profile && typeof frame.worker_js_profile === "object") {
+      summary.push(
+        [
+          "JS RunPython",
+          `${formatProfileMs(frame.worker_js_profile.runPythonAsyncMs)} avg / ${formatProfileMs(frame.worker_js_profile.runPythonAsyncMsMax)} max`,
+        ],
+        [
+          "JS Parse",
+          `${formatProfileMs(frame.worker_js_profile.jsonParseMs)} avg / ${formatProfileMs(frame.worker_js_profile.jsonParseMsMax)} max`,
+        ],
+        [
+          "JS Revive",
+          `${formatProfileMs(frame.worker_js_profile.reviveBytesMs)} avg / ${formatProfileMs(frame.worker_js_profile.reviveBytesMsMax)} max`,
+        ],
+        [
+          "JS Post",
+          `${formatProfileMs(frame.worker_js_profile.postMessageMs)} avg / ${formatProfileMs(frame.worker_js_profile.postMessageMsMax)} max`,
+        ],
+      );
+    }
 
     this.elements.runtimeSummary.innerHTML = summary.map(([label, value]) => `
       <div class="summary-card">
@@ -2103,6 +2162,7 @@ class BrowserHostApp {
         innerHeight: window.innerHeight,
         devicePixelRatio: dpr,
       },
+      webglResolutionScalePreference: this.webglResolutionScalePreference,
       webglResolutionScale: this.webglResolutionScale,
       webglCanvas: this.canvas ? {
         clientWidth: this.canvas.clientWidth,
@@ -2117,6 +2177,7 @@ class BrowserHostApp {
         height: this.fallbackCanvas.height,
       } : null,
       pythonProfile: frame.python_profile ?? null,
+      workerJsProfile: frame.worker_js_profile ?? null,
       renderProfile,
       executionProfile,
     };
