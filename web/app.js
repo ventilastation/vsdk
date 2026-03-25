@@ -97,6 +97,34 @@ function summarizeProfileValues(samples, key) {
   };
 }
 
+function buildRenderProfileSnapshot(samples) {
+  if (!Array.isArray(samples) || !samples.length) {
+    return null;
+  }
+  const latest = samples[samples.length - 1];
+  return {
+    sampleCount: samples.length,
+    renderer: latest.renderer,
+    totalMs: summarizeProfileValues(samples, "totalMs"),
+    computePixelsMs: summarizeProfileValues(samples, "computePixelsMs"),
+    rendererMs: summarizeProfileValues(samples, "rendererMs"),
+    detail: latest.renderer === "webgl" ? {
+      resizeMs: summarizeProfileValues(samples, "rendererDetail.resizeMs"),
+      clearMs: summarizeProfileValues(samples, "rendererDetail.clearMs"),
+      colorExpandMs: summarizeProfileValues(samples, "rendererDetail.colorExpandMs"),
+      uploadMs: summarizeProfileValues(samples, "rendererDetail.uploadMs"),
+      drawSubmitMs: summarizeProfileValues(samples, "rendererDetail.drawSubmitMs"),
+      colorBytes: latest.rendererDetail?.colorBytes ?? null,
+      vertexCount: latest.rendererDetail?.vertexCount ?? null,
+      resolutionScale: latest.rendererDetail?.resolutionScale ?? null,
+    } : {
+      resizeMs: summarizeProfileValues(samples, "rendererDetail.resizeMs"),
+      drawMs: summarizeProfileValues(samples, "rendererDetail.drawMs"),
+      drawnLedCount: latest.rendererDetail?.drawnLedCount ?? null,
+    },
+  };
+}
+
 function fillRepeatedLedColors(ledPixels, repeatedWords, multiplier) {
   const ledWords = new Uint32Array(
     ledPixels.buffer,
@@ -292,7 +320,7 @@ class LedRingWebGLRenderer {
     this.lastDevicePixelRatio = null;
     this.gl = canvas.getContext("webgl", {
       alpha: true,
-      antialias: true,
+      antialias: false,
       premultipliedAlpha: false,
     });
     this.available = Boolean(this.gl);
@@ -456,7 +484,7 @@ class LedRingWebGLRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
     fillRepeatedLedColors(ledPixels, this.colorWords, 6);
     const afterColorExpandAt = performance.now();
-    gl.bufferData(gl.ARRAY_BUFFER, this.colorBytes, gl.DYNAMIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.colorBytes);
     const afterUploadAt = performance.now();
     gl.enableVertexAttribArray(this.attribs.color);
     gl.vertexAttribPointer(this.attribs.color, 4, gl.UNSIGNED_BYTE, true, 0, 0);
@@ -735,10 +763,13 @@ class BrowserHostApp {
     this.pendingMinFps = null;
     this.lastFpsDisplayUpdateAt = null;
     this.renderProfileSamples = [];
+    this.fullscreenRenderProfileSamples = [];
+    this.lastFullscreenRenderProfile = null;
     this.lastCanvasClientSize = null;
     this.lastAppliedCanvasClientSize = null;
     this.canvasDisplaySize = { width: 0, height: 0 };
     this.fallbackCanvasDisplaySize = { width: 0, height: 0 };
+    this.isFullscreen = false;
     this.lowFpsSinceAt = null;
     this.diagnostics = [];
     this.audio = new BrowserAudioHost();
@@ -758,6 +789,7 @@ class BrowserHostApp {
     this.unsubscribeWorkerFrame = null;
     this.unsubscribeWorkerRuntimeError = null;
     this.canvasResizeObserver = null;
+    this.stagePanel = document.querySelector(".stage-panel");
     this.canvas = document.querySelector("#frame-canvas-gl");
     this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
     this.renderer = new LedRingWebGLRenderer(this.canvas);
@@ -774,6 +806,8 @@ class BrowserHostApp {
       sceneErrorTitle: document.querySelector("#scene-error-title"),
       sceneErrorMessage: document.querySelector("#scene-error-message"),
       sceneErrorDebugButton: document.querySelector("#scene-error-debug-button"),
+      stageFullscreenExit: document.querySelector("#stage-fullscreen-exit"),
+      toggleFullscreenButton: document.querySelector("#toggle-fullscreen-button"),
       toggleRenderingButton: document.querySelector("#toggle-rendering-button"),
       touchStick: document.querySelector("#touch-stick"),
       touchStickKnob: document.querySelector("#touch-stick-knob"),
@@ -924,6 +958,7 @@ class BrowserHostApp {
   }
 
   start() {
+    this.syncFullscreenState();
     this.elements.adapterName.textContent = this.adapter.name;
     this.elements.adapterSource.textContent = this.runtime.source;
     this.addDiagnostic("adapter.start", {
@@ -938,10 +973,12 @@ class BrowserHostApp {
     this.bindVisibility();
     this.bindCopyDiagnostics();
     this.bindDebugControls();
+    this.bindFullscreenControls();
     this.bindRenderingToggle();
     this.bindInspectorToggle();
     this.bindSceneErrorControls();
     this.bindCanvasResizeObserver();
+    this.renderFullscreenToggle();
     this.renderRenderingToggle();
     this.renderInspectorVisibility();
     this.renderCanvasVisibility();
@@ -1358,6 +1395,8 @@ class BrowserHostApp {
         this.force2dFallback = Boolean(this.elements.force2dFallback.checked);
         this.writeForce2dPreference(this.force2dFallback);
         this.renderProfileSamples = [];
+        this.fullscreenRenderProfileSamples = [];
+        this.lastFullscreenRenderProfile = null;
         this.addDiagnostic("renderer.mode", {
           forced2d: this.force2dFallback,
           webglAvailable: this.renderer.available,
@@ -1388,6 +1427,8 @@ class BrowserHostApp {
         this.rendererProfiling = Boolean(this.elements.enableRendererProfiling.checked);
         this.writeRendererProfilingPreference(this.rendererProfiling);
         this.renderProfileSamples = [];
+        this.fullscreenRenderProfileSamples = [];
+        this.lastFullscreenRenderProfile = null;
         this.addDiagnostic("renderer.profiling", {
           enabled: this.rendererProfiling,
         });
@@ -1432,6 +1473,8 @@ class BrowserHostApp {
     this.renderer.resolutionScale = resolvedScale;
     this.lowFpsSinceAt = null;
     this.renderProfileSamples = [];
+    this.fullscreenRenderProfileSamples = [];
+    this.lastFullscreenRenderProfile = null;
     if (persist) {
       this.writeWebglResolutionScalePreference(this.webglResolutionScalePreference);
     }
@@ -1528,6 +1571,55 @@ class BrowserHostApp {
     this.fallbackCanvas.hidden = !use2d;
   }
 
+  bindFullscreenControls() {
+    const button = this.elements.toggleFullscreenButton;
+    const stageExitButton = this.elements.stageFullscreenExit;
+    if (!button || !this.stagePanel || !document.fullscreenEnabled) {
+      if (button) {
+        button.hidden = true;
+      }
+      if (stageExitButton) {
+        stageExitButton.hidden = true;
+      }
+      return;
+    }
+
+    const toggleFullscreen = async () => {
+      try {
+        if (this.isFullscreen) {
+          await document.exitFullscreen();
+        } else {
+          await this.stagePanel.requestFullscreen();
+        }
+      } catch (error) {
+        this.addDiagnostic("fullscreen.error", {
+          message: error?.message || String(error),
+        });
+      }
+    };
+
+    button.addEventListener("click", () => {
+      void toggleFullscreen();
+    });
+    if (stageExitButton) {
+      stageExitButton.addEventListener("click", () => {
+        void toggleFullscreen();
+      });
+    }
+
+    document.addEventListener("fullscreenchange", () => {
+      this.syncFullscreenState();
+      this.refreshCanvasDisplayMetrics();
+      this.renderFullscreenToggle();
+      this.renderStatus();
+      if (this.lastFrame) {
+        this.renderInspectors(this.lastFrame);
+      } else {
+        this.refreshCopyDiagnostics();
+      }
+    });
+  }
+
   bindInspectorToggle() {
     if (!this.elements.toggleInspectorButton || !this.elements.inspectorPanel) {
       return;
@@ -1585,6 +1677,49 @@ class BrowserHostApp {
       }
     }
     this.renderRenderingToggle();
+  }
+
+  syncFullscreenState() {
+    const active = Boolean(this.stagePanel && document.fullscreenElement === this.stagePanel);
+    if (this.isFullscreen === active) {
+      if (this.stagePanel) {
+        this.stagePanel.classList.toggle("is-fullscreen", active);
+      }
+      return;
+    }
+
+    this.isFullscreen = active;
+    if (this.stagePanel) {
+      this.stagePanel.classList.toggle("is-fullscreen", active);
+    }
+    if (active) {
+      this.fullscreenRenderProfileSamples = [];
+      this.lastFullscreenRenderProfile = null;
+    } else if (this.fullscreenRenderProfileSamples.length) {
+      this.lastFullscreenRenderProfile = buildRenderProfileSnapshot(this.fullscreenRenderProfileSamples);
+      this.fullscreenRenderProfileSamples = [];
+    }
+    this.addDiagnostic("fullscreen.state", {
+      active,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      },
+    });
+  }
+
+  renderFullscreenToggle() {
+    const button = this.elements.toggleFullscreenButton;
+    const stageExitButton = this.elements.stageFullscreenExit;
+    if (!button) {
+      return;
+    }
+    button.textContent = this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+    button.setAttribute("aria-pressed", this.isFullscreen ? "true" : "false");
+    if (stageExitButton) {
+      stageExitButton.hidden = !this.isFullscreen;
+    }
   }
 
   renderRenderingToggle() {
@@ -1960,41 +2095,43 @@ class BrowserHostApp {
   }
 
   recordRenderProfile(sample) {
-    this.renderProfileSamples.push({
+    const stampedSample = {
       at: performance.now(),
+      isFullscreen: this.isFullscreen,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      },
       ...sample,
-    });
+    };
+    this.renderProfileSamples.push(stampedSample);
     if (this.renderProfileSamples.length > RENDER_PROFILE_SAMPLE_LIMIT) {
       this.renderProfileSamples.shift();
+    }
+    if (this.isFullscreen) {
+      this.fullscreenRenderProfileSamples.push(stampedSample);
+      if (this.fullscreenRenderProfileSamples.length > RENDER_PROFILE_SAMPLE_LIMIT) {
+        this.fullscreenRenderProfileSamples.shift();
+      }
     }
   }
 
   getRenderProfileSnapshot() {
-    if (!this.rendererProfiling || !this.renderProfileSamples.length) {
+    if (!this.rendererProfiling) {
       return null;
     }
-    const samples = this.renderProfileSamples;
-    const latest = samples[samples.length - 1];
-    return {
-      sampleCount: samples.length,
-      renderer: latest.renderer,
-      totalMs: summarizeProfileValues(samples, "totalMs"),
-      computePixelsMs: summarizeProfileValues(samples, "computePixelsMs"),
-      rendererMs: summarizeProfileValues(samples, "rendererMs"),
-      detail: latest.renderer === "webgl" ? {
-        resizeMs: summarizeProfileValues(samples, "rendererDetail.resizeMs"),
-        clearMs: summarizeProfileValues(samples, "rendererDetail.clearMs"),
-        colorExpandMs: summarizeProfileValues(samples, "rendererDetail.colorExpandMs"),
-        uploadMs: summarizeProfileValues(samples, "rendererDetail.uploadMs"),
-        drawSubmitMs: summarizeProfileValues(samples, "rendererDetail.drawSubmitMs"),
-        colorBytes: latest.rendererDetail?.colorBytes ?? null,
-        vertexCount: latest.rendererDetail?.vertexCount ?? null,
-      } : {
-        resizeMs: summarizeProfileValues(samples, "rendererDetail.resizeMs"),
-        drawMs: summarizeProfileValues(samples, "rendererDetail.drawMs"),
-        drawnLedCount: latest.rendererDetail?.drawnLedCount ?? null,
-      },
-    };
+    return buildRenderProfileSnapshot(this.renderProfileSamples);
+  }
+
+  getFullscreenRenderProfileSnapshot() {
+    if (!this.rendererProfiling) {
+      return null;
+    }
+    if (this.isFullscreen) {
+      return buildRenderProfileSnapshot(this.fullscreenRenderProfileSamples);
+    }
+    return this.lastFullscreenRenderProfile;
   }
 
   getAssetFrameImage(asset, frameNumber) {
@@ -2121,6 +2258,7 @@ class BrowserHostApp {
       return;
     }
     const profile = this.getRenderProfileSnapshot();
+    const fullscreenProfile = this.getFullscreenRenderProfileSnapshot();
     const summary = [
       ["Sprites", frame.sprites.length],
       ["Assets", this.assetIndex.size],
@@ -2130,6 +2268,7 @@ class BrowserHostApp {
       ["Buttons", `0x${frame.buttons.toString(16).padStart(2, "0")}`],
       ["Gamepad", this.activeGamepadIndex === null ? "None" : `Controller ${this.activeGamepadIndex + 1}`],
       ["Renderer", this.force2dFallback ? "2D fallback" : this.renderer.available ? "WebGL" : "2D fallback"],
+      ["Fullscreen", this.isFullscreen ? "Active" : "Windowed"],
       ["WebGL Scale", this.webglResolutionScalePreference === WEBGL_RESOLUTION_SCALE_AUTO
         ? `Auto (${Math.round(this.webglResolutionScale * 100)}%)`
         : `${Math.round(this.webglResolutionScale * 100)}%`],
@@ -2154,6 +2293,24 @@ class BrowserHostApp {
         ]);
       }
     }
+    if (fullscreenProfile) {
+      summary.push(
+        ["FS Samples", fullscreenProfile.sampleCount],
+        ["FS Frame Total", `${formatProfileMs(fullscreenProfile.totalMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.totalMs?.max)} max`],
+        ["FS Renderer", `${formatProfileMs(fullscreenProfile.rendererMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.rendererMs?.max)} max`],
+      );
+      if (fullscreenProfile.renderer === "webgl") {
+        summary.push(
+          ["FS Upload", `${formatProfileMs(fullscreenProfile.detail.uploadMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.detail.uploadMs?.max)} max`],
+          ["FS Draw Submit", `${formatProfileMs(fullscreenProfile.detail.drawSubmitMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.detail.drawSubmitMs?.max)} max`],
+        );
+      } else {
+        summary.push([
+          "FS Canvas Draw",
+          `${formatProfileMs(fullscreenProfile.detail.drawMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.detail.drawMs?.max)} max`,
+        ]);
+      }
+    }
     this.elements.runtimeSummary.innerHTML = summary.map(([label, value]) => `
       <div class="summary-card">
         <strong>${label}</strong>
@@ -2169,6 +2326,7 @@ class BrowserHostApp {
   describeFrame(frame) {
     const firstAsset = this.assetIndex.size ? this.assetIndex.values().next().value : null;
     const renderProfile = this.getRenderProfileSnapshot();
+    const fullscreenRenderProfile = this.getFullscreenRenderProfileSnapshot();
     const dpr = window.devicePixelRatio || 1;
     return {
       frameType: typeof frame,
@@ -2189,6 +2347,7 @@ class BrowserHostApp {
         innerWidth: window.innerWidth,
         innerHeight: window.innerHeight,
         devicePixelRatio: dpr,
+        isFullscreen: this.isFullscreen,
       },
       webglResolutionScalePreference: this.webglResolutionScalePreference,
       webglResolutionScale: this.webglResolutionScale,
@@ -2205,6 +2364,7 @@ class BrowserHostApp {
         height: this.fallbackCanvas.height,
       } : null,
       renderProfile,
+      fullscreenRenderProfile,
     };
   }
 
@@ -2224,6 +2384,8 @@ class BrowserHostApp {
       ? diagnostics.filter((entry) => (
         entry?.type === "renderer.profiling" ||
         entry?.type === "renderer.mode" ||
+        entry?.type === "fullscreen.state" ||
+        entry?.type === "fullscreen.error" ||
         entry?.type === "timing.resync" ||
         entry?.type === "timing.catchup" ||
         entry?.type === "frame.error"

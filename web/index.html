@@ -13,6 +13,7 @@
       <div class="stage-display">
         <canvas id="frame-canvas-gl" width="768" height="768"></canvas>
         <canvas id="frame-canvas-2d" width="768" height="768" hidden></canvas>
+        <button type="button" class="stage-fullscreen-exit" id="stage-fullscreen-exit" hidden>Exit fullscreen</button>
       </div>
       <section class="mobile-controls" aria-label="Touch controls">
         <div class="mobile-stick-panel">
@@ -53,6 +54,7 @@
         </div>
         <div class="copy-header">
           <div class="copy-actions">
+            <button type="button" id="toggle-fullscreen-button" aria-pressed="false">Enter fullscreen</button>
             <button type="button" id="toggle-rendering-button" aria-pressed="false">Pause emulator</button>
             <button type="button" id="toggle-inspector-button" aria-expanded="false">Show options</button>
           </div>
@@ -92,6 +94,7 @@
           <span class="status-pill" id="frame-counter">FPS --</span>
           <span class="status-pill" id="button-mask">Buttons 0x00</span>
           <span class="status-pill" id="gamepad-status">Gamepad none</span>
+          <span class="status-pill" id="webgl-scale-status">Scale Auto 100%</span>
         </div>
         <div class="debug-meta">
           <span><strong>Canvas</strong> WebGL radial preview</span>
