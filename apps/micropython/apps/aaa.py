@@ -86,16 +86,20 @@ class AAA(Scene):
                 if self.barras[a].y() == 250:
                     self.barras[a].og_x = randrange(0,208)
                     self.barras[a].drift = 0
+                    target_snd = "aaa/out"
                     # target
                     if randrange(0, 13) <= self.unlucky:
                         self.barras[a].og_x = 251 - self.x_center
                     # drift
                     if randrange(0, 17) <= self.unlucky:
+                        target_snd = "aaa/out_special"
                         self.barras[a].drift = randrange(-2,3)
                     # launch
                     self.barras[a].set_y(249)
                     self.launch['total'] += 1
                     self.launch['last'] = now
+                    if self.dead == 0:
+                        director.sound_play(target_snd)
                     # quit?
                     if randrange(0,23) > self.unlucky:
                         break
@@ -111,6 +115,7 @@ class AAA(Scene):
                 self.x_center += self.y_speed
 
             if self.punto.collision(self.barras):
+                director.sound_play("aaa/fail")
                 self.dead = ticks_ms()
                 self.unlucky = 20
                 self.launch['freq'] = 1
@@ -127,6 +132,7 @@ class AAA(Scene):
             if cy < 8:
                 if self.dead == 0:
                     cy = 250
+                    director.sound_play("aaa/pass")
                     self.adjust_diff()
                 else:
                     cy = 11
