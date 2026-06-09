@@ -43,6 +43,21 @@ class VentilastationWasmAdapter {
     return this.bridge.call("ventilastation.browser", "import_storage", files);
   }
 
+  memorySnapshot({ collect = false } = {}) {
+    return this.bridge.call("ventilastation.browser", "memory_snapshot", Boolean(collect));
+  }
+
+  proxyRefInfo() {
+    if (typeof this.bridge.getProxyRefInfo === "function") {
+      return this.bridge.getProxyRefInfo();
+    }
+    return Promise.resolve(null);
+  }
+
+  setTraceFlags(flags = 0) {
+    return this.bridge.call("ventilastation.browser", "set_trace_flags", Number(flags) || 0);
+  }
+
   onFrame(listener) {
     return this.bridge.on("frame", (message) => listener(message.frame, message));
   }

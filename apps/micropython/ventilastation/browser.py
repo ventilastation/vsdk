@@ -52,12 +52,107 @@ def clear_buttons():
     _browser_platform().comms.set_buttons(0)
 
 
+def set_trace_flags(flags=0):
+    flags = int(flags) & 0x20
+    platform = _browser_platform()
+    platform.trace_flags = flags
+    return flags
+
+
 def drain_input_updates():
     return _browser_platform().comms.drain_input_updates()
 
 
 def drain_host_events():
     return _browser_platform().comms.drain_events()
+
+
+def _safe_call(target, fallback=None):
+    try:
+        return target()
+    except Exception:
+        return fallback
+
+
+def _display_memory_snapshot(display):
+    asset_data = getattr(display, "asset_data", {}) or {}
+    assets = getattr(display, "assets", {}) or {}
+    dirty_asset_slots = getattr(display, "dirty_asset_slots", set()) or set()
+    palette = getattr(display, "palette", b"") or b""
+    sprite_data = getattr(display, "sprite_data", b"") or b""
+
+    asset_bytes = 0
+    largest_asset_bytes = 0
+    for value in asset_data.values():
+        size = len(value)
+        asset_bytes += size
+        if size > largest_asset_bytes:
+            largest_asset_bytes = size
+
+    return {
+        "assetCount": len(assets),
+        "assetBytes": asset_bytes,
+        "largestAssetBytes": largest_asset_bytes,
+        "dirtyAssetCount": len(dirty_asset_slots),
+        "paletteBytes": len(palette),
+        "spriteStateBytes": len(sprite_data),
+    }
+
+
+def _director_memory_snapshot(director):
+    scene_stack = getattr(director, "scene_stack", []) or []
+    scene_names = [scene.__class__.__name__ for scene in scene_stack]
+    pending_calls = 0
+    for scene in scene_stack:
+        pending_calls += len(getattr(scene, "pending_calls", ()) or ())
+    return {
+        "currentScene": scene_names[-1] if scene_names else None,
+        "sceneStack": scene_names,
+        "sceneStackDepth": len(scene_names),
+        "pendingCalls": pending_calls,
+    }
+
+
+def memory_snapshot(collect=False):
+    if collect:
+        gc.collect()
+
+    gc_mem_alloc = getattr(gc, "mem_alloc", None)
+    gc_mem_free = getattr(gc, "mem_free", None)
+    mem_alloc = gc_mem_alloc() if gc_mem_alloc else None
+    mem_free = gc_mem_free() if gc_mem_free else None
+    mem_total = None
+    mem_used_percent = None
+    if mem_alloc is not None and mem_free is not None:
+        mem_total = mem_alloc + mem_free
+        if mem_total:
+            mem_used_percent = (mem_alloc * 100.0) / mem_total
+
+    platform = _browser_platform()
+    director_module = __import__("ventilastation.director", None, None, ["director"])
+    director = director_module.director
+    director_snapshot = _director_memory_snapshot(director)
+    display_snapshot = _display_memory_snapshot(platform.display)
+
+    return {
+        "gc": {
+            "allocBytes": mem_alloc,
+            "freeBytes": mem_free,
+            "totalBytes": mem_total,
+            "usedPercent": mem_used_percent,
+            "enabled": _safe_call(gc.isenabled, None) if hasattr(gc, "isenabled") else None,
+            "collected": bool(collect),
+        },
+        "runtime": {
+            "platform": platform.name,
+            "frame": getattr(platform.display, "frame", None),
+            "currentScene": director_snapshot["currentScene"],
+            "sceneStack": director_snapshot["sceneStack"],
+            "sceneStackDepth": director_snapshot["sceneStackDepth"],
+            "pendingCalls": director_snapshot["pendingCalls"],
+        },
+        "display": display_snapshot,
+    }
 
 
 def _consume_traceback_messages():
@@ -88,16 +183,10 @@ def export_frame(full=False):
     global _export_frame_counter, _export_profile_totals
     started_at = _ticks_us()
     _export_frame_counter += 1
-    gc_started_at = started_at
-    did_collect = full or (_export_frame_counter % 60) == 0
-    if did_collect:
-        gc.collect()
-    after_gc_at = _ticks_us()
     frame = _browser_platform().display.export_frame(full=full)
     finished_at = _ticks_us()
     browser_export_us = _ticks_diff_us(finished_at, started_at)
-    gc_us = _ticks_diff_us(after_gc_at, gc_started_at) if did_collect else 0
-    display_call_us = _ticks_diff_us(finished_at, after_gc_at)
+    display_call_us = browser_export_us
     _export_profile_totals["sampleCount"] += 1
     _export_profile_totals["browserExportUs"] += browser_export_us
     _export_profile_totals["displayCallUs"] += display_call_us
@@ -105,11 +194,6 @@ def export_frame(full=False):
         _export_profile_totals["browserExportUsMax"] = browser_export_us
     if display_call_us > _export_profile_totals["displayCallUsMax"]:
         _export_profile_totals["displayCallUsMax"] = display_call_us
-    if did_collect:
-        _export_profile_totals["gcCount"] += 1
-        _export_profile_totals["gcUs"] += gc_us
-        if gc_us > _export_profile_totals["gcUsMax"]:
-            _export_profile_totals["gcUsMax"] = gc_us
     if isinstance(frame, dict):
         profile = frame.get("python_profile")
         if not isinstance(profile, dict):
@@ -122,7 +206,7 @@ def export_frame(full=False):
         profile["browserExportMsMax"] = _export_profile_totals["browserExportUsMax"] / 1000.0
         profile["gcMs"] = (_export_profile_totals["gcUs"] / gc_count / 1000.0) if _export_profile_totals["gcCount"] else 0.0
         profile["gcMsMax"] = _export_profile_totals["gcUsMax"] / 1000.0
-        profile["didCollectGc"] = bool(did_collect)
+        profile["didCollectGc"] = False
         profile["gcCount"] = _export_profile_totals["gcCount"]
         profile["displayCallMs"] = _export_profile_totals["displayCallUs"] / sample_count / 1000.0
         profile["displayCallMsMax"] = _export_profile_totals["displayCallUsMax"] / 1000.0

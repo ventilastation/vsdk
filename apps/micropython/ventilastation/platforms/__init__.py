@@ -191,6 +191,38 @@ class BrowserStorage(MemoryStorage):
             self.files[filename] = dict(content)
 
 
+_BUTTON_BYTES = tuple(bytes((value,)) for value in range(256))
+
+
+def _post_worker_command(worker_host, line, data=b""):
+    if isinstance(line, str):
+        line = line.encode("utf-8")
+    line = bytes(line)
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    payload = data if data else b""
+
+    post_command_ptr = getattr(worker_host, "post_command_ptr", None)
+    if post_command_ptr is not None:
+        payload_ptr = uctypes.addressof(payload) if payload else 0
+        try:
+            post_command_ptr(
+                uctypes.addressof(line),
+                len(line),
+                payload_ptr,
+                len(payload),
+            )
+            return True
+        except Exception:
+            pass
+
+    try:
+        worker_host.post_command(line.decode("utf-8"), bytes(payload) if payload else b"")
+        return True
+    except Exception:
+        return False
+
+
 class BrowserComms:
     def __init__(self):
         self.buttons = 0
@@ -205,7 +237,7 @@ class BrowserComms:
                 self.set_buttons(self.worker_host.get_buttons())
             except Exception:
                 pass
-        return bytes((self.buttons,))
+        return _BUTTON_BYTES[self.buttons]
 
     def send(self, line, data=b""):
         if isinstance(line, str):
@@ -223,11 +255,8 @@ class BrowserComms:
         if payload:
             event["data"] = payload
         if self.worker_host is not None:
-            try:
-                self.worker_host.post_command(line.decode("utf-8"), payload)
+            if _post_worker_command(self.worker_host, line, payload):
                 return
-            except Exception:
-                pass
         self.events.append(event)
 
     def set_buttons(self, buttons):
@@ -236,10 +265,6 @@ class BrowserComms:
             return
         self.buttons = normalized
         self.input_sequence += 1
-        self.input_updates.append({
-            "sequence": self.input_sequence,
-            "buttons": self.buttons,
-        })
 
     def set_worker_host(self, worker_host):
         self.worker_host = worker_host
@@ -268,6 +293,11 @@ class BrowserDisplay(NullDisplay):
         self.asset_data = {}
         self.assets = {}
         self.dirty_asset_slots = set()
+        self._worker_post_sprites = None
+        self._worker_post_frame = None
+        self._worker_post_frame_bytes = None
+        self._worker_post_present = None
+        self._frame_meta = bytearray(16)
         self._profile_totals = {
             "sampleCount": 0,
             "displayExportUs": 0,
@@ -298,12 +328,125 @@ class BrowserDisplay(NullDisplay):
 
     def set_worker_host(self, worker_host):
         self.worker_host = worker_host
+        self._worker_post_sprites = getattr(worker_host, "post_sprites", None)
+        self._worker_post_sprites_ptr = getattr(worker_host, "post_sprites_ptr", None)
+        self._worker_post_frame_bytes = getattr(worker_host, "post_frame_bytes", None)
+        self._worker_post_frame_bytes_ptr = getattr(worker_host, "post_frame_bytes_ptr", None)
+        self._worker_post_frame = getattr(worker_host, "post_frame", None)
+        self._worker_post_present = getattr(worker_host, "post_present", None)
+        self._worker_post_present_ptr = getattr(worker_host, "post_present_ptr", None)
 
     def _post_command(self, line, data=b""):
         if self.worker_host is None:
             return False
+        return _post_worker_command(self.worker_host, line, data)
+
+    def _post_sprites(self):
+        if self.worker_host is None:
+            return False
+        post_sprites = self._worker_post_sprites
+        post_sprites_ptr = self._worker_post_sprites_ptr
+        if post_sprites_ptr is not None:
+            try:
+                post_sprites_ptr(uctypes.addressof(self.sprite_data), len(self.sprite_data))
+                return True
+            except Exception:
+                pass
+        if post_sprites is None:
+            return self._post_command("sprites", self.sprite_data)
         try:
-            self.worker_host.post_command(line, data)
+            post_sprites(self.sprite_data)
+            return True
+        except Exception:
+            return False
+
+    def _fill_frame_meta(self, full):
+        palette_dirty = 1 if (full or self.palette_dirty) else 0
+        frame_meta = self._frame_meta
+        frame = self.frame
+        palette_length = len(self.palette)
+        palette_version = self.palette_version
+        frame_meta[0] = frame & 0xFF
+        frame_meta[1] = (frame >> 8) & 0xFF
+        frame_meta[2] = (frame >> 16) & 0xFF
+        frame_meta[3] = (frame >> 24) & 0xFF
+        frame_meta[4] = self.comms.buttons & 0xFF
+        frame_meta[5] = self.gamma_mode & 0xFF
+        frame_meta[6] = self.column_offset & 0xFF
+        frame_meta[7] = palette_dirty
+        frame_meta[8] = palette_length & 0xFF
+        frame_meta[9] = (palette_length >> 8) & 0xFF
+        frame_meta[10] = (palette_length >> 16) & 0xFF
+        frame_meta[11] = (palette_length >> 24) & 0xFF
+        frame_meta[12] = palette_version & 0xFF
+        frame_meta[13] = (palette_version >> 8) & 0xFF
+        frame_meta[14] = (palette_version >> 16) & 0xFF
+        frame_meta[15] = (palette_version >> 24) & 0xFF
+        return frame_meta
+
+    def _post_present(self, full):
+        if self.worker_host is None:
+            return False
+        post_present = self._worker_post_present
+        post_present_ptr = self._worker_post_present_ptr
+        if post_present_ptr is None and post_present is None:
+            return False
+        try:
+            frame_meta = self._fill_frame_meta(full)
+            if post_present_ptr is not None:
+                post_present_ptr(
+                    uctypes.addressof(self.sprite_data),
+                    len(self.sprite_data),
+                    uctypes.addressof(frame_meta),
+                    len(frame_meta),
+                )
+                return True
+            if post_present is None:
+                return False
+            post_present(self.sprite_data, frame_meta)
+            return True
+        except Exception:
+            return False
+
+    def _post_frame(self, full):
+        if self.worker_host is None:
+            return False
+        palette_dirty = 1 if (full or self.palette_dirty) else 0
+        post_frame_bytes = self._worker_post_frame_bytes
+        post_frame_bytes_ptr = self._worker_post_frame_bytes_ptr
+        if post_frame_bytes is not None:
+            frame_meta = self._fill_frame_meta(full)
+            try:
+                if post_frame_bytes_ptr is not None:
+                    post_frame_bytes_ptr(uctypes.addressof(frame_meta), len(frame_meta))
+                    return True
+                post_frame_bytes(frame_meta)
+                return True
+            except Exception:
+                return False
+        post_frame = self._worker_post_frame
+        if post_frame is None:
+            return self._post_command(
+                "frame %d %d %d %d %d %d %d" % (
+                    self.frame,
+                    self.comms.buttons,
+                    self.gamma_mode,
+                    self.column_offset,
+                    len(self.palette),
+                    self.palette_version,
+                    palette_dirty,
+                )
+            )
+        try:
+            post_frame(
+                self.frame,
+                self.comms.buttons,
+                self.gamma_mode,
+                self.column_offset,
+                len(self.palette),
+                self.palette_version,
+                palette_dirty,
+            )
             return True
         except Exception:
             return False
@@ -318,7 +461,6 @@ class BrowserDisplay(NullDisplay):
         self.palette = palette
         self.palette_version += 1
         self.palette_dirty = True
-        self._post_command("palette %d %d" % (len(palette), self.palette_version), palette)
 
     def getaddress(self, sprite_num):
         return uctypes.addressof(self.sprite_data) + sprite_num * 5
@@ -333,34 +475,32 @@ class BrowserDisplay(NullDisplay):
         self.asset_data[number] = stripmap
         self.assets[number] = asset
         self.dirty_asset_slots.add(number)
-        self._post_command("imagestrip %d %d" % (number, len(stripmap)), stripmap)
 
     def update(self):
         self.frame += 1
         if self.worker_host is None:
             return
         full = bool(self.worker_host.consume_full_frame_request())
-        if full and self.palette:
+        if (full or self.palette_dirty) and self.palette:
             self._post_command("palette %d %d" % (len(self.palette), self.palette_version), self.palette)
-        asset_slots = sorted(self.assets) if full else sorted(self.dirty_asset_slots)
-        for slot in asset_slots:
-            stripmap = self.asset_data.get(slot)
-            if stripmap is not None:
+        if full:
+            for slot, stripmap in self.asset_data.items():
                 self._post_command("imagestrip %d %d" % (slot, len(stripmap)), stripmap)
-        self._post_command("sprites", bytes(self.sprite_data))
-        self._post_command(
-            "frame %d %d %d %d %d %d %d" % (
-                self.frame,
-                self.comms.buttons,
-                self.gamma_mode,
-                self.column_offset,
-                len(self.palette),
-                self.palette_version,
-                1 if (full or self.palette_dirty) else 0,
-            )
-        )
+        else:
+            for slot in self.dirty_asset_slots:
+                stripmap = self.asset_data.get(slot)
+                if stripmap is not None:
+                    self._post_command("imagestrip %d %d" % (slot, len(stripmap)), stripmap)
+        if (
+            self._worker_post_present_ptr is not None or
+            self._worker_post_present is not None
+        ):
+            self._post_present(full)
+        else:
+            self._post_sprites()
+            self._post_frame(full)
         self.palette_dirty = False
-        self.dirty_asset_slots = set()
+        self.dirty_asset_slots.clear()
 
     def _decode_imagestrip(self, slot, stripmap):
         if len(stripmap) < 4:
@@ -412,9 +552,9 @@ class BrowserDisplay(NullDisplay):
         after_palette_at = _ticks_us()
         assets_started_at = after_palette_at
         if full:
-            asset_slots = sorted(self.assets)
+            asset_slots = self.assets
         else:
-            asset_slots = sorted(self.dirty_asset_slots)
+            asset_slots = self.dirty_asset_slots
         exported["assets"] = [self.assets[slot] for slot in asset_slots if slot in self.assets]
         after_assets_at = _ticks_us()
         exported["events"] = self.comms.drain_events()
@@ -461,7 +601,7 @@ class BrowserDisplay(NullDisplay):
             "full": bool(full),
         }
         self.palette_dirty = False
-        self.dirty_asset_slots = set()
+        self.dirty_asset_slots.clear()
         return exported
 
 

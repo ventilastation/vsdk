@@ -9,7 +9,6 @@ It currently provides:
 - a pull-based frame polling loop
 - a debug canvas that renders exported sprite state
 - inspector panels for runtime events, sprites, and assets
-- a mock runtime adapter so the shell works before MicroPython/WASM is wired in
 - a WASM adapter layer that auto-activates if a low-level bridge is provided
 - a worker-bridge scaffold for integrating the official MicroPython `webassembly` port
 
@@ -80,10 +79,6 @@ That adapter should expose:
 }
 ```
 
-## Next Step
-
-Replace the mock adapter with a real low-level WASM bridge.
-
 The adapter scaffold in `web/wasm-adapter.js` expects one of:
 
 - `window.VentilastationWasmBridge`
@@ -104,7 +99,7 @@ This repository now also includes a default scaffold implementation:
 - [web/micropython-bridge.js](/Users/alecu/ventilastation/vsdk/web/micropython-bridge.js)
 - [web/wasm-worker.js](/Users/alecu/ventilastation/vsdk/web/wasm-worker.js)
 
-Today those files provide the transport and placeholder runtime. They do not include the actual MicroPython artifacts yet.
+Today those files provide the transport layer. They do not include the actual MicroPython artifacts yet.
 
 The high-level adapter already translates that into:
 

@@ -60,11 +60,16 @@ const TOUCH_STICK_DEAD_ZONE = 0.26;
 const GAMEPAD_AXIS_DEAD_ZONE = 0.35;
 const FPS_DISPLAY_INTERVAL_MS = 500;
 const RENDER_PROFILE_SAMPLE_LIMIT = 60;
+const MEMORY_SNAPSHOT_HISTORY_LIMIT = 20;
+const TRACE_FLAGS = {
+  auto_gc_frame: 32,
+};
 const WEBGL_RESOLUTION_SCALE_AUTO = "auto";
 const DEFAULT_WEBGL_RESOLUTION_SCALE = 1;
 const WEBGL_RESOLUTION_SCALES = [1, 0.75, 0.5, 0.375, 0.25];
 const WEBGL_AUTO_SCALE_MIN_FPS = 20;
 const WEBGL_AUTO_SCALE_WAIT_MS = 3000;
+const MEMORY_FRAME_REFRESH_STORAGE_KEY = "ventilastation.memoryFrameRefresh.v1";
 const EMULATOR_BASE_URL = new URL(".", window.location.href);
 const PROJECT_ROOT_CANDIDATES = [
   EMULATOR_BASE_URL,
@@ -77,6 +82,33 @@ function decodePerspective(value) {
 
 function formatProfileMs(value) {
   return value === null || value === undefined ? "--" : `${value.toFixed(2)} ms`;
+}
+
+function formatBytes(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+    return "--";
+  }
+  const bytes = Number(value);
+  if (Math.abs(bytes) < 1024) {
+    return `${bytes} B`;
+  }
+  const units = ["KiB", "MiB", "GiB"];
+  let amount = bytes;
+  let unitIndex = -1;
+  do {
+    amount /= 1024;
+    unitIndex += 1;
+  } while (Math.abs(amount) >= 1024 && unitIndex < units.length - 1);
+  return `${amount.toFixed(amount >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+}
+
+function formatDeltaBytes(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+    return "--";
+  }
+  const numeric = Number(value);
+  const prefix = numeric > 0 ? "+" : "";
+  return `${prefix}${formatBytes(numeric)}`;
 }
 
 function getNestedValue(source, path) {
@@ -656,86 +688,14 @@ class LedRingCanvasRenderer {
   }
 }
 
-class MockRuntimeAdapter {
+class FailedRuntimeAdapter {
   constructor() {
-    this.name = "Mock Runtime";
-    this.buttons = 0;
-    this.frame = 0;
-    this.angle = 0;
-    this.assets = [
-      { slot: 1, width: 18, height: 18, frames: 1, palette: 0, data: new Uint8Array(18 * 18) },
-      { slot: 2, width: 28, height: 10, frames: 1, palette: 0, data: new Uint8Array(28 * 10) },
-    ];
-    this.palette = new Uint8Array(256 * 4);
-    this.events = [];
-
-    this.palette[1 * 4 + 1] = 160;
-    this.palette[1 * 4 + 2] = 220;
-    this.palette[1 * 4 + 3] = 64;
-    this.palette[2 * 4 + 1] = 80;
-    this.palette[2 * 4 + 2] = 160;
-    this.palette[2 * 4 + 3] = 255;
-
-    this.assets[0].data.fill(255);
-    this.assets[1].data.fill(255);
-    for (let x = 0; x < 18; x += 1) {
-      for (let y = 0; y < 18; y += 1) {
-        const dx = x - 9;
-        const dy = y - 9;
-        if (dx * dx + dy * dy < 56) {
-          this.assets[0].data[x * 18 + y] = 1;
-        }
-      }
-    }
-    for (let x = 0; x < 28; x += 1) {
-      for (let y = 0; y < 10; y += 1) {
-        if (Math.abs(y - 5) < 3) {
-          this.assets[1].data[x * 10 + y] = 2;
-        }
-      }
-    }
+    this.name = "Runtime unavailable";
+    this.usesWorkerFrameStream = false;
   }
 
-  setButtons(buttons) {
-    this.buttons = buttons & 0xff;
-  }
-
-  exportFrame({ full = false } = {}) {
-    this.frame += 1;
-    this.angle = (this.angle + 0.02) % (Math.PI * 2);
-
-    const radius = 90;
-    const x = 128 + Math.round(Math.cos(this.angle) * radius);
-    const y = 128 + Math.round(Math.sin(this.angle) * radius);
-    const pressed = [];
-    for (const [name, bit] of Object.entries(BUTTONS)) {
-      if (this.buttons & bit) {
-        pressed.push(name);
-      }
-    }
-
-    if (pressed.length) {
-      this.events = [{ command: "input", args: pressed }];
-    } else {
-      this.events = [];
-    }
-
-    return {
-      frame: this.frame,
-      buttons: this.buttons,
-      column_offset: 0,
-      gamma_mode: 1,
-      palette_length: this.palette.length,
-      palette_version: 1,
-      palette_dirty: Boolean(full),
-      palette: full ? this.palette : undefined,
-      assets: full ? this.assets : [],
-      events: this.events,
-      sprites: [
-        { slot: 1, image_strip: 1, x, y, frame: 0, perspective: 1 },
-        { slot: 2, image_strip: 2, x: 128, y: 220, frame: 0, perspective: 0 },
-      ],
-    };
+  setButtons(_buttons) {
+    return;
   }
 }
 
@@ -757,6 +717,13 @@ class BrowserHostApp {
     this.paletteLoadedBytes = 0;
     this.lastFrame = null;
     this.lastFrameShape = null;
+    this.lastMemorySnapshot = null;
+    this.lastCollectedMemorySnapshot = null;
+    this.lastMemorySnapshotAt = 0;
+    this.memorySnapshotHistory = [];
+    this.lastMemoryScene = null;
+    this.memorySnapshotPending = null;
+    this.traceFlags = 0;
     this.lastRenderedLedPixels = null;
     this.lastRenderAt = null;
     this.displayedFps = null;
@@ -789,6 +756,9 @@ class BrowserHostApp {
     this.unsubscribeWorkerFrame = null;
     this.unsubscribeWorkerRuntimeError = null;
     this.canvasResizeObserver = null;
+    this.mobileLayoutQuery = typeof window.matchMedia === "function"
+      ? window.matchMedia("(max-width: 980px) and (pointer: coarse)")
+      : null;
     this.stagePanel = document.querySelector(".stage-panel");
     this.canvas = document.querySelector("#frame-canvas-gl");
     this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
@@ -820,12 +790,17 @@ class BrowserHostApp {
       copyDiagnosticsButton: document.querySelector("#copy-diagnostics-button"),
       copyDiagnosticsStatus: document.querySelector("#copy-diagnostics-status"),
       runtimeSummary: document.querySelector("#runtime-summary"),
+      memorySummary: document.querySelector("#memory-summary"),
+      collectMemoryButton: document.querySelector("#collect-memory-button"),
+      refreshMemoryEveryFrame: document.querySelector("#refresh-memory-every-frame"),
       force2dFallback: document.querySelector("#force-2d-fallback"),
       invertGamepadY: document.querySelector("#invert-gamepad-y"),
       enableRendererProfiling: document.querySelector("#enable-renderer-profiling"),
       webglResolutionScale: document.querySelector("#webgl-resolution-scale"),
+      traceFlagControls: Array.from(document.querySelectorAll("[data-trace-flag]")),
     };
     this.copyStatusTimer = null;
+    this.refreshMemoryEveryFrame = this.readBooleanPreference(MEMORY_FRAME_REFRESH_STORAGE_KEY, false);
     this.refreshCopyDiagnostics();
   }
 
@@ -966,6 +941,7 @@ class BrowserHostApp {
       source: this.runtime.source,
       hasTick: typeof this.adapter.tick === "function",
       hasExportFrame: typeof this.adapter.exportFrame === "function",
+      hasMemorySnapshot: typeof this.adapter.memorySnapshot === "function",
       hasWebGL: this.renderer.available,
     });
     this.renderRuntimeStatus();
@@ -976,13 +952,20 @@ class BrowserHostApp {
     this.bindFullscreenControls();
     this.bindRenderingToggle();
     this.bindInspectorToggle();
+    this.bindMemoryControls();
     this.bindSceneErrorControls();
+    this.bindResponsiveLayout();
     this.bindCanvasResizeObserver();
+    this.syncResponsiveLayout();
     this.renderFullscreenToggle();
     this.renderRenderingToggle();
     this.renderInspectorVisibility();
     this.renderCanvasVisibility();
     this.renderSceneError();
+    this.renderMemorySummary();
+    if (this.runtime.source === "error") {
+      return;
+    }
     if (this.adapter.usesWorkerFrameStream && typeof this.adapter.onFrame === "function") {
       this.unsubscribeWorkerFrame = this.adapter.onFrame((frame) => {
         this.handleWorkerFrame(frame);
@@ -1016,8 +999,10 @@ class BrowserHostApp {
   }
 
   bindInput() {
-    const enableAudio = () => this.audio.enable();
-    window.addEventListener("pointerdown", enableAudio, { once: true });
+    window.addEventListener("pointerdown", () => {
+      this.audio.enable();
+    }, { once: true });
+
     window.addEventListener("keydown", (event) => {
       this.audio.enable();
       const bit = KEY_TO_BUTTON.get(event.code);
@@ -1157,6 +1142,9 @@ class BrowserHostApp {
     const nextButtons = this.readGamepadButtons();
     if (nextButtons === this.gamepadButtons) {
       return false;
+    }
+    if (nextButtons !== 0) {
+      this.audio.enable();
     }
     this.gamepadButtons = nextButtons;
     this.syncButtons();
@@ -1463,6 +1451,47 @@ class BrowserHostApp {
         }
       });
     }
+
+    if (this.elements.traceFlagControls.length) {
+      this.elements.traceFlagControls.forEach((control) => {
+        control.checked = false;
+        control.addEventListener("change", () => {
+          void this.syncTraceFlags();
+        });
+      });
+      void this.syncTraceFlags();
+    }
+  }
+
+  syncTraceFlags() {
+    const flags = this.elements.traceFlagControls.reduce((mask, control) => {
+      if (!control.checked) {
+        return mask;
+      }
+      return mask | (TRACE_FLAGS[control.dataset.traceFlag] || 0);
+    }, 0);
+    this.traceFlags = flags;
+    if (typeof this.adapter.setTraceFlags !== "function") {
+      this.addDiagnostic("trace.flags.unavailable", { flags });
+      return Promise.resolve(null);
+    }
+    return Promise.resolve()
+      .then(() => this.adapter.setTraceFlags(flags))
+      .then(() => {
+        this.addDiagnostic("trace.flags", {
+          flags,
+          enabled: Object.entries(TRACE_FLAGS)
+            .filter(([, bit]) => Boolean(flags & bit))
+            .map(([name]) => name),
+        });
+        this.refreshCopyDiagnostics();
+      })
+      .catch((error) => {
+        this.addDiagnostic("trace.flags.error", {
+          flags,
+          message: error?.message || String(error),
+        });
+      });
   }
 
   applyWebglResolutionScale(scale, { reason = "manual", persist = true } = {}) {
@@ -1574,7 +1603,7 @@ class BrowserHostApp {
   bindFullscreenControls() {
     const button = this.elements.toggleFullscreenButton;
     const stageExitButton = this.elements.stageFullscreenExit;
-    if (!button || !this.stagePanel || !document.fullscreenEnabled) {
+    if (!button || !this.stagePanel || !this.canUseFullscreen()) {
       if (button) {
         button.hidden = true;
       }
@@ -1584,26 +1613,12 @@ class BrowserHostApp {
       return;
     }
 
-    const toggleFullscreen = async () => {
-      try {
-        if (this.isFullscreen) {
-          await document.exitFullscreen();
-        } else {
-          await this.stagePanel.requestFullscreen();
-        }
-      } catch (error) {
-        this.addDiagnostic("fullscreen.error", {
-          message: error?.message || String(error),
-        });
-      }
-    };
-
     button.addEventListener("click", () => {
-      void toggleFullscreen();
+      void this.toggleFullscreen();
     });
     if (stageExitButton) {
       stageExitButton.addEventListener("click", () => {
-        void toggleFullscreen();
+        void this.toggleFullscreen();
       });
     }
 
@@ -1620,12 +1635,59 @@ class BrowserHostApp {
     });
   }
 
+  bindResponsiveLayout() {
+    const syncLayout = () => {
+      this.syncResponsiveLayout();
+    };
+    if (this.mobileLayoutQuery && typeof this.mobileLayoutQuery.addEventListener === "function") {
+      this.mobileLayoutQuery.addEventListener("change", syncLayout);
+    } else if (this.mobileLayoutQuery && typeof this.mobileLayoutQuery.addListener === "function") {
+      this.mobileLayoutQuery.addListener(syncLayout);
+    }
+    window.addEventListener("resize", syncLayout);
+  }
+
   bindInspectorToggle() {
     if (!this.elements.toggleInspectorButton || !this.elements.inspectorPanel) {
       return;
     }
     this.elements.toggleInspectorButton.addEventListener("click", () => {
       this.setInspectorOpen(!this.inspectorOpen);
+    });
+  }
+
+  bindMemoryControls() {
+    const button = this.elements.collectMemoryButton;
+    const refreshToggle = this.elements.refreshMemoryEveryFrame;
+    if (!button) {
+      return;
+    }
+    if (typeof this.adapter.memorySnapshot !== "function") {
+      button.disabled = true;
+      if (refreshToggle) {
+        refreshToggle.disabled = true;
+      }
+      return;
+    }
+    if (refreshToggle) {
+      refreshToggle.checked = this.refreshMemoryEveryFrame;
+      refreshToggle.addEventListener("change", () => {
+        this.refreshMemoryEveryFrame = Boolean(refreshToggle.checked);
+        this.writeBooleanPreference(MEMORY_FRAME_REFRESH_STORAGE_KEY, this.refreshMemoryEveryFrame);
+      });
+    }
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "Collecting";
+      try {
+        await this.requestMemorySnapshot({
+          collect: true,
+          reason: "manual_collect",
+        });
+      } finally {
+        button.disabled = false;
+        button.textContent = "Collect";
+      }
     });
   }
 
@@ -1692,6 +1754,7 @@ class BrowserHostApp {
     if (this.stagePanel) {
       this.stagePanel.classList.toggle("is-fullscreen", active);
     }
+    this.syncResponsiveLayout();
     if (active) {
       this.fullscreenRenderProfileSamples = [];
       this.lastFullscreenRenderProfile = null;
@@ -1709,13 +1772,69 @@ class BrowserHostApp {
     });
   }
 
+  isMobileLayout() {
+    return Boolean(this.mobileLayoutQuery?.matches);
+  }
+
+  syncResponsiveLayout() {
+    if (!this.stagePanel) {
+      return;
+    }
+    this.stagePanel.classList.toggle("is-mobile-layout", this.isMobileLayout());
+  }
+
+  canUseFullscreen() {
+    return Boolean(
+      this.stagePanel &&
+      document.fullscreenEnabled &&
+      typeof this.stagePanel.requestFullscreen === "function",
+    );
+  }
+
+  async enterFullscreen() {
+    if (!this.canUseFullscreen() || this.isFullscreen) {
+      return false;
+    }
+    try {
+      await this.stagePanel.requestFullscreen();
+      return true;
+    } catch (error) {
+      this.addDiagnostic("fullscreen.error", {
+        message: error?.message || String(error),
+      });
+      return false;
+    }
+  }
+
+  async exitFullscreen() {
+    if (!document.fullscreenElement) {
+      return false;
+    }
+    try {
+      await document.exitFullscreen();
+      return true;
+    } catch (error) {
+      this.addDiagnostic("fullscreen.error", {
+        message: error?.message || String(error),
+      });
+      return false;
+    }
+  }
+
+  async toggleFullscreen() {
+    if (this.isFullscreen) {
+      return this.exitFullscreen();
+    }
+    return this.enterFullscreen();
+  }
+
   renderFullscreenToggle() {
     const button = this.elements.toggleFullscreenButton;
     const stageExitButton = this.elements.stageFullscreenExit;
     if (!button) {
       return;
     }
-    button.textContent = this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+    button.textContent = this.isFullscreen ? "Exit fullscreen" : "Fullscreen";
     button.setAttribute("aria-pressed", this.isFullscreen ? "true" : "false");
     if (stageExitButton) {
       stageExitButton.hidden = !this.isFullscreen;
@@ -1727,7 +1846,7 @@ class BrowserHostApp {
     if (!button) {
       return;
     }
-    button.textContent = this.renderingPaused ? "Resume emulator" : "Pause emulator";
+    button.textContent = this.renderingPaused ? "Resume" : "Pause";
     button.setAttribute("aria-pressed", this.renderingPaused ? "true" : "false");
   }
 
@@ -1736,68 +1855,52 @@ class BrowserHostApp {
       return;
     }
     this.elements.inspectorPanel.hidden = !this.inspectorOpen;
-    this.elements.toggleInspectorButton.textContent = this.inspectorOpen ? "Hide options" : "Show options";
+    this.elements.toggleInspectorButton.textContent = this.inspectorOpen ? "Hide" : "Options";
     this.elements.toggleInspectorButton.setAttribute("aria-expanded", this.inspectorOpen ? "true" : "false");
   }
 
-  readForce2dPreference() {
+  readBooleanPreference(storageKey, fallback = false) {
     try {
-      return localStorage.getItem(FORCE_2D_STORAGE_KEY) === "1";
+      return localStorage.getItem(storageKey) === "1";
     } catch (_error) {
-      return false;
+      return fallback;
     }
+  }
+
+  writeBooleanPreference(storageKey, enabled) {
+    try {
+      if (enabled) {
+        localStorage.setItem(storageKey, "1");
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    } catch (_error) {
+      return;
+    }
+  }
+
+  readForce2dPreference() {
+    return this.readBooleanPreference(FORCE_2D_STORAGE_KEY, false);
   }
 
   writeForce2dPreference(enabled) {
-    try {
-      if (enabled) {
-        localStorage.setItem(FORCE_2D_STORAGE_KEY, "1");
-      } else {
-        localStorage.removeItem(FORCE_2D_STORAGE_KEY);
-      }
-    } catch (_error) {
-      return;
-    }
+    this.writeBooleanPreference(FORCE_2D_STORAGE_KEY, enabled);
   }
 
   readInvertGamepadYPreference() {
-    try {
-      return localStorage.getItem(INVERT_GAMEPAD_Y_STORAGE_KEY) === "1";
-    } catch (_error) {
-      return false;
-    }
+    return this.readBooleanPreference(INVERT_GAMEPAD_Y_STORAGE_KEY, false);
   }
 
   writeInvertGamepadYPreference(enabled) {
-    try {
-      if (enabled) {
-        localStorage.setItem(INVERT_GAMEPAD_Y_STORAGE_KEY, "1");
-      } else {
-        localStorage.removeItem(INVERT_GAMEPAD_Y_STORAGE_KEY);
-      }
-    } catch (_error) {
-      return;
-    }
+    this.writeBooleanPreference(INVERT_GAMEPAD_Y_STORAGE_KEY, enabled);
   }
 
   readRendererProfilingPreference() {
-    try {
-      return localStorage.getItem(RENDERER_PROFILING_STORAGE_KEY) === "1";
-    } catch (_error) {
-      return false;
-    }
+    return this.readBooleanPreference(RENDERER_PROFILING_STORAGE_KEY, false);
   }
 
   writeRendererProfilingPreference(enabled) {
-    try {
-      if (enabled) {
-        localStorage.setItem(RENDERER_PROFILING_STORAGE_KEY, "1");
-      } else {
-        localStorage.removeItem(RENDERER_PROFILING_STORAGE_KEY);
-      }
-    } catch (_error) {
-      return;
-    }
+    this.writeBooleanPreference(RENDERER_PROFILING_STORAGE_KEY, enabled);
   }
 
   readWebglResolutionScalePreference() {
@@ -1826,23 +1929,11 @@ class BrowserHostApp {
   }
 
   readInspectorPreference() {
-    try {
-      return localStorage.getItem(INSPECTOR_OPEN_STORAGE_KEY) === "1";
-    } catch (_error) {
-      return false;
-    }
+    return this.readBooleanPreference(INSPECTOR_OPEN_STORAGE_KEY, false);
   }
 
   writeInspectorPreference(enabled) {
-    try {
-      if (enabled) {
-        localStorage.setItem(INSPECTOR_OPEN_STORAGE_KEY, "1");
-      } else {
-        localStorage.removeItem(INSPECTOR_OPEN_STORAGE_KEY);
-      }
-    } catch (_error) {
-      return;
-    }
+    this.writeBooleanPreference(INSPECTOR_OPEN_STORAGE_KEY, enabled);
   }
 
   copyViaSelection(text) {
@@ -1877,6 +1968,110 @@ class BrowserHostApp {
       this.elements.copyDiagnostics.value = text;
     }
     return text;
+  }
+
+  async requestMemorySnapshot({ collect = false, reason = "manual", track = true } = {}) {
+    if (typeof this.adapter.memorySnapshot !== "function") {
+      return null;
+    }
+    if (this.memorySnapshotPending) {
+      if (!collect) {
+        return this.memorySnapshotPending;
+      }
+      await this.memorySnapshotPending;
+    }
+    this.memorySnapshotPending = Promise.resolve()
+      .then(async () => {
+        const [snapshot, proxyRefInfo] = await Promise.all([
+          this.adapter.memorySnapshot({ collect }),
+          typeof this.adapter.proxyRefInfo === "function"
+            ? this.adapter.proxyRefInfo().catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        return { snapshot, proxyRefInfo };
+      })
+      .then(({ snapshot, proxyRefInfo }) => {
+        const stampedSnapshot = {
+          ...snapshot,
+          proxyRefInfo,
+          sampledAt: new Date().toISOString(),
+          reason,
+        };
+        this.lastMemorySnapshot = stampedSnapshot;
+        if (collect) {
+          this.lastCollectedMemorySnapshot = stampedSnapshot;
+        }
+        this.lastMemorySnapshotAt = performance.now();
+        if (track) {
+          this.recordMemorySnapshot(stampedSnapshot, { collect, reason });
+          this.addDiagnostic("memory.snapshot", {
+            reason,
+            collect,
+            gc: stampedSnapshot.gc || null,
+            runtime: stampedSnapshot.runtime || null,
+            display: stampedSnapshot.display || null,
+            proxyRefInfo: stampedSnapshot.proxyRefInfo || null,
+            jsHistoryLength: this.memorySnapshotHistory.length,
+            traceFlags: this.traceFlags,
+          });
+        }
+        this.renderMemorySummary();
+        if (track && this.inspectorOpen && this.lastFrame) {
+          this.renderInspectors(this.lastFrame);
+        } else if (track) {
+          this.refreshCopyDiagnostics();
+        }
+        return stampedSnapshot;
+      })
+      .catch((error) => {
+        this.lastMemorySnapshotAt = performance.now();
+        this.addDiagnostic("memory.snapshot.error", {
+          reason,
+          message: error.message || String(error),
+        });
+        this.renderMemorySummary(error);
+        return null;
+      })
+      .finally(() => {
+        this.memorySnapshotPending = null;
+      });
+    return this.memorySnapshotPending;
+  }
+
+  recordMemorySnapshot(snapshot, { collect = false, reason = "manual" } = {}) {
+    const currentScene = snapshot?.runtime?.currentScene || null;
+    const sceneChanged = currentScene !== this.lastMemoryScene;
+    const entry = {
+      sampledAt: snapshot.sampledAt,
+      reason,
+      collect,
+      sceneChanged,
+      previousScene: this.lastMemoryScene,
+      currentScene,
+      frame: snapshot?.runtime?.frame ?? null,
+      allocBytes: snapshot?.gc?.allocBytes ?? null,
+      freeBytes: snapshot?.gc?.freeBytes ?? null,
+      assetBytes: snapshot?.display?.assetBytes ?? null,
+      assetCount: snapshot?.display?.assetCount ?? null,
+      pendingCalls: snapshot?.runtime?.pendingCalls ?? null,
+      sceneStackDepth: snapshot?.runtime?.sceneStackDepth ?? null,
+    };
+    this.lastMemoryScene = currentScene;
+    this.memorySnapshotHistory.push(entry);
+    if (this.memorySnapshotHistory.length > MEMORY_SNAPSHOT_HISTORY_LIMIT) {
+      this.memorySnapshotHistory.shift();
+    }
+  }
+
+  refreshFrameMemorySummary() {
+    if (!(this.traceFlags & TRACE_FLAGS.auto_gc_frame) && !this.refreshMemoryEveryFrame) {
+      return;
+    }
+    void this.requestMemorySnapshot({
+      collect: false,
+      reason: "frame",
+      track: false,
+    });
   }
 
   applyFrame(frame) {
@@ -1935,6 +2130,7 @@ class BrowserHostApp {
       const gamepadChanged = this.updateGamepadButtons();
       this.applyFrame(frame);
       this.renderFrame();
+      this.refreshFrameMemorySummary();
       if (gamepadChanged) {
         this.renderStatus();
       }
@@ -1998,6 +2194,7 @@ class BrowserHostApp {
       const frame = await Promise.resolve(this.adapter.exportFrame({ full }));
       this.applyFrame(frame);
       this.renderFrame();
+      this.refreshFrameMemorySummary();
     } catch (error) {
       this.executionError = this.extractProminentError(error);
       this.runtime.error = this.executionError ? null : error;
@@ -2211,28 +2408,26 @@ class BrowserHostApp {
 
   renderRuntimeStatus() {
     const { runtimeBanner, runtimeMessage } = this.elements;
-    runtimeBanner.hidden = false;
     runtimeBanner.classList.remove("is-error", "is-warning");
 
     if (this.executionError) {
+      runtimeBanner.hidden = false;
       runtimeBanner.classList.add("is-error");
       runtimeMessage.textContent = `${this.executionError.title}\n\n${this.executionError.message}`;
       return;
     }
 
     if (this.runtime.error) {
+      runtimeBanner.hidden = false;
       runtimeBanner.classList.add("is-error");
-      runtimeMessage.textContent = this.runtime.error.stack || this.runtime.error.message || String(this.runtime.error);
+      runtimeMessage.textContent = this.runtime.source === "error"
+        ? `Runtime initialization failed.\n\n${this.runtime.error.stack || this.runtime.error.message || String(this.runtime.error)}`
+        : (this.runtime.error.stack || this.runtime.error.message || String(this.runtime.error));
       return;
     }
 
-    if (this.runtime.source === "wasm") {
-      runtimeMessage.textContent = "Using real MicroPython WASM runtime.";
-      return;
-    }
-
-    runtimeBanner.classList.add("is-warning");
-    runtimeMessage.textContent = "Using mock runtime.";
+    runtimeBanner.hidden = true;
+    runtimeMessage.textContent = "";
   }
 
   renderSceneError() {
@@ -2251,6 +2446,41 @@ class BrowserHostApp {
     sceneErrorBanner.hidden = false;
     sceneErrorTitle.textContent = this.executionError.title;
     sceneErrorMessage.textContent = this.executionError.message;
+  }
+
+  renderMemorySummary(error = null) {
+    if (!this.elements.memorySummary) {
+      return;
+    }
+    const memory = this.lastMemorySnapshot;
+    let summary;
+    if (memory) {
+      const usedPercent = typeof memory.gc?.usedPercent === "number"
+        ? `${memory.gc.usedPercent.toFixed(1)}%`
+        : "--";
+      summary = [
+        ["Heap Used", `${formatBytes(memory.gc?.allocBytes)} / ${usedPercent}`],
+        ["Heap Free", formatBytes(memory.gc?.freeBytes)],
+      ];
+      if (memory.proxyRefInfo) {
+        summary.push([
+          "Proxy Refs",
+          `${memory.proxyRefInfo.usedSlots ?? "--"}/${memory.proxyRefInfo.totalSlots ?? "--"} next ${memory.proxyRefInfo.nextSlot ?? "--"}`,
+        ]);
+      }
+    } else if (error) {
+      summary = [["Heap", "Snapshot failed"]];
+    } else if (typeof this.adapter.memorySnapshot === "function") {
+      summary = [["Heap", "Not sampled"]];
+    } else {
+      summary = [["Heap", "Unavailable"]];
+    }
+    this.elements.memorySummary.innerHTML = summary.map(([label, value]) => `
+      <div class="summary-card">
+        <strong>${label}</strong>
+        <span>${value}</span>
+      </div>
+    `).join("");
   }
 
   renderInspectors(frame) {
@@ -2365,6 +2595,10 @@ class BrowserHostApp {
       } : null,
       renderProfile,
       fullscreenRenderProfile,
+      memorySnapshot: this.lastMemorySnapshot,
+      collectedMemorySnapshot: this.lastCollectedMemorySnapshot,
+      memorySnapshotHistory: this.memorySnapshotHistory.slice(),
+      traceFlags: this.traceFlags,
     };
   }
 
@@ -2407,6 +2641,10 @@ class BrowserHostApp {
         isSceneLifecycleError: this.executionError.isSceneLifecycleError,
       } : null,
       frameShape,
+      memorySnapshot: this.lastMemorySnapshot,
+      collectedMemorySnapshot: this.lastCollectedMemorySnapshot,
+      memorySnapshotHistory: this.memorySnapshotHistory.slice(),
+      traceFlags: this.traceFlags,
       diagnostics: exportedDiagnostics,
     };
     return JSON.stringify(bundle, null, 2);
@@ -2427,10 +2665,17 @@ async function resolveRuntime() {
       }
     } catch (error) {
       console.error("Failed to initialize Ventilastation WASM adapter", error);
-      return { adapter: new MockRuntimeAdapter(), source: "mock", error };
+      return { adapter: new FailedRuntimeAdapter(), source: "error", error };
     }
   }
-  return { adapter: new MockRuntimeAdapter(), source: "mock" };
+  return {
+    adapter: new FailedRuntimeAdapter(),
+    source: "error",
+    error: new Error(
+      "No Ventilastation WASM bridge available. " +
+      "Expected window.VentilastationWasmBridge or window.createVentilastationWasmBridge()."
+    ),
+  };
 }
 
 resolveRuntime().then((runtime) => {

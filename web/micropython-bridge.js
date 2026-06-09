@@ -86,10 +86,16 @@ class WorkerBridge {
   requestFullFrame() {
     return this.request("request_full_frame");
   }
+
+  getProxyRefInfo() {
+    return this.request("get_proxy_ref_info");
+  }
 }
 
+const WORKER_SCRIPT_VERSION = "worker-debug-20260609T000500Z";
+
 export async function createVentilastationWasmBridge(options = {}) {
-  const workerUrl = options.workerUrl || new URL("./wasm-worker.js", import.meta.url).href;
+  const workerUrl = options.workerUrl || new URL(`./wasm-worker.js?v=${WORKER_SCRIPT_VERSION}`, import.meta.url).href;
   const worker = new Worker(workerUrl, { type: "module" });
   const bridge = new WorkerBridge(worker);
   return bridge;

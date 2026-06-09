@@ -1,3 +1,5 @@
+globalThis.__vs_micropython_bridge_version = "bridge-debug-20260608T230500Z";
+
 // This code implements the `-sMODULARIZE` settings by taking the generated
 // JS program code (INNER_JS_CODE) and wrapping it in a factory function.
 
@@ -5834,6 +5836,21 @@ export async function loadMicroPython(options) {
         _module: Module,
         PyProxy: PyProxy,
         FS: Module.FS,
+        readMemoryBytes(ptr, length) {
+            const start = Number(ptr) || 0;
+            const size = Number(length) || 0;
+            if (start < 0 || size <= 0) {
+                return new Uint8Array(0);
+            }
+            if (typeof Module.getValue !== "function") {
+                throw new Error("Module.getValue unavailable");
+            }
+            const bytes = new Uint8Array(size);
+            for (let index = 0; index < size; index += 1) {
+                bytes[index] = Module.getValue(start + index, "i8") & 0xff;
+            }
+            return bytes;
+        },
         globals: {
             __dict__: pyimport("__main__").__dict__,
             get(key) {
@@ -6338,9 +6355,39 @@ function proxy_js_init() {
     globalThis.proxy_js_ref_map.set(globalThis, 0);
     globalThis.proxy_js_map = new Map();
     globalThis.proxy_js_existing = [undefined];
+    globalThis.__vs_mp_bridge_stats = {
+        conversions: {
+            mp_exception: 0,
+            mp_null: 0,
+            mp_none: 0,
+            mp_bool: 0,
+            mp_int: 0,
+            mp_float: 0,
+            mp_str: 0,
+            mp_jsproxy: 0,
+            mp_existing: 0,
+            mp_callable: 0,
+            mp_generator: 0,
+            mp_object: 0,
+        },
+        pyProxy: {
+            created: 0,
+            finalized: 0,
+            callableCreated: 0,
+            generatorCreated: 0,
+            objectCreated: 0,
+            liveEstimate: 0,
+            liveEstimateHighWater: 0,
+        },
+    };
     globalThis.pyProxyFinalizationRegistry = new FinalizationRegistry(
         (cRef) => {
             globalThis.proxy_js_map.delete(cRef);
+            const stats = globalThis.__vs_mp_bridge_stats;
+            if (stats) {
+                stats.pyProxy.finalized += 1;
+                stats.pyProxy.liveEstimate = stats.pyProxy.created - stats.pyProxy.finalized;
+            }
             Module.ccall("proxy_c_free_obj", "null", ["number"], [cRef]);
         },
     );
@@ -6507,7 +6554,11 @@ function proxy_convert_js_to_mp_obj_jsside_force_double_proxy(js_obj, out) {
 function proxy_convert_mp_to_js_obj_jsside(value) {
     const kind = Module.getValue(value, "i32");
     let obj;
+    const bridgeStats = globalThis.__vs_mp_bridge_stats;
     if (kind === PROXY_KIND_MP_EXCEPTION) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_exception += 1;
+        }
         // Exception
         const str_len = Module.getValue(value + 4, "i32");
         const str_ptr = Module.getValue(value + 8, "i32");
@@ -6517,19 +6568,34 @@ function proxy_convert_mp_to_js_obj_jsside(value) {
         throw new PythonError(str_split[0], str_split[1]);
     }
     if (kind === PROXY_KIND_MP_NULL) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_null += 1;
+        }
         // MP_OBJ_NULL
         throw new Error("NULL object");
     }
     if (kind === PROXY_KIND_MP_NONE) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_none += 1;
+        }
         // None
         obj = null;
     } else if (kind === PROXY_KIND_MP_BOOL) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_bool += 1;
+        }
         // bool
         obj = Module.getValue(value + 4, "i32") ? true : false;
     } else if (kind === PROXY_KIND_MP_INT) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_int += 1;
+        }
         // int
         obj = Module.getValue(value + 4, "i32");
     } else if (kind === PROXY_KIND_MP_FLOAT) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_float += 1;
+        }
         // float
         // double must be loaded from an address that's a multiple of 8
         const temp = (value + 4) & ~7;
@@ -6539,15 +6605,24 @@ function proxy_convert_mp_to_js_obj_jsside(value) {
         Module.setValue(temp + 4, double_hi, "i32");
         obj = Module.getValue(temp, "double");
     } else if (kind === PROXY_KIND_MP_STR) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_str += 1;
+        }
         // str
         const str_len = Module.getValue(value + 4, "i32");
         const str_ptr = Module.getValue(value + 8, "i32");
         obj = Module.UTF8ToString(str_ptr, str_len);
     } else if (kind === PROXY_KIND_MP_JSPROXY) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_jsproxy += 1;
+        }
         // js proxy
         const id = Module.getValue(value + 4, "i32");
         obj = proxy_js_ref[id];
     } else if (kind === PROXY_KIND_MP_EXISTING) {
+        if (bridgeStats) {
+            bridgeStats.conversions.mp_existing += 1;
+        }
         const id = Module.getValue(value + 4, "i32");
         obj = globalThis.proxy_js_existing[id];
         globalThis.proxy_js_existing[id] = undefined;
@@ -6555,16 +6630,35 @@ function proxy_convert_mp_to_js_obj_jsside(value) {
         // obj
         const id = Module.getValue(value + 4, "i32");
         if (kind === PROXY_KIND_MP_CALLABLE) {
+            if (bridgeStats) {
+                bridgeStats.conversions.mp_callable += 1;
+                bridgeStats.pyProxy.callableCreated += 1;
+            }
             obj = (...args) => {
                 return proxy_call_python(id, args);
             };
             obj._ref = id;
         } else if (kind === PROXY_KIND_MP_GENERATOR) {
+            if (bridgeStats) {
+                bridgeStats.conversions.mp_generator += 1;
+                bridgeStats.pyProxy.generatorCreated += 1;
+            }
             obj = new PyProxyThenable(id);
         } else {
+            if (bridgeStats) {
+                bridgeStats.conversions.mp_object += 1;
+                bridgeStats.pyProxy.objectCreated += 1;
+            }
             // PROXY_KIND_MP_OBJECT
             const target = new PyProxy(id);
             obj = new Proxy(target, py_proxy_handler);
+        }
+        if (bridgeStats) {
+            bridgeStats.pyProxy.created += 1;
+            bridgeStats.pyProxy.liveEstimate = bridgeStats.pyProxy.created - bridgeStats.pyProxy.finalized;
+            if (bridgeStats.pyProxy.liveEstimate > bridgeStats.pyProxy.liveEstimateHighWater) {
+                bridgeStats.pyProxy.liveEstimateHighWater = bridgeStats.pyProxy.liveEstimate;
+            }
         }
         globalThis.pyProxyFinalizationRegistry.register(obj, id);
         globalThis.proxy_js_map.set(id, new WeakRef(obj));

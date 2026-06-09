@@ -64,7 +64,7 @@ def invoke(module_name, function_name, args_json):
         result = json.loads(call(module_name, function_name, args_json))
         return json.dumps({"ok": True, "result": result})
     except Exception as error:
-        error_type = sys.exc_info()[0]
+        error_type = error.__class__
         error_name = getattr(error_type, "__name__", str(error_type))
         return json.dumps({"ok": False, "error": error_name + ": " + str(error)})
 

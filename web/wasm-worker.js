@@ -1,4 +1,6 @@
-import { loadMicroPython } from "./vendor/micropython/micropython.mjs";
+import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260608T230500Z";
+
+const WORKER_BUILD_VERSION = "worker-debug-20260609T000500Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: "./vendor/micropython/micropython.wasm",
@@ -171,6 +173,41 @@ class MicroPythonRuntime {
     this.mp = null;
   }
 
+  _readHeapBytesFromModule(ptr, length) {
+    const heap = this.mp?._module?.HEAPU8;
+    if (!(heap instanceof Uint8Array)) {
+      throw new Error("mp._module.HEAPU8 unavailable");
+    }
+    const start = Number(ptr);
+    const size = Number(length);
+    if (!Number.isFinite(start) || !Number.isFinite(size)) {
+      throw new Error(`invalid ptr/length ${ptr}/${length}`);
+    }
+    if (start < 0 || size <= 0) {
+      return new Uint8Array(0);
+    }
+    if (start + size > heap.length) {
+      throw new Error(`out of bounds read ${start}+${size} > ${heap.length}`);
+    }
+    return heap.slice(start, start + size);
+  }
+
+  readHeapBytes(ptr, length) {
+    this.assertInitialized();
+    if (typeof this.mp?.readMemoryBytes === "function") {
+      try {
+        const normalizedPtr = Number(ptr) >>> 0;
+        const normalizedLength = Number(length) >>> 0;
+        return this.mp.readMemoryBytes(normalizedPtr, normalizedLength);
+      } catch (_error) {}
+    }
+    try {
+      return this._readHeapBytesFromModule(ptr, length);
+    } catch (_error) {
+      return new Uint8Array(0);
+    }
+  }
+
   async initialize() {
     if (this.initialized) {
       return {
@@ -199,6 +236,51 @@ class MicroPythonRuntime {
       },
       post_command: (line, data = null) => {
         handleRuntimeCommand(String(line || ""), normalizeWorkerCommandPayload(data));
+        return null;
+      },
+      post_command_ptr: (linePtr, lineLength, dataPtr, dataLength) => {
+        const lineBytes = this.readHeapBytes(linePtr, lineLength);
+        const dataBytes = dataLength ? this.readHeapBytes(dataPtr, dataLength) : null;
+        const line = lineBytes.length ? new TextDecoder().decode(lineBytes) : "";
+        handleRuntimeCommand(line, dataBytes);
+        return null;
+      },
+      post_sprites: (data) => {
+        handleRuntimeSprites(normalizeWorkerCommandPayload(data));
+        return null;
+      },
+      post_sprites_ptr: (ptr, length) => {
+        handleRuntimeSprites(this.readHeapBytes(ptr, length));
+        return null;
+      },
+      post_present: (sprites, frameData) => {
+        handleRuntimeSprites(normalizeWorkerCommandPayload(sprites));
+        handleRuntimeFrameBytes(normalizeWorkerCommandPayload(frameData));
+        return null;
+      },
+      post_present_ptr: (spritePtr, spriteLength, framePtr, frameLength) => {
+        handleRuntimeSprites(this.readHeapBytes(spritePtr, spriteLength));
+        handleRuntimeFrameBytes(this.readHeapBytes(framePtr, frameLength));
+        return null;
+      },
+      post_frame_bytes: (data) => {
+        handleRuntimeFrameBytes(normalizeWorkerCommandPayload(data));
+        return null;
+      },
+      post_frame_bytes_ptr: (ptr, length) => {
+        handleRuntimeFrameBytes(this.readHeapBytes(ptr, length));
+        return null;
+      },
+      post_frame: (frame, buttons, gammaMode, columnOffset, paletteLength, paletteVersion, paletteDirty) => {
+        handleRuntimeFrame({
+          frame,
+          buttons,
+          gammaMode,
+          columnOffset,
+          paletteLength,
+          paletteVersion,
+          paletteDirty,
+        });
         return null;
       },
       post_runtime_error: (message, stack = null) => {
@@ -352,6 +434,28 @@ class MicroPythonRuntime {
       throw new Error("WASM worker runtime has not been initialized");
     }
   }
+
+  getProxyRefInfo() {
+    this.assertInitialized();
+    const refs = Array.isArray(globalThis.proxy_js_ref) ? globalThis.proxy_js_ref : null;
+    let usedSlots = 0;
+    if (refs) {
+      for (const entry of refs) {
+        if (entry !== undefined) {
+          usedSlots += 1;
+        }
+      }
+    }
+    const refMap = globalThis.proxy_js_ref_map;
+    const proxyMap = globalThis.proxy_js_map;
+    return {
+      totalSlots: refs ? refs.length : null,
+      usedSlots,
+      nextSlot: typeof globalThis.proxy_js_ref_next === "number" ? globalThis.proxy_js_ref_next : null,
+      refMapSize: refMap && typeof refMap.size === "number" ? refMap.size : null,
+      proxyMapSize: proxyMap && typeof proxyMap.size === "number" ? proxyMap.size : null,
+    };
+  }
 }
 
 async function createRuntime(config = {}) {
@@ -381,10 +485,15 @@ const streamedFrameState = {
   palette_version: 0,
   palette_dirty: false,
   events: [],
+  pendingSpritesEvent: null,
   sprites: [],
 };
 
 function finalizeStreamedFrame() {
+  const events = streamedFrameState.events.slice();
+  if (streamedFrameState.pendingSpritesEvent) {
+    events.push(streamedFrameState.pendingSpritesEvent);
+  }
   const frame = {
     frame: streamedFrameState.frame,
     buttons: streamedFrameState.buttons,
@@ -393,11 +502,12 @@ function finalizeStreamedFrame() {
     palette_length: streamedFrameState.palette_length,
     palette_version: streamedFrameState.palette_version,
     palette_dirty: streamedFrameState.palette_dirty,
-    events: streamedFrameState.events.slice(),
+    events,
     sprites: streamedFrameState.sprites.slice(),
   };
   streamedFrameState.palette_dirty = false;
   streamedFrameState.events = [];
+  streamedFrameState.pendingSpritesEvent = null;
   return frame;
 }
 
@@ -427,24 +537,20 @@ function handleRuntimeCommand(line, payloadBytes) {
   }
 
   if (command === "sprites") {
-    streamedFrameState.events.push({
-      command,
-      args: parts.slice(1),
-      data: payloadBytes || new Uint8Array(0),
-    });
-    streamedFrameState.sprites = [];
+    handleRuntimeSprites(payloadBytes);
     return;
   }
 
   if (command === "frame") {
-    streamedFrameState.frame = Number(parts[1] || streamedFrameState.frame);
-    streamedFrameState.buttons = Number(parts[2] || 0);
-    streamedFrameState.gamma_mode = Number(parts[3] || 1);
-    streamedFrameState.column_offset = Number(parts[4] || 0);
-    streamedFrameState.palette_length = Number(parts[5] || streamedFrameState.palette_length);
-    streamedFrameState.palette_version = Number(parts[6] || streamedFrameState.palette_version);
-    streamedFrameState.palette_dirty = Boolean(Number(parts[7] || 0)) || streamedFrameState.palette_dirty;
-    postEvent("frame", { frame: finalizeStreamedFrame() });
+    handleRuntimeFrame({
+      frame: parts[1],
+      buttons: parts[2],
+      gammaMode: parts[3],
+      columnOffset: parts[4],
+      paletteLength: parts[5],
+      paletteVersion: parts[6],
+      paletteDirty: parts[7],
+    });
     return;
   }
 
@@ -456,6 +562,54 @@ function handleRuntimeCommand(line, payloadBytes) {
     event.data = payloadBytes;
   }
   streamedFrameState.events.push(event);
+}
+
+function handleRuntimeSprites(payloadBytes) {
+  streamedFrameState.pendingSpritesEvent = {
+    command: "sprites",
+    args: [],
+    data: payloadBytes || new Uint8Array(0),
+  };
+  streamedFrameState.sprites = [];
+}
+
+function handleRuntimeFrame({
+  frame,
+  buttons,
+  gammaMode,
+  columnOffset,
+  paletteLength,
+  paletteVersion,
+  paletteDirty,
+}) {
+  streamedFrameState.frame = Number(frame || streamedFrameState.frame);
+  streamedFrameState.buttons = Number(buttons || 0);
+  streamedFrameState.gamma_mode = Number(gammaMode || 1);
+  streamedFrameState.column_offset = Number(columnOffset || 0);
+  streamedFrameState.palette_length = Number(paletteLength || streamedFrameState.palette_length);
+  streamedFrameState.palette_version = Number(paletteVersion || streamedFrameState.palette_version);
+  streamedFrameState.palette_dirty = Boolean(Number(paletteDirty || 0)) || streamedFrameState.palette_dirty;
+  postEvent("frame", { frame: finalizeStreamedFrame() });
+}
+
+function handleRuntimeFrameBytes(payloadBytes) {
+  if (!(payloadBytes instanceof Uint8Array) || payloadBytes.length < 16) {
+    return;
+  }
+  const view = new DataView(
+    payloadBytes.buffer,
+    payloadBytes.byteOffset,
+    payloadBytes.byteLength,
+  );
+  handleRuntimeFrame({
+    frame: view.getUint32(0, true),
+    buttons: view.getUint8(4),
+    gammaMode: view.getUint8(5),
+    columnOffset: view.getUint8(6),
+    paletteDirty: view.getUint8(7),
+    paletteLength: view.getUint32(8, true),
+    paletteVersion: view.getUint32(12, true),
+  });
 }
 
 function enqueueRuntimeWork(work) {
@@ -630,6 +784,11 @@ self.addEventListener("message", async (event) => {
       runtimeLoop.fullNextFrame = true;
       workerHostState.fullNextFrame = true;
       success(id, { pending: true });
+      return;
+    }
+
+    if (type === "get_proxy_ref_info") {
+      success(id, runtime.getProxyRefInfo());
       return;
     }
 

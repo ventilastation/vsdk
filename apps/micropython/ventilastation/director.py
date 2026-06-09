@@ -13,6 +13,7 @@ DEBUG = False
 INPUT_TIMEOUT = 30 * 1000  # 30 segundos de inactividad, mostrar las instrucciones para empezar a jugar
 PIXELS = 54
 stripes = {}
+TRACE_AUTO_GC_FRAME = 32
 
 
 class _DirectorProxy:
@@ -114,6 +115,7 @@ class Director:
         if not scene.keep_music:
             self.music_off()
         self.platform.sprites.reset_sprites()
+        gc.collect()
         if self.scene_stack:
             self._enter_scene(self.scene_stack[-1])
         return scene
@@ -279,6 +281,9 @@ class Director:
 
         self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
         self.platform.display.update()
+        trace_flags = getattr(self.platform, "trace_flags", 0)
+        if trace_flags & TRACE_AUTO_GC_FRAME:
+            gc.collect()
 
     def run(self, should_continue=None):
         while True:
