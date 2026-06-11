@@ -77,6 +77,48 @@ class VentilastationWasmAdapter {
   requestFullFrame() {
     return this.bridge.requestFullFrame();
   }
+
+  listWorkspaceFiles(path = ".") {
+    if (typeof this.bridge.listWorkspaceFiles !== "function") {
+      return Promise.resolve([]);
+    }
+    return this.bridge.listWorkspaceFiles(path);
+  }
+
+  readWorkspaceFile(path, encoding = "utf8") {
+    if (typeof this.bridge.readWorkspaceFile !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.bridge.readWorkspaceFile(path, encoding);
+  }
+
+  writeWorkspaceFile(path, content, encoding = "utf8") {
+    if (typeof this.bridge.writeWorkspaceFile !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.bridge.writeWorkspaceFile(path, content, encoding);
+  }
+
+  deleteWorkspaceFile(path) {
+    if (typeof this.bridge.deleteWorkspaceFile !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.bridge.deleteWorkspaceFile(path);
+  }
+
+  applyWorkspaceSnapshot(files = []) {
+    if (typeof this.bridge.applyWorkspaceSnapshot !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.bridge.applyWorkspaceSnapshot(files);
+  }
+
+  restartRuntime(options = {}) {
+    if (typeof this.bridge.restartRuntime !== "function") {
+      return Promise.reject(new Error("Runtime restart unavailable"));
+    }
+    return this.bridge.restartRuntime(options);
+  }
 }
 
 function isBridge(candidate) {

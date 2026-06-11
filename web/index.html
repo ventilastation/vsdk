@@ -5,15 +5,62 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ventilastation Emulator</title>
   <link rel="icon" type="image/png" href="./logo.png">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20260611b">
 </head>
 <body>
   <main class="app-shell">
+    <section class="editor-panel-shell" id="editor-panel-shell" aria-label="Code editor" hidden>
+      <div class="editor-panel">
+        <div class="editor-toolbar">
+          <div class="editor-actions">
+            <button type="button" id="editor-toggle-files-button" aria-expanded="false">Files</button>
+            <button type="button" id="editor-save-button" disabled>Save</button>
+            <button type="button" id="editor-run-button" disabled>Save + Run</button>
+          </div>
+        </div>
+        <div class="editor-drawer-shell">
+          <section class="editor-drawer" id="editor-files-drawer" hidden>
+            <div class="editor-drawer-header">
+              <div class="editor-section-caption">Workspace Files</div>
+            </div>
+            <div class="editor-file-list" id="editor-file-list" aria-live="polite"></div>
+          </section>
+        </div>
+        <section class="editor-workspace">
+          <div class="editor-active-file-bar">
+            <span class="editor-active-file" id="editor-active-file">No file selected</span>
+            <span class="editor-active-meta" id="editor-active-meta"></span>
+          </div>
+          <div class="editor-surface" id="editor-surface"></div>
+          <div class="editor-message" id="editor-message">
+            Loading Monaco editor…
+          </div>
+        </section>
+      </div>
+    </section>
+
     <section class="stage-panel">
+      <div class="stage-toolbar">
+        <div class="stage-primary-actions">
+          <button type="button" class="stage-control-button" id="toggle-editor-button" aria-pressed="false">Editor</button>
+          <button type="button" class="stage-control-button" id="toggle-inspector-button" aria-expanded="false">Options</button>
+        </div>
+      </div>
       <div class="stage-display">
         <canvas id="frame-canvas-gl" width="768" height="768"></canvas>
         <canvas id="frame-canvas-2d" width="768" height="768" hidden></canvas>
-        <button type="button" class="stage-fullscreen-exit" id="stage-fullscreen-exit" hidden>Exit fullscreen</button>
+        <button type="button" class="stage-fullscreen-toggle" id="toggle-fullscreen-button" aria-label="Toggle fullscreen" aria-pressed="false">
+          <span class="fullscreen-icon" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div class="scene-error-banner" id="scene-error-banner" hidden>
+        <div class="scene-error-copy">
+          <strong id="scene-error-title">Scene lifecycle error</strong>
+          <pre id="scene-error-message"></pre>
+        </div>
+        <div class="scene-error-actions">
+          <button type="button" id="scene-error-debug-button">Open debug</button>
+        </div>
       </div>
       <section class="mobile-controls" aria-label="Touch controls">
         <div class="mobile-stick-panel">
@@ -36,32 +83,7 @@
       </section>
     </section>
 
-    <section class="inspector-panel-shell">
-      <div class="inspector-block">
-        <h1 class="debug-title">Ventilastation Emulator</h1>
-        <div class="debug-meta debug-meta-header">
-          <span><strong>Keyboard</strong> Arrows + Space/O/P/Esc</span>
-          <span><strong>Gamepad</strong> D-pad/Left Stick + Face Buttons</span>
-        </div>
-        <div class="scene-error-banner" id="scene-error-banner" hidden>
-          <div class="scene-error-copy">
-            <strong id="scene-error-title">Scene lifecycle error</strong>
-            <pre id="scene-error-message"></pre>
-          </div>
-          <div class="scene-error-actions">
-            <button type="button" id="scene-error-debug-button">Open debug</button>
-          </div>
-        </div>
-        <div class="status-row top-status-row">
-          <span class="status-pill" id="frame-counter">FPS --</span>
-        </div>
-        <div class="primary-actions">
-          <button type="button" id="toggle-fullscreen-button" aria-pressed="false">Fullscreen</button>
-          <button type="button" id="toggle-rendering-button" aria-pressed="false">Pause</button>
-          <button type="button" id="toggle-inspector-button" aria-expanded="false">Options</button>
-        </div>
-      </div>
-      <section class="inspector-panel" id="inspector-panel" hidden>
+    <section class="inspector-panel" id="inspector-panel" hidden>
         <div class="inspector-block settings-block">
           <h2>Settings</h2>
           <label class="settings-option">
@@ -119,6 +141,7 @@
         <div class="inspector-block">
           <h2>Runtime</h2>
           <div class="status-row status-row-debug">
+            <span class="status-pill" id="frame-counter">FPS --</span>
             <span class="status-pill" id="adapter-name">Runtime --</span>
             <span class="status-pill" id="adapter-source">--</span>
             <span class="status-pill" id="button-mask">Buttons 0x00</span>
@@ -143,13 +166,13 @@
           </div>
           <textarea id="copy-diagnostics" rows="18" readonly></textarea>
         </div>
-      </section>
     </section>
   </main>
 
-  <script type="module" src="./micropython-bridge.js"></script>
-  <script type="module" src="./wasm-adapter.js"></script>
+  <script type="module" src="./micropython-bridge.js?v=20260611b"></script>
+  <script type="module" src="./wasm-adapter.js?v=20260611b"></script>
   <script src="./led-render-core.js"></script>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=20260611b"></script>
+  <script type="module" src="./monaco-ide.js?v=20260611b"></script>
 </body>
 </html>

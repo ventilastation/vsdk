@@ -12,6 +12,28 @@ It currently provides:
 - a WASM adapter layer that auto-activates if a low-level bridge is provided
 - a worker-bridge scaffold for integrating the official MicroPython `webassembly` port
 - a browser-usable ROM builder for `stripedefs.yaml` asset folders
+- a runtime workspace API for browser IDE integration
+
+## Browser Workspace API
+
+The emulator now exposes `window.VentilastationWebEmulator` for browser-side IDEs and parent shells.
+
+That API provides:
+
+- `listProjectFiles(path = ".")`
+- `readProjectFile(path, encoding = "utf8")`
+- `writeProjectFile(path, content, encoding = "utf8")`
+- `deleteProjectFile(path)`
+- `applyProjectSnapshot(files)`
+- `restartRuntime({ full = true })`
+
+This lets an embedded editor write files directly into the worker-hosted MicroPython filesystem and restart the runtime without rebuilding `runtime-bundle.json` on every save.
+
+The first built-in IDE panel uses Monaco and lazy-loads it from jsDelivr at runtime, so that editor surface currently depends on normal browser network access.
+
+For the intended GitHub and web-IDE flow, see:
+
+- `vsdk/docs/web-ide-integration.md`
 
 ## Run
 

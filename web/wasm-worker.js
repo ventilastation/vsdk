@@ -33,6 +33,30 @@ function dirname(path) {
   return index <= 0 ? "/" : normalized.slice(0, index);
 }
 
+function encodeBase64(bytes) {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+  return btoa(binary);
+}
+
+function normalizeRuntimeRelativePath(path) {
+  const normalized = String(path || "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/u, "")
+    .replace(/^\/+/u, "")
+    .replace(/\/{2,}/gu, "/");
+  if (!normalized || normalized === ".") {
+    return "";
+  }
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.some((segment) => segment === "..")) {
+    throw new Error(`Invalid runtime path: ${path}`);
+  }
+  return segments.join("/");
+}
+
 function getProjectRootCandidates() {
   const emulatorBaseUrl = new URL(".", self.location.href);
   return [
@@ -171,6 +195,7 @@ class MicroPythonRuntime {
     this.config = config;
     this.initialized = false;
     this.mp = null;
+    this.workspaceFilePaths = new Set();
   }
 
   _readHeapBytesFromModule(ptr, length) {
@@ -308,6 +333,7 @@ class MicroPythonRuntime {
 
   async populateFilesystem() {
     if (await this.populateFilesystemFromBundle()) {
+      this.applyWorkspaceFiles(this.config.workspaceFiles || [], { replace: true });
       return;
     }
 
@@ -329,6 +355,7 @@ class MicroPythonRuntime {
       this.ensureDir(dirname(targetPath));
       this.mp.FS.writeFile(targetPath, bytes);
     }
+    this.applyWorkspaceFiles(this.config.workspaceFiles || [], { replace: true });
   }
 
   async populateFilesystemFromBundle() {
@@ -361,6 +388,133 @@ class MicroPythonRuntime {
       this.mp.FS.writeFile(targetPath, decodeBase64(entry.base64));
     }
     return true;
+  }
+
+  resolveWorkspacePath(path) {
+    const relativePath = normalizeRuntimeRelativePath(path);
+    const fsRoot = this.config.fsRoot.replace(/\/+$/u, "");
+    return relativePath ? `${fsRoot}/${relativePath}` : fsRoot;
+  }
+
+  applyWorkspaceFiles(files = [], { replace = false } = {}) {
+    if (!Array.isArray(files) || !files.length) {
+      if (replace) {
+        for (const targetPath of this.workspaceFilePaths) {
+          try {
+            this.mp.FS.unlink(targetPath);
+          } catch (_error) {
+            // Ignore missing files while replacing the overlay.
+          }
+        }
+        this.workspaceFilePaths.clear();
+      }
+      return;
+    }
+    const nextWorkspacePaths = new Set();
+    for (const file of files) {
+      if (!file || typeof file.path !== "string") {
+        continue;
+      }
+      const targetPath = this.resolveWorkspacePath(file.path);
+      const encoding = file.encoding === "base64" ? "base64" : "utf8";
+      const content = typeof file.content === "string" ? file.content : "";
+      const bytes = encoding === "base64"
+        ? decodeBase64(content)
+        : new TextEncoder().encode(content);
+      this.ensureDir(dirname(targetPath));
+      this.mp.FS.writeFile(targetPath, bytes);
+      nextWorkspacePaths.add(targetPath);
+    }
+    if (replace) {
+      for (const targetPath of this.workspaceFilePaths) {
+        if (nextWorkspacePaths.has(targetPath)) {
+          continue;
+        }
+        try {
+          this.mp.FS.unlink(targetPath);
+        } catch (_error) {
+          // Ignore missing files while replacing the overlay.
+        }
+      }
+      this.workspaceFilePaths = nextWorkspacePaths;
+      return;
+    }
+    for (const targetPath of nextWorkspacePaths) {
+      this.workspaceFilePaths.add(targetPath);
+    }
+  }
+
+  listWorkspaceFiles(path = ".") {
+    this.assertInitialized();
+    const rootPath = this.resolveWorkspacePath(path);
+    const entries = [];
+    const visit = (currentPath) => {
+      let children = [];
+      try {
+        children = this.mp.FS.readdir(currentPath);
+      } catch (error) {
+        throw new Error(`Unable to list workspace path ${path}: ${error.message || String(error)}`);
+      }
+      for (const child of children) {
+        if (child === "." || child === "..") {
+          continue;
+        }
+        const childPath = `${currentPath.replace(/\/+$/u, "")}/${child}`;
+        const stat = this.mp.FS.stat(childPath);
+        if (this.mp.FS.isDir(stat.mode)) {
+          visit(childPath);
+          continue;
+        }
+        const relativePath = childPath.slice(this.config.fsRoot.length).replace(/^\/+/u, "");
+        entries.push(relativePath);
+      }
+    };
+    visit(rootPath);
+    entries.sort((left, right) => left.localeCompare(right));
+    return entries;
+  }
+
+  readWorkspaceFile(path, encoding = "utf8") {
+    this.assertInitialized();
+    const targetPath = this.resolveWorkspacePath(path);
+    const bytes = this.mp.FS.readFile(targetPath);
+    const normalizedEncoding = encoding === "base64" ? "base64" : "utf8";
+    return {
+      path: normalizeRuntimeRelativePath(path),
+      encoding: normalizedEncoding,
+      byteLength: bytes.length,
+      content: normalizedEncoding === "base64"
+        ? encodeBase64(bytes)
+        : new TextDecoder().decode(bytes),
+    };
+  }
+
+  writeWorkspaceFile(path, content, encoding = "utf8") {
+    this.assertInitialized();
+    const targetPath = this.resolveWorkspacePath(path);
+    const normalizedEncoding = encoding === "base64" ? "base64" : "utf8";
+    const bytes = normalizedEncoding === "base64"
+      ? decodeBase64(String(content || ""))
+      : new TextEncoder().encode(String(content || ""));
+    this.ensureDir(dirname(targetPath));
+    this.mp.FS.writeFile(targetPath, bytes);
+    this.workspaceFilePaths.add(targetPath);
+    return {
+      path: normalizeRuntimeRelativePath(path),
+      byteLength: bytes.length,
+      encoding: normalizedEncoding,
+    };
+  }
+
+  deleteWorkspaceFile(path) {
+    this.assertInitialized();
+    const targetPath = this.resolveWorkspacePath(path);
+    this.mp.FS.unlink(targetPath);
+    this.workspaceFilePaths.delete(targetPath);
+    return {
+      path: normalizeRuntimeRelativePath(path),
+      deleted: true,
+    };
   }
 
   ensureDir(path) {
@@ -789,6 +943,34 @@ self.addEventListener("message", async (event) => {
 
     if (type === "get_proxy_ref_info") {
       success(id, runtime.getProxyRefInfo());
+      return;
+    }
+
+    if (type === "list_workspace_files") {
+      success(id, runtime.listWorkspaceFiles(message.path));
+      return;
+    }
+
+    if (type === "read_workspace_file") {
+      success(id, runtime.readWorkspaceFile(message.path, message.encoding));
+      return;
+    }
+
+    if (type === "write_workspace_file") {
+      success(id, runtime.writeWorkspaceFile(message.path, message.content, message.encoding));
+      return;
+    }
+
+    if (type === "delete_workspace_file") {
+      success(id, runtime.deleteWorkspaceFile(message.path));
+      return;
+    }
+
+    if (type === "apply_workspace_snapshot") {
+      runtime.applyWorkspaceFiles(message.files || [], { replace: true });
+      success(id, {
+        applied: Array.isArray(message.files) ? message.files.length : 0,
+      });
       return;
     }
 

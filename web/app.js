@@ -51,6 +51,7 @@ const {
 const FORCE_2D_STORAGE_KEY = "ventilastation.force2dFallback";
 const INVERT_GAMEPAD_Y_STORAGE_KEY = "ventilastation.invertGamepadY.v1";
 const INSPECTOR_OPEN_STORAGE_KEY = "ventilastation.inspectorOpen.v2";
+const EDITOR_OPEN_STORAGE_KEY = "ventilastation.editorOpen.v1";
 const RENDERER_PROFILING_STORAGE_KEY = "ventilastation.rendererProfiling.v1";
 const WEBGL_RESOLUTION_SCALE_STORAGE_KEY = "ventilastation.webglResolutionScale.v1";
 const SCENE_STEP_MS = 30;
@@ -748,10 +749,10 @@ class BrowserHostApp {
       ? DEFAULT_WEBGL_RESOLUTION_SCALE
       : this.webglResolutionScalePreference;
     this.inspectorOpen = this.readInspectorPreference();
+    this.editorOpen = this.readEditorPreference();
     this.lastSceneTickAt = null;
     this.pollRequestId = null;
     this.pollingHalted = false;
-    this.renderingPaused = false;
     this.touchStickPointerId = null;
     this.unsubscribeWorkerFrame = null;
     this.unsubscribeWorkerRuntimeError = null;
@@ -759,7 +760,9 @@ class BrowserHostApp {
     this.mobileLayoutQuery = typeof window.matchMedia === "function"
       ? window.matchMedia("(max-width: 980px) and (pointer: coarse)")
       : null;
+    this.appShell = document.querySelector(".app-shell");
     this.stagePanel = document.querySelector(".stage-panel");
+    this.editorPanelShell = document.querySelector("#editor-panel-shell");
     this.canvas = document.querySelector("#frame-canvas-gl");
     this.fallbackCanvas = document.querySelector("#frame-canvas-2d");
     this.renderer = new LedRingWebGLRenderer(this.canvas);
@@ -776,9 +779,8 @@ class BrowserHostApp {
       sceneErrorTitle: document.querySelector("#scene-error-title"),
       sceneErrorMessage: document.querySelector("#scene-error-message"),
       sceneErrorDebugButton: document.querySelector("#scene-error-debug-button"),
-      stageFullscreenExit: document.querySelector("#stage-fullscreen-exit"),
       toggleFullscreenButton: document.querySelector("#toggle-fullscreen-button"),
-      toggleRenderingButton: document.querySelector("#toggle-rendering-button"),
+      toggleEditorButton: document.querySelector("#toggle-editor-button"),
       touchStick: document.querySelector("#touch-stick"),
       touchStickKnob: document.querySelector("#touch-stick-knob"),
       touchButtons: Array.from(document.querySelectorAll("[data-touch-button]")),
@@ -933,6 +935,13 @@ class BrowserHostApp {
   }
 
   start() {
+    window.VentilastationWebEmulator = this.createIntegrationApi();
+    window.dispatchEvent(new CustomEvent("ventilastation:ready", {
+      detail: {
+        api: window.VentilastationWebEmulator,
+      },
+    }));
+    this.applyEditorLayout();
     this.syncFullscreenState();
     this.elements.adapterName.textContent = this.adapter.name;
     this.elements.adapterSource.textContent = this.runtime.source;
@@ -950,7 +959,7 @@ class BrowserHostApp {
     this.bindCopyDiagnostics();
     this.bindDebugControls();
     this.bindFullscreenControls();
-    this.bindRenderingToggle();
+    this.bindEditorToggle();
     this.bindInspectorToggle();
     this.bindMemoryControls();
     this.bindSceneErrorControls();
@@ -958,7 +967,7 @@ class BrowserHostApp {
     this.bindCanvasResizeObserver();
     this.syncResponsiveLayout();
     this.renderFullscreenToggle();
-    this.renderRenderingToggle();
+    this.renderEditorToggle();
     this.renderInspectorVisibility();
     this.renderCanvasVisibility();
     this.renderSceneError();
@@ -988,8 +997,106 @@ class BrowserHostApp {
     }
   }
 
+  createIntegrationApi() {
+    return {
+      listProjectFiles: (path = ".") => this.listProjectFiles(path),
+      readProjectFile: (path, encoding = "utf8") => this.readProjectFile(path, encoding),
+      writeProjectFile: (path, content, encoding = "utf8") => this.writeProjectFile(path, content, encoding),
+      deleteProjectFile: (path) => this.deleteProjectFile(path),
+      applyProjectSnapshot: (files = []) => this.applyProjectSnapshot(files),
+      restartRuntime: (options = {}) => this.restartRuntime(options),
+      getRuntimeInfo: () => ({
+        adapterName: this.adapter?.name || null,
+        adapterSource: this.runtime?.source || null,
+        editorOpen: this.editorOpen,
+        pollingHalted: this.pollingHalted,
+        currentButtons: this.currentButtons,
+      }),
+    };
+  }
+
+  listProjectFiles(path = ".") {
+    if (typeof this.adapter.listWorkspaceFiles !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.adapter.listWorkspaceFiles(path);
+  }
+
+  readProjectFile(path, encoding = "utf8") {
+    if (typeof this.adapter.readWorkspaceFile !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.adapter.readWorkspaceFile(path, encoding);
+  }
+
+  writeProjectFile(path, content, encoding = "utf8") {
+    if (typeof this.adapter.writeWorkspaceFile !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.adapter.writeWorkspaceFile(path, content, encoding);
+  }
+
+  deleteProjectFile(path) {
+    if (typeof this.adapter.deleteWorkspaceFile !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.adapter.deleteWorkspaceFile(path);
+  }
+
+  applyProjectSnapshot(files = []) {
+    if (typeof this.adapter.applyWorkspaceSnapshot !== "function") {
+      return Promise.reject(new Error("Workspace file API unavailable"));
+    }
+    return this.adapter.applyWorkspaceSnapshot(files);
+  }
+
+  async restartRuntime({ full = true } = {}) {
+    if (typeof this.adapter.restartRuntime !== "function") {
+      throw new Error("Runtime restart unavailable");
+    }
+    this.addDiagnostic("runtime.restart.begin", { full });
+    this.pollingHalted = false;
+    this.executionError = null;
+    this.runtime.error = null;
+    this.lastSceneTickAt = null;
+    this.lastFrame = null;
+    this.lastFrameShape = null;
+    this.lastRenderedLedPixels = null;
+    this.assetIndex.clear();
+    this.assetRenderCache.clear();
+    this.visibleStripSlots = [];
+    this.palette = null;
+    this.paletteVersion = 0;
+    this.paletteLoadedBytes = 0;
+    if (this.pollRequestId !== null) {
+      window.cancelAnimationFrame(this.pollRequestId);
+      this.pollRequestId = null;
+    }
+    if (this.adapter.usesWorkerFrameStream && typeof this.adapter.stopLoop === "function") {
+      await this.adapter.stopLoop();
+    }
+    const result = await this.adapter.restartRuntime();
+    this.runtime.source = "wasm";
+    this.elements.adapterSource.textContent = this.runtime.source;
+    this.syncButtons();
+    await this.syncTraceFlags();
+    this.renderRuntimeStatus();
+    this.renderSceneError();
+    this.renderMemorySummary();
+    this.addDiagnostic("runtime.restart.complete", {
+      full,
+      result,
+    });
+    if (this.adapter.usesWorkerFrameStream && typeof this.adapter.startLoop === "function") {
+      await this.adapter.startLoop({ full });
+    } else {
+      this.schedulePoll(full);
+    }
+    return result;
+  }
+
   schedulePoll(full = false) {
-    if (this.pollRequestId !== null || this.pollingHalted || this.renderingPaused) {
+    if (this.pollRequestId !== null || this.pollingHalted) {
       return;
     }
     this.pollRequestId = window.requestAnimationFrame(() => {
@@ -1602,13 +1709,9 @@ class BrowserHostApp {
 
   bindFullscreenControls() {
     const button = this.elements.toggleFullscreenButton;
-    const stageExitButton = this.elements.stageFullscreenExit;
     if (!button || !this.stagePanel || !this.canUseFullscreen()) {
       if (button) {
         button.hidden = true;
-      }
-      if (stageExitButton) {
-        stageExitButton.hidden = true;
       }
       return;
     }
@@ -1616,11 +1719,6 @@ class BrowserHostApp {
     button.addEventListener("click", () => {
       void this.toggleFullscreen();
     });
-    if (stageExitButton) {
-      stageExitButton.addEventListener("click", () => {
-        void this.toggleFullscreen();
-      });
-    }
 
     document.addEventListener("fullscreenchange", () => {
       this.syncFullscreenState();
@@ -1691,12 +1789,12 @@ class BrowserHostApp {
     });
   }
 
-  bindRenderingToggle() {
-    if (!this.elements.toggleRenderingButton) {
+  bindEditorToggle() {
+    if (!this.elements.toggleEditorButton) {
       return;
     }
-    this.elements.toggleRenderingButton.addEventListener("click", () => {
-      this.setRenderingPaused(!this.renderingPaused);
+    this.elements.toggleEditorButton.addEventListener("click", () => {
+      this.setEditorOpen(!this.editorOpen);
     });
   }
 
@@ -1710,35 +1808,68 @@ class BrowserHostApp {
   }
 
   setInspectorOpen(open) {
-    this.inspectorOpen = Boolean(open);
+    const nextOpen = Boolean(open);
+    if (nextOpen && this.editorOpen) {
+      this.editorOpen = false;
+      this.writeEditorPreference(false);
+    }
+    this.inspectorOpen = nextOpen;
     this.writeInspectorPreference(this.inspectorOpen);
+    this.applyEditorLayout();
+    this.renderEditorToggle();
     this.renderInspectorVisibility();
+    this.addDiagnostic("inspector.toggle", {
+      open: this.inspectorOpen,
+    });
     if (this.inspectorOpen && this.lastFrame) {
       this.renderInspectors(this.lastFrame);
     }
+    this.refreshCanvasDisplayMetrics();
+    if (this.lastFrame) {
+      this.renderFrame();
+    } else {
+      this.renderStatus();
+    }
   }
 
-  setRenderingPaused(paused) {
-    this.renderingPaused = Boolean(paused);
-    if (this.renderingPaused) {
-      if (this.pollRequestId !== null) {
-        window.cancelAnimationFrame(this.pollRequestId);
-        this.pollRequestId = null;
-      }
-      if (this.adapter.usesWorkerFrameStream && typeof this.adapter.stopLoop === "function") {
-        void this.adapter.stopLoop();
-      }
-      this.addDiagnostic("timing.pause", { reason: "manual" });
-    } else {
-      this.lastSceneTickAt = performance.now() - SCENE_STEP_MS;
-      this.addDiagnostic("timing.resume", { reason: "manual" });
-      if (this.adapter.usesWorkerFrameStream && typeof this.adapter.startLoop === "function") {
-        void this.adapter.startLoop({ full: false });
-      } else {
-        this.schedulePoll(false);
-      }
+  setEditorOpen(open) {
+    const nextOpen = Boolean(open);
+    if (nextOpen && this.inspectorOpen) {
+      this.inspectorOpen = false;
+      this.writeInspectorPreference(false);
     }
-    this.renderRenderingToggle();
+    this.editorOpen = nextOpen;
+    this.writeEditorPreference(this.editorOpen);
+    this.applyEditorLayout();
+    this.renderEditorToggle();
+    this.renderInspectorVisibility();
+    this.addDiagnostic("editor.toggle", {
+      open: this.editorOpen,
+    });
+    window.dispatchEvent(new CustomEvent("ventilastation:editor-toggle", {
+      detail: {
+        open: this.editorOpen,
+      },
+    }));
+    this.refreshCanvasDisplayMetrics();
+    if (this.lastFrame) {
+      this.renderFrame();
+    } else {
+      this.renderStatus();
+    }
+  }
+
+  applyEditorLayout() {
+    if (this.appShell) {
+      this.appShell.classList.toggle("is-editor-open", this.editorOpen);
+      this.appShell.classList.toggle("is-inspector-open", this.inspectorOpen);
+    }
+    if (this.editorPanelShell) {
+      this.editorPanelShell.hidden = !this.editorOpen;
+    }
+    if (this.elements.inspectorPanel) {
+      this.elements.inspectorPanel.hidden = !this.inspectorOpen;
+    }
   }
 
   syncFullscreenState() {
@@ -1830,32 +1961,28 @@ class BrowserHostApp {
 
   renderFullscreenToggle() {
     const button = this.elements.toggleFullscreenButton;
-    const stageExitButton = this.elements.stageFullscreenExit;
     if (!button) {
       return;
     }
-    button.textContent = this.isFullscreen ? "Exit fullscreen" : "Fullscreen";
     button.setAttribute("aria-pressed", this.isFullscreen ? "true" : "false");
-    if (stageExitButton) {
-      stageExitButton.hidden = !this.isFullscreen;
-    }
+    button.setAttribute("aria-label", this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen");
+    button.title = this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
   }
 
-  renderRenderingToggle() {
-    const button = this.elements.toggleRenderingButton;
+  renderEditorToggle() {
+    const button = this.elements.toggleEditorButton;
     if (!button) {
       return;
     }
-    button.textContent = this.renderingPaused ? "Resume" : "Pause";
-    button.setAttribute("aria-pressed", this.renderingPaused ? "true" : "false");
+    button.textContent = "Editor";
+    button.setAttribute("aria-pressed", this.editorOpen ? "true" : "false");
   }
 
   renderInspectorVisibility() {
-    if (!this.elements.toggleInspectorButton || !this.elements.inspectorPanel) {
+    if (!this.elements.toggleInspectorButton) {
       return;
     }
-    this.elements.inspectorPanel.hidden = !this.inspectorOpen;
-    this.elements.toggleInspectorButton.textContent = this.inspectorOpen ? "Hide" : "Options";
+    this.elements.toggleInspectorButton.textContent = "Options";
     this.elements.toggleInspectorButton.setAttribute("aria-expanded", this.inspectorOpen ? "true" : "false");
   }
 
@@ -1879,8 +2006,24 @@ class BrowserHostApp {
     }
   }
 
+  readStoredBooleanPreference(storageKey) {
+    try {
+      const rawValue = localStorage.getItem(storageKey);
+      if (rawValue === null) {
+        return null;
+      }
+      return rawValue === "1";
+    } catch (_error) {
+      return null;
+    }
+  }
+
   readForce2dPreference() {
-    return this.readBooleanPreference(FORCE_2D_STORAGE_KEY, false);
+    const storedPreference = this.readStoredBooleanPreference(FORCE_2D_STORAGE_KEY);
+    if (storedPreference !== null) {
+      return storedPreference;
+    }
+    return this.isMobileLayout();
   }
 
   writeForce2dPreference(enabled) {
@@ -1934,6 +2077,14 @@ class BrowserHostApp {
 
   writeInspectorPreference(enabled) {
     this.writeBooleanPreference(INSPECTOR_OPEN_STORAGE_KEY, enabled);
+  }
+
+  readEditorPreference() {
+    return this.readBooleanPreference(EDITOR_OPEN_STORAGE_KEY, false);
+  }
+
+  writeEditorPreference(enabled) {
+    this.writeBooleanPreference(EDITOR_OPEN_STORAGE_KEY, enabled);
   }
 
   copyViaSelection(text) {
