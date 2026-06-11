@@ -1,0 +1,13 @@
+{
+  "name": "vsdk-rom-tools",
+  "private": true,
+  "bin": {
+    "vsdk-generate-roms-js": "./tools/generate_roms_js.cjs"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

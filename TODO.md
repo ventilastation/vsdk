@@ -8,7 +8,7 @@
 
 - Create some way to edit the micropython code for some app, and do live reloading without going back to the menu
 
-- Integrate the compilation of PNG images into ROM files, inside the web workflow. This will need replacing python's Pillow for something that can run more natively in the browser.
+- [DONE] Integrate the compilation of PNG images into ROM files, inside the web workflow. This will need replacing python's Pillow for something that can run more natively in the browser.
 
 - Create a pixel editor integrated into the workflow, so assets can be created without leaving the emulator.
 
