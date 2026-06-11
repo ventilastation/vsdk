@@ -189,6 +189,7 @@ apps/micropython/roms/*.rom
 .vscode/
 .history/
 *.code-workspace
+node_modules/
 
 # Archivos temporales del sistema
 .DS_Store
