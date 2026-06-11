@@ -40,15 +40,15 @@ mkdir apps/images/mygame
 cp apps/images/ventap/*.png apps/images/mygame
 ```
 
-Ventilastation cannot directly open PNG images, so in order to transform your assets into a format it can understand, you'll need a definition file. Create the file `apps/images/mygame/stripedefs.py` with the following content:
-``` python
-stripes = [
-    palettegroup(
-        strip("bola.png", frames=12),
-        strip("target.png", frames=5),
-        fullscreen("fondo.png"),
-    )
-]
+Ventilastation cannot directly open PNG images, so in order to transform your assets into a format it can understand, you'll need a definition file. Create the file `apps/images/mygame/stripedefs.yaml` with the following content:
+``` yaml
+palettegroups:
+  palette1:
+    - strip: bola.png
+      frames: 12
+    - strip: target.png
+      frames: 5
+    - fullscreen: fondo.png
 ```
 
 Whenever you run the emulator, your PNG images are compiled into a ROM file, which is what the physical Ventilastation uses. The first time it will be kinda slow, but this step will only happen if you ever add new images or change the existing files:

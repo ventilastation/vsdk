@@ -4,5 +4,6 @@ python-ffmpeg
 gmqtt
 pyserial
 pillow
+PyYAML
 RPi.GPIO; "Raspbian" in platform_version
 numpy; "Raspbian" not in platform_version

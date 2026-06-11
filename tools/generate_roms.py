@@ -1,6 +1,7 @@
 import os
 import sys
 import struct
+import yaml
 
 from pathlib import Path
 from itertools import zip_longest, chain
@@ -161,20 +162,80 @@ def generate_rom(folder, palettegroups, spritedef_path):
 
 
 
-STRIPEDEF_FILENAME = "stripedefs.py"
+STRIPEDEF_FILENAME = "stripedefs.yaml"
 
-def palettegroup(*items):
-    return list(items)
+def _normalize_item(item, source_path, palettegroup_index, item_index):
+    if not isinstance(item, dict):
+        raise ValueError(
+            f"{source_path}: palette group {palettegroup_index} item {item_index} must be a mapping"
+        )
 
-def strip(filename, frames=1):
-    return filename, dict(frames=frames)
+    inline_kinds = [kind for kind in ("strip", "fullscreen") if kind in item]
+    if len(inline_kinds) != 1:
+        raise ValueError(
+            f"{source_path}: palette group {palettegroup_index} item {item_index} "
+            "must define exactly one of 'strip' or 'fullscreen'"
+        )
 
-def fullscreen(filename, radius=54):
-    return filename, dict(frames=1, radius=radius, process="reproject")
+    item_type = inline_kinds[0]
+    filename = item.get(item_type)
+    if not isinstance(filename, str) or not filename:
+        raise ValueError(
+            f"{source_path}: palette group {palettegroup_index} item {item_index} needs a non-empty {item_type} filename"
+        )
+
+    frames = item.get("frames", 1)
+    if not isinstance(frames, int) or frames < 1:
+        raise ValueError(
+            f"{source_path}: palette group {palettegroup_index} item {item_index} has invalid frames {frames!r}"
+        )
+
+    options = {"frames": frames}
+    if item_type == "fullscreen":
+        radius = item.get("radius", 54)
+        if not isinstance(radius, int) or radius < 1:
+            raise ValueError(
+                f"{source_path}: palette group {palettegroup_index} item {item_index} has invalid radius {radius!r}"
+            )
+        options["radius"] = radius
+        options["process"] = "reproject"
+
+    return filename, options
+
+def load_palettegroups(spritedef_path):
+    data = yaml.safe_load(spritedef_path.read_text()) or {}
+    palettegroup_defs = data.get("palettegroups")
+
+    if palettegroup_defs is None:
+        palettegroup_defs = data.get("stripes")
+
+    if isinstance(palettegroup_defs, dict):
+        group_entries = list(palettegroup_defs.items())
+    elif isinstance(palettegroup_defs, list):
+        group_entries = [
+            (f"palette{palettegroup_index + 1}", group)
+            for palettegroup_index, group in enumerate(palettegroup_defs)
+        ]
+    else:
+        raise ValueError(
+            f"{spritedef_path}: top-level 'palettegroups' must be a mapping "
+            "or legacy 'stripes' must be a list"
+        )
+
+    palettegroups = []
+    for palettegroup_index, (group_name, group) in enumerate(group_entries):
+        if not isinstance(group, list):
+            raise ValueError(
+                f"{spritedef_path}: palette group {group_name!r} must be a list"
+            )
+        palettegroups.append([
+            _normalize_item(item, spritedef_path, group_name, item_index)
+            for item_index, item in enumerate(group)
+        ])
+    return palettegroups
 
 for root, dirs, files in Path(ROOT_FOLDER).walk(on_error=print):
     if STRIPEDEF_FILENAME in files:
         spritedef_path = root / STRIPEDEF_FILENAME
-        stripedef = open(spritedef_path).read()
-        parsed = exec(stripedef)
-        generate_rom(root, stripes, spritedef_path)
+        palettegroups = load_palettegroups(spritedef_path)
+        generate_rom(root, palettegroups, spritedef_path)

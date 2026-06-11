@@ -1,0 +1,30 @@
+palettegroups:
+  palette1:
+    - strip: vajon.png
+    - strip: aaa.png
+    - strip: fanphibious_danger_2.png
+    - strip: menu.png
+      frames: 16
+    - strip: mygame.png
+    - strip: peronjam.png
+    - strip: tvnel_alecu.png
+    - strip: pollitos.png
+      frames: 5
+    - strip: vortris.png
+    - strip: mijuegui.png
+    - strip: vzumaki.png
+    - strip: vasura_espacial.png
+    - strip: vs.png
+    - strip: oraculo2.png
+    - strip: vailableextreme.png
+    - strip: venti808.png
+    - strip: tvnel.png
+    - strip: 2bam_demo_menu.png
+    - strip: 2bam_sencom.png
+    - strip: domedefander.png
+    - strip: tincho_vrunner.png
+      frames: 2
+    - strip: villalugano_games.png
+    - strip: vslogo.png
+    - strip: loviejo-3.png
+    - fullscreen: favalli.png

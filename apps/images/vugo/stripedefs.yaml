@@ -1,0 +1,12 @@
+palettegroups:
+  palette1:
+    - strip: moregrass.png
+      frames: 4
+    - strip: monchito_runs.png
+      frames: 4
+    - strip: obstacles.png
+      frames: 2
+    - strip: bushes.png
+      frames: 4
+    - strip: nube8bit.png
+    - fullscreen: bluesky.png

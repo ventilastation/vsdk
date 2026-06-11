@@ -1,0 +1,5 @@
+palettegroups:
+  palette1:
+    - strip: ball.png
+    - strip: barra.png
+    - strip: barra_punto.png

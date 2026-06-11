@@ -1,0 +1,17 @@
+palettegroups:
+  palette1:
+    - strip: bichorot.png
+      frames: 28
+  palette2:
+    - strip: gusano360.png
+      frames: 24
+  palette3:
+    - strip: spookyfont.png
+      frames: 64
+  palette4:
+    - fullscreen: blanco-off-right.png
+    - fullscreen: p0.png
+    - fullscreen: p1.png
+    - fullscreen: p2.png
+    - fullscreen: p3.png
+    - fullscreen: p4.png

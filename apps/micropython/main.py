@@ -11,7 +11,7 @@ from ventilastation import menu
 from ventilastation import povdisplay
 from ventilastation.shuffler import shuffled
 
-# (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
+# (rom, image, frame)[] -- see apps/images/menu/stripedefs.yaml
 MAIN_MENU_OPTIONS = [
         ('vyruss', "menu.png", 0),
         ('2bam_sencom', "2bam_sencom.png", 0),
