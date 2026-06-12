@@ -1,30 +1,63 @@
 palettegroups:
   palette1:
-    - strip: vajon.png
-    - strip: aaa.png
-    - strip: fanphibious_danger_2.png
+    - strip: ../../../games/alecu/vyruss/menu.png
+      id: alecu/vyruss/menu.png
+    - strip: ../../../games/alecu/ventilagon_game/menu.png
+      id: alecu/ventilagon_game/menu.png
+    - strip: ../../../games/alecu/vladfarty/menu.png
+      id: alecu/vladfarty/menu.png
+    - strip: ../../../games/alecu/ventap/menu.png
+      id: alecu/ventap/menu.png
+    - strip: ../../../games/other/aaa/menu.png
+      id: other/aaa/menu.png
+    - strip: ../../../games/other/mijuegui/menu.png
+      id: other/mijuegui/menu.png
+    - strip: ../../../games/other/tvnel/menu.png
+      id: other/tvnel/menu.png
+    - strip: ../../../games/other/tvnel_alecu/menu.png
+      id: other/tvnel_alecu/menu.png
+    - strip: ../../../games/other/villalugano_games/menu.png
+      id: other/villalugano_games/menu.png
+    - strip: ../../../games/pycamp-mar25/vance/menu.png
+      id: pycamp-mar25/vance/menu.png
+    - strip: ../../../games/pycamp-mar25/vong/menu.png
+      id: pycamp-mar25/vong/menu.png
+    - strip: ../../../games/pycamp-mar25/vugo/menu.png
+      id: pycamp-mar25/vugo/menu.png
+    - strip: ../../../games/vsjam-may25/oraculo/menu.png
+      id: vsjam-may25/oraculo/menu.png
+    - strip: ../../../games/vsjam-may25/vailableextreme/menu.png
+      id: vsjam-may25/vailableextreme/menu.png
+    - strip: ../../../games/vsjam-may25/vasura_espacial/menu.png
+      id: vsjam-may25/vasura_espacial/menu.png
+    - strip: ../../../games/vsjam-may25/ventrack/menu.png
+      id: vsjam-may25/ventrack/menu.png
+    - strip: ../../../games/vsjam-may25/vortris/menu.png
+      id: vsjam-may25/vortris/menu.png
+    - strip: ../../../games/vsjam-may25/vs/menu.png
+      id: vsjam-may25/vs/menu.png
+    - strip: ../../../games/vsjam-may25/vzumaki/menu.png
+      id: vsjam-may25/vzumaki/menu.png
+    - strip: ../../../games/vsjam-oct25/2bam_demo/menu.png
+      id: vsjam-oct25/2bam_demo/menu.png
+    - strip: ../../../games/vsjam-oct25/2bam_sencom/menu.png
+      id: vsjam-oct25/2bam_sencom/menu.png
+    - strip: ../../../games/vsjam-oct25/dome_defander/menu.png
+      id: vsjam-oct25/dome_defander/menu.png
+    - strip: ../../../games/vsjam-oct25/fanphibious_danger/menu.png
+      id: vsjam-oct25/fanphibious_danger/menu.png
+    - strip: ../../../games/vsjam-oct25/peronjam/menu.png
+      id: vsjam-oct25/peronjam/menu.png
+    - strip: ../../../games/vsjam-oct25/tincho_vrunner/menu.png
+      id: vsjam-oct25/tincho_vrunner/menu.png
+      frames: 2
+    - strip: ../../../games/vsjam-oct25/vajon/menu.png
+      id: vsjam-oct25/vajon/menu.png
     - strip: menu.png
       frames: 16
     - strip: mygame.png
-    - strip: peronjam.png
-    - strip: tvnel_alecu.png
     - strip: pollitos.png
       frames: 5
-    - strip: vortris.png
-    - strip: mijuegui.png
-    - strip: vzumaki.png
-    - strip: vasura_espacial.png
-    - strip: vs.png
-    - strip: oraculo2.png
-    - strip: vailableextreme.png
-    - strip: venti808.png
-    - strip: tvnel.png
-    - strip: 2bam_demo_menu.png
-    - strip: 2bam_sencom.png
-    - strip: domedefander.png
-    - strip: tincho_vrunner.png
-      frames: 2
-    - strip: villalugano_games.png
     - strip: vslogo.png
     - strip: loviejo-3.png
     - fullscreen: favalli.png

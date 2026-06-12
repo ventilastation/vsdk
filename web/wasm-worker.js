@@ -26,6 +26,7 @@ __vs_wasm_bridge.boot_runtime()
 
 const PY_BRIDGE_CALL_SOURCE = "__vs_bridge_result = __vs_wasm_bridge.invoke_from_globals()";
 const PY_STEP_SOURCE = "__vs_wasm_bridge.step(__vs_step_count)";
+const RUNTIME_ROMS_PREFIX = "__runtime_roms__/";
 
 function dirname(path) {
   const normalized = path.replace(/\\/g, "/");
@@ -392,6 +393,16 @@ class MicroPythonRuntime {
 
   resolveWorkspacePath(path) {
     const relativePath = normalizeRuntimeRelativePath(path);
+    if (relativePath.startsWith(RUNTIME_ROMS_PREFIX)) {
+      const romRelativePath = relativePath.slice(RUNTIME_ROMS_PREFIX.length);
+      if (!romRelativePath) {
+        return "/apps/micropython/roms";
+      }
+      return `/apps/micropython/roms/${romRelativePath}`;
+    }
+    if (relativePath.startsWith("games/") || relativePath.startsWith("system/") || relativePath.startsWith("apps/")) {
+      return `/${relativePath}`;
+    }
     const fsRoot = this.config.fsRoot.replace(/\/+$/u, "");
     return relativePath ? `${fsRoot}/${relativePath}` : fsRoot;
   }

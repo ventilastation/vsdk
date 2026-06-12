@@ -6,28 +6,31 @@ from ventilastation.app_loader import load_app
 from ventilastation.director import director, stripes
 from ventilastation.shuffler import shuffled
 
+def game_menu_strip(game_slug):
+    return game_slug.replace(".", "/") + "/menu.png"
+
 # (slug, image, frame)[] -- see menu ROM assets
 MAIN_MENU_OPTIONS = [
-    ("alecu.vyruss", "menu.png", 0),
-    ("vsjam-oct25.2bam_sencom", "2bam_sencom.png", 0),
-    ("vsjam-may25.vasura_espacial", "vasura_espacial.png", 0),
-    # ("gallery", "pollitos.png", 0),
-    ("vsjam-oct25.tincho_vrunner", "tincho_vrunner.png", 0),
-    ("vsjam-oct25.dome_defander", "domedefander.png", 0),
-    ("vsjam-oct25.fanphibious_danger", "fanphibious_danger_2.png", 0),
-    ("vsjam-oct25.peronjam", "peronjam.png", 0),
-    ("other.aaa", "aaa.png", 0),
-    ("vsjam-may25.vailableextreme", "vailableextreme.png", 0),
-    # ("vsjam-may25.vzumaki", "vzumaki.png", 0),
-    ("vsjam-may25.vs", "vs.png", 0),
-    # ("vsjam-may25.oraculo", "oraculo2.png", 0),
-    ("vsjam-may25.vortris", "vortris.png", 0),
-    ("vsjam-may25.ventrack", "venti808.png", 0),
-    ("pycamp-mar25.vance", "menu.png", 5),
-    ("pycamp-mar25.vong", "menu.png", 6),
-    ("pycamp-mar25.vugo", "menu.png", 7),
-    ("alecu.ventap", "menu.png", 4),
-    # ("alecu.vladfarty", "menu.png", 2),
+    ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),
+    ("vsjam-oct25.2bam_sencom", game_menu_strip("vsjam-oct25.2bam_sencom"), 0),
+    ("vsjam-may25.vasura_espacial", game_menu_strip("vsjam-may25.vasura_espacial"), 0),
+    ("gallery", "pollitos.png", 0),
+    ("vsjam-oct25.tincho_vrunner", game_menu_strip("vsjam-oct25.tincho_vrunner"), 0),
+    ("vsjam-oct25.dome_defander", game_menu_strip("vsjam-oct25.dome_defander"), 0),
+    ("vsjam-oct25.fanphibious_danger", game_menu_strip("vsjam-oct25.fanphibious_danger"), 0),
+    ("vsjam-oct25.peronjam", game_menu_strip("vsjam-oct25.peronjam"), 0),
+    ("other.aaa", game_menu_strip("other.aaa"), 0),
+    ("vsjam-may25.vailableextreme", game_menu_strip("vsjam-may25.vailableextreme"), 0),
+    ("vsjam-may25.vzumaki", game_menu_strip("vsjam-may25.vzumaki"), 0),
+    ("vsjam-may25.vs", game_menu_strip("vsjam-may25.vs"), 0),
+    ("vsjam-may25.oraculo", game_menu_strip("vsjam-may25.oraculo"), 0),
+    ("vsjam-may25.vortris", game_menu_strip("vsjam-may25.vortris"), 0),
+    ("vsjam-may25.ventrack", game_menu_strip("vsjam-may25.ventrack"), 0),
+    ("pycamp-mar25.vance", game_menu_strip("pycamp-mar25.vance"), 0),
+    ("pycamp-mar25.vong", game_menu_strip("pycamp-mar25.vong"), 0),
+    ("pycamp-mar25.vugo", game_menu_strip("pycamp-mar25.vugo"), 0),
+    ("alecu.ventap", game_menu_strip("alecu.ventap"), 0),
+    ("alecu.vladfarty", game_menu_strip("alecu.vladfarty"), 0),
     ("credits", "menu.png", 3),
 ]
 
@@ -37,8 +40,8 @@ SYS_MENU_OPTIONS = [
     ("tutorial", "menu.png", 10),
     ("settings", "menu.png", 8),
     ("upgrade", "menu.png", 11),
-    ("alecu.vyruss", "menu.png", 0),
-    ("alecu.ventilagon_game", "menu.png", 1),
+    ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),
+    ("alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0),
     ("credits", "menu.png", 3),
 ]
 
@@ -111,7 +114,7 @@ class GamesMenu(menu.Menu):
         except ValueError:
             self.pollitos = None
         try:
-            tincho_index = [m[1] for m in self.options].index("tincho_vrunner.png")
+            tincho_index = [m[1] for m in self.options].index(game_menu_strip("vsjam-oct25.tincho_vrunner"))
             self.es_tincho = self.sprites[tincho_index]
         except ValueError:
             self.es_tincho = None

@@ -81,6 +81,19 @@ function decodePerspective(value) {
   return (value & 0x80) ? value - 0x100 : value;
 }
 
+function isEditableEventTarget(target) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  if (target.closest("input, textarea, select, button, dialog, [contenteditable=\"true\"]")) {
+    return true;
+  }
+  if (target.closest("#editor-panel-shell")) {
+    return true;
+  }
+  return false;
+}
+
 function formatProfileMs(value) {
   return value === null || value === undefined ? "--" : `${value.toFixed(2)} ms`;
 }
@@ -1125,6 +1138,9 @@ class BrowserHostApp {
     }, { once: true });
 
     window.addEventListener("keydown", (event) => {
+      if (isEditableEventTarget(event.target)) {
+        return;
+      }
       this.audio.enable();
       const bit = KEY_TO_BUTTON.get(event.code);
       if (!bit) {
@@ -1142,11 +1158,17 @@ class BrowserHostApp {
       if (!bit) {
         return;
       }
+      const wasPressed = Boolean(this.keyboardButtons & bit);
+      if (wasPressed) {
+        this.keyboardButtons &= ~bit;
+        this.syncButtons();
+        this.addDiagnostic("input.keyup", { code: event.code, buttons: this.currentButtons });
+        this.renderStatus();
+      }
+      if (isEditableEventTarget(event.target)) {
+        return;
+      }
       event.preventDefault();
-      this.keyboardButtons &= ~bit;
-      this.syncButtons();
-      this.addDiagnostic("input.keyup", { code: event.code, buttons: this.currentButtons });
-      this.renderStatus();
     });
 
     window.addEventListener("blur", () => {

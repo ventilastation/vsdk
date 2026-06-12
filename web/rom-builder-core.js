@@ -104,13 +104,17 @@
         if (!currentItem) {
           throw new Error(`${at}: property declared before any item`);
         }
-        const match = content.match(/^(frames|radius):\s*(\S+)\s*$/);
+        const match = content.match(/^(frames|radius|id):\s*(.+?)\s*$/);
         if (!match) {
-          throw new Error(`${at}: expected 'frames: N' or 'radius: N'`);
+          throw new Error(`${at}: expected 'frames: N', 'radius: N', or 'id: name'`);
         }
         const key = match[1];
-        const value = parsePositiveInteger(match[2], `${at} ${key}`);
-        currentItem[key] = value;
+        if (key === "id") {
+          currentItem.id = stripQuotes(match[2]);
+        } else {
+          const value = parsePositiveInteger(match[2], `${at} ${key}`);
+          currentItem[key] = value;
+        }
         continue;
       }
 
@@ -139,6 +143,7 @@
     const normalized = {
       kind: item.kind,
       filename: String(item.filename || ""),
+      id: item.id ? String(item.id) : "",
       frames: item.kind === "strip" ? Number(item.frames || 1) : 1,
       radius: item.kind === "fullscreen"
         ? Number(item.radius || DEFAULT_FULLSCREEN_RADIUS)
@@ -584,7 +589,7 @@
           frames,
           paletteIndex,
         ]);
-        const filename = entry.item.filename.split("/").pop();
+        const filename = entry.item.id || entry.item.filename.split("/").pop();
         romStrips.push(concatArrays([
           encodePascalString(filename),
           attrs,

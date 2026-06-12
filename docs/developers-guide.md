@@ -67,10 +67,10 @@ Finally, to be able to start this app it needs to be added to the launcher menu.
 Add a new entry to `MAIN_MENU_OPTIONS` in `system/launcher/code/__init__.py`:
 
 ```python
-("mygame", "mygame.png", 0),
+("mygame", game_menu_strip("mygame"), 0),
 ```
 
-Menu thumbnails are launcher assets. Put the menu image in `system/menu/images` if it is launcher-only, or keep it with the game if it is clearly game-owned and only used there. 64x30 pixels is the right size for menu items.
+Menu thumbnails should live with the game at `games/<group>/<slug>/menu.png`. The launcher menu ROM can include those files by referencing them from `system/menu/images/__images__.yaml`, and giving each entry a unique `id:` such as `vsjam-oct25/vajon/menu.png`. 64x30 pixels is the right size for menu items.
 
 
 ## Part III: Scenes and the director

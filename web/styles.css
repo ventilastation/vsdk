@@ -669,6 +669,10 @@ textarea {
 .editor-file-button {
   appearance: none;
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   text-align: left;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -678,6 +682,73 @@ textarea {
   cursor: pointer;
   font: 0.78rem/1.35 "IBM Plex Mono", "SFMono-Regular", monospace;
   word-break: break-word;
+}
+
+.editor-file-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editor-file-preview {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.04) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.04) 75%);
+  background-position: 0 0, 4px 4px;
+  background-size: 8px 8px;
+}
+
+.editor-file-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.editor-game-preview {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 34px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.04) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.04) 75%);
+  background-position: 0 0, 4px 4px;
+  background-size: 8px 8px;
+}
+
+.editor-game-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.editor-file-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editor-file-kind {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 3px 7px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
 }
 
 .editor-file-button:hover {
@@ -720,6 +791,26 @@ textarea {
 .editor-surface {
   width: 100%;
   height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.editor-text-surface,
+.editor-sprite-surface {
+  width: 100%;
+  height: 100%;
+}
+
+.editor-text-surface[hidden],
+.editor-sprite-surface[hidden] {
+  display: none !important;
+}
+
+.piskel-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #111;
 }
 
 .editor-message {
@@ -981,6 +1072,55 @@ textarea {
   margin-bottom: 6px;
 }
 
+.editor-create-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.editor-create-actions button,
+.editor-dialog-actions button {
+  appearance: none;
+  border-radius: 12px;
+  border: 1px solid rgba(83, 209, 182, 0.2);
+  background: rgba(83, 209, 182, 0.08);
+  color: var(--text);
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-create-actions button:hover,
+.editor-dialog-actions button:hover {
+  background: rgba(83, 209, 182, 0.14);
+}
+
+.editor-create-actions button:disabled,
+.editor-dialog-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.editor-create-help,
+.editor-list-group,
+.editor-dialog-hint,
+.editor-dialog-header p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.editor-create-help {
+  margin-top: 10px;
+}
+
+.editor-list-group {
+  margin: 10px 0 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .editor-open-form {
   flex-wrap: wrap;
 }
@@ -1005,6 +1145,74 @@ textarea {
 .editor-active-file-bar {
   padding: 6px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.editor-dialog {
+  width: min(420px, calc(100vw - 32px));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(9, 13, 19, 0.98);
+  color: var(--text);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42);
+  padding: 0;
+}
+
+.editor-dialog::backdrop {
+  background: rgba(3, 5, 8, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.editor-dialog-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.editor-dialog-header {
+  display: grid;
+  gap: 6px;
+}
+
+.editor-dialog-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.editor-dialog-header p,
+.editor-dialog-hint {
+  margin: 0;
+}
+
+.editor-dialog-field {
+  display: grid;
+  gap: 6px;
+}
+
+.editor-dialog-field span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.editor-dialog-field input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(5, 8, 12, 0.9);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+.editor-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.editor-dialog-actions #editor-create-cancel {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .stage-panel {

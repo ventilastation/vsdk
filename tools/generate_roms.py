@@ -149,7 +149,7 @@ def generate_rom(folder, palettegroups, spritedef_path):
             i_paletted.paste(255, mask=bitmask)
 
             b = i_paletted.transpose(Image.ROTATE_270).tobytes()
-            filename = fn.rsplit("/", 1)[-1]
+            filename = images_opts[fn].get("id", fn.rsplit("/", 1)[-1])
             frames, palette = attributes[fn][2:4]
             width = i.width // frames
             if width > 255:
@@ -213,6 +213,13 @@ def _normalize_item(item, source_path, palettegroup_index, item_index):
         )
 
     options = {"frames": frames}
+    if "id" in item:
+        strip_id = item.get("id")
+        if not isinstance(strip_id, str) or not strip_id:
+            raise ValueError(
+                f"{source_path}: palette group {palettegroup_index} item {item_index} has invalid id {strip_id!r}"
+            )
+        options["id"] = strip_id
     if item_type == "fullscreen":
         radius = item.get("radius", 54)
         if not isinstance(radius, int) or radius < 1:

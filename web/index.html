@@ -9,21 +9,42 @@
 </head>
 <body>
   <main class="app-shell">
-    <section class="editor-panel-shell" id="editor-panel-shell" aria-label="Code editor" hidden>
-      <div class="editor-panel">
-        <div class="editor-toolbar">
-          <div class="editor-actions">
-            <button type="button" id="editor-toggle-files-button" aria-expanded="false">Files</button>
-            <button type="button" id="editor-save-button" disabled>Save</button>
-            <button type="button" id="editor-run-button" disabled>Save + Run</button>
+    <section class="editor-panel-shell" id="editor-panel-shell" aria-label="Code and sprite editor" hidden>
+        <div class="editor-panel">
+          <div class="editor-toolbar">
+            <div class="editor-actions">
+              <button type="button" id="editor-toggle-games-button" aria-expanded="false">Games</button>
+              <button type="button" id="editor-toggle-files-button" aria-expanded="false">Files</button>
+              <button type="button" id="editor-toggle-new-button" aria-expanded="false">New</button>
+              <button type="button" id="editor-save-button" disabled>Save</button>
+              <button type="button" id="editor-run-button" disabled>Save + Run</button>
+            </div>
           </div>
-        </div>
         <div class="editor-drawer-shell">
+          <section class="editor-drawer" id="editor-games-drawer" hidden>
+            <div class="editor-drawer-header">
+              <div class="editor-section-caption">Games</div>
+            </div>
+            <div class="editor-file-list" id="editor-games-list" aria-live="polite"></div>
+          </section>
           <section class="editor-drawer" id="editor-files-drawer" hidden>
             <div class="editor-drawer-header">
-              <div class="editor-section-caption">Workspace Files</div>
+              <div class="editor-section-caption">Game Files</div>
             </div>
             <div class="editor-file-list" id="editor-file-list" aria-live="polite"></div>
+          </section>
+          <section class="editor-drawer" id="editor-new-drawer" hidden>
+            <div class="editor-drawer-header">
+              <div class="editor-section-caption">Create</div>
+            </div>
+            <div class="editor-create-actions">
+              <button type="button" id="editor-new-game-button">New Game</button>
+              <button type="button" id="editor-new-source-button" disabled>New Source File</button>
+              <button type="button" id="editor-new-stripe-button" disabled>New Image Stripe</button>
+            </div>
+            <div class="editor-create-help" id="editor-create-help" aria-live="polite">
+              Select a game to add files and image strips.
+            </div>
           </section>
         </div>
         <section class="editor-workspace">
@@ -33,11 +54,29 @@
           </div>
           <div class="editor-surface" id="editor-surface"></div>
           <div class="editor-message" id="editor-message">
-            Loading Monaco editor…
+            Loading editor…
           </div>
         </section>
       </div>
     </section>
+
+    <dialog class="editor-dialog" id="editor-create-dialog">
+      <form method="dialog" class="editor-dialog-form" id="editor-create-form">
+        <div class="editor-dialog-header">
+          <h2 id="editor-create-title">Create</h2>
+          <p id="editor-create-description"></p>
+        </div>
+        <label class="editor-dialog-field">
+          <span id="editor-create-label">Name</span>
+          <input type="text" id="editor-create-input" autocomplete="off" required>
+        </label>
+        <p class="editor-dialog-hint" id="editor-create-hint"></p>
+        <div class="editor-dialog-actions">
+          <button type="button" id="editor-create-cancel">Cancel</button>
+          <button type="submit" id="editor-create-submit">Create</button>
+        </div>
+      </form>
+    </dialog>
 
     <section class="stage-panel">
       <div class="stage-toolbar">
@@ -169,10 +208,12 @@
     </section>
   </main>
 
-  <script type="module" src="./micropython-bridge.js?v=20260612c"></script>
+  <script type="module" src="./micropython-bridge.js?v=20260612d"></script>
   <script type="module" src="./wasm-adapter.js?v=20260612c"></script>
   <script src="./led-render-core.js"></script>
+  <script src="./rom-builder-core.js"></script>
+  <script src="./rom-builder-browser.js"></script>
   <script type="module" src="./app.js?v=20260612c"></script>
-  <script type="module" src="./monaco-ide.js?v=20260612c"></script>
+  <script type="module" src="./monaco-ide.js?v=20260612i"></script>
 </body>
 </html>
