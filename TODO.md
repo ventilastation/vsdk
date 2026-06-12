@@ -18,10 +18,19 @@
 
 - Compile the Super Ventilagon C code into wasm, and have it displayable inside the desktop and browser renderers. Or port it to micropython
 
-- Go thru the list of suggestions in Discord and bug reports in Github, and create a Ventilastation API v2, with breaking changes but cleaner
-
 - Port existing games to the v2 APIs
 
 - The app.js source file is huge. Please split it in a few files per each concern
 
 - Add a pill that shows the webgl resolution scale, useful for when Auto is selected
+
+
+- Go thru the list of suggestions in Discord and bug reports in Github, and create a Ventilastation API v2, with breaking changes but cleaner:
+ - Allow music to automatically repeat. To the method "director.music_play" add an optional named parameter "repeat" that defaults to False.
+ - 
+
+- have some way to import binary modules. For eg, ventilastation, and voom
+
+- make voom run again on the esp32-s3, but be able to start it from micropython. It's ok to reboot the esp when ending doom.
+
+- ease the deployment, 

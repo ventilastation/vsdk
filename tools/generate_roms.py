@@ -9,8 +9,11 @@ from numpy import sin, cos, pi, ndarray, array, uint8
 from PIL import Image, ImageChops
 
 TRANSPARENT = (255, 0, 255)
-ROOT_FOLDER = "../apps/images"
-ROMS_FOLDER = "../apps/micropython/roms"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+GAMES_ROOT = ROOT_DIR / "games"
+SYSTEM_ROOT = ROOT_DIR / "system"
+ROMS_FOLDER = ROOT_DIR / "apps" / "micropython" / "roms"
+SEARCH_ROOTS = (GAMES_ROOT, SYSTEM_ROOT)
 
 os.makedirs(ROMS_FOLDER, exist_ok=True)
 
@@ -52,8 +55,27 @@ def reproject(image, n_led=54, n_ang=256):
 # ('bluesky.png', {'frames': 1, 'radius': 54, 'process': 'reproject'})]]
 
 
+def _relative_to(path, root):
+    try:
+        return path.relative_to(root)
+    except ValueError:
+        return None
+
+
+def rom_name_for_folder(folder):
+    games = _relative_to(folder, GAMES_ROOT)
+    if games is not None and len(games.parts) >= 2 and games.parts[-1] == "images":
+        return ".".join(games.parts[:-1])
+
+    system = _relative_to(folder, SYSTEM_ROOT)
+    if system is not None and len(system.parts) >= 2 and system.parts[-1] == "images":
+        return system.parts[-2]
+
+    return folder.parts[-1]
+
+
 def generate_rom(folder, palettegroups, spritedef_path):
-    rom_name = folder.parts[-1]
+    rom_name = rom_name_for_folder(folder)
     rom_filename = Path(ROMS_FOLDER) / (rom_name + ".rom")
     rom_timestamp = rom_filename.stat().st_mtime if rom_filename.exists() else 0
     src_filenames = (folder / filename for group in palettegroups for filename, _ in group)
@@ -162,7 +184,7 @@ def generate_rom(folder, palettegroups, spritedef_path):
 
 
 
-STRIPEDEF_FILENAME = "stripedefs.yaml"
+STRIPEDEF_FILENAME = "__images__.yaml"
 
 def _normalize_item(item, source_path, palettegroup_index, item_index):
     if not isinstance(item, dict):
@@ -234,8 +256,11 @@ def load_palettegroups(spritedef_path):
         ])
     return palettegroups
 
-for root, dirs, files in Path(ROOT_FOLDER).walk(on_error=print):
-    if STRIPEDEF_FILENAME in files:
-        spritedef_path = root / STRIPEDEF_FILENAME
-        palettegroups = load_palettegroups(spritedef_path)
-        generate_rom(root, palettegroups, spritedef_path)
+for search_root in SEARCH_ROOTS:
+    if not search_root.exists():
+        continue
+    for root, dirs, files in search_root.walk(on_error=print):
+        if STRIPEDEF_FILENAME in files:
+            spritedef_path = root / STRIPEDEF_FILENAME
+            palettegroups = load_palettegroups(spritedef_path)
+            generate_rom(root, palettegroups, spritedef_path)

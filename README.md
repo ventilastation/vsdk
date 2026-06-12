@@ -17,10 +17,19 @@ The emulator has been tested on modern Linux, macOS and Windows.
 - [macOS setup](docs/emulator-setup.macOS.md)
 - [Windows setup](docs/emulator-setup.Windows.md)
 
+## Current Repo Layout
+
+Game code and assets now live together under `games/<slug>/`:
+
+- `games/<slug>/code`
+- `games/<slug>/images`
+- `games/<slug>/sounds`
+
+The default boot app is the launcher in `system/launcher/code`, and shared non-game assets live under `system/menu` and `system/shared`.
+
 # Build your own Ventilastation
 
 If you have some maker experience, there are also schematics and blueprints so you can build your own Ventilastation console.
 
 <img width="40%" alt="image" src="https://github.com/user-attachments/assets/b6c1ed0a-6657-4d1e-be63-2cbb74b9bcad" />
 <img width="40%" alt="image" src="https://github.com/user-attachments/assets/0130f902-f64b-4f7b-8971-a659ffe97859" />
-

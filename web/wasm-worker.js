@@ -1,12 +1,12 @@
-import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260608T230500Z";
+import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260612T183500Z";
 
-const WORKER_BUILD_VERSION = "worker-debug-20260609T000500Z";
+const WORKER_BUILD_VERSION = "worker-debug-20260612T183500Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: "./vendor/micropython/micropython.wasm",
   runtimeBundleUrl: "./runtime-bundle.json",
   runtimeManifestUrl: "./runtime-manifest.json",
-  fsRoot: "/apps/micropython",
+  fsRoot: "/games",
   pystack: 32 * 1024,
   heapsize: 8 * 1024 * 1024,
 };

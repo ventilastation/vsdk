@@ -4,7 +4,10 @@ import os
 import threading
 from ffmpeg import FFmpeg
 
-SOUNDS_FOLDER = "../apps/sounds"
+SOUND_ROOTS = (
+    ("../games", "games"),
+    ("../system", "system"),
+)
 
 pyglet.options['debug_media'] = False
 
@@ -26,10 +29,33 @@ else:
     FFMPEG_PATH = "ffmpeg"
 
 def short_name(path):
-    # strip the SOUNDS_FOLDER prefix
-    if path.startswith(SOUNDS_FOLDER):
-        path = path[len(SOUNDS_FOLDER)+1:]
+    for root, _kind in SOUND_ROOTS:
+        if path.startswith(root):
+            path = path[len(root)+1:]
+            break
     return path
+
+
+def sound_name_from_path(root_kind, root_path, fullname):
+    relative = os.path.relpath(fullname, root_path)
+    if relative.endswith(".mp3"):
+        relative = relative[:-4]
+    relative = relative.replace("\\", "/")
+
+    parts = relative.split("/")
+    if "sounds" not in parts:
+        return None
+
+    sounds_index = parts.index("sounds")
+    prefix_parts = parts[:sounds_index]
+    asset_parts = parts[sounds_index + 1:]
+    if not prefix_parts or not asset_parts:
+        return None
+
+    if root_kind == "games":
+        return ".".join(prefix_parts) + "/" + "/".join(asset_parts)
+
+    return prefix_parts[-1] + "/" + "/".join(asset_parts)
 
 def convert_mp3_to_wav(input_filename, output_filename):
     print("Converting mp3 to wav:", short_name(input_filename))
@@ -75,15 +101,19 @@ def is_newer(filename_1, filename_2):
 
 def sound_init():
     def load_sounds():
-        for dirpath, dirs, files in os.walk(SOUNDS_FOLDER):
-            for fn in files:
-                if fn.endswith(".mp3"):
-                    fullname = os.path.join(dirpath, fn)
-                    sound = load_sound(fullname)
-                    if not sound:
-                        continue
-                    fn = fullname[len(SOUNDS_FOLDER)+1:-4].replace("\\", "/")
-                    sounds[bytes(fn, "latin1")] = sound
+        for root_path, root_kind in SOUND_ROOTS:
+            if not os.path.exists(root_path):
+                continue
+            for dirpath, dirs, files in os.walk(root_path):
+                for fn in files:
+                    if fn.endswith(".mp3"):
+                        fullname = os.path.join(dirpath, fn)
+                        sound = load_sound(fullname)
+                        if not sound:
+                            continue
+                        sound_name = sound_name_from_path(root_kind, root_path, fullname)
+                        if sound_name:
+                            sounds[bytes(sound_name, "latin1")] = sound
 
         # startup sound
         sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin1")))
@@ -137,4 +167,3 @@ def sound_process_queue():
 
             for s in to_play:
                 s.play()
-

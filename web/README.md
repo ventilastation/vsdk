@@ -11,7 +11,7 @@ It currently provides:
 - inspector panels for runtime events, sprites, and assets
 - a WASM adapter layer that auto-activates if a low-level bridge is provided
 - a worker-bridge scaffold for integrating the official MicroPython `webassembly` port
-- a browser-usable ROM builder for `stripedefs.yaml` asset folders
+- a browser-usable ROM builder for `__images__.yaml` asset folders
 - a runtime workspace API for browser IDE integration
 
 ## Browser Workspace API
@@ -66,7 +66,7 @@ Load them in that order, then generate a ROM from an asset folder:
 <script src="/web/rom-builder-browser.js"></script>
 <script>
   const rom = await window.VentilastationBrowserRomBuilder.buildRomFromFolder(
-    "/apps/images/ventap/"
+    "/games/alecu/ventap/images/"
   );
   console.log("ROM bytes", rom.length);
 </script>
@@ -83,7 +83,7 @@ node tools/generate_roms_js.cjs
 Or generate a single folder:
 
 ```bash
-node tools/generate_roms_js.cjs apps/images/ventap
+node tools/generate_roms_js.cjs games/alecu/ventap/images
 ```
 
 ## Expected Runtime Adapter

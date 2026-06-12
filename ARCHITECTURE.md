@@ -12,6 +12,11 @@ Within that tree, `vsdk/web/apps` is a symlink to:
 
 - `vsdk/apps`
 
+The worker-hosted runtime bundle also includes Python files from:
+
+- `vsdk/games`
+- `vsdk/system`
+
 The top-level `emulator/` directory is only the published copy used by the Jekyll site.
 
 When reading the rest of this document, prefer the matching path under `vsdk/web/...`; the `emulator/...` copy should be treated as deployment output.
@@ -38,6 +43,7 @@ The browser-based emulator is split into four main layers:
 4. `vsdk/web/apps/micropython/ventilastation/...`
    - MicroPython-side emulator code.
    - `platforms/__init__.py` contains the browser display/comms implementation used by the WASM runtime.
+   - app boot and scene loading then continue into `games/...` and `system/...` as needed.
 
 ## Frame Flow
 

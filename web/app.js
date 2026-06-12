@@ -261,11 +261,25 @@ class BrowserAudioHost {
     if (this.soundCache.has(normalized)) {
       return this.soundCache.get(normalized);
     }
+    const slashIndex = normalized.indexOf("/");
+    const slug = slashIndex === -1 ? normalized : normalized.slice(0, slashIndex);
+    const rest = slashIndex === -1 ? "" : normalized.slice(slashIndex + 1);
+    const slugPath = slug.replace(/\./g, "/");
     const candidates = [
-      `apps/sounds/${normalized}.mp3`,
-      `apps/sounds/${normalized}.mp3.wav`,
-      `apps/sounds/${normalized}.wav`,
-      `apps/sounds/${normalized}.ogg`,
+      ...(rest ? [
+        `games/${slugPath}/sounds/${rest}.mp3`,
+        `games/${slugPath}/sounds/${rest}.mp3.wav`,
+        `games/${slugPath}/sounds/${rest}.wav`,
+        `games/${slugPath}/sounds/${rest}.ogg`,
+        `system/shared/${slugPath}/sounds/${rest}.mp3`,
+        `system/shared/${slugPath}/sounds/${rest}.mp3.wav`,
+        `system/shared/${slugPath}/sounds/${rest}.wav`,
+        `system/shared/${slugPath}/sounds/${rest}.ogg`,
+        `system/${slugPath}/sounds/${rest}.mp3`,
+        `system/${slugPath}/sounds/${rest}.mp3.wav`,
+        `system/${slugPath}/sounds/${rest}.wav`,
+        `system/${slugPath}/sounds/${rest}.ogg`,
+      ] : []),
     ];
     const resolved = await resolveFirstAvailableUrl(candidates, { method: "HEAD" });
     if (resolved) {

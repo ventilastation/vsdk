@@ -5,9 +5,12 @@ const path = require("path");
 const { PNG } = require("pngjs");
 const romBuilder = require("../web/rom-builder-core.js");
 
-const ROOT_FOLDER = path.resolve(__dirname, "../apps/images");
-const ROMS_FOLDER = path.resolve(__dirname, "../apps/micropython/roms");
-const STRIPEDEF_FILENAME = "stripedefs.yaml";
+const ROOT_DIR = path.resolve(__dirname, "..");
+const GAMES_ROOT = path.join(ROOT_DIR, "games");
+const SYSTEM_ROOT = path.join(ROOT_DIR, "system");
+const SEARCH_ROOTS = [GAMES_ROOT, SYSTEM_ROOT];
+const ROMS_FOLDER = path.join(ROOT_DIR, "apps", "micropython", "roms");
+const STRIPEDEF_FILENAME = "__images__.yaml";
 
 function walkDirectories(rootFolder) {
   const stack = [rootFolder];
@@ -59,7 +62,7 @@ function decodePng(filename) {
 
 async function generateRomForFolder(folder) {
   const stripedefPath = path.join(folder, STRIPEDEF_FILENAME);
-  const romName = path.basename(folder);
+  const romName = romNameForFolder(folder);
   const romFilename = path.join(ROMS_FOLDER, `${romName}.rom`);
   const stripedefsYaml = fs.readFileSync(stripedefPath, "utf8");
   const palettegroups = romBuilder.parseStripedefsYaml(stripedefsYaml);
@@ -99,11 +102,36 @@ async function main() {
     return;
   }
 
-  for (const { current, entries } of walkDirectories(ROOT_FOLDER)) {
-    if (entries.some((entry) => entry.isFile() && entry.name === STRIPEDEF_FILENAME)) {
-      await generateRomForFolder(current);
+  for (const rootFolder of SEARCH_ROOTS) {
+    if (!fs.existsSync(rootFolder)) {
+      continue;
+    }
+    for (const { current, entries } of walkDirectories(rootFolder)) {
+      if (entries.some((entry) => entry.isFile() && entry.name === STRIPEDEF_FILENAME)) {
+        await generateRomForFolder(current);
+      }
     }
   }
+}
+
+function romNameForFolder(folder) {
+  const normalized = path.resolve(folder);
+
+  if (normalized.startsWith(GAMES_ROOT + path.sep)) {
+    const relative = path.relative(GAMES_ROOT, normalized).split(path.sep);
+    if (relative[relative.length - 1] === "images") {
+      return relative.slice(0, -1).join(".");
+    }
+  }
+
+  if (normalized.startsWith(SYSTEM_ROOT + path.sep)) {
+    const relative = path.relative(SYSTEM_ROOT, normalized).split(path.sep);
+    if (relative[relative.length - 1] === "images" && relative.length >= 2) {
+      return relative[relative.length - 2];
+    }
+  }
+
+  return path.basename(normalized);
 }
 
 main().catch((error) => {

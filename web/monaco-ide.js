@@ -1,6 +1,6 @@
 const MONACO_VERSION = "0.52.2";
 const MONACO_BASE_URL = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min/vs`;
-const WORKSPACE_ROOT = "apps";
+const WORKSPACE_ROOT_CANDIDATES = ["."];
 const EDITABLE_EXTENSIONS = new Set([
   ".py",
   ".pyi",
@@ -81,15 +81,34 @@ function inferDisplayLanguage(path) {
   return language;
 }
 
-function trimWorkspaceRoot(path) {
+function trimWorkspaceRoot(path, workspaceRoot = "") {
   const normalized = String(path || "").replace(/^\/+/u, "");
-  if (normalized === WORKSPACE_ROOT) {
+  if (!workspaceRoot || workspaceRoot === ".") {
+    return normalized;
+  }
+  if (normalized === workspaceRoot) {
     return "";
   }
-  if (normalized.startsWith(`${WORKSPACE_ROOT}/`)) {
-    return normalized.slice(WORKSPACE_ROOT.length + 1);
+  if (normalized.startsWith(`${workspaceRoot}/`)) {
+    return normalized.slice(workspaceRoot.length + 1);
   }
   return normalized;
+}
+
+function pathIsWithinWorkspace(path, workspaceRoot = "") {
+  const normalized = String(path || "").replace(/^\/+/u, "");
+  if (!workspaceRoot || workspaceRoot === ".") {
+    return true;
+  }
+  return normalized === workspaceRoot || normalized.startsWith(`${workspaceRoot}/`);
+}
+
+function resolveWorkspaceFilePath(workspaceRoot, relativePath) {
+  const normalizedRelativePath = String(relativePath || "").replace(/^\/+/u, "");
+  if (!workspaceRoot || workspaceRoot === ".") {
+    return normalizedRelativePath;
+  }
+  return `${workspaceRoot}/${normalizedRelativePath}`;
 }
 
 function createMonacoWorkerUrl() {
@@ -149,6 +168,7 @@ function loadMonaco() {
 class MonacoWorkspaceIde {
   constructor(api) {
     this.api = api;
+    this.workspaceRoot = "";
     this.fileEntries = [];
     this.fileStates = new Map();
     this.currentPath = null;
@@ -182,9 +202,6 @@ class MonacoWorkspaceIde {
     try {
       this.monaco = await loadMonaco();
       this.createEditor();
-      await this.refreshFiles({ openDefault: true });
-      this.setMessage("Monaco ready", { ready: true });
-      this.setStatus("Ready");
     } catch (error) {
       this.setStatus("Monaco failed");
       this.setMessage(
@@ -192,6 +209,19 @@ class MonacoWorkspaceIde {
         "This first version loads Monaco from jsDelivr, so browser network access is required.",
         { error: true },
       );
+      return;
+    }
+    try {
+      await this.refreshFiles({ openDefault: true });
+      this.setMessage("Monaco ready", { ready: true });
+      this.setStatus("Ready");
+    } catch (error) {
+      this.setStatus("Workspace failed");
+      this.setMessage(
+        `Monaco loaded, but the workspace could not be opened. ${error.message || String(error)}`,
+        { error: true },
+      );
+      console.error("Workspace refresh failed", error);
     }
   }
 
@@ -273,11 +303,30 @@ class MonacoWorkspaceIde {
     });
   }
 
+  async resolveWorkspaceRoot() {
+    if (this.workspaceRoot) {
+      return this.workspaceRoot;
+    }
+    for (const candidate of WORKSPACE_ROOT_CANDIDATES) {
+      try {
+        await this.api.listProjectFiles(candidate);
+        this.workspaceRoot = candidate;
+        return candidate;
+      } catch (_error) {
+        // Try the next known root from the migrated repo layout.
+      }
+    }
+    throw new Error(
+      `Unable to locate an editable workspace root. Tried: ${WORKSPACE_ROOT_CANDIDATES.join(", ")}`
+    );
+  }
+
   async refreshFiles({ openDefault = false } = {}) {
     this.setStatus("Refreshing files");
-    const paths = await this.api.listProjectFiles(WORKSPACE_ROOT);
+    const workspaceRoot = await this.resolveWorkspaceRoot();
+    const paths = await this.api.listProjectFiles(workspaceRoot);
     this.fileEntries = paths
-      .filter((path) => path.startsWith(`${WORKSPACE_ROOT}/`) && isEditableTextPath(path))
+      .filter((path) => pathIsWithinWorkspace(path, workspaceRoot) && isEditableTextPath(path))
       .sort((left, right) => left.localeCompare(right));
     this.renderFileList();
     if (openDefault) {
@@ -293,9 +342,10 @@ class MonacoWorkspaceIde {
 
   pickDefaultFile() {
     const preferred = [
-      `${WORKSPACE_ROOT}/tutorial.py`,
-      `${WORKSPACE_ROOT}/aaa.py`,
-      `${WORKSPACE_ROOT}/vs.py`,
+      resolveWorkspaceFilePath(this.workspaceRoot, "registry.py"),
+      resolveWorkspaceFilePath(this.workspaceRoot, "alecu/vyruss/code/vyruss.py"),
+      resolveWorkspaceFilePath(this.workspaceRoot, "other/aaa/code/aaa.py"),
+      resolveWorkspaceFilePath(this.workspaceRoot, "vsjam-may25/vs/code/vs.py"),
     ];
     for (const candidate of preferred) {
       if (this.fileEntries.includes(candidate)) {
@@ -414,7 +464,7 @@ class MonacoWorkspaceIde {
           type="button"
           class="editor-file-button${active ? " is-active" : ""}"
           data-editor-file-path="${escapeHtml(path)}"
-        >${dirty ? "* " : ""}${escapeHtml(trimWorkspaceRoot(path))}</button>
+        >${dirty ? "* " : ""}${escapeHtml(trimWorkspaceRoot(path, this.workspaceRoot))}</button>
       `;
     }).join("");
     for (const button of this.elements.fileList.querySelectorAll("[data-editor-file-path]")) {
@@ -436,7 +486,7 @@ class MonacoWorkspaceIde {
       return;
     }
     const state = this.fileStates.get(this.currentPath);
-    this.elements.activeFile.textContent = trimWorkspaceRoot(this.currentPath);
+    this.elements.activeFile.textContent = trimWorkspaceRoot(this.currentPath, this.workspaceRoot);
     const bits = [inferDisplayLanguage(this.currentPath)];
     if (state?.isNew) {
       bits.push("new");

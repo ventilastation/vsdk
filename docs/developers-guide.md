@@ -12,9 +12,11 @@ Part of the above installation is to clone the [VSDK repository](https://github.
 
 ### VSDK repo, key folders
 In the Ventilastation repo there are a few folders that you'll need to identify, where your code, images and sounds will go.
-* `apps/micropython/apps` is the folder that will hold your code
-* `apps/images` is for your graphic assets
-* `apps/sounds` is for music and sound effects
+* `games/<slug>/code` is where a game's Python code lives
+* `games/<slug>/images` is for that game's graphic assets
+* `games/<slug>/sounds` is for that game's music and sound effects
+* `system/launcher/code` is the launcher app that boots by default and defines the game menus
+* `system/menu` and `system/shared` hold launcher-only and shared assets that are not owned by one game
 * `apps/micropython/roms` - images compiled when starting the emulator are put into this folder
 * `apps/micropython/ventilastation` is a folder with system code
 
@@ -24,23 +26,25 @@ In the Ventilastation repo there are a few folders that you'll need to identify,
 
 ## Part II: How to clone the simplest game
 
-Let's start by cloning a very simple game: `ventap`. In the repo find the `apps/micropython/apps` folder, and make a copy of the `ventap.py` file, into a new file called `mygame.py`:
+Let's start by cloning a very simple game: `ventap`. In the repo, create a new game folder and copy the `ventap` code into it:
 
 ```
-cp apps/micropython/apps/ventap.py apps/micropython/apps/mygame.py
+mkdir -p games/mygame/code
+cp games/alecu/ventap/code/ventap.py games/mygame/code/mygame.py
 ```
 
 In that file, rename the class called `Ventap` to `MyGame`, including its use in `super` calls, and the usage in the `main` function at the bottom.
 
 
-Create a new folder called `mygame` inside `apps/images`, and put some PNG images into it:
+Create image and sound folders for the new game:
 
 ```
-mkdir apps/images/mygame
-cp apps/images/ventap/*.png apps/images/mygame
+mkdir -p games/mygame/images
+mkdir -p games/mygame/sounds
+cp games/alecu/ventap/images/*.png games/mygame/images
 ```
 
-Ventilastation cannot directly open PNG images, so in order to transform your assets into a format it can understand, you'll need a definition file. Create the file `apps/images/mygame/stripedefs.yaml` with the following content:
+Ventilastation cannot directly open PNG images, so in order to transform your assets into a format it can understand, you'll need a definition file. Create the file `games/mygame/images/__images__.yaml` with the following content:
 ``` yaml
 palettegroups:
   palette1:
@@ -59,13 +63,14 @@ Whenever you run the emulator, your PNG images are compiled into a ROM file, whi
 
 The above creates a ROM file in `apps/micropython/roms/mygame.rom`. We can reference it in our source code by changing the line `stripes_rom = "mygame"` in the `MyGame` class.
 
-Finally, to be able to start this app it needs to be added to the main menu.
-Add the following line to `main.py`:
-```
-    ('mygame', "mygame.png", 0),
+Finally, to be able to start this app it needs to be added to the launcher menu.
+Add a new entry to `MAIN_MENU_OPTIONS` in `system/launcher/code/__init__.py`:
+
+```python
+("mygame", "mygame.png", 0),
 ```
 
-You can modify the file `mygame.png` used in the menu, in the `apps/images/menu` folder. 64x30 pixels is the right size for menu items.
+Menu thumbnails are launcher assets. Put the menu image in `system/menu/images` if it is launcher-only, or keep it with the game if it is clearly game-owned and only used there. 64x30 pixels is the right size for menu items.
 
 
 ## Part III: Scenes and the director

@@ -73,7 +73,7 @@
 
   async function buildRomFromFolder(folderUrl, options = {}) {
     const baseUrl = new URL(folderUrl, options.baseUrl || window.location.href);
-    const stripedefsUrl = new URL(options.stripedefsFilename || "stripedefs.yaml", baseUrl);
+    const stripedefsUrl = new URL(options.stripedefsFilename || "__images__.yaml", baseUrl);
     const fetchImpl = options.fetchImpl || fetch;
     const stripedefsResponse = await fetchImpl(stripedefsUrl.href);
     if (!stripedefsResponse.ok) {
