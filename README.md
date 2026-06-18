@@ -27,6 +27,33 @@ Game code and assets now live together under `games/<slug>/`:
 
 The default boot app is the launcher in `system/launcher/code`, and shared non-game assets live under `system/menu` and `system/shared`.
 
+## Rebuilding The WebAssembly Runtime
+
+The browser emulator uses vendored MicroPython WebAssembly artifacts under `web/vendor/micropython/`.
+
+To rebuild those files with `sys.settrace` enabled:
+
+```bash
+cd vsdk
+make micropython-webassembly
+```
+
+That target:
+
+- clones pinned `micropython` and `emsdk` checkouts into `/tmp/vsdk-micropython-webassembly` by default
+- applies the repo's trace-enabled WebAssembly variant and compatibility patch
+- builds `micropython.mjs` and `micropython.wasm`
+- copies them into `web/vendor/micropython/`
+- bumps the browser cache-busting version strings used by the worker bridge
+
+Useful overrides:
+
+```bash
+BUILD_ROOT=/tmp/custom-vsdk-build make micropython-webassembly
+VERSION_TAG=20260618T160000Z make micropython-webassembly
+BUILD_JOBS=8 make micropython-webassembly
+```
+
 # Build your own Ventilastation
 
 If you have some maker experience, there are also schematics and blueprints so you can build your own Ventilastation console.

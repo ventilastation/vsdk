@@ -10,6 +10,8 @@ import {
 const MONACO_VERSION = "0.52.2";
 const MONACO_BASE_URL = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min/vs`;
 const WORKSPACE_ROOT_CANDIDATES = ["."];
+const WORKSPACE_READY_RETRY_COUNT = 20;
+const WORKSPACE_READY_RETRY_DELAY_MS = 150;
 const EDITABLE_EXTENSIONS = new Set([
   ".py",
   ".pyi",
@@ -280,6 +282,21 @@ function imageDataUrlFromBase64(base64) {
   return `data:image/png;base64,${base64}`;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function isTransientWorkspaceError(error) {
+  const message = String(error?.message || error || "");
+  return (
+    message.includes("WASM worker not initialized") ||
+    message.includes("Workspace file API unavailable") ||
+    message.includes("Worker restarted")
+  );
+}
+
 const GAME_MENU_PREVIEW_MAP = new Map();
 
 class WorkspaceIde {
@@ -507,14 +524,27 @@ class WorkspaceIde {
     if (this.workspaceRoot) {
       return this.workspaceRoot;
     }
-    for (const candidate of WORKSPACE_ROOT_CANDIDATES) {
-      try {
-        await this.api.listProjectFiles(candidate);
-        this.workspaceRoot = candidate;
-        return candidate;
-      } catch (_error) {
-        // Try the next candidate.
+    let lastError = null;
+    for (let attempt = 0; attempt < WORKSPACE_READY_RETRY_COUNT; attempt += 1) {
+      for (const candidate of WORKSPACE_ROOT_CANDIDATES) {
+        try {
+          await this.api.listProjectFiles(candidate);
+          this.workspaceRoot = candidate;
+          return candidate;
+        } catch (error) {
+          lastError = error;
+          if (!isTransientWorkspaceError(error)) {
+            break;
+          }
+        }
       }
+      if (!isTransientWorkspaceError(lastError)) {
+        break;
+      }
+      await delay(WORKSPACE_READY_RETRY_DELAY_MS);
+    }
+    if (lastError && !isTransientWorkspaceError(lastError)) {
+      throw lastError;
     }
     throw new Error(
       `Unable to locate an editable workspace root. Tried: ${WORKSPACE_ROOT_CANDIDATES.join(", ")}`

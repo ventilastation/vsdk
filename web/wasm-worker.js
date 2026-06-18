@@ -1,9 +1,10 @@
-import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260612T183500Z";
+import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260618T161500Z";
 
-const WORKER_BUILD_VERSION = "worker-debug-20260618T120000Z";
+const WORKER_BUILD_VERSION = "worker-debug-20260618T161500Z";
+const MICROPYTHON_WASM_VERSION = "bridge-debug-20260618T161500Z";
 
 const DEFAULT_CONFIG = {
-  micropythonWasmUrl: "./vendor/micropython/micropython.wasm",
+  micropythonWasmUrl: `./vendor/micropython/micropython.wasm?v=${MICROPYTHON_WASM_VERSION}`,
   runtimeBundleUrl: "./runtime-bundle.json",
   runtimeManifestUrl: "./runtime-manifest.json",
   fsRoot: "/games",
