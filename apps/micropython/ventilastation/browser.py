@@ -261,6 +261,13 @@ def configure_worker_host(worker_host):
     _browser_platform().set_worker_host(worker_host)
 
 
+def autostart_app(slug):
+    from ventilastation.app_loader import load_app
+
+    load_app(slug)
+    return slug
+
+
 def tick(count=1):
     director = __import__("ventilastation.director", None, None, ["director"]).director
     try:

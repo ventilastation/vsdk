@@ -224,6 +224,14 @@ function getGameInfoFromKey(gameKey) {
   };
 }
 
+function gameKeyToSlug(gameKey) {
+  const info = getGameInfoFromKey(gameKey);
+  if (!info) {
+    return null;
+  }
+  return `${info.group}.${info.slug}`;
+}
+
 function trimGameRoot(path, gameKey) {
   const normalizedPath = normalizeWorkspacePath(path);
   const normalizedRoot = normalizeWorkspacePath(gameKey);
@@ -808,8 +816,9 @@ class WorkspaceIde {
 
   async saveAndRun() {
     await this.saveCurrentFile();
-    this.setStatus("Restarting runtime");
-    await this.api.restartRuntime({ full: true });
+    const autostartSlug = gameKeyToSlug(this.currentGameKey);
+    this.setStatus(autostartSlug ? `Restarting runtime for ${autostartSlug}` : "Restarting runtime");
+    await this.api.restartRuntime({ full: true, autostartSlug });
     this.setStatus("Runtime restarted");
   }
 

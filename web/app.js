@@ -1077,11 +1077,11 @@ class BrowserHostApp {
     return this.adapter.applyWorkspaceSnapshot(files);
   }
 
-  async restartRuntime({ full = true } = {}) {
+  async restartRuntime({ full = true, autostartSlug = null } = {}) {
     if (typeof this.adapter.restartRuntime !== "function") {
       throw new Error("Runtime restart unavailable");
     }
-    this.addDiagnostic("runtime.restart.begin", { full });
+    this.addDiagnostic("runtime.restart.begin", { full, autostartSlug });
     this.pollingHalted = false;
     this.executionError = null;
     this.runtime.error = null;
@@ -1102,7 +1102,7 @@ class BrowserHostApp {
     if (this.adapter.usesWorkerFrameStream && typeof this.adapter.stopLoop === "function") {
       await this.adapter.stopLoop();
     }
-    const result = await this.adapter.restartRuntime();
+    const result = await this.adapter.restartRuntime({ autostartSlug });
     this.runtime.source = "wasm";
     this.elements.adapterSource.textContent = this.runtime.source;
     this.syncButtons();

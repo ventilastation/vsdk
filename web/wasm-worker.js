@@ -1,6 +1,6 @@
 import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260612T183500Z";
 
-const WORKER_BUILD_VERSION = "worker-debug-20260612T183500Z";
+const WORKER_BUILD_VERSION = "worker-debug-20260618T120000Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: "./vendor/micropython/micropython.wasm",
@@ -9,6 +9,7 @@ const DEFAULT_CONFIG = {
   fsRoot: "/games",
   pystack: 32 * 1024,
   heapsize: 8 * 1024 * 1024,
+  autostartSlug: null,
 };
 const SCENE_STEP_MS = 30;
 const MAX_CATCH_UP_STEPS = 6;
@@ -324,11 +325,15 @@ class MicroPythonRuntime {
     await this.mp.runPythonAsync(PY_BOOTSTRAP_SOURCE);
     this.initialized = true;
     await this.call("ventilastation.browser", "configure_worker_host", ["__vs_host"]);
+    if (typeof this.config.autostartSlug === "string" && this.config.autostartSlug) {
+      await this.call("ventilastation.browser", "autostart_app", [this.config.autostartSlug]);
+    }
 
     return {
       runtime: "micropython-webassembly",
       micropythonWasmUrl: this.config.micropythonWasmUrl,
       fsRoot: this.config.fsRoot,
+      autostartSlug: this.config.autostartSlug || null,
     };
   }
 

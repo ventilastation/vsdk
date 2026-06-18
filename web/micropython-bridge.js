@@ -75,10 +75,11 @@ class WorkerBridge {
     });
   }
 
-  async initialize() {
+  async initialize(config = {}) {
     return this.request("initialize", {
       config: {
         workspaceFiles: Array.from(this.workspaceFiles.values()),
+        ...config,
       },
     });
   }
@@ -168,11 +169,13 @@ class WorkerBridge {
     const workerUrl = options.workerUrl || new URL(`./wasm-worker.js?v=${WORKER_SCRIPT_VERSION}`, import.meta.url).href;
     const worker = new Worker(workerUrl, { type: "module" });
     this.attachWorker(worker);
-    return this.initialize();
+    return this.initialize({
+      autostartSlug: options.autostartSlug || null,
+    });
   }
 }
 
-const WORKER_SCRIPT_VERSION = "worker-debug-20260612T221500Z";
+const WORKER_SCRIPT_VERSION = "worker-debug-20260618T120000Z";
 
 export async function createVentilastationWasmBridge(options = {}) {
   const workerUrl = options.workerUrl || new URL(`./wasm-worker.js?v=${WORKER_SCRIPT_VERSION}`, import.meta.url).href;
