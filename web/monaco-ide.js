@@ -7,8 +7,7 @@ import {
   maybeRebuildRomForPath,
 } from "./workspace-rom-builder.js";
 
-const MONACO_VERSION = "0.52.2";
-const MONACO_BASE_URL = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min/vs`;
+const MONACO_BASE_URL = "./vendor/monaco/vs";
 const WORKSPACE_ROOT_CANDIDATES = ["."];
 const WORKSPACE_READY_RETRY_COUNT = 20;
 const WORKSPACE_READY_RETRY_DELAY_MS = 150;
@@ -34,6 +33,10 @@ const EDITABLE_EXTENSIONS = new Set([
 
 let monacoLoadPromise = null;
 const workerUrlCache = new Map();
+
+function getMonacoBaseUrl() {
+  return new URL(`${MONACO_BASE_URL}/`, window.location.href).href.replace(/\/$/u, "");
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -133,9 +136,10 @@ function createMonacoWorkerUrl() {
   if (workerUrlCache.has("default")) {
     return workerUrlCache.get("default");
   }
+  const monacoBaseUrl = getMonacoBaseUrl();
   const workerSource = [
-    `self.MonacoEnvironment = { baseUrl: ${JSON.stringify(`${MONACO_BASE_URL}/`)} };`,
-    `importScripts(${JSON.stringify(`${MONACO_BASE_URL}/base/worker/workerMain.js`)});`,
+    `self.MonacoEnvironment = { baseUrl: ${JSON.stringify(`${monacoBaseUrl}/`)} };`,
+    `importScripts(${JSON.stringify(`${monacoBaseUrl}/base/worker/workerMain.js`)});`,
   ].join("\n");
   const url = URL.createObjectURL(new Blob([workerSource], { type: "text/javascript" }));
   workerUrlCache.set("default", url);
