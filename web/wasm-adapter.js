@@ -4,6 +4,7 @@ class VentilastationWasmAdapter {
     this.name = options.name || "MicroPython WASM";
     this.bootModule = options.bootModule || "main";
     this.bootstrapped = false;
+    this.initPromise = null;
     this.usesWorkerFrameStream = true;
   }
 
@@ -11,13 +12,23 @@ class VentilastationWasmAdapter {
     if (this.bootstrapped) {
       return this;
     }
-
-    if (typeof this.bridge.initialize === "function") {
-      await this.bridge.initialize();
+    if (this.initPromise) {
+      return this.initPromise;
     }
 
-    this.bootstrapped = true;
-    return this;
+    this.initPromise = (async () => {
+      if (typeof this.bridge.initialize === "function") {
+        await this.bridge.initialize();
+      }
+
+      this.bootstrapped = true;
+      return this;
+    })().catch((error) => {
+      this.initPromise = null;
+      throw error;
+    });
+
+    return this.initPromise;
   }
 
   setButtons(bitmask) {
@@ -150,20 +161,30 @@ export async function createVentilastationWasmAdapter(options = {}) {
   if (window.VentilastationRuntimeAdapter && window.VentilastationRuntimeAdapter.__isVentilastationWasmAdapter) {
     return window.VentilastationRuntimeAdapter;
   }
-
-  const bridge = await resolveBridge(options);
-  if (!bridge) {
-    throw new Error(
-      "No Ventilastation WASM bridge available. " +
-      "Provide window.VentilastationWasmBridge or window.createVentilastationWasmBridge()."
-    );
+  if (window.__VentilastationWasmAdapterPromise) {
+    return window.__VentilastationWasmAdapterPromise;
   }
 
-  const adapter = new VentilastationWasmAdapter(bridge, options);
-  await adapter.init();
-  adapter.__isVentilastationWasmAdapter = true;
-  window.VentilastationRuntimeAdapter = adapter;
-  return adapter;
+  window.__VentilastationWasmAdapterPromise = (async () => {
+    const bridge = await resolveBridge(options);
+    if (!bridge) {
+      throw new Error(
+        "No Ventilastation WASM bridge available. " +
+        "Provide window.VentilastationWasmBridge or window.createVentilastationWasmBridge()."
+      );
+    }
+
+    const adapter = new VentilastationWasmAdapter(bridge, options);
+    await adapter.init();
+    adapter.__isVentilastationWasmAdapter = true;
+    window.VentilastationRuntimeAdapter = adapter;
+    return adapter;
+  })().catch((error) => {
+    window.__VentilastationWasmAdapterPromise = null;
+    throw error;
+  });
+
+  return window.__VentilastationWasmAdapterPromise;
 }
 
 window.createVentilastationWasmAdapter = createVentilastationWasmAdapter;

@@ -315,6 +315,8 @@ class WorkspaceIde {
     this.monaco = null;
     this.isApplyingModel = false;
     this.activeDrawer = null;
+    this.actionInFlight = false;
+    this.activeActionLabel = "";
     this.root = document.querySelector("#editor-panel-shell");
     if (!this.root) {
       return;
@@ -444,10 +446,20 @@ class WorkspaceIde {
   }
 
   async runAction(failureLabel, action) {
+    if (this.actionInFlight) {
+      return;
+    }
+    this.actionInFlight = true;
+    this.activeActionLabel = failureLabel;
+    this.updateActionState();
     try {
       await action();
     } catch (error) {
       this.handleError(failureLabel, error);
+    } finally {
+      this.actionInFlight = false;
+      this.activeActionLabel = "";
+      this.updateActionState();
     }
   }
 
@@ -1298,6 +1310,7 @@ class WorkspaceIde {
 
   updateActionState() {
     const hasFile = Boolean(this.currentPath);
+    const isBusy = this.actionInFlight;
     let canSave = false;
     if (hasFile && this.currentMode === "sprite") {
       canSave = Boolean(this.spriteFileStates.get(this.currentPath)?.dirty);
@@ -1306,10 +1319,16 @@ class WorkspaceIde {
       canSave = Boolean(state && (state.dirty || state.isNew));
     }
     if (this.elements.saveButton) {
-      this.elements.saveButton.disabled = !canSave;
+      this.elements.saveButton.disabled = isBusy || !canSave;
+      this.elements.saveButton.textContent = isBusy && this.activeActionLabel === "Save failed"
+        ? "Saving..."
+        : "Save";
     }
     if (this.elements.runButton) {
-      this.elements.runButton.disabled = !hasFile;
+      this.elements.runButton.disabled = isBusy || !hasFile;
+      this.elements.runButton.textContent = isBusy && this.activeActionLabel === "Run failed"
+        ? "Starting..."
+        : "Save + Run";
     }
     this.renderCreateState();
   }

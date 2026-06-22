@@ -5,6 +5,8 @@ class WorkerBridge {
     this.listeners = new Map();
     this.worker = null;
     this.workspaceFiles = new Map();
+    this.initializePromise = null;
+    this.restartPromise = null;
     this.handleWorkerMessage = (event) => {
       const message = event.data;
       if (!message || typeof message !== "object") {
@@ -67,21 +69,35 @@ class WorkerBridge {
   }
 
   request(type, payload = {}) {
-    const id = this.nextId++;
-    const message = { id, type, ...payload };
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage(message);
-    });
+    const send = () => {
+      const id = this.nextId++;
+      const message = { id, type, ...payload };
+      return new Promise((resolve, reject) => {
+        this.pending.set(id, { resolve, reject });
+        this.worker.postMessage(message);
+      });
+    };
+
+    if (type !== "initialize" && this.initializePromise) {
+      return this.initializePromise.then(() => send());
+    }
+
+    return send();
   }
 
-  async initialize(config = {}) {
-    return this.request("initialize", {
-      config: {
-        workspaceFiles: Array.from(this.workspaceFiles.values()),
-        ...config,
-      },
-    });
+  initialize(config = {}) {
+    if (!this.initializePromise) {
+      this.initializePromise = this.request("initialize", {
+        config: {
+          workspaceFiles: Array.from(this.workspaceFiles.values()),
+          ...config,
+        },
+      }).catch((error) => {
+        this.initializePromise = null;
+        throw error;
+      });
+    }
+    return this.initializePromise;
   }
 
   async exec(code) {
@@ -162,6 +178,9 @@ class WorkerBridge {
   }
 
   async restartRuntime(options = {}) {
+    if (this.restartPromise) {
+      return this.restartPromise;
+    }
     this.rejectPending("Worker restarted");
     if (this.worker) {
       this.worker.terminate();
@@ -169,9 +188,13 @@ class WorkerBridge {
     const workerUrl = options.workerUrl || new URL(`./wasm-worker.js?v=${WORKER_SCRIPT_VERSION}`, import.meta.url).href;
     const worker = new Worker(workerUrl, { type: "module" });
     this.attachWorker(worker);
-    return this.initialize({
+    this.initializePromise = null;
+    this.restartPromise = this.initialize({
       autostartSlug: options.autostartSlug || null,
+    }).finally(() => {
+      this.restartPromise = null;
     });
+    return this.restartPromise;
   }
 }
 
