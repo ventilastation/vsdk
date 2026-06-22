@@ -50,6 +50,14 @@ def build_manifest_file_list(existing_files):
     return ordered
 
 
+def should_include_in_bundle(relative_path):
+    normalized = Path(relative_path).as_posix()
+    suffix = Path(normalized).suffix.lower()
+    if suffix in {".png", ".yaml", ".yml"}:
+        return False
+    return True
+
+
 def main():
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest["files"] = build_manifest_file_list(manifest["files"])
@@ -60,6 +68,8 @@ def main():
 
     entries = []
     for relative_path in manifest["files"]:
+      if not should_include_in_bundle(relative_path):
+        continue
       source_path = ROOT_DIR / relative_path
       if not source_path.is_file():
         raise FileNotFoundError(f"Missing runtime file: {relative_path}")

@@ -199,6 +199,9 @@ class MicroPythonRuntime {
     this.initialized = false;
     this.mp = null;
     this.workspaceFilePaths = new Set();
+    this.deletedWorkspacePaths = new Set();
+    this.runtimeManifestFiles = [];
+    this.runtimeManifestByTargetPath = new Map();
   }
 
   _readHeapBytesFromModule(ptr, length) {
@@ -338,12 +341,7 @@ class MicroPythonRuntime {
     };
   }
 
-  async populateFilesystem() {
-    if (await this.populateFilesystemFromBundle()) {
-      this.applyWorkspaceFiles(this.config.workspaceFiles || [], { replace: true });
-      return;
-    }
-
+  async loadRuntimeManifest() {
     const response = await fetch(this.config.runtimeManifestUrl, {
       credentials: "same-origin",
       cache: "no-store",
@@ -352,13 +350,31 @@ class MicroPythonRuntime {
       throw new Error(`Unable to load runtime manifest: ${response.status} ${response.url}`);
     }
     const manifest = await response.json();
+    if (!manifest || !Array.isArray(manifest.files)) {
+      throw new Error("Invalid runtime manifest format");
+    }
+    this.runtimeManifestFiles = manifest.files
+      .filter((entry) => typeof entry === "string")
+      .map((entry) => normalizeRuntimeRelativePath(entry));
+    this.runtimeManifestByTargetPath = new Map();
+    for (const relativePath of this.runtimeManifestFiles) {
+      this.runtimeManifestByTargetPath.set(this.resolveWorkspacePath(relativePath), relativePath);
+    }
+  }
+
+  async populateFilesystem() {
+    await this.loadRuntimeManifest();
+    if (await this.populateFilesystemFromBundle()) {
+      this.applyWorkspaceFiles(this.config.workspaceFiles || [], { replace: true });
+      return;
+    }
     this.ensureDir("/");
     this.ensureDir(this.config.fsRoot);
 
-    for (const relativePath of manifest.files) {
+    for (const relativePath of this.runtimeManifestFiles) {
       const fileResponse = await fetchFirstAvailable([relativePath]);
       const bytes = new Uint8Array(await fileResponse.arrayBuffer());
-      const targetPath = `/${relativePath}`;
+      const targetPath = this.resolveWorkspacePath(relativePath);
       this.ensureDir(dirname(targetPath));
       this.mp.FS.writeFile(targetPath, bytes);
     }
@@ -390,7 +406,7 @@ class MicroPythonRuntime {
       if (!entry || typeof entry.path !== "string" || typeof entry.base64 !== "string") {
         throw new Error("Invalid runtime bundle entry");
       }
-      const targetPath = `/${entry.path}`;
+      const targetPath = this.resolveWorkspacePath(entry.path);
       this.ensureDir(dirname(targetPath));
       this.mp.FS.writeFile(targetPath, decodeBase64(entry.base64));
     }
@@ -440,6 +456,7 @@ class MicroPythonRuntime {
         : new TextEncoder().encode(content);
       this.ensureDir(dirname(targetPath));
       this.mp.FS.writeFile(targetPath, bytes);
+      this.deletedWorkspacePaths.delete(targetPath);
       nextWorkspacePaths.add(targetPath);
     }
     if (replace) {
@@ -461,10 +478,37 @@ class MicroPythonRuntime {
     }
   }
 
+  workspacePathFromTargetPath(targetPath) {
+    const normalizedTargetPath = String(targetPath || "").replace(/\/+$/u, "");
+    const fsRoot = this.config.fsRoot.replace(/\/+$/u, "");
+    if (normalizedTargetPath === fsRoot) {
+      return "";
+    }
+    if (normalizedTargetPath.startsWith(`${fsRoot}/`)) {
+      return normalizedTargetPath.slice(fsRoot.length + 1);
+    }
+    return normalizedTargetPath.replace(/^\/+/u, "");
+  }
+
+  async loadManifestBackedFile(targetPath) {
+    if (this.deletedWorkspacePaths.has(targetPath)) {
+      throw new Error("File has been deleted in this session");
+    }
+    const manifestPath = this.runtimeManifestByTargetPath.get(targetPath);
+    if (!manifestPath) {
+      return null;
+    }
+    const fileResponse = await fetchFirstAvailable([manifestPath]);
+    const bytes = new Uint8Array(await fileResponse.arrayBuffer());
+    this.ensureDir(dirname(targetPath));
+    this.mp.FS.writeFile(targetPath, bytes);
+    return bytes;
+  }
+
   listWorkspaceFiles(path = ".") {
     this.assertInitialized();
     const rootPath = this.resolveWorkspacePath(path);
-    const entries = [];
+    const entries = new Set();
     const visit = (currentPath) => {
       let children = [];
       try {
@@ -482,19 +526,36 @@ class MicroPythonRuntime {
           visit(childPath);
           continue;
         }
-        const relativePath = childPath.slice(this.config.fsRoot.length).replace(/^\/+/u, "");
-        entries.push(relativePath);
+        entries.add(this.workspacePathFromTargetPath(childPath));
       }
     };
     visit(rootPath);
-    entries.sort((left, right) => left.localeCompare(right));
-    return entries;
+    for (const targetPath of this.runtimeManifestByTargetPath.keys()) {
+      if (this.deletedWorkspacePaths.has(targetPath)) {
+        continue;
+      }
+      if (targetPath === rootPath || targetPath.startsWith(`${rootPath}/`)) {
+        entries.add(this.workspacePathFromTargetPath(targetPath));
+      }
+    }
+    return Array.from(entries).sort((left, right) => left.localeCompare(right));
   }
 
-  readWorkspaceFile(path, encoding = "utf8") {
+  async readWorkspaceFile(path, encoding = "utf8") {
     this.assertInitialized();
     const targetPath = this.resolveWorkspacePath(path);
-    const bytes = this.mp.FS.readFile(targetPath);
+    if (this.deletedWorkspacePaths.has(targetPath)) {
+      throw new Error(`Unable to read workspace path ${path}: file not found`);
+    }
+    let bytes;
+    try {
+      bytes = this.mp.FS.readFile(targetPath);
+    } catch (_error) {
+      bytes = await this.loadManifestBackedFile(targetPath);
+      if (!bytes) {
+        throw new Error(`Unable to read workspace path ${path}: file not found`);
+      }
+    }
     const normalizedEncoding = encoding === "base64" ? "base64" : "utf8";
     return {
       path: normalizeRuntimeRelativePath(path),
@@ -515,6 +576,7 @@ class MicroPythonRuntime {
       : new TextEncoder().encode(String(content || ""));
     this.ensureDir(dirname(targetPath));
     this.mp.FS.writeFile(targetPath, bytes);
+    this.deletedWorkspacePaths.delete(targetPath);
     this.workspaceFilePaths.add(targetPath);
     return {
       path: normalizeRuntimeRelativePath(path),
@@ -526,7 +588,14 @@ class MicroPythonRuntime {
   deleteWorkspaceFile(path) {
     this.assertInitialized();
     const targetPath = this.resolveWorkspacePath(path);
-    this.mp.FS.unlink(targetPath);
+    try {
+      this.mp.FS.unlink(targetPath);
+    } catch (error) {
+      if (!this.runtimeManifestByTargetPath.has(targetPath)) {
+        throw error;
+      }
+    }
+    this.deletedWorkspacePaths.add(targetPath);
     this.workspaceFilePaths.delete(targetPath);
     return {
       path: normalizeRuntimeRelativePath(path),
@@ -964,22 +1033,22 @@ self.addEventListener("message", async (event) => {
     }
 
     if (type === "list_workspace_files") {
-      success(id, runtime.listWorkspaceFiles(message.path));
+      success(id, await runtime.listWorkspaceFiles(message.path));
       return;
     }
 
     if (type === "read_workspace_file") {
-      success(id, runtime.readWorkspaceFile(message.path, message.encoding));
+      success(id, await runtime.readWorkspaceFile(message.path, message.encoding));
       return;
     }
 
     if (type === "write_workspace_file") {
-      success(id, runtime.writeWorkspaceFile(message.path, message.content, message.encoding));
+      success(id, await runtime.writeWorkspaceFile(message.path, message.content, message.encoding));
       return;
     }
 
     if (type === "delete_workspace_file") {
-      success(id, runtime.deleteWorkspaceFile(message.path));
+      success(id, await runtime.deleteWorkspaceFile(message.path));
       return;
     }
 
