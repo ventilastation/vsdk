@@ -71,15 +71,27 @@
     return decodeImageFromBlob(await response.blob());
   }
 
+  async function fetchTextWithYamlFallback(url, { fetchImpl = fetch } = {}) {
+    const candidates = [url];
+    if (url.endsWith(".yaml") || url.endsWith(".yml")) {
+      candidates.push(`${url}.txt`);
+    }
+    const errors = [];
+    for (const candidate of candidates) {
+      const response = await fetchImpl(candidate);
+      if (response.ok) {
+        return response.text();
+      }
+      errors.push(`${candidate}: ${response.status}`);
+    }
+    throw new Error(`Failed to fetch ${url}: ${errors.join(", ")}`);
+  }
+
   async function buildRomFromFolder(folderUrl, options = {}) {
     const baseUrl = new URL(folderUrl, options.baseUrl || window.location.href);
     const stripedefsUrl = new URL(options.stripedefsFilename || "__images__.yaml", baseUrl);
     const fetchImpl = options.fetchImpl || fetch;
-    const stripedefsResponse = await fetchImpl(stripedefsUrl.href);
-    if (!stripedefsResponse.ok) {
-      throw new Error(`Failed to fetch ${stripedefsUrl.href}: ${stripedefsResponse.status}`);
-    }
-    const stripedefsYaml = await stripedefsResponse.text();
+    const stripedefsYaml = await fetchTextWithYamlFallback(stripedefsUrl.href, { fetchImpl });
     const palettegroups = core.parseStripedefsYaml(stripedefsYaml);
 
     return core.buildRom({

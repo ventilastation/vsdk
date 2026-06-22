@@ -68,10 +68,22 @@ function getProjectRootCandidates() {
   ];
 }
 
+function getFetchPathCandidates(path) {
+  const normalized = normalizeRuntimeRelativePath(path);
+  if (!normalized) {
+    return [normalized];
+  }
+  if (normalized.endsWith(".yaml") || normalized.endsWith(".yml")) {
+    return [normalized, `${normalized}.txt`];
+  }
+  return [normalized];
+}
+
 async function fetchFirstAvailable(paths) {
   const errors = [];
   for (const baseUrl of getProjectRootCandidates()) {
-    for (const path of paths) {
+    for (const originalPath of paths) {
+      for (const path of getFetchPathCandidates(originalPath)) {
       const url = new URL(path.replace(/^\/+/, ""), baseUrl);
       try {
         const response = await fetch(url, {
@@ -84,6 +96,7 @@ async function fetchFirstAvailable(paths) {
         errors.push(`${response.status} ${url.href}`);
       } catch (error) {
         errors.push(`${url.href}: ${error.message || String(error)}`);
+      }
       }
     }
   }
