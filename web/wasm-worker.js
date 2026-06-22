@@ -1,7 +1,7 @@
-import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260618T161500Z";
+import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260622T203500Z";
 
-const WORKER_BUILD_VERSION = "worker-debug-20260618T161500Z";
-const MICROPYTHON_WASM_VERSION = "bridge-debug-20260618T161500Z";
+const WORKER_BUILD_VERSION = "worker-debug-20260622T203500Z";
+const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T203500Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: `./vendor/micropython/micropython.wasm?v=${MICROPYTHON_WASM_VERSION}`,
