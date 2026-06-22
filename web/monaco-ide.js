@@ -971,7 +971,7 @@ class WorkspaceIde {
     const candidates = [];
     if (info) {
       candidates.push({
-        path: `../games/${gameKey}/menu.png`,
+        path: `./games/${gameKey}/menu.png`,
         frame: 0,
         frames: 1,
       });
@@ -981,7 +981,7 @@ class WorkspaceIde {
       candidates.push(mapped);
     }
     candidates.push({
-      path: `../games/${gameKey}/images/menu.png`,
+      path: `./games/${gameKey}/images/menu.png`,
       frame: 0,
       frames: 1,
     });

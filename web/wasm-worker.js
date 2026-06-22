@@ -1,7 +1,7 @@
-import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260622T203500Z";
+import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260622T204800Z";
 
-const WORKER_BUILD_VERSION = "worker-debug-20260622T203500Z";
-const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T203500Z";
+const WORKER_BUILD_VERSION = "worker-debug-20260622T204800Z";
+const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T204800Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: `./vendor/micropython/micropython.wasm?v=${MICROPYTHON_WASM_VERSION}`,
@@ -73,8 +73,14 @@ function getFetchPathCandidates(path) {
   if (!normalized) {
     return [normalized];
   }
+  if (normalized.endsWith("/__images__.yaml")) {
+    return [normalized, normalized.replace(/\/__images__\.yaml$/u, "/images-manifest.yaml.txt")];
+  }
+  if (normalized.endsWith("/__images__.yml")) {
+    return [normalized, normalized.replace(/\/__images__\.yml$/u, "/images-manifest.yml.txt")];
+  }
   if (normalized.endsWith(".yaml") || normalized.endsWith(".yml")) {
-    return [normalized, `${normalized}.txt`];
+    return [normalized];
   }
   return [normalized];
 }

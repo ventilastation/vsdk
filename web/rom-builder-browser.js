@@ -73,8 +73,10 @@
 
   async function fetchTextWithYamlFallback(url, { fetchImpl = fetch } = {}) {
     const candidates = [url];
-    if (url.endsWith(".yaml") || url.endsWith(".yml")) {
-      candidates.push(`${url}.txt`);
+    if (url.endsWith("/__images__.yaml")) {
+      candidates.push(url.replace(/\/__images__\.yaml$/u, "/images-manifest.yaml.txt"));
+    } else if (url.endsWith("/__images__.yml")) {
+      candidates.push(url.replace(/\/__images__\.yml$/u, "/images-manifest.yml.txt"));
     }
     const errors = [];
     for (const candidate of candidates) {
