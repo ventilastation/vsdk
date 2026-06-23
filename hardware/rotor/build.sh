@@ -1,6 +1,18 @@
 VENTILASTATION_MODULES=`pwd`/modules/micropython.cmake
 FROZEN_MANIFEST=`pwd`/../../apps/micropython/manifest.py
 
+if [[ "$1" == "voom-image" ]]; then
+  shift
+  python3 build_voom_image.py "$@"
+  exit $?
+fi
+
+if [[ "$1" == "voom-flash" ]]; then
+  shift
+  python3 flash_voom_image.py "$@"
+  exit $?
+fi
+
 cd micropython/ports/esp32
 
 BOARD=ESP32_GENERIC_S3

@@ -6,6 +6,7 @@ except ImportError:
     import os
 
 from ventilastation.director import director
+from ventilastation.native_apps import is_native_app, launch_native_scene
 
 PROJECT_ROOT = "../.."
 GAMES_ROOT = PROJECT_ROOT + "/games"
@@ -52,6 +53,8 @@ def import_app_module(slug):
 
 
 def load_app(slug):
+    if is_native_app(slug):
+        return launch_native_scene(slug)
     module = import_app_module(slug)
     scene = module.main()
     director.push(scene)

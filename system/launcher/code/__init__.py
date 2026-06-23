@@ -12,6 +12,7 @@ def game_menu_strip(game_slug):
 # (slug, image, frame)[] -- see menu ROM assets
 MAIN_MENU_OPTIONS = [
     ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),
+    ("native.voom", "voom.png", 0),
     ("vsjam-oct25.2bam_sencom", game_menu_strip("vsjam-oct25.2bam_sencom"), 0),
     ("vsjam-may25.vasura_espacial", game_menu_strip("vsjam-may25.vasura_espacial"), 0),
     ("gallery", "pollitos.png", 0),

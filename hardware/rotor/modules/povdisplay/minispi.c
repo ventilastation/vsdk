@@ -296,8 +296,10 @@ void spiWaitComplete() {
         return;
     }
     esp_err_t ret;
-    ret = spi_device_get_trans_result(spi_handle, &spi_trans, pdMS_TO_TICKS(100));
+    spi_transaction_t *completed_trans = NULL;
+    ret = spi_device_get_trans_result(spi_handle, &completed_trans, pdMS_TO_TICKS(100));
     ESP_ERROR_CHECK(ret);
+    spi_ongoing = false;
 }
 
 // we need esp-idf v5.4 or later for this function

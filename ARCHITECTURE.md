@@ -21,6 +21,65 @@ The top-level `emulator/` directory is only the published copy used by the Jekyl
 
 When reading the rest of this document, prefer the matching path under `vsdk/web/...`; the `emulator/...` copy should be treated as deployment output.
 
+## Native App Handoff
+
+The current runtime is MicroPython-first:
+
+1. MicroPython boots from `apps/micropython/main.py`
+2. the launcher loads app slugs through `ventilastation.app_loader`
+3. Python apps return `Scene` objects that run inside the `director`
+
+To support heavyweight native apps such as `voom`, the launcher now also has a native-app registry in
+`apps/micropython/ventilastation/native_apps.py`.
+
+On hardware, the preferred launch path is a direct native launcher hook exposed by the
+MicroPython firmware itself. This matches the current rotor build, which is a single
+MicroPython firmware image with linked user C modules under `hardware/rotor/modules/...`.
+
+At the moment, that native hook is implemented as a practical bridge to the existing Voom
+firmware fork, which builds Doom as the `prboom-go` app partition in a Retro-Go image.
+
+That means the current hardware flow for `voom` is:
+
+- MicroPython launcher selects `native.voom`
+- Python asks the hardware platform to launch a native app hook
+- the hook switches boot partition to `prboom-go`
+- the ESP32 restarts into the flashed Voom firmware
+
+The current combined-image layout for this handoff is defined in:
+
+- `hardware/rotor/partitions-voom.csv`
+
+and built by:
+
+- `hardware/rotor/build_voom_image.py`
+
+That image keeps:
+
+- MicroPython in the `factory` app partition
+- Voom in the `prboom-go` app partition
+- `otadata` present so `esp_ota_set_boot_partition()` can switch between them
+
+The combined builder intentionally supports different ESP-IDF trees for each side:
+
+- `vsdk` / MicroPython can stay on `esp-idf-5.4`
+- `voom` / Retro-Go can be built with another installed SDK such as `esp-idf` (`v5.0.4`)
+
+The intended longer-term steady-state flow is still possible:
+
+- the native runtime takes over display/input/audio timing directly without rebooting
+- on exit, native code returns to the launcher or resets back into MicroPython
+
+The registry also defines a boot-intent fallback:
+
+- the launcher persists intent in `ventilastation/boot.json`
+- a future native boot shim can read that intent before entering MicroPython
+- native apps are expected to clear or replace that intent before returning to the launcher
+
+At the moment the Python-side registry, intent persistence, and a hardware native launcher hook
+exist. Platforms without that hook still save boot intent and then fail loudly because they cannot
+honor it.
+
 ## Web Emulator Overview
 
 The browser-based emulator is split into four main layers:
