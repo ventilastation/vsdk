@@ -162,7 +162,9 @@ export class EmbeddedPiskelEditor {
             frameOffsetY: 0,
           },
           (piskel) => {
+            piskel.fps = 3;
             win.pskl.app.piskelController.setPiskel(piskel);
+            win.pskl.app.piskelController.setFPS(3);
             this.suspendDirtyTracking = false;
             resolve();
           },
@@ -190,6 +192,12 @@ export class EmbeddedPiskelEditor {
 
   async serialize() {
     return this.withWindow((win) => win.pskl.app.piskelController.serialize());
+  }
+
+  async setFPS(fps) {
+    return this.withWindow((win) => {
+      win.pskl.app.piskelController.setFPS(fps);
+    });
   }
 
   async exportPngBase64() {

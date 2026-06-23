@@ -1,4 +1,4 @@
-import { EmbeddedPiskelEditor } from "./piskel-embed.js";
+import { EmbeddedPiskelEditor } from "./piskel-embed.js?v=20260622d";
 import {
   findStripedefItemForPath,
   getSerializedSpritePath,
@@ -774,6 +774,9 @@ class WorkspaceIde {
       serializedSprite,
       frames: spriteState.manifestItem?.frames || 1,
     });
+    if (!serializedSprite) {
+      await this.piskel.setFPS(3);
+    }
     this.currentMode = "sprite";
     this.currentPath = path;
     this.showEditorMode("sprite");
