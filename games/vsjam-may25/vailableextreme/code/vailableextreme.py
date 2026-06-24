@@ -408,7 +408,8 @@ class VailableExtremeGame(Scene):
         redondeado = (actual_time // 50) * 50
 
         if redondeado == 2000:
-            self.music_test = Music("../../games/vsjam-may25/vailableextreme/code/extreme_songs/electro_easy.txt")
+            from ventilastation.app_loader import GAMES_ROOT
+            self.music_test = Music(GAMES_ROOT + "/vsjam-may25/vailableextreme/code/extreme_songs/electro_easy.txt")
 
         if redondeado == TIME_MODIFIER + 1500:
             self.tutorial.disable()

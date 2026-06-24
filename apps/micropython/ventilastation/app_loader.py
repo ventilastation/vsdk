@@ -8,9 +8,16 @@ except ImportError:
 from ventilastation.director import director
 from ventilastation.native_apps import is_native_app, launch_native_scene
 
-PROJECT_ROOT = "../.."
-GAMES_ROOT = PROJECT_ROOT + "/games"
-SYSTEM_ROOT = PROJECT_ROOT + "/system"
+def _find_project_root():
+    try:
+        os.stat("games")
+        return ""
+    except OSError:
+        return "../.."
+
+PROJECT_ROOT = _find_project_root()
+GAMES_ROOT = PROJECT_ROOT + "/games" if PROJECT_ROOT else "games"
+SYSTEM_ROOT = PROJECT_ROOT + "/system" if PROJECT_ROOT else "system"
 
 
 def ensure_project_root_on_path():

@@ -708,10 +708,12 @@ def create_desktop_platform():
 
 def create_hardware_platform():
     hw_config = _load_attr("ventilastation.hw_config")
+    display = LazyModule("vshw_povdisplay")
+    display.update = lambda: None  # GPU renders autonomously via hall sensor interrupt
     return Platform(
         name="hardware",
         comms=LazyModule("ventilastation.serialcomms"),
-        display=LazyModule("vshw_povdisplay"),
+        display=display,
         sprites_backend=LazyModule("vshw_sprites"),
         storage=FileStorage(),
         hw_config=(
@@ -766,7 +768,7 @@ def resolve_platform_name(platform_name=None, argv=None, environ=None):
     if env_name:
         return env_name
 
-    return "hardware" if sys.platform == "rp2" else "desktop"
+    return "hardware" if sys.platform in ("rp2", "esp32") else "desktop"
 
 
 def create_platform(platform_name=None, argv=None, environ=None):

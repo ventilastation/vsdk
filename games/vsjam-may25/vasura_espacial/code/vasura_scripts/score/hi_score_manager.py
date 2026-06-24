@@ -8,7 +8,8 @@ class HiScoreManager:
         self.al_superar_hi_score : Evento = Evento()
 
         #Config
-        path_base = "../../games/vsjam-may25/vasura_espacial/code/vasura_files/"
+        from ventilastation.app_loader import GAMES_ROOT
+        path_base = GAMES_ROOT + "/vsjam-may25/vasura_espacial/code/vasura_files/"
         self.archivo_principal = path_base + "tabla_puntajes.json"
         self.archivo_backup = path_base + "tabla_puntajes.bak"
 

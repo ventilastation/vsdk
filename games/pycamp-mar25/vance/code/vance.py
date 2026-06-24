@@ -89,7 +89,8 @@ class VanceGame(Scene):
 
         super(VanceGame, self).on_enter()
 
-        with open(f"../../games/pycamp-mar25/vance/code/vance_songs/{song}.json", 'r') as file:
+        from ventilastation.app_loader import GAMES_ROOT
+        with open(GAMES_ROOT + f"/pycamp-mar25/vance/code/vance_songs/{song}.json", 'r') as file:
             self.beats = ujson.load(file)
 
         self.length = self.beats["length"]
