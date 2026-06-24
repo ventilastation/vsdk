@@ -253,11 +253,14 @@ function decodeImageStripPayload(slot, payload) {
 }
 
 class BrowserAudioHost {
-  constructor() {
+  constructor(options = {}) {
     this.enabled = false;
     this.musicPlayer = null;
     this.soundCache = new Map();
     this.pendingMusic = null;
+    this.readProjectFile = typeof options.readProjectFile === "function"
+      ? options.readProjectFile
+      : null;
   }
 
   enable() {
@@ -269,16 +272,13 @@ class BrowserAudioHost {
     }
   }
 
-  async resolveUrl(name) {
+  buildCandidatePaths(name) {
     const normalized = String(name).replace(/^\/+/, "");
-    if (this.soundCache.has(normalized)) {
-      return this.soundCache.get(normalized);
-    }
     const slashIndex = normalized.indexOf("/");
     const slug = slashIndex === -1 ? normalized : normalized.slice(0, slashIndex);
     const rest = slashIndex === -1 ? "" : normalized.slice(slashIndex + 1);
     const slugPath = slug.replace(/\./g, "/");
-    const candidates = [
+    return [
       ...(rest ? [
         `games/${slugPath}/sounds/${rest}.mp3`,
         `games/${slugPath}/sounds/${rest}.mp3.wav`,
@@ -294,6 +294,58 @@ class BrowserAudioHost {
         `system/${slugPath}/sounds/${rest}.ogg`,
       ] : []),
     ];
+  }
+
+  guessMimeType(path) {
+    if (path.endsWith(".ogg")) {
+      return "audio/ogg";
+    }
+    if (path.endsWith(".wav")) {
+      return "audio/wav";
+    }
+    return "audio/mpeg";
+  }
+
+  decodeBase64Bytes(value) {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  async resolveWorkspaceUrl(normalized, candidates) {
+    if (!this.readProjectFile) {
+      return null;
+    }
+    for (const path of candidates) {
+      try {
+        const file = await this.readProjectFile(path, "base64");
+        if (!file || typeof file.content !== "string") {
+          continue;
+        }
+        const bytes = this.decodeBase64Bytes(file.content);
+        const blob = new Blob([bytes], { type: this.guessMimeType(path) });
+        return URL.createObjectURL(blob);
+      } catch (_error) {
+        // Try the next candidate path.
+      }
+    }
+    return null;
+  }
+
+  async resolveUrl(name) {
+    const normalized = String(name).replace(/^\/+/, "");
+    if (this.soundCache.has(normalized)) {
+      return this.soundCache.get(normalized);
+    }
+    const candidates = this.buildCandidatePaths(normalized);
+    const workspaceUrl = await this.resolveWorkspaceUrl(normalized, candidates);
+    if (workspaceUrl) {
+      this.soundCache.set(normalized, workspaceUrl);
+      return workspaceUrl;
+    }
     const resolved = await resolveFirstAvailableUrl(candidates, { method: "HEAD" });
     if (resolved) {
       this.soundCache.set(normalized, resolved);
@@ -301,6 +353,15 @@ class BrowserAudioHost {
     }
     this.soundCache.set(normalized, null);
     return null;
+  }
+
+  resetCache() {
+    for (const url of this.soundCache.values()) {
+      if (typeof url === "string" && url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+      }
+    }
+    this.soundCache.clear();
   }
 
   async playSound(name) {
@@ -767,7 +828,9 @@ class BrowserHostApp {
     this.isFullscreen = false;
     this.lowFpsSinceAt = null;
     this.diagnostics = [];
-    this.audio = new BrowserAudioHost();
+    this.audio = new BrowserAudioHost({
+      readProjectFile: (path, encoding = "utf8") => this.readProjectFile(path, encoding),
+    });
     this.force2dFallback = this.readForce2dPreference();
     this.invertGamepadY = this.readInvertGamepadYPreference();
     this.rendererProfiling = this.readRendererProfilingPreference();
@@ -1091,6 +1154,7 @@ class BrowserHostApp {
     this.lastRenderedLedPixels = null;
     this.assetIndex.clear();
     this.assetRenderCache.clear();
+    this.audio.resetCache();
     this.visibleStripSlots = [];
     this.palette = null;
     this.paletteVersion = 0;
