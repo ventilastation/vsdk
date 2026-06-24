@@ -150,7 +150,7 @@ def main():
         default=parent_root / "esp-idf",
     )
     parser.add_argument("--micropython-root", type=pathlib.Path, default=parent_root / "micropython")
-    parser.add_argument("--retro-go-root", type=pathlib.Path, default=parent_root / "voom/retro-go")
+    parser.add_argument("--retro-go-root", type=pathlib.Path, default=vsdk_root / "apps/retro-go")
     parser.add_argument("--retro-go-target", default="esp32s3-devkit-c")
     parser.add_argument("--board", default="ESP32_GENERIC_S3")
     parser.add_argument("--board-variant", default="SPIRAM_OCT")

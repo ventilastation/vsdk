@@ -20,12 +20,12 @@ Relevant files:
 
 That originally suggested same-firmware native takeover as the cleanest design.
 
-However, the working `voom` codebase we found at `/Users/alecu/ventilastation/voom/retro-go`
-is not structured as a small reusable library. It is a Retro-Go fork with:
+However, the working `voom` codebase is now tracked as the `apps/retro-go` submodule in `vsdk`.
+It is a Retro-Go fork with:
 
 - an `esp32s3-devkit-c` target
 - a `prboom-go` app partition
-- custom POV display projection code inside `prboom-go/main/main.c`
+- custom POV display projection code inside `components/retro-go/drivers/display/ventilastation_pov.c`
 
 So there are now two valid models:
 
@@ -99,7 +99,7 @@ That image layout is:
 The builder assumes the current local parent-folder layout:
 
 - `../micropython`
-- `../voom/retro-go`
+- `apps/retro-go`
 - `../esp-idf-5.4` for `vsdk` / MicroPython
 - `../esp-idf` for `voom` / Retro-Go
 
@@ -158,7 +158,7 @@ That entry currently uses an existing bundled menu tile and routes through:
 
 The current `voom` tree lives at:
 
-- `/Users/alecu/ventilastation/voom/retro-go`
+- `apps/retro-go`
 
 Board target is defined in:
 
@@ -191,7 +191,7 @@ The resulting partition layout in that fork is:
 
 The POV display path in the working fork lives in:
 
-- `/Users/alecu/ventilastation/voom/retro-go/prboom-go/main/main.c`
+- `apps/retro-go/components/retro-go/drivers/display/ventilastation_pov.c`
 
 The flow is:
 
@@ -202,7 +202,7 @@ The flow is:
    into LED colors using `brillos` and `intensidades_por_led`.
 5. `gpu_step()` uses hall-sensor timing to stream two projected columns over SPI.
 
-There is also a debug helper in `/Users/alecu/ventilastation/voom/hex2png.py` that turns logged
+There is also a debug helper in `../voom/hex2png.py` that turns logged
 projected hex output into a 256 x 54 PNG.
 
 ## Why This Is Better Than Forcing A MicroPython Extension
