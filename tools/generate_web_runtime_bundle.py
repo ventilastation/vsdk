@@ -10,7 +10,7 @@ MANIFEST_PATH = ROOT_DIR / "web" / "runtime-manifest.json"
 BUNDLE_PATH = ROOT_DIR / "web" / "runtime-bundle.json"
 
 
-def iter_workspace_image_sources():
+def iter_workspace_asset_sources():
     for root_name in ("games", "system"):
         root_dir = ROOT_DIR / root_name
         if not root_dir.is_dir():
@@ -22,9 +22,10 @@ def iter_workspace_image_sources():
             if root_name == "games" and path.name == "menu.png" and len(path.relative_to(root_dir).parts) == 3:
                 yield relative_path
                 continue
-            if "/images/" not in relative_path:
+            if "/images/" in relative_path and (path.name == "__images__.yaml" or path.suffix.lower() == ".png"):
+                yield relative_path
                 continue
-            if path.name == "__images__.yaml" or path.suffix.lower() == ".png":
+            if "/sounds/" in relative_path:
                 yield relative_path
 
 
@@ -41,7 +42,7 @@ def build_manifest_file_list(existing_files):
         seen.add(normalized)
         ordered.append(normalized)
 
-    for relative_path in sorted(iter_workspace_image_sources()):
+    for relative_path in sorted(iter_workspace_asset_sources()):
         if relative_path in seen:
             continue
         seen.add(relative_path)
@@ -53,7 +54,7 @@ def build_manifest_file_list(existing_files):
 def should_include_in_bundle(relative_path):
     normalized = Path(relative_path).as_posix()
     suffix = Path(normalized).suffix.lower()
-    if suffix in {".png", ".yaml", ".yml"}:
+    if suffix in {".png", ".yaml", ".yml", ".mp3", ".wav", ".ogg"}:
         return False
     return True
 
