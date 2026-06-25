@@ -26,8 +26,8 @@ def run_in_idf_env(idf_path, command, cwd):
 
 def find_parent_root(script_path):
     vsdk_root = script_path.parents[2]
-    website_root = vsdk_root.parent
-    return vsdk_root, website_root.parent
+    ventilastation_root = vsdk_root.parents[1]
+    return vsdk_root, ventilastation_root
 
 
 def ensure_file(path, description):
@@ -79,7 +79,7 @@ def flash_images(args, bootloader_path, partition_table_path, micropython_path):
 
 def main():
     script_path = pathlib.Path(__file__).resolve()
-    vsdk_root, parent_root = find_parent_root(script_path)
+    vsdk_root, ventilastation_root = find_parent_root(script_path)
     default_build_dir = vsdk_root / "hardware/rotor/build"
 
     parser = argparse.ArgumentParser(description="Flash MicroPython with the Ventilastation partition table")
@@ -88,7 +88,7 @@ def main():
     parser.add_argument(
         "--idf-path",
         type=pathlib.Path,
-        default=parent_root / "esp-idf-5.4",
+        default=ventilastation_root / "esp-idf/esp-5.5.2",
     )
     parser.add_argument(
         "--partition-csv",
@@ -106,7 +106,7 @@ def main():
     parser.add_argument(
         "--micropython-root",
         type=pathlib.Path,
-        default=parent_root / "micropython",
+        default=vsdk_root / "hardware/rotor/micropython",
     )
     parser.add_argument(
         "--output-dir",

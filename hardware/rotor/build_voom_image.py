@@ -42,9 +42,10 @@ def parse_partition_table(csv_path):
 
 
 def find_parent_root(script_path):
+    rotor_root = script_path.parent
     vsdk_root = script_path.parents[2]
-    website_root = vsdk_root.parent
-    return vsdk_root, website_root.parent
+    ventilastation_root = vsdk_root.parents[1]
+    return rotor_root, vsdk_root, ventilastation_root
 
 
 def ensure_file(path, description):
@@ -136,21 +137,21 @@ def create_image(image_path, bootloader_path, partition_table_path, micropython_
 
 def main():
     script_path = pathlib.Path(__file__).resolve()
-    vsdk_root, parent_root = find_parent_root(script_path)
+    rotor_root, vsdk_root, ventilastation_root = find_parent_root(script_path)
     default_build_dir = vsdk_root / "hardware/rotor/build"
 
     parser = argparse.ArgumentParser(description="Build a combined vsdk + voom ESP32 image")
     parser.add_argument(
         "--micropython-idf-path",
         type=pathlib.Path,
-        default=parent_root / "esp-idf-5.4",
+        default=ventilastation_root / "esp-idf/esp-5.5.2",
     )
     parser.add_argument(
         "--retro-go-idf-path",
         type=pathlib.Path,
-        default=parent_root / "esp-idf",
+        default=ventilastation_root / "esp-idf/esp-5.0.4",
     )
-    parser.add_argument("--micropython-root", type=pathlib.Path, default=parent_root / "micropython")
+    parser.add_argument("--micropython-root", type=pathlib.Path, default=rotor_root / "micropython")
     parser.add_argument("--retro-go-root", type=pathlib.Path, default=vsdk_root / "apps/retro-go")
     parser.add_argument("--retro-go-target", default="ventilastation")
     parser.add_argument("--board", default="ESP32_GENERIC_S3")

@@ -26,8 +26,8 @@ def run_in_idf_env(idf_path, command, cwd):
 
 def find_parent_root(script_path):
     vsdk_root = script_path.parents[2]
-    website_root = vsdk_root.parent
-    return vsdk_root, website_root.parent
+    ventilastation_root = vsdk_root.parents[1]
+    return vsdk_root, ventilastation_root
 
 
 def ensure_file(path, description):
@@ -72,7 +72,7 @@ def flash_image(args, image_path):
 
 def main():
     script_path = pathlib.Path(__file__).resolve()
-    vsdk_root, parent_root = find_parent_root(script_path)
+    vsdk_root, ventilastation_root = find_parent_root(script_path)
     default_image = vsdk_root / "hardware/rotor/build/vsdk-voom-esp32s3.bin"
 
     parser = argparse.ArgumentParser(description="Flash the combined vsdk + voom ESP32 image")
@@ -88,7 +88,7 @@ def main():
     parser.add_argument(
         "--idf-path",
         type=pathlib.Path,
-        default=parent_root / "esp-idf-5.4",
+        default=ventilastation_root / "esp-idf/esp-5.5.2",
         help="ESP-IDF used to provide esptool and flash helpers",
     )
     parser.add_argument(
