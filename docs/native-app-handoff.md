@@ -23,7 +23,7 @@ That originally suggested same-firmware native takeover as the cleanest design.
 However, the working `voom` codebase is now tracked as the `apps/retro-go` submodule in `vsdk`.
 It is a Retro-Go fork with:
 
-- an `esp32s3-devkit-c` target
+- a `ventilastation` target
 - a `prboom-go` app partition
 - custom POV display projection code inside `components/retro-go/drivers/display/ventilastation_pov.c`
 
@@ -162,12 +162,12 @@ The current `voom` tree lives at:
 
 Board target is defined in:
 
-- `components/retro-go/targets/esp32s3-devkit-c/config.h`
-- `components/retro-go/targets/esp32s3-devkit-c/env.py`
+- `components/retro-go/targets/ventilastation/config.h`
+- `components/retro-go/targets/ventilastation/env.py`
 
 That target sets:
 
-- `RG_TARGET_NAME` = `ESP32S3-DEVKIT-C`
+- `RG_TARGET_NAME` = `Ventilastation`
 - `IDF_TARGET` = `esp32s3`
 - `FW_FORMAT` = `none`
 
@@ -179,7 +179,7 @@ The relevant build image in that fork uses:
 Build command:
 
 ```sh
-./rg_tool.py --target=esp32s3-devkit-c build-img launcher prboom-go
+./rg_tool.py --target=ventilastation build-img launcher prboom-go
 ```
 
 The resulting partition layout in that fork is:

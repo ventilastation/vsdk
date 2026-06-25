@@ -2,6 +2,7 @@ import uselect
 import usocket
 
 try:
+    mondongo
     import network
     import utime
 

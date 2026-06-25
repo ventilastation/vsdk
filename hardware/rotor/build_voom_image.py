@@ -108,10 +108,8 @@ def create_image(image_path, bootloader_path, partition_table_path, micropython_
         )
 
     image_size = max(
-        bootloader_offset + len(bootloader),
-        partition_offset + len(partition_table),
-        factory["offset"] + factory["size"],
-        prboom["offset"] + prboom["size"],
+        [bootloader_offset + len(bootloader), partition_offset + len(partition_table)]
+        + [partition["offset"] + partition["size"] for partition in partitions.values()]
     )
     image = bytearray(b"\xff" * image_size)
 
@@ -131,6 +129,9 @@ def create_image(image_path, bootloader_path, partition_table_path, micropython_
     print(
         f"  prboom-go  @ 0x{prboom['offset']:06x} size={len(prboom_bin)} / {prboom['size']}"
     )
+    if "vfs" in partitions:
+        vfs = partitions["vfs"]
+        print(f"  vfs        @ 0x{vfs['offset']:06x} size={vfs['size']}")
 
 
 def main():
@@ -151,7 +152,7 @@ def main():
     )
     parser.add_argument("--micropython-root", type=pathlib.Path, default=parent_root / "micropython")
     parser.add_argument("--retro-go-root", type=pathlib.Path, default=vsdk_root / "apps/retro-go")
-    parser.add_argument("--retro-go-target", default="esp32s3-devkit-c")
+    parser.add_argument("--retro-go-target", default="ventilastation")
     parser.add_argument("--board", default="ESP32_GENERIC_S3")
     parser.add_argument("--board-variant", default="SPIRAM_OCT")
     parser.add_argument(
@@ -186,6 +187,7 @@ def main():
     prboom_bin = args.prboom_bin or (args.retro_go_root / "prboom-go/build/prboom-go.bin")
     partition_bin = args.output_dir / "partition-table-voom.bin"
     image_bin = args.output_dir / "vsdk-voom-esp32s3.bin"
+    legacy_vfs_bin = args.output_dir / "vfs.bin"
 
     if not args.skip_micropython:
         build_micropython(args, vsdk_root)
@@ -203,6 +205,8 @@ def main():
 
     generate_partition_table(args, partition_bin)
     partitions = parse_partition_table(args.partition_csv)
+    if legacy_vfs_bin.exists():
+        legacy_vfs_bin.unlink()
     create_image(image_bin, micropython_bootloader, partition_bin, micropython_bin, prboom_bin, partitions)
 
 
