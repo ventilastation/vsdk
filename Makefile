@@ -1,16 +1,17 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom flash-all
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
 
 PORT ?=
 BAUD ?= 2000000
 VOOM_WAIT ?= 15
-VOOM_MICROPYTHON_IDF_PATH ?= ../../esp-idf-5.4
-VOOM_RETRO_GO_IDF_PATH ?= ../../esp-idf
+VOOM_MICROPYTHON_IDF_PATH ?= ../../esp-idf/esp-5.5.2
+VOOM_RETRO_GO_IDF_PATH ?= ../../esp-idf/esp-5.0.4
 VSDK_BOARD ?= VENTILASTATION
 VSDK_BOARD_VARIANT ?= SPIRAM_OCT
 VSDK_BOARD_DIR := $(abspath ./hardware/rotor/boards/VENTILASTATION)
 VSDK_MODULES := $(abspath ./hardware/rotor/modules/micropython.cmake)
 VSDK_FROZEN_MANIFEST := $(abspath ./apps/micropython/manifest.py)
-MICROPYTHON_PORT_DIR := ./../../micropython/ports/esp32
+MICROPYTHON_ROOT ?= ./hardware/rotor/micropython
+MICROPYTHON_PORT_DIR := $(abspath $(MICROPYTHON_ROOT)/ports/esp32)
 RETRO_GO_DIR := ./apps/retro-go
 
 micropython-webassembly:
@@ -40,8 +41,37 @@ ifndef PORT
 endif
 	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash prboom-go'
 
-flash-all: flash-vsdk flash-voom
+flash-all: flash-vsdk flash-voom deploy-fs
+
+generate-roms:
+	python3 tools/generate_roms.py
+
+build-fs:
+	python3 hardware/rotor/build_micropython_fs.py
+
+deploy-fs:
 ifndef PORT
 	$(error Set PORT=/dev/cu.usbmodemXXXX)
 endif
-	/bin/zsh -lc 'source "$(VOOM_MICROPYTHON_IDF_PATH)/export.sh" >/dev/null && python3 ./hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)" --wait "$(VOOM_WAIT)"'
+	python3 hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)"
+
+# Hardware WiFi dev loop
+# Usage:
+#   make dev-deploy PORT=/dev/ttyACM0 WIFI_SSID=mywifi WIFI_PASS=mypassword
+#   make dev-emulator BOARD_IP=192.168.1.42
+#
+# After dev-deploy: reset the board — it will print its IP over USB serial.
+# Run dev-emulator in one terminal, `mpremote connect PORT` in another for console.
+WIFI_SSID ?=
+WIFI_PASS ?=
+BOARD_IP ?= 192.168.1.1
+
+dev-deploy:
+	@test -n "$(WIFI_SSID)" || (echo "Usage: make dev-deploy PORT=... WIFI_SSID=... WIFI_PASS=..."; exit 1)
+	python3 ./tools/dev_deploy.py \
+		$(if $(PORT),--port $(PORT),) \
+		--wifi-ssid "$(WIFI_SSID)" \
+		--wifi-password "$(WIFI_PASS)"
+
+dev-emulator:
+	cd emulator && python emu.py $(BOARD_IP) --no-display
