@@ -1,24 +1,34 @@
 import uselect
 import usocket
 
+def _load_wifi_config():
+    try:
+        import ujson
+        with open("wifi_config.json") as _f:
+            return ujson.load(_f)
+    except Exception:
+        pass
+    return {"ssid": "ventilastation", "password": "plagazombie2"}
+
 try:
-    mondongo
     import network
     import utime
 
+    _wifi = _load_wifi_config()
     sta_if = network.WLAN(network.STA_IF)
     if not sta_if.isconnected():
-        print('connecting to network', end="")
+        print('connecting to network', _wifi["ssid"], end="")
         sta_if.active(True)
-        sta_if.connect('ventilastation', 'plagazombie2')
+        sta_if.connect(_wifi["ssid"], _wifi["password"])
         while not sta_if.isconnected():
             print(".", end="")
             utime.sleep_ms(333)
         print()
     print('network config:', sta_if.ifconfig())
-    network.telnet.start()
-except:
-    print("no need to set up wifi")
+except ImportError:
+    print("no wifi module, skipping")
+except Exception as _e:
+    print("wifi setup failed:", _e)
 
 UDP_THIS = "0.0.0.0", 5005
 this_addr = usocket.getaddrinfo(*UDP_THIS)[0][-1]
@@ -33,18 +43,28 @@ print("listening on 5005")
 poller = uselect.poll()
 poller.register(sock, uselect.POLLIN)
 conn = None
+_new_connection = False
+
+def was_new_connection():
+    global _new_connection
+    if _new_connection:
+        _new_connection = False
+        return True
+    return False
 
 def receive(bufsize):
-    global conn
+    global conn, _new_connection
     retval = None
     for obj, event, *more in poller.ipoll(0, 0):
         if obj is sock:
             if conn:
                 conn.close()
                 poller.unregister(conn)
-            conn, _ = sock.accept()
+            conn, addr = sock.accept()
             conn.setblocking(0)
             poller.register(conn, uselect.POLLIN)
+            _new_connection = True
+            print("comms: new connection from", addr)
         else:
             try:
                 b = obj.read(1)
@@ -58,16 +78,27 @@ def receive(bufsize):
                 conn = None
     return retval
 
+def _drop_conn(reason):
+    global conn
+    print("comms: drop connection:", reason)
+    conn.close()
+    poller.unregister(conn)
+    conn = None
+
 def send(line, data=b""):
-    #print("sending:", line, end="")
     global conn
     if conn:
-        try:
-            conn.write(line + b"\n" + data)
-        except OSError:
-            conn.close()
-            poller.unregister(conn)
-            conn = None
-            # conn, _ = sock.accept()
-            # conn.setblocking(0)
-            # poller.register(conn, uselect.POLLIN)
+        msg = line + b"\n" + data
+        view = memoryview(msg)
+        sent = 0
+        while sent < len(msg):
+            try:
+                n = conn.write(view[sent:])
+                if n is None:
+                    n = 0
+                sent += n
+            except OSError as e:
+                if e.args[0] == 11:  # EAGAIN: buffer full, retry
+                    continue
+                _drop_conn("OSError %d" % e.args[0])
+                return
