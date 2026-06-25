@@ -28,6 +28,12 @@ class _CommsProxy:
     def send(self, line, data=b""):
         return get_platform().comms.send(line, data)
 
+    def was_new_connection(self):
+        c = get_platform().comms
+        if hasattr(c, 'was_new_connection'):
+            return c.was_new_connection()
+        return False
+
 
 director = _DirectorProxy()
 comms = _CommsProxy()

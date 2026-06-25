@@ -5,17 +5,19 @@ import gc
 
 sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
 stripes = {}
+_palette = None
 
 def init(num_pixels, *hw_config):
     pass
 
 def set_palettes(palette):
+    global _palette
     # NOTE 2bam: This keeps making the emulator run out of memory. I'm guessing
     # it's not the case in the actual platform so I added a collect here.
     # Please, remove if it's no-bueno.
     gc.collect()
-    
-    comms.send(b"palette %d" % (len(palette)/ 1024),  palette)
+    _palette = palette
+    comms.send(b"palette %d" % (len(palette) / 1024), palette)
 
 def getaddress(sprite_num):
     return uctypes.addressof(sprite_data) + sprite_num * 5
@@ -33,10 +35,24 @@ def get_column_offset():
     return column_offset
 
 def set_imagestrip(n, stripmap):
+    print("remotepov: set_imagestrip %s (%d bytes)" % (n, len(stripmap)))
     stripes[n] = stripmap
     comms.send(b"imagestrip %s %d" % (n, len(stripmap)), stripmap)
 
+def _resend_all():
+    print("remotepov: resend_all palette=%s strips=%s" % (_palette is not None, list(stripes.keys())))
+    if _palette is not None:
+        comms.send(b"palette %d" % (len(_palette) / 1024), _palette)
+        print("remotepov: palette sent (%d bytes)" % len(_palette))
+    for n, stripmap in stripes.items():
+        comms.send(b"imagestrip %s %d" % (n, len(stripmap)), stripmap)
+        print("remotepov: imagestrip %s sent (%d bytes)" % (n, len(stripmap)))
+    print("remotepov: resend_all done")
+
 def update():
+    if comms.was_new_connection():
+        print("remotepov: new connection detected, resending all")
+        _resend_all()
     comms.send(b"sprites", sprite_data)
 
 def last_turn_duration():
