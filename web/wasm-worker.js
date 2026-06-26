@@ -321,6 +321,18 @@ class MicroPythonRuntime {
         handleRuntimeFrameBytes(this.readHeapBytes(ptr, length));
         return null;
       },
+      post_native_frame: (data) => {
+        handleRuntimeNativeFrame(normalizeWorkerCommandPayload(data));
+        return null;
+      },
+      post_native_frame_ptr: (ptr, length) => {
+        queueRuntimeNativeFramePointer(ptr, length);
+        return null;
+      },
+      post_native_clear: () => {
+        queueRuntimeNativeClear();
+        return null;
+      },
       post_frame: (frame, buttons, gammaMode, columnOffset, paletteLength, paletteVersion, paletteDirty) => {
         handleRuntimeFrame({
           frame,
@@ -734,6 +746,9 @@ const workerHostState = {
   buttons: 0,
   running: false,
   fullNextFrame: true,
+  nativeFramePtr: 0,
+  nativeFrameLength: 0,
+  nativeFramePendingClear: false,
 };
 const streamedFrameState = {
   frame: 0,
@@ -830,6 +845,49 @@ function handleRuntimeSprites(payloadBytes) {
     data: payloadBytes || new Uint8Array(0),
   };
   streamedFrameState.sprites = [];
+}
+
+function handleRuntimeNativeFrame(payloadBytes) {
+  streamedFrameState.events.push({
+    command: "nativeframe",
+    args: payloadBytes instanceof Uint8Array ? [String(payloadBytes.length)] : [],
+    data: payloadBytes || new Uint8Array(0),
+  });
+}
+
+function handleRuntimeNativeClear() {
+  streamedFrameState.events.push({
+    command: "nativeclear",
+    args: [],
+  });
+}
+
+function queueRuntimeNativeFramePointer(ptr, length) {
+  workerHostState.nativeFramePtr = Number(ptr) >>> 0;
+  workerHostState.nativeFrameLength = Number(length) >>> 0;
+  workerHostState.nativeFramePendingClear = false;
+}
+
+function queueRuntimeNativeClear() {
+  workerHostState.nativeFramePtr = 0;
+  workerHostState.nativeFrameLength = 0;
+  workerHostState.nativeFramePendingClear = true;
+}
+
+function flushPendingNativeFrame() {
+  if (workerHostState.nativeFramePendingClear) {
+    workerHostState.nativeFramePendingClear = false;
+    handleRuntimeNativeClear();
+    return;
+  }
+  if (!runtime || !workerHostState.nativeFrameLength) {
+    return;
+  }
+  handleRuntimeNativeFrame(
+    runtime.readHeapBytes(workerHostState.nativeFramePtr, workerHostState.nativeFrameLength),
+  );
+  workerHostState.nativeFramePtr = 0;
+  workerHostState.nativeFrameLength = 0;
 }
 
 function handleRuntimeFrame({
@@ -976,6 +1034,7 @@ async function runRuntimeLoopIteration() {
 
     if (stepsDue > 0) {
       await enqueueRuntimeWork(async () => runtime.step(stepsDue));
+      flushPendingNativeFrame();
       runtimeLoop.lastSceneTickAt += stepsDue * SCENE_STEP_MS;
     }
   } catch (error) {

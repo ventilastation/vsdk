@@ -248,11 +248,15 @@ class BrowserComms:
         command = parts[0].decode("utf-8") if parts else ""
         args = [p.decode("utf-8") for p in parts[1:]]
 
-        if self.worker_host is not None and _post_worker_command(self.worker_host, line, data):
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+
+        if self.worker_host is not None:
             self.events.append({
                 "command": command,
                 "args": args,
             })
+            self.wire_events.append((line, data if data else b""))
             return
 
         payload = bytes(data) if data else b""
@@ -305,10 +309,15 @@ class BrowserDisplay(NullDisplay):
         self.asset_data = {}
         self.assets = {}
         self.dirty_asset_slots = set()
+        self.native_frame_data = None
+        self.native_frame_dirty = False
         self._worker_post_sprites = None
         self._worker_post_frame = None
         self._worker_post_frame_bytes = None
         self._worker_post_present = None
+        self._worker_post_native_frame = None
+        self._worker_post_native_frame_ptr = None
+        self._worker_post_native_clear = None
         self._frame_meta = bytearray(16)
         self._profile_totals = {
             "sampleCount": 0,
@@ -347,6 +356,9 @@ class BrowserDisplay(NullDisplay):
         self._worker_post_frame = getattr(worker_host, "post_frame", None)
         self._worker_post_present = getattr(worker_host, "post_present", None)
         self._worker_post_present_ptr = getattr(worker_host, "post_present_ptr", None)
+        self._worker_post_native_frame = getattr(worker_host, "post_native_frame", None)
+        self._worker_post_native_frame_ptr = getattr(worker_host, "post_native_frame_ptr", None)
+        self._worker_post_native_clear = getattr(worker_host, "post_native_clear", None)
 
     def _post_command(self, line, data=b""):
         if self.worker_host is None:
@@ -463,6 +475,43 @@ class BrowserDisplay(NullDisplay):
         except Exception:
             return False
 
+    def set_native_frame(self, frame_bytes):
+        self.native_frame_data = frame_bytes if frame_bytes else None
+        self.native_frame_dirty = True
+
+    def clear_native_frame(self):
+        self.native_frame_data = None
+        self.native_frame_dirty = True
+
+    def _post_native_frame(self):
+        if self.worker_host is None or not self.native_frame_dirty:
+            return False
+        payload = self.native_frame_data
+        if payload is None:
+            post_native_clear = self._worker_post_native_clear
+            if post_native_clear is not None:
+                try:
+                    post_native_clear()
+                    return True
+                except Exception:
+                    pass
+            return self._post_command("nativeclear")
+        post_native_frame_ptr = self._worker_post_native_frame_ptr
+        if post_native_frame_ptr is not None:
+            try:
+                post_native_frame_ptr(uctypes.addressof(payload), len(payload))
+                return True
+            except Exception:
+                pass
+        post_native_frame = self._worker_post_native_frame
+        if post_native_frame is not None:
+            try:
+                post_native_frame(payload)
+                return True
+            except Exception:
+                pass
+        return self._post_command("nativeframe %d" % len(payload), payload)
+
     def set_gamma_mode(self, mode):
         self.gamma_mode = mode
 
@@ -496,6 +545,8 @@ class BrowserDisplay(NullDisplay):
         if hasattr(self.comms, "drain_wire_events"):
             for line, payload in self.comms.drain_wire_events():
                 self._post_command(line, payload)
+        if self.native_frame_dirty:
+            self._post_native_frame()
         if (full or self.palette_dirty) and self.palette:
             self._post_command("palette %d %d" % (len(self.palette), self.palette_version), self.palette)
         if full:
@@ -516,6 +567,7 @@ class BrowserDisplay(NullDisplay):
             self._post_frame(full)
         self.palette_dirty = False
         self.dirty_asset_slots.clear()
+        self.native_frame_dirty = False
 
     def _decode_imagestrip(self, slot, stripmap):
         if len(stripmap) < 4:

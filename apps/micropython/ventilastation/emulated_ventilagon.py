@@ -13,6 +13,8 @@ try:
 except ImportError:
     import random
 
+from ventilastation.runtime import get_platform
+
 COLUMNS = 256
 PIXELS = 54
 SHIP_ROW = 6
@@ -146,10 +148,10 @@ class VentilagonEmulator:
 
     def exit(self):
         self.active = False
+        self._clear_native_frame()
         self.queue = [
             b"musicstop",
             b"arduino stop",
-            b"nativeclear",
         ]
 
     def received(self, buttons):
@@ -276,7 +278,36 @@ class VentilagonEmulator:
             if self.game_over and SHIP_ROW + 1 < PIXELS:
                 self._set_led(column, SHIP_ROW + 1, color)
 
-        self.queue.append((b"nativeframe %d" % _BYTES_PER_FRAME, self.frame_bytes))
+        if not self._set_native_frame(self.frame_bytes):
+            self.queue.append((b"nativeframe %d" % _BYTES_PER_FRAME, self.frame_bytes))
+
+    def _display(self):
+        try:
+            return get_platform().display
+        except Exception:
+            return None
+
+    def _set_native_frame(self, frame_bytes):
+        display = self._display()
+        setter = getattr(display, "set_native_frame", None)
+        if setter is None:
+            return False
+        try:
+            setter(frame_bytes)
+            return True
+        except Exception:
+            return False
+
+    def _clear_native_frame(self):
+        display = self._display()
+        clearer = getattr(display, "clear_native_frame", None)
+        if clearer is None:
+            return False
+        try:
+            clearer()
+            return True
+        except Exception:
+            return False
 
 
 _emu = VentilagonEmulator()
