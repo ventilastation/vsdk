@@ -703,6 +703,9 @@ def create_desktop_platform():
         display=LazyModule("ventilastation.remotepov"),
         sprites_backend=LazyModule("ventilastation.emu_sprites"),
         storage=FileStorage(),
+        native_launcher=_optional_attr("vshw_native_apps", "launch"),
+        native_available=_optional_attr("vshw_native_apps", "available"),
+        native_last_exit_reason=_optional_attr("vshw_native_apps", "last_exit_reason"),
     )
 
 

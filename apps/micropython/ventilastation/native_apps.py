@@ -99,6 +99,31 @@ def request_native_launch(slug):
     }
 
 
+def _sync_wifi_to_nvs():
+    """Copy wifi_config.json credentials into NVS so prboom-go can read them."""
+    try:
+        import esp32
+        try:
+            import ujson as _json
+        except ImportError:
+            import json as _json
+        try:
+            with open("wifi_config.json") as _f:
+                cfg = _json.load(_f)
+        except Exception:
+            return
+        ssid = cfg.get("ssid", "")
+        password = cfg.get("password", "")
+        if not ssid:
+            return
+        nvs = esp32.NVS("voom_wifi")
+        nvs.set_blob("ssid", ssid.encode())
+        nvs.set_blob("password", password.encode())
+        nvs.commit()
+    except Exception:
+        pass
+
+
 class NativeLaunchScene(Scene):
     def __init__(self, slug):
         super().__init__()
@@ -109,23 +134,13 @@ class NativeLaunchScene(Scene):
         self.call_later(1, self._launch)
 
     def _launch(self):
+        _sync_wifi_to_nvs()
         result = request_native_launch(self.slug)
         if result["launched"]:
             return
 
-        raise RuntimeError(
-            "Native launch requested for %(slug)s, but launch did not complete on "
-            "platform '%(platform)s'. available=%(available)s last_exit_reason=%(last_exit_reason)s. "
-            "Boot intent was saved to %(file)s: %(intent)s"
-            % {
-                "slug": self.slug,
-                "available": result["available"],
-                "file": BOOT_INTENT_FILE,
-                "intent": json.dumps(result["intent"]),
-                "last_exit_reason": result["last_exit_reason"],
-                "platform": result["platform"],
-            }
-        )
+        clear_boot_intent()
+        director.pop()
 
 
 def launch_native_scene(slug):

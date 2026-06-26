@@ -15,6 +15,18 @@ all_strips = {}
 qpalette = []
 upalette = []
 
+# Voom display bridge: set by comms.py when a "frame" command arrives from prboom-go.
+# Each frame is 256 columns × led_count palette indices (bytes).
+_voom_frame = None
+
+def set_voom_frame(data):
+    global _voom_frame
+    _voom_frame = bytes(data)
+
+def clear_voom_frame():
+    global _voom_frame
+    _voom_frame = None
+
 def change_colors(colors):
     # byteswap all longs
     fmt_unpack = "<" + "L" * (len(colors)//4)
@@ -58,6 +70,11 @@ def step_starfield():
 
 
 def render(column):
+    if _voom_frame is not None and upalette:
+        # Direct voom POV frame: column N = led_count palette indices at offset N*led_count
+        offset = column * led_count
+        return [upalette[_voom_frame[offset + i]] for i in range(led_count)]
+
     pixels = [0x00000000] * led_count
 
     for (x,y) in starfield:

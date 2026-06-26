@@ -14,6 +14,7 @@ SKIP_FILE_NAMES = {
     "README.md",
     "boot.json",
     "settings.json",
+    "wifi_config.json",  # device-specific, managed outside the repo
 }
 
 SKIP_DIR_NAMES = {
@@ -29,6 +30,7 @@ ALLOWED_SUFFIXES = {
     ".py",
     ".rom",
     ".txt",
+    ".wad",  # Doom WAD files for prboom-go
     ".yaml",
     ".yml",
 }
@@ -39,6 +41,7 @@ def iter_copy_jobs(vsdk_root):
         ("main.py", vsdk_root / "apps/micropython/main.py"),
         ("ventilastation", vsdk_root / "apps/micropython/ventilastation"),
         ("roms", vsdk_root / "apps/micropython/roms"),
+        ("roms/doom", vsdk_root / "apps/retro-go/prboom-go/components/prboom/data"),
         ("games", vsdk_root / "games"),
         ("system", vsdk_root / "system"),
     ]
@@ -117,8 +120,8 @@ def main():
     parser.add_argument(
         "--partition-size",
         type=lambda x: int(x, 0),
-        default=0xccc000,
-        help="VFS partition size in bytes (default: 0xccc000 = 12.8 MB)",
+        default=0xC10000,
+        help="VFS partition size in bytes (default: 0xC10000 = 12,648,448 bytes, matches partitions-voom.csv)",
     )
     parser.add_argument(
         "--output",

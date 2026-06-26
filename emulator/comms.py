@@ -10,6 +10,7 @@ import struct
 import socket
 import threading
 from pygletengine import all_strips, set_palettes, spritedata
+from vsdk import set_voom_frame, clear_voom_frame
 from audio import playsound, playmusic, playnotes
 
 class ConnectionBase:
@@ -140,14 +141,20 @@ def receive_loop():
                 continue
 
             command, *args = l.split()
-            # print("RECEIVED", command, args)
 
-            if command == b"sprites":
+            if command == b"frame":
+                data = conn.read(256 * 54)
+                set_voom_frame(data)
+                print(f"DBG comms: frame received ({len(data)} bytes)")
+
+            elif command == b"sprites":
+                clear_voom_frame()
                 spritedata[:] = conn.read(5*100)
 
             elif command == b"palette":
                 paldata = conn.read(1024 * int(args[0]))
                 set_palettes(paldata)
+                print(f"DBG comms: palette received ({len(paldata)} bytes)")
 
             elif command == b"sound":
                 playsound(b" ".join(args))

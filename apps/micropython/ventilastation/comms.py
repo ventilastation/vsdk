@@ -2,6 +2,21 @@ import uselect
 import usocket
 
 def _load_wifi_config():
+    # Primary: NVS namespace "voom_wifi" — shared with prboom-go, written by dev-deploy.
+    try:
+        import esp32
+        nvs = esp32.NVS("voom_wifi")
+        ssid_buf = bytearray(33)
+        pass_buf = bytearray(65)
+        ssid_len = nvs.get_blob("ssid", ssid_buf)
+        pass_len = nvs.get_blob("password", pass_buf)
+        ssid = ssid_buf[:ssid_len].decode()
+        password = pass_buf[:pass_len].decode()
+        if ssid:
+            return {"ssid": ssid, "password": password}
+    except Exception:
+        pass
+    # Fallback: wifi_config.json (legacy / desktop mode).
     try:
         import ujson
         with open("wifi_config.json") as _f:

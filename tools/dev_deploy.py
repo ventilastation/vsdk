@@ -63,13 +63,27 @@ def main():
         platform_file = tmp / "vsdk_platform.txt"
         platform_file.write_text("desktop\n")
 
-        # wifi_config.json — credentials for comms.py
+        # wifi_config.json — fallback for desktop/emulator mode (no esp32 NVS module)
         wifi_file = tmp / "wifi_config.json"
         wifi_file.write_text(json.dumps({"ssid": args.wifi_ssid, "password": args.wifi_password}))
+
+        # setup_wifi_nvs.py — writes credentials to NVS namespace "voom_wifi" so both
+        # MicroPython (comms.py) and prboom-go (wb_init) read from the same place.
+        wifi_script = tmp / "setup_wifi_nvs.py"
+        wifi_script.write_text(
+            "import esp32\n"
+            "nvs = esp32.NVS('voom_wifi')\n"
+            f"nvs.set_blob('ssid', {args.wifi_ssid.encode()!r})\n"
+            f"nvs.set_blob('password', {args.wifi_password.encode()!r})\n"
+            "nvs.commit()\n"
+            "print('WiFi credentials saved to NVS voom_wifi')\n"
+        )
 
         print("\n=== Uploading config files ===")
         mpremote("cp", str(platform_file), ":vsdk_platform.txt", port=args.port)
         mpremote("cp", str(wifi_file), ":wifi_config.json", port=args.port)
+        print("\n=== Writing WiFi credentials to NVS ===")
+        mpremote("run", str(wifi_script), port=args.port)
 
     if not args.skip_files:
         print("\n=== Uploading Python app files ===")
