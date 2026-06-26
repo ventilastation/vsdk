@@ -247,6 +247,14 @@ class BrowserComms:
         parts = line.split()
         command = parts[0].decode("utf-8") if parts else ""
         args = [p.decode("utf-8") for p in parts[1:]]
+
+        if self.worker_host is not None and _post_worker_command(self.worker_host, line, data):
+            self.events.append({
+                "command": command,
+                "args": args,
+            })
+            return
+
         payload = bytes(data) if data else b""
 
         event = {
