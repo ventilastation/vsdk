@@ -36,6 +36,7 @@ MAIN_MENU_OPTIONS = [
 ]
 
 SYS_MENU_OPTIONS = [
+    ("native.launcher", "voom.png", 0),
     ("debugmode", "menu.png", 9),
     # ("calibrate", "menu.png", 8),
     ("tutorial", "menu.png", 10),
