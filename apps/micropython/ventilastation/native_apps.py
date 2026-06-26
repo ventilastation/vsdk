@@ -16,6 +16,11 @@ APP_REGISTRY = {
         "native_app": "voom",
         "title": "Voom",
     },
+    "native.launcher": {
+        "kind": "native",
+        "native_app": "launcher",
+        "title": "Retro-Go Launcher",
+    },
 }
 
 

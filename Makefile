@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
 
 PORT ?=
 BAUD ?= 2000000
@@ -41,7 +41,16 @@ ifndef PORT
 endif
 	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash prboom-go'
 
-flash-all: flash-vsdk flash-voom deploy-fs
+launcher:
+	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation build launcher'
+
+flash-launcher: launcher
+ifndef PORT
+	$(error Set PORT=/dev/cu.usbmodemXXXX)
+endif
+	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash launcher'
+
+flash-all: flash-vsdk flash-voom flash-launcher deploy-fs
 
 generate-roms:
 	python3 tools/generate_roms.py

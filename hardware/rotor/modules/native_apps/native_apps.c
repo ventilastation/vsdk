@@ -34,7 +34,8 @@ static bool native_partition_launch(const native_app_entry_t *entry) {
 }
 
 static const native_app_entry_t native_apps_registry[] = {
-    { "voom", "prboom-go", NULL },
+    { "voom",     "prboom-go", NULL },
+    { "launcher", "launcher",  NULL },
 };
 
 static size_t native_apps_registry_len(void) {

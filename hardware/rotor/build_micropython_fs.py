@@ -120,8 +120,8 @@ def main():
     parser.add_argument(
         "--partition-size",
         type=lambda x: int(x, 0),
-        default=0xC10000,
-        help="VFS partition size in bytes (default: 0xC10000 = 12,648,448 bytes, matches partitions-voom.csv)",
+        default=0xB10000,
+        help="VFS partition size in bytes (default: 0xB10000 = 11,599,872 bytes, matches partitions-voom.csv)",
     )
     parser.add_argument(
         "--output",
