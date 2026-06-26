@@ -229,6 +229,7 @@ class BrowserComms:
         self.input_updates = []
         self.input_sequence = 0
         self.events = []
+        self.wire_events = []
         self.worker_host = None
 
     def receive(self, _bufsize):
@@ -254,10 +255,8 @@ class BrowserComms:
         }
         if payload:
             event["data"] = payload
-        if self.worker_host is not None:
-            if _post_worker_command(self.worker_host, line, payload):
-                return
         self.events.append(event)
+        self.wire_events.append((line, payload))
 
     def set_buttons(self, buttons):
         normalized = buttons & 0xFF
@@ -277,6 +276,11 @@ class BrowserComms:
     def drain_events(self):
         events = self.events
         self.events = []
+        return events
+
+    def drain_wire_events(self):
+        events = self.wire_events
+        self.wire_events = []
         return events
 
 
@@ -481,6 +485,9 @@ class BrowserDisplay(NullDisplay):
         if self.worker_host is None:
             return
         full = bool(self.worker_host.consume_full_frame_request())
+        if hasattr(self.comms, "drain_wire_events"):
+            for line, payload in self.comms.drain_wire_events():
+                self._post_command(line, payload)
         if (full or self.palette_dirty) and self.palette:
             self._post_command("palette %d %d" % (len(self.palette), self.palette_version), self.palette)
         if full:

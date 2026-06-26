@@ -228,6 +228,13 @@ function decodeSpriteStateBuffer(buffer) {
   return sprites;
 }
 
+function decodeNativeLedFrame(buffer) {
+  if (!(buffer instanceof Uint8Array) || buffer.byteLength % 4 !== 0) {
+    return null;
+  }
+  return new Uint32Array(buffer.slice().buffer);
+}
+
 function decodeImageStripPayload(slot, payload) {
   if (!(payload instanceof Uint8Array) || payload.length < 4) {
     return null;
@@ -797,10 +804,12 @@ class BrowserHostApp {
     this.keyboardButtons = 0;
     this.touchButtons = 0;
     this.gamepadButtons = 0;
+    this.integrationButtons = 0;
     this.activeGamepadIndex = null;
     this.assetIndex = new Map();
     this.assetRenderCache = new Map();
     this.visibleStripSlots = [];
+    this.nativeLedFrame = null;
     this.palette = null;
     this.paletteVersion = 0;
     this.paletteLoadedBytes = 0;
@@ -844,6 +853,7 @@ class BrowserHostApp {
     this.pollRequestId = null;
     this.pollingHalted = false;
     this.touchStickPointerId = null;
+    this.touchStickMouseActive = false;
     this.unsubscribeWorkerFrame = null;
     this.unsubscribeWorkerRuntimeError = null;
     this.canvasResizeObserver = null;
@@ -924,7 +934,13 @@ class BrowserHostApp {
     return Array.isArray(frame?.events) && frame.events.some((event) => (
       event &&
       typeof event === "object" &&
-      (event.command === "palette" || event.command === "imagestrip" || event.command === "sprites")
+      (
+        event.command === "palette" ||
+        event.command === "imagestrip" ||
+        event.command === "sprites" ||
+        event.command === "nativeframe" ||
+        event.command === "nativeclear"
+      )
     ));
   }
 
@@ -936,10 +952,13 @@ class BrowserHostApp {
       if (!Array.isArray(frame.assets)) {
         frame.assets = [];
       }
+      frame.native_leds = this.nativeLedFrame;
       return;
     }
 
     let decodedSprites = null;
+    let nativeLedFrame = this.nativeLedFrame;
+    let nativeFrameChanged = false;
     const remainingEvents = [];
 
     for (const event of frame.events) {
@@ -980,9 +999,23 @@ class BrowserHostApp {
         decodedSprites = decodeSpriteStateBuffer(event.data);
         continue;
       }
+      if (event.command === "nativeframe" && event.data instanceof Uint8Array) {
+        nativeLedFrame = decodeNativeLedFrame(event.data);
+        nativeFrameChanged = true;
+        continue;
+      }
+      if (event.command === "nativeclear") {
+        nativeLedFrame = null;
+        nativeFrameChanged = true;
+        continue;
+      }
       remainingEvents.push(event);
     }
 
+    if (nativeFrameChanged) {
+      this.nativeLedFrame = nativeLedFrame;
+    }
+    frame.native_leds = nativeLedFrame;
     frame.sprites = decodedSprites || [];
     frame.assets = [];
     frame.events = remainingEvents;
@@ -1102,7 +1135,21 @@ class BrowserHostApp {
         pollingHalted: this.pollingHalted,
         currentButtons: this.currentButtons,
       }),
+      setButtons: (buttons = 0) => this.setIntegrationButtons(buttons),
+      clearButtons: () => this.setIntegrationButtons(0),
+      pulseButtons: async (buttons = 0, durationMs = 100) => {
+        this.setIntegrationButtons(buttons);
+        await new Promise((resolve) => window.setTimeout(resolve, durationMs));
+        this.setIntegrationButtons(0);
+      },
     };
+  }
+
+  setIntegrationButtons(buttons = 0) {
+    this.integrationButtons = Number(buttons) & 0xff;
+    this.syncButtons();
+    this.renderStatus();
+    return this.currentButtons;
   }
 
   listProjectFiles(path = ".") {
@@ -1152,6 +1199,7 @@ class BrowserHostApp {
     this.lastFrame = null;
     this.lastFrameShape = null;
     this.lastRenderedLedPixels = null;
+    this.nativeLedFrame = null;
     this.assetIndex.clear();
     this.assetRenderCache.clear();
     this.audio.resetCache();
@@ -1373,9 +1421,6 @@ class BrowserHostApp {
       return;
     }
     stick.addEventListener("pointerdown", (event) => {
-      if (event.pointerType === "mouse") {
-        return;
-      }
       event.preventDefault();
       this.audio.enable();
       this.touchStickPointerId = event.pointerId;
@@ -1399,6 +1444,28 @@ class BrowserHostApp {
     };
     stick.addEventListener("pointerup", releaseStick);
     stick.addEventListener("pointercancel", releaseStick);
+
+    stick.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      this.audio.enable();
+      this.touchStickMouseActive = true;
+      this.updateTouchStickFromPoint(event.clientX, event.clientY);
+    });
+    window.addEventListener("mousemove", (event) => {
+      if (!this.touchStickMouseActive) {
+        return;
+      }
+      event.preventDefault();
+      this.updateTouchStickFromPoint(event.clientX, event.clientY);
+    });
+    window.addEventListener("mouseup", (event) => {
+      if (!this.touchStickMouseActive) {
+        return;
+      }
+      event.preventDefault();
+      this.touchStickMouseActive = false;
+      this.setTouchDirection(0, 0, 0);
+    });
   }
 
   bindTouchButtons() {
@@ -1417,10 +1484,8 @@ class BrowserHostApp {
         this.syncButtons();
         this.renderStatus();
       };
+      let mousePressed = false;
       button.addEventListener("pointerdown", (event) => {
-        if (event.pointerType === "mouse") {
-          return;
-        }
         event.preventDefault();
         this.audio.enable();
         button.setPointerCapture(event.pointerId);
@@ -1432,6 +1497,26 @@ class BrowserHostApp {
       };
       button.addEventListener("pointerup", release);
       button.addEventListener("pointercancel", release);
+      button.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        this.audio.enable();
+        mousePressed = true;
+        setPressed(true);
+      });
+      button.addEventListener("mouseleave", () => {
+        if (!mousePressed) {
+          return;
+        }
+        mousePressed = false;
+        setPressed(false);
+      });
+      window.addEventListener("mouseup", () => {
+        if (!mousePressed) {
+          return;
+        }
+        mousePressed = false;
+        setPressed(false);
+      });
     }
   }
 
@@ -1532,7 +1617,12 @@ class BrowserHostApp {
   }
 
   syncButtons() {
-    this.currentButtons = (this.keyboardButtons | this.touchButtons | this.gamepadButtons) & 0xff;
+    this.currentButtons = (
+      this.keyboardButtons
+      | this.touchButtons
+      | this.gamepadButtons
+      | this.integrationButtons
+    ) & 0xff;
     this.adapter.setButtons(this.currentButtons);
     this.renderTouchButtons();
     this.renderTouchStickFromButtons();
@@ -2479,11 +2569,15 @@ class BrowserHostApp {
       return !asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength;
     });
     const beforePixelsAt = this.rendererProfiling ? performance.now() : 0;
-    const ledPixels = hasPendingVisibleAsset && this.lastRenderedLedPixels
-      ? this.lastRenderedLedPixels
-      : computeLedFramePixels(frame, this.assetIndex, this.palette);
+    const ledPixels = frame.native_leds instanceof Uint32Array
+      ? frame.native_leds
+      : (
+        hasPendingVisibleAsset && this.lastRenderedLedPixels
+          ? this.lastRenderedLedPixels
+          : computeLedFramePixels(frame, this.assetIndex, this.palette)
+      );
     const afterPixelsAt = this.rendererProfiling ? performance.now() : 0;
-    if (!hasPendingVisibleAsset) {
+    if (!hasPendingVisibleAsset && !(frame.native_leds instanceof Uint32Array)) {
       this.lastRenderedLedPixels = ledPixels;
     }
     this.renderCanvasVisibility();
@@ -2742,6 +2836,7 @@ class BrowserHostApp {
     const fullscreenProfile = this.getFullscreenRenderProfileSnapshot();
     const summary = [
       ["Sprites", frame.sprites.length],
+      ["Native Frame", frame.native_leds instanceof Uint32Array ? "Yes" : "No"],
       ["Assets", this.assetIndex.size],
       ["Events", frame.events.length],
       ["Column Offset", frame.column_offset],

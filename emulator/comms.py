@@ -10,6 +10,7 @@ import struct
 import socket
 import threading
 from pygletengine import all_strips, set_palettes, spritedata
+from vsdk import set_native_frame_data
 from audio import playsound, playmusic, playnotes
 
 class ConnectionBase:
@@ -170,6 +171,13 @@ def receive_loop():
                 slot_number = int(slot.decode())
                 all_strips[slot_number] = conn.read(int(length))
 
+            elif command == b"nativeframe":
+                frame_length = int(args[0])
+                set_native_frame_data(conn.read(frame_length))
+
+            elif command == b"nativeclear":
+                set_native_frame_data(b"")
+
             elif command == b"traceback":
                 length = args[0]
                 tb = conn.read(int(length))
@@ -255,4 +263,3 @@ except Exception as e:
         pass
 
 arduino_send(b"attract")
-

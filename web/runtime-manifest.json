@@ -38,9 +38,11 @@
     "apps/micropython/ventilastation/director.py",
     "apps/micropython/ventilastation/emu_spritelib.py",
     "apps/micropython/ventilastation/emu_sprites.py",
+    "apps/micropython/ventilastation/emulated_ventilagon.py",
     "apps/micropython/ventilastation/fake_ventilagon.py",
     "apps/micropython/ventilastation/hw_config.py",
     "apps/micropython/ventilastation/menu.py",
+    "apps/micropython/ventilastation/native_apps.py",
     "apps/micropython/ventilastation/ota_update.py",
     "apps/micropython/ventilastation/platforms/__init__.py",
     "apps/micropython/ventilastation/povdisplay.py",
@@ -1144,6 +1146,7 @@
     "system/shared/ventilagon/sounds/audio/triangle.mp3.wav",
     "system/shared/ventilagon/sounds/audio/wonderful.mp3",
     "system/shared/ventilagon/sounds/audio/wonderful.mp3.wav",
-    "system/shared/ventilagon/sounds/music/superventilagon-track.mp3"
+    "system/shared/ventilagon/sounds/music/superventilagon-track.mp3",
+    "system/menu/images/voom.png"
   ]
 }

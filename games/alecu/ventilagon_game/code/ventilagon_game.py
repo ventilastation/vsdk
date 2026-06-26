@@ -1,7 +1,9 @@
-try:
+from ventilastation.runtime import get_platform
+
+if get_platform().name == "hardware":
     import ventilagon
-except ImportError:
-    from ventilastation import fake_ventilagon as ventilagon
+else:
+    from ventilastation import emulated_ventilagon as ventilagon
 from ventilastation.director import director, comms, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
@@ -17,7 +19,11 @@ class VentilagonGame(Scene):
     def sending_loop(self):
         sending = ventilagon.sending()
         while sending:
-            comms.send(sending)
+            if isinstance(sending, tuple):
+                line, data = sending
+                comms.send(line, data)
+            else:
+                comms.send(sending)
             sending = ventilagon.sending()
 
     def on_exit(self):
@@ -104,4 +110,6 @@ class VentilagonIdle(Scene):
 
 
 def main():
+    if get_platform().name != "hardware":
+        return VentilagonGame()
     return VentilagonIdle()

@@ -1,4 +1,5 @@
 import random
+from array import array
 from struct import pack, unpack
 
 from deepspace import deepspace, PIXELS
@@ -14,6 +15,7 @@ spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 all_strips = {}
 qpalette = []
 upalette = []
+native_frame = None
 
 def change_colors(colors):
     # byteswap all longs
@@ -49,6 +51,8 @@ def get_visible_column(sprite_x, sprite_width, render_column):
         return -1
 
 def step_starfield():
+    if native_frame is not None:
+        return
     for (n, (x, y)) in enumerate(starfield):
         y -= 1
         if y < 0:
@@ -57,7 +61,22 @@ def step_starfield():
         starfield[n] = (x, y)
 
 
+def set_native_frame_data(data):
+    global native_frame
+    if not data:
+        native_frame = None
+        return
+    words = array("I")
+    words.frombytes(data)
+    native_frame = words
+
+
 def render(column):
+    if native_frame is not None:
+        start = column * led_count
+        end = start + led_count
+        return native_frame[start:end]
+
     pixels = [0x00000000] * led_count
 
     for (x,y) in starfield:
