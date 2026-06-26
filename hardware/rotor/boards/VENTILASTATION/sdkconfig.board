@@ -1,0 +1,7 @@
+# Keep UART0 as primary IDF console (the default; boot messages go to port 1,
+# the USB-UART bridge that stays connected through resets).
+# Disable secondary console so IDF does NOT also write boot messages to the
+# USB Serial/JTAG port (port 2).  If IDF fills the USB JTAG TX FIFO before
+# MicroPython starts, usb_serial_jtag_tx_strn() hits a 200ms timeout, sets
+# terminal_connected=false, and silently drops all Python output forever.
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
