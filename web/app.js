@@ -232,7 +232,7 @@ function decodeNativeLedFrame(buffer) {
   if (!(buffer instanceof Uint8Array) || buffer.byteLength % 4 !== 0) {
     return null;
   }
-  return new Uint32Array(buffer.slice().buffer);
+  return buffer.slice();
 }
 
 function decodeImageStripPayload(slot, payload) {
@@ -953,6 +953,7 @@ class BrowserHostApp {
         frame.assets = [];
       }
       frame.native_leds = this.nativeLedFrame;
+      frame.has_native_leds = frame.native_leds instanceof Uint8Array;
       return;
     }
 
@@ -1016,6 +1017,7 @@ class BrowserHostApp {
       this.nativeLedFrame = nativeLedFrame;
     }
     frame.native_leds = nativeLedFrame;
+    frame.has_native_leds = nativeLedFrame instanceof Uint8Array;
     frame.sprites = decodedSprites || [];
     frame.assets = [];
     frame.events = remainingEvents;
@@ -2569,7 +2571,7 @@ class BrowserHostApp {
       return !asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength;
     });
     const beforePixelsAt = this.rendererProfiling ? performance.now() : 0;
-    const ledPixels = frame.native_leds instanceof Uint32Array
+    const ledPixels = frame.has_native_leds
       ? frame.native_leds
       : (
         hasPendingVisibleAsset && this.lastRenderedLedPixels
@@ -2577,7 +2579,7 @@ class BrowserHostApp {
           : computeLedFramePixels(frame, this.assetIndex, this.palette)
       );
     const afterPixelsAt = this.rendererProfiling ? performance.now() : 0;
-    if (!hasPendingVisibleAsset && !(frame.native_leds instanceof Uint32Array)) {
+    if (!hasPendingVisibleAsset && !frame.has_native_leds) {
       this.lastRenderedLedPixels = ledPixels;
     }
     this.renderCanvasVisibility();
@@ -2836,7 +2838,7 @@ class BrowserHostApp {
     const fullscreenProfile = this.getFullscreenRenderProfileSnapshot();
     const summary = [
       ["Sprites", frame.sprites.length],
-      ["Native Frame", frame.native_leds instanceof Uint32Array ? "Yes" : "No"],
+      ["Native Frame", frame.has_native_leds ? "Yes" : "No"],
       ["Assets", this.assetIndex.size],
       ["Events", frame.events.length],
       ["Column Offset", frame.column_offset],

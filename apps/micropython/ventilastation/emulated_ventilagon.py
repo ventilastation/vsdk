@@ -63,6 +63,8 @@ BUTTON_ANY = 16
 
 _BYTES_PER_FRAME = COLUMNS * PIXELS * 4
 _COLOR_BYTES = {}
+_BACKGROUND_FRAMES = {}
+_COLUMN_BASE_OFFSETS = tuple(column * PIXELS * 4 for column in range(COLUMNS))
 
 
 def _packed_color(color):
@@ -70,6 +72,14 @@ def _packed_color(color):
     if cached is None:
         cached = struct.pack("<I", color)
         _COLOR_BYTES[color] = cached
+    return cached
+
+
+def _background_frame(color):
+    cached = _BACKGROUND_FRAMES.get(color)
+    if cached is None:
+        cached = _packed_color(color) * (COLUMNS * PIXELS)
+        _BACKGROUND_FRAMES[color] = cached
     return cached
 
 
@@ -112,17 +122,14 @@ class VentilagonEmulator:
         self.obstacles = []
         self.game_over = False
         self.frame_bytes = bytearray(_BYTES_PER_FRAME)
+        self.frame_dirty = False
 
     def _set_led(self, column, row, color):
-        offset = (column * PIXELS + row) * 4
+        offset = _COLUMN_BASE_OFFSETS[column] + row * 4
         self.frame_bytes[offset:offset + 4] = _packed_color(color)
 
     def _fill_frame(self, color):
-        packed = _packed_color(color)
-        offset = 0
-        while offset < _BYTES_PER_FRAME:
-            self.frame_bytes[offset:offset + 4] = packed
-            offset += 4
+        self.frame_bytes[:] = _background_frame(color)
 
     def enter(self):
         self.active = True
@@ -138,6 +145,7 @@ class VentilagonEmulator:
         self.buttons = 0
         self.game_over = False
         self.obstacles = []
+        self.frame_dirty = True
         self._seed_board()
         self.queue = [
             b"sound ventilagon/audio/es/empeza",
@@ -196,9 +204,6 @@ class VentilagonEmulator:
     def _tick(self):
         now = _ticks_us()
         if self.game_over:
-            if _ticks_diff(now, self.last_frame_at) >= FRAME_US:
-                self.last_frame_at = now
-                self._queue_frame()
             return
 
         moved = False
@@ -210,6 +215,7 @@ class VentilagonEmulator:
             moved = True
         if moved:
             self.idle = False
+            self.frame_dirty = True
 
         section_elapsed = _ticks_diff(now, self.section_started_at)
         if section_elapsed >= SECTION_LENGTH_US:
@@ -218,14 +224,17 @@ class VentilagonEmulator:
                 self.step_interval_us = STEP_INTERVALS_US[self.section]
                 self.section_started_at = now
                 self.queue.append(SECTION_SOUNDS[min(self.section - 1, len(SECTION_SOUNDS) - 1)])
+                self.frame_dirty = True
 
         if _ticks_diff(now, self.last_step_at) >= self.step_interval_us:
             self.last_step_at = now
             self._advance_board()
+            self.frame_dirty = True
 
-        if _ticks_diff(now, self.last_frame_at) >= FRAME_US:
+        if self.frame_dirty:
             self.last_frame_at = now
             self._queue_frame()
+            self.frame_dirty = False
 
     def _advance_board(self):
         new_obstacles = []
