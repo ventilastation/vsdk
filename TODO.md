@@ -34,3 +34,11 @@
 - make voom run again on the esp32-s3, but be able to start it from micropython. It's ok to reboot the esp when ending doom.
 
 - ease the deployment, 
+
+
+
+
+= VOOM FIXES =
+- image is rotated 90 degrees clockwise
+- buttons don't stay pressed
+- sounds are missing. The emulator should have a local copy of the wad file, should be able to convert the midis to mp3s, and prboom should send the triggers to play a sound or music, or stop the music, like micropython games do.
