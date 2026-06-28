@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher voom-emulator flash-voom-emulator run-emulator flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
 
 PORT ?=
 BAUD ?= 2000000
@@ -13,6 +13,14 @@ VSDK_FROZEN_MANIFEST := $(abspath ./apps/micropython/manifest.py)
 MICROPYTHON_ROOT ?= ./hardware/rotor/micropython
 MICROPYTHON_PORT_DIR := $(abspath $(MICROPYTHON_ROOT)/ports/esp32)
 RETRO_GO_DIR := ./apps/retro-go
+
+# POV firmware output mode for prboom-go / launcher (see RG_VS_ENABLE_TCP_BRIDGE):
+#   0 = drive the spinning LED strip over SPI (real hardware) -- the default
+#   1 = stream frames to the desktop emulator over TCP/WiFi (development)
+# The *-emulator targets below set this to 1; override manually with VOOM_TCP_BRIDGE=1.
+VOOM_TCP_BRIDGE ?= 0
+RG_TOOL_EXTRA_DEFINES = -DRG_VS_ENABLE_TCP_BRIDGE=$(VOOM_TCP_BRIDGE)
+export RG_TOOL_EXTRA_DEFINES
 
 micropython-webassembly:
 	./tools/build-micropython-webassembly.sh
@@ -49,6 +57,23 @@ ifndef PORT
 	$(error Set PORT=/dev/cu.usbmodemXXXX)
 endif
 	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash launcher'
+
+# --- Voom desktop emulator dev loop ---
+# Build/flash prboom-go configured to stream POV frames to the desktop emulator
+# (RG_VS_ENABLE_TCP_BRIDGE=1), then run the emulator pointed at the board to display them.
+# Usage:
+#   make flash-voom-emulator PORT=/dev/ttyACM0     # build + flash emulator firmware
+#   make run-emulator BOARD_IP=192.168.1.42        # render the stream on the desktop
+# The board needs WiFi creds in NVS "voom_wifi" (provisioned via the MicroPython side
+# or `make dev-deploy`). After reset it prints its IP over USB serial.
+voom-emulator flash-voom-emulator: VOOM_TCP_BRIDGE = 1
+
+voom-emulator: voom
+
+flash-voom-emulator: flash-voom
+
+run-emulator:
+	cd emulator && python emu.py $(BOARD_IP) --remote
 
 flash-all: flash-vsdk flash-voom flash-launcher deploy-fs
 
