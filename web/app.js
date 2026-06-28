@@ -232,21 +232,7 @@ function decodeNativeLedFrame(buffer) {
   if (!(buffer instanceof Uint8Array) || buffer.byteLength % 4 !== 0) {
     return null;
   }
-  if (buffer.byteLength !== COLUMNS * PIXELS * 4) {
-    return buffer.slice();
-  }
-  const transposed = new Uint8Array(buffer.byteLength);
-  for (let column = 0; column < COLUMNS; column += 1) {
-    for (let led = 0; led < PIXELS; led += 1) {
-      const sourceOffset = (column * PIXELS + led) * 4;
-      const targetOffset = (led * COLUMNS + column) * 4;
-      transposed[targetOffset] = buffer[sourceOffset];
-      transposed[targetOffset + 1] = buffer[sourceOffset + 1];
-      transposed[targetOffset + 2] = buffer[sourceOffset + 2];
-      transposed[targetOffset + 3] = buffer[sourceOffset + 3];
-    }
-  }
-  return transposed;
+  return buffer.slice();
 }
 
 function decodeImageStripPayload(slot, payload) {
