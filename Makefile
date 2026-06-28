@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher voom-emulator flash-voom-emulator run-emulator flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
 
 PORT ?=
 BAUD ?= 2000000
@@ -74,6 +74,14 @@ flash-voom-emulator: flash-voom
 
 run-emulator:
 	cd emulator && python emu.py $(BOARD_IP) --remote
+
+# --- Voom sound assets ---
+# Pre-render Doom's WAD audio into system/voom/sounds/*.mp3 so the emulator (TCP)
+# and the hardware host (serial) can play the triggers Voom sends. SFX need only
+# ffmpeg; music needs a MIDI synth + soundfont (one-time: sudo apt install fluidsynth).
+# Re-run whenever the WAD changes.
+voom-sounds:
+	cd emulator && python build_voom_sounds.py
 
 flash-all: flash-vsdk flash-voom flash-launcher deploy-fs
 

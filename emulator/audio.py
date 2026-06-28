@@ -71,10 +71,10 @@ def convert_mp3_to_wav(input_filename, output_filename):
         print("ERROR: cannot convert mp3 to wav:", e)
         raise e
 
-def load_sound(filename_mp3):
+def load_sound(filename_mp3, force_static=False):
     filename_wav = filename_mp3 + ".wav"
 
-    if os.path.getsize(filename_mp3) > 200 * 1024:
+    if os.path.getsize(filename_mp3) > 200 * 1024 and not force_static:
         # larger file, probably music, don't preload fully, load as streaming
         if os.path.exists(filename_wav):
             if is_newer(filename_mp3, filename_wav):
@@ -88,7 +88,8 @@ def load_sound(filename_mp3):
                 convert_mp3_to_wav(filename_mp3, filename_wav)
                 return pyglet.media.load(filename_wav, streaming=True)
     else:
-        # small size, convert to wav if needed and load as non-streaming
+        # small size (or forced static): convert to wav if needed and load as
+        # non-streaming, so it can be replayed and looped cleanly (Voom music).
 
         if (not os.path.exists(filename_wav) or is_newer(filename_mp3, filename_wav)):
             convert_mp3_to_wav(filename_mp3, filename_wav)
@@ -108,7 +109,9 @@ def sound_init():
                 for fn in files:
                     if fn.endswith(".mp3"):
                         fullname = os.path.join(dirpath, fn)
-                        sound = load_sound(fullname)
+                        # Voom (Doom) sounds load static so music can loop/replay.
+                        force_static = "/voom/" in fullname.replace("\\", "/")
+                        sound = load_sound(fullname, force_static=force_static)
                         if not sound:
                             continue
                         sound_name = sound_name_from_path(root_kind, root_path, fullname)
@@ -144,6 +147,7 @@ def sound_process_queue():
             name = args[0]
             if music_player:
                 music_player.delete()
+                music_player = None
             if name != b"off":
                 s = sounds.get(name)
                 if s:
@@ -152,7 +156,14 @@ def sound_process_queue():
                         s.seek(0)
                     except:
                         pass
-                    music_player = s.play()
+                    if name.startswith(b"voom/"):
+                        # Doom music loops continuously until stopped or changed.
+                        music_player = pyglet.media.Player()
+                        music_player.queue(s)
+                        music_player.loop = True
+                        music_player.play()
+                    else:
+                        music_player = s.play()
                 else:
                     print("WARNING: music not found:", name)
         elif command == "notes":
