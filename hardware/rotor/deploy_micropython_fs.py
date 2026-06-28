@@ -39,13 +39,14 @@ def main():
     parser.add_argument(
         "--vfs-offset",
         type=lambda x: int(x, 0),
-        default=0x3F0000,
-        help="Flash offset of the VFS partition (default: 0x3F0000)",
+        default=0x4F0000,
+        help="Flash offset of the VFS partition (default: 0x4F0000, matches partitions-voom.csv)",
     )
     parser.add_argument(
         "--partition-size",
         type=lambda x: int(x, 0),
-        default=0xC10000,
+        default=0xB10000,
+        help="VFS partition size in bytes (default: 0xB10000, matches partitions-voom.csv)",
     )
     parser.add_argument(
         "--idf-path",

@@ -93,6 +93,10 @@ def build_image(vsdk_root, partition_size, output_path):
     block_count = partition_size // BLOCK_SIZE
     fs = LittleFS(block_size=BLOCK_SIZE, block_count=block_count)
 
+    for retro_go_dir in ("retro-go", "retro-go/cache", "retro-go/saves", "retro-go/config"):
+        print(f"  mkdir /{retro_go_dir}")
+        fs.makedirs(f"/{retro_go_dir}", exist_ok=True)
+
     for kind, remote_path, local_path in iter_copy_jobs(vsdk_root):
         lfs_path = "/" + remote_path
         if kind == "dir":
