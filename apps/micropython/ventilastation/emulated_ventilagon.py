@@ -70,7 +70,7 @@ _COLUMN_BASE_OFFSETS = tuple(column * PIXELS * 4 for column in range(COLUMNS))
 def _packed_color(color):
     cached = _COLOR_BYTES.get(color)
     if cached is None:
-        cached = struct.pack("<I", color)
+        cached = struct.pack(">I", color)
         _COLOR_BYTES[color] = cached
     return cached
 
