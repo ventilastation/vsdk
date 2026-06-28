@@ -39,6 +39,6 @@
 
 
 = VOOM FIXES =
-- image is rotated 90 degrees clockwise
-- buttons don't stay pressed
+- [done] image is rotated 90 degrees clockwise
+- [done] buttons don't stay pressed
 - sounds are missing. The emulator should have a local copy of the wad file, should be able to convert the midis to mp3s, and prboom should send the triggers to play a sound or music, or stop the music, like micropython games do.
