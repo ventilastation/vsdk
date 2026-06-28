@@ -136,6 +136,8 @@ def receive_loop():
     while looping:
         try:
             l = conn.readline()
+            if not l:  # b"" = EOF, connection closed by remote end
+                raise socket.error("connection closed")
             l = l.strip()
             if not l:
                 continue
