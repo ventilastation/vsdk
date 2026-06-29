@@ -26,14 +26,20 @@
 
 
 - Go thru the list of suggestions in Discord and bug reports in Github, and create a Ventilastation API v2, with breaking changes but cleaner:
- - Allow music to automatically repeat. To the method "director.music_play" add an optional named parameter "repeat" that defaults to False.
+ - [done] Allow music to automatically repeat. To the method "director.music_play" add an optional named parameter "loops" that defaults to False.
  - 
 
-- [DISCARDED] have some way to import binary modules. For eg, ventilastation, and voom
-
+- [DISCARDED] have some way to import binary modules. For eg, ventilastation, and voom. Replaced with booting into Voom, the retrogo launcher and other emulators.
+ 
 - [DONE] make voom run again on the esp32-s3, but be able to start it from micropython. It's ok to reboot the esp when ending doom.
 
-- ease the deployment, 
+- ease the deployment:
+    - small micropython module compiled in ROM that connects to base and checks for updates
+    - able to download new partitions and update
+    - fetches wifi config and other settings like pov_offset from NVS
+    - uses mdns to connect to update server and remote joystick/display
+    - able to upgrade voom without rebooting
+    - 
 
 
 
@@ -41,7 +47,8 @@
 = VOOM FIXES =
 - [done] image is rotated 90 degrees clockwise
 - [done] buttons don't stay pressed
-- sounds are missing. The emulator should have a local copy of the wad file, should be able to convert the midis to mp3s, and prboom should send the triggers to play a sound or music, or stop the music, like micropython games do.
-- make sure the rest of retrogo uses the LED POV and emulator displays, including the launcher menus
+- [done] sounds are missing. The emulator should have a local copy of the wad file, should be able to convert the midis to mp3s, and prboom should send the triggers to play a sound or music, or stop the music, like micropython games do.
+- [ongoing] make sure the rest of retrogo uses the LED POV and emulator displays, including the launcher menus
 - add stereo separation/pan as available in I_StartSound
 - disable board OPL synth and audio playback when in LED and emulator modes.
+- [done] disable LCD framebuffer generation when in LED mode

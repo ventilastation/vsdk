@@ -107,6 +107,7 @@ class GamesMenu(menu.Menu):
     def on_enter(self):
         self.shuffle_options()
         super().on_enter()
+        director.music_off()
 
         self.animation_frames = 0
         self.tincho_frames = 0
