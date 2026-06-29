@@ -1,7 +1,12 @@
 try:
     import ventilagon
 except ImportError:
-    from ventilastation import fake_ventilagon as ventilagon
+    # Emulators (desktop + web) have no native module: use the MicroPython port.
+    from ventilastation import ventilagon_emu as ventilagon
+
+# The native C module loops on the rotor display task; the emulator port has no such
+# task, so the Scene pumps it once per frame. Absent on hardware (getattr -> None).
+_ventilagon_tick = getattr(ventilagon, "tick", None)
 from ventilastation.director import director, comms, stripes
 from ventilastation.scene import Scene
 from ventilastation.sprites import Sprite
@@ -35,6 +40,8 @@ class VentilagonGame(Scene):
             director.pop()
             raise StopIteration()
 
+        if _ventilagon_tick is not None:
+            _ventilagon_tick()
         self.sending_loop()
 
 

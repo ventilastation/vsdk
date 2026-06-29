@@ -147,12 +147,10 @@ def receive_loop():
             if command == b"frame":
                 data = conn.read(256 * 54)
                 set_voom_frame(data)
-                print(f"DBG comms: frame received ({len(data)} bytes)")
 
             elif command == b"frame_rgb":
                 data = conn.read(256 * 54 * 3)
                 set_voom_frame_rgb(data)
-                print(f"DBG comms: frame_rgb received ({len(data)} bytes)")
 
             elif command == b"sprites":
                 clear_voom_frame()

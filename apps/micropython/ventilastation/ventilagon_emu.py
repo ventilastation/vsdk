@@ -39,6 +39,7 @@ SUBDEGREES = 8192
 SUBDEGREES_MASK = 8191
 SHIP_COLOR = 0xFF0000FF
 HALF_SHIP_WIDTH = 50
+LED_COUNT = 54  # pixels per radial column (matches the POV bar / emulator led_count)
 
 # Button bitmask (matches director / ventilagon_rotor.c).
 JOY_LEFT = 1
@@ -571,6 +572,85 @@ class Game:
         now = self.advance_clock()
         self.current_state.loop(now)
 
+    # -- rendering (replaces display.c's per-column draw with a full polar frame) -------
+    def _ledbar_color(self, num_row, value, alt):
+        if value:
+            if self.multicolored:
+                return WIN_COLORS[((num_row >> 2) + (alt << 1)) % 6]
+            return self.current_level["color"]
+        return self.current_level["bg1"] if alt else self.current_level["bg2"]
+
+    def _build_column_strips(self):
+        """One RGB strip (LED_COUNT pixels) per board column, mirroring board_draw_column."""
+        strips = []
+        for col in range(NUM_COLUMNS):
+            strip = bytearray(LED_COUNT * 3)
+            mask = 1 << col
+            alt = col & 1
+            for n in range(NUM_ROWS):
+                if n == 0:
+                    color = self._ledbar_color(0, True, 1)  # innermost ring always lit
+                else:
+                    value = self.get_row(n) & mask
+                    color = self._ledbar_color(n, value, alt)
+                o = n * 3
+                strip[o] = (color >> 24) & 0xFF
+                strip[o + 1] = (color >> 16) & 0xFF
+                strip[o + 2] = (color >> 8) & 0xFF
+            # LEDs NUM_ROWS..LED_COUNT-1 are the unlit outer rim (black).
+            strips.append(strip)
+        return strips
+
+    def render_frame(self):
+        """Build the 256-column x LED_COUNT RGB polar frame the emulators render."""
+        if self.current_state is self.credits_state:
+            return self._render_credits()
+
+        frame = bytearray(256 * LED_COUNT * 3)
+        strips = self._build_column_strips()
+        stride = LED_COUNT * 3
+        drift = self.drift_pos
+        for a in range(256):
+            pos = (drift + a * 32) & SUBDEGREES_MASK
+            col = (pos * NUM_COLUMNS) // SUBDEGREES
+            base = a * stride
+            frame[base : base + stride] = strips[col]
+            ship_rows = self.display_ship_rows(pos)
+            for j in range(ship_rows):
+                o = base + (ROW_SHIP + j) * 3
+                frame[o] = 0xFF  # SHIP_COLOR red
+                frame[o + 1] = 0x00
+                frame[o + 2] = 0x00
+        return frame
+
+    def _render_credits(self):
+        """Scrolling-text ring (state_win_credits.c text_loop2), text in the inner LEDs."""
+        frame = bytearray(256 * LED_COUNT * 3)
+        stride = LED_COUNT * 3
+        font = _data.text_bitmap
+        text = CREDITS_TEXT
+        text_len = len(text)
+        for a in range(256):
+            x = a + self.step_position
+            cursor = x // CHAR_WIDTH
+            columna_letra = x % CHAR_WIDTH
+            if cursor >= text_len:
+                cursor = cursor % text_len
+            v = font[(ord(text[cursor]) & 0xFF) * CHAR_WIDTH + columna_letra]
+            color = WIN_COLORS[cursor % 6]
+            r = (color >> 24) & 0xFF
+            gg = (color >> 16) & 0xFF
+            b = (color >> 8) & 0xFF
+            base = a * stride
+            for n in range(8):
+                if v & (1 << n):
+                    for led in (n * 2, n * 2 + 1):
+                        o = base + led * 3
+                        frame[o] = r
+                        frame[o + 1] = gg
+                        frame[o + 2] = b
+        return frame
+
 
 # credits text + font geometry (state_win_credits.c)
 CHAR_WIDTH = 6
@@ -615,4 +695,13 @@ def is_idle():
 
 
 def tick():
-    _get().tick()
+    game = _get()
+    game.tick()
+    _present(game.render_frame())
+
+
+def _present(frame):
+    """Send the polar frame to whatever renders it (desktop pyglet / web worker)."""
+    from ventilastation.director import comms
+
+    comms.send(b"frame_rgb", frame)
