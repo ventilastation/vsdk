@@ -159,8 +159,8 @@ def sound_process_queue():
                         s.seek(0)
                     except:
                         pass
-                    if name.startswith(b"voom/"):
-                        # Doom music loops continuously until stopped or changed.
+                    if name.startswith(b"voom/") or name.startswith(b"ventilagon/"):
+                        # Game background music loops continuously until stopped/changed.
                         music_player = pyglet.media.Player()
                         music_player.queue(s)
                         music_player.loop = True

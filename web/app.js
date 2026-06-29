@@ -398,6 +398,8 @@ class BrowserAudioHost {
     this.stopMusic();
     const audio = new Audio(url);
     audio.preload = "auto";
+    // Game background music loops until explicitly stopped/changed (Super Ventilagon, Voom).
+    audio.loop = name.startsWith("ventilagon/") || name.startsWith("voom/");
     this.musicPlayer = audio;
     try {
       await audio.play();
