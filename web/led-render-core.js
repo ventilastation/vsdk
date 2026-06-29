@@ -178,6 +178,26 @@
     return pixels;
   }
 
+  function computeLedFramePixelsFromRgb(rgb) {
+    // Convert a raw 256-column x PIXELS polar framebuffer (R,G,B per LED, as sent by
+    // Super Ventilagon / Voom via the "frame_rgb" command) into the RGBA ledPixels
+    // array the ring renderers consume. Layout in / out is column-major, led-minor.
+    const pixels = new Uint8Array(COLUMNS * PIXELS * 4);
+    const count = COLUMNS * PIXELS;
+    const usable = rgb instanceof Uint8Array ? Math.min(count, (rgb.length / 3) | 0) : 0;
+    for (let i = 0; i < count; i += 1) {
+      const d = i * 4;
+      pixels[d + 3] = 255;
+      if (i < usable) {
+        const s = i * 3;
+        pixels[d] = rgb[s];
+        pixels[d + 1] = rgb[s + 1];
+        pixels[d + 2] = rgb[s + 2];
+      }
+    }
+    return pixels;
+  }
+
   function repeatLedColors(ledPixels, multiplier) {
     const repeated = new Uint8Array(ledPixels.length * multiplier);
     let dest = 0;
@@ -280,6 +300,7 @@
     DEEPSPACE,
     getVisibleColumn,
     computeLedFramePixels,
+    computeLedFramePixelsFromRgb,
     createLedRingGeometry,
     repeatLedColors,
     getLedColor,

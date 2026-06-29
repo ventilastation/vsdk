@@ -45,6 +45,7 @@ const {
   COLUMNS,
   PIXELS,
   computeLedFramePixels,
+  computeLedFramePixelsFromRgb,
   createLedRingGeometry,
 } = LedRenderCore;
 
@@ -924,7 +925,8 @@ class BrowserHostApp {
     return Array.isArray(frame?.events) && frame.events.some((event) => (
       event &&
       typeof event === "object" &&
-      (event.command === "palette" || event.command === "imagestrip" || event.command === "sprites")
+      (event.command === "palette" || event.command === "imagestrip" ||
+        event.command === "sprites" || event.command === "frame_rgb")
     ));
   }
 
@@ -978,6 +980,11 @@ class BrowserHostApp {
       }
       if (event.command === "sprites" && event.data instanceof Uint8Array) {
         decodedSprites = decodeSpriteStateBuffer(event.data);
+        continue;
+      }
+      if (event.command === "frame_rgb" && event.data instanceof Uint8Array) {
+        // Raw polar framebuffer (Super Ventilagon / Voom): drawn directly, no sprites.
+        frame.povFrameRgb = event.data;
         continue;
       }
       remainingEvents.push(event);
@@ -2479,9 +2486,15 @@ class BrowserHostApp {
       return !asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength;
     });
     const beforePixelsAt = this.rendererProfiling ? performance.now() : 0;
-    const ledPixels = hasPendingVisibleAsset && this.lastRenderedLedPixels
-      ? this.lastRenderedLedPixels
-      : computeLedFramePixels(frame, this.assetIndex, this.palette);
+    let ledPixels;
+    if (frame.povFrameRgb instanceof Uint8Array) {
+      // Raw polar framebuffer path (Super Ventilagon / Voom): bypass sprite compositing.
+      ledPixels = computeLedFramePixelsFromRgb(frame.povFrameRgb);
+    } else if (hasPendingVisibleAsset && this.lastRenderedLedPixels) {
+      ledPixels = this.lastRenderedLedPixels;
+    } else {
+      ledPixels = computeLedFramePixels(frame, this.assetIndex, this.palette);
+    }
     const afterPixelsAt = this.rendererProfiling ? performance.now() : 0;
     if (!hasPendingVisibleAsset) {
       this.lastRenderedLedPixels = ledPixels;
