@@ -129,6 +129,19 @@ def _sync_wifi_to_nvs():
         pass
 
 
+def _sync_pov_to_nvs():
+    """Copy the current pov_column_offset into NVS so prboom-go/launcher can read it."""
+    try:
+        import esp32
+        from ventilastation import povdisplay
+        offset = povdisplay.get_column_offset()
+        nvs = esp32.NVS("voom_pov")
+        nvs.set_i32("col_offset", offset)
+        nvs.commit()
+    except Exception:
+        pass
+
+
 class NativeLaunchScene(Scene):
     def __init__(self, slug):
         super().__init__()
@@ -140,6 +153,7 @@ class NativeLaunchScene(Scene):
 
     def _launch(self):
         _sync_wifi_to_nvs()
+        _sync_pov_to_nvs()
         result = request_native_launch(self.slug)
         if result["launched"]:
             return
