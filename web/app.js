@@ -267,9 +267,9 @@ class BrowserAudioHost {
   enable() {
     this.enabled = true;
     if (this.pendingMusic !== null) {
-      const name = this.pendingMusic;
+      const { name, loop } = this.pendingMusic;
       this.pendingMusic = null;
-      this.playMusic(name);
+      this.playMusic(name, loop);
     }
   }
 
@@ -382,13 +382,13 @@ class BrowserAudioHost {
     }
   }
 
-  async playMusic(name) {
+  async playMusic(name, loop = false) {
     if (name === "off") {
       this.stopMusic();
       return;
     }
     if (!this.enabled) {
-      this.pendingMusic = name;
+      this.pendingMusic = { name, loop };
       return;
     }
     const url = await this.resolveUrl(name);
@@ -398,14 +398,14 @@ class BrowserAudioHost {
     this.stopMusic();
     const audio = new Audio(url);
     audio.preload = "auto";
-    // Game background music loops until explicitly stopped/changed (Super Ventilagon, Voom).
-    audio.loop = name.startsWith("ventilagon/") || name.startsWith("voom/");
+    // Looping requested by the "music <track> loop" wire command (e.g. Voom).
+    audio.loop = Boolean(loop);
     this.musicPlayer = audio;
     try {
       await audio.play();
     } catch (_error) {
       if (this.musicPlayer === audio) {
-        this.pendingMusic = name;
+        this.pendingMusic = { name, loop };
       }
     }
   }
@@ -955,7 +955,9 @@ class BrowserHostApp {
         continue;
       }
       if (event.command === "music") {
-        this.audio.playMusic((event.args || []).join(" "));
+        // "music <track> [loop]" — the optional loop flag repeats the track.
+        const args = event.args || [];
+        this.audio.playMusic(args[0] || "off", args.includes("loop"));
         continue;
       }
       if (event.command === "notes") {

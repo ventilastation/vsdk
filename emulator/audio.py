@@ -129,8 +129,8 @@ def playsound(name):
 def playnotes(folder, notes):
     sound_queue.append(("notes", folder, notes))
 
-def playmusic(name):
-    sound_queue.append(("music", name))
+def playmusic(name, loop=False):
+    sound_queue.append(("music", name, loop))
 
 def sound_process_queue():
     global music_player
@@ -148,19 +148,20 @@ def sound_process_queue():
                 print("WARNING: sound not found:", name)
         elif command == "music":
             name = args[0]
+            loop = args[1] if len(args) > 1 else False
             if music_player:
                 music_player.delete()
                 music_player = None
             if name != b"off":
                 s = sounds.get(name)
                 if s:
-                    print("Playing music:", name)
+                    print("Playing music:", name, "(loop)" if loop else "")
                     try:
                         s.seek(0)
                     except:
                         pass
-                    if name.startswith(b"voom/") or name.startswith(b"ventilagon/"):
-                        # Game background music loops continuously until stopped/changed.
+                    if loop:
+                        # Looping requested by the "music <track> loop" wire command.
                         music_player = pyglet.media.Player()
                         music_player.queue(s)
                         music_player.loop = True

@@ -148,10 +148,14 @@ class Director:
             normalized.append(note.encode("utf-8") if isinstance(note, str) else note)
         self.platform.comms.send(b"notes " + folder + b" " + b";".join(normalized))
 
-    def music_play(self, track):
+    def music_play(self, track, loop=False):
         if isinstance(track, str):
             track = track.encode("utf-8")
-        self.platform.comms.send(b"music " + track)
+        line = b"music " + track
+        if loop:
+            # Host loops the track until stopped/changed; e.g. "music vyruss/track loop".
+            line += b" loop"
+        self.platform.comms.send(line)
 
     def music_off(self):
         self.platform.comms.send(b"music off")

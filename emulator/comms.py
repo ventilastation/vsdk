@@ -171,7 +171,9 @@ def receive_loop():
                 arduino_send(b" ".join(args))
 
             elif command == b"music":
-                playmusic(b" ".join(args))
+                # "music <track> [loop]" — the optional loop flag repeats the track.
+                name = args[0] if args else b"off"
+                playmusic(name, b"loop" in args[1:])
 
             elif command == b"musicstop":
                 playmusic(b"off")
