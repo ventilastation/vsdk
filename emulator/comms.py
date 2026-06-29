@@ -176,7 +176,7 @@ def receive_loop():
                 playmusic(b" ".join(args))
 
             elif command == b"musicstop":
-                playmusic("off")
+                playmusic(b"off")
 
             elif command == b"imagestrip":
                 # print("RECEIVED imagestrip", args)

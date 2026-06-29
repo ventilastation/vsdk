@@ -135,7 +135,10 @@ def playmusic(name):
 def sound_process_queue():
     global music_player
     while sound_queue:
-        command, *args = sound_queue.pop()
+        # FIFO: process triggers in the order they arrived. Doom changes music by
+        # emitting "musicstop" then "music ..." back-to-back; popping from the end
+        # would reverse them and stop the track right after starting it.
+        command, *args = sound_queue.pop(0)
         if command == "sound":
             name = args[0]
             s = sounds.get(name)
