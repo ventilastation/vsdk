@@ -3,6 +3,7 @@ const {
   COLUMNS,
   PIXELS,
   computeLedFramePixels,
+  computeLedFramePixelsFromRgb,
   getLedColor,
 } = require("./led-render-core.js");
 
@@ -144,6 +145,31 @@ function runTests() {
 
   assert.equal(COLUMNS, 256);
   assert.equal(PIXELS, 54);
+
+  // Raw polar framebuffer path (Super Ventilagon / Voom "frame_rgb").
+  {
+    const rgb = new Uint8Array(COLUMNS * PIXELS * 3);
+    const set = (col, led, r, g, b) => {
+      const s = (col * PIXELS + led) * 3;
+      rgb[s] = r;
+      rgb[s + 1] = g;
+      rgb[s + 2] = b;
+    };
+    set(0, 0, 255, 0, 0);
+    set(5, 3, 10, 20, 30);
+    set(255, 53, 1, 2, 3);
+    const pixels = computeLedFramePixelsFromRgb(rgb);
+    assert.equal(pixels.length, COLUMNS * PIXELS * 4);
+    assert.deepEqual(getLedColor(pixels, 0, 0), [255, 0, 0, 255]);
+    assert.deepEqual(getLedColor(pixels, 5, 3), [10, 20, 30, 255]);
+    assert.deepEqual(getLedColor(pixels, 255, 53), [1, 2, 3, 255]);
+    assert.deepEqual(getLedColor(pixels, 1, 1), [0, 0, 0, 255]); // unset stays black, opaque
+    // A short buffer must not throw and leaves the remainder black/opaque.
+    const shortPixels = computeLedFramePixelsFromRgb(new Uint8Array(9));
+    assert.equal(shortPixels.length, COLUMNS * PIXELS * 4);
+    assert.deepEqual(getLedColor(shortPixels, 100, 0), [0, 0, 0, 255]);
+  }
+
   console.log("render parity tests passed");
 }
 
