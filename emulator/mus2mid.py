@@ -37,9 +37,17 @@ MUS2MID_CONTROL = [
     0x79,  # reset all controllers
 ]
 
+# MUS event deltas are in 140 Hz ticks. A Standard MIDI File plays at
+# division * BPM/60 ticks/sec, so to get 140 Hz we use division=70 and a tempo
+# of 120 BPM (500000 us/quarter): 70 * 120/60 = 140. (prboom's mus2mid.c used
+# division=64 with a ~95 BPM tempo, which its OPL player tolerated but which
+# plays ~1.38x too slow on a real synth like fluidsynth.)
+MUS_TICKRATE = 140
+DEFAULT_DIVISION = 70
+
 TRACK0_PREAMBLE = bytes([
     0x00, 0xff, 0x59, 0x02, 0x00, 0x00,        # key signature (C major)
-    0x00, 0xff, 0x51, 0x03, 0x09, 0xa3, 0x1a,  # tempo
+    0x00, 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,  # tempo: 500000 us/qn = 120 BPM
 ])
 
 
@@ -63,7 +71,7 @@ def _write_varlen(out, value):
             break
 
 
-def mus2mid(mus, division=64):
+def mus2mid(mus, division=DEFAULT_DIVISION):
     """Convert a MUS byte string to MIDI bytes. Raises Mus2MidError on bad input."""
     if not mus or mus[:4] != b"MUS\x1a":
         raise Mus2MidError("not MUS data")
