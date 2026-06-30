@@ -2,6 +2,7 @@
 """Build a LittleFS2 image pre-populated with MicroPython app files."""
 
 import argparse
+import gzip
 import os
 import pathlib
 import sys
@@ -103,9 +104,20 @@ def build_image(vsdk_root, partition_size, output_path):
             print(f"  mkdir {lfs_path}")
             fs.makedirs(lfs_path, exist_ok=True)
         else:
-            print(f"  add   {lfs_path}")
             with open(local_path, "rb") as f_in:
                 data = f_in.read()
+            # Sprite ROMs are palette-indexed image data and compress ~85% with
+            # deflate. Store them gzip-compressed under a ".rom.gz" name (so they
+            # are not confused with raw ROMs) to save flash; director.py finds the
+            # ".gz" file and inflates it via the `deflate` module. mtime=0 keeps
+            # the image reproducible.
+            if lfs_path.endswith(".rom"):
+                compressed = gzip.compress(data, compresslevel=9, mtime=0)
+                lfs_path += ".gz"
+                print(f"  add   {lfs_path}  ({len(data):,} -> {len(compressed):,} gzip)")
+                data = compressed
+            else:
+                print(f"  add   {lfs_path}")
             with fs.open(lfs_path, "wb") as f_out:
                 f_out.write(data)
 

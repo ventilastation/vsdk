@@ -206,26 +206,9 @@ class Director:
         finally:
             romfile.close()
 
-    def load_rom(self, filename):
-        romlength = uos.stat(filename)[6]
-        if not getattr(self.platform, "disable_gc", False):
-            self.romdata = None
-            self.palette_data = None
-            self._load_rom_streaming(filename, romlength)
-            return
-
-        rombuffer = bytearray(romlength)
-        romview = memoryview(rombuffer)
-        romfile = open(filename, "rb")
-        try:
-            try:
-                romfile.readinto(romview)
-            except (AttributeError, OSError):
-                data = romfile.read()
-                rombuffer[:len(data)] = data
-        finally:
-            romfile.close()
-        self.romdata = romview
+    def _parse_rom_memory(self):
+        # Parse a fully-loaded ROM held in self.romdata (a bytes/bytearray
+        # memoryview), wiring its palettes and image strips into the display.
         stripes.clear()
         num_stripes, num_palettes = struct.unpack("<HH", self.romdata)
         offsets = struct.unpack_from("<%dL%dL" % (num_stripes, num_palettes), self.romdata, 4)
@@ -245,6 +228,52 @@ class Director:
             image_data = off + 1 + filename_len
             self.platform.sprites.set_imagestrip(n, self.romdata[image_data:image_data + w * h * frames + 4])
             stripes[filename.decode("utf-8")] = n
+
+    def load_rom(self, filename):
+        # On the board, ROMs are stored gzip-compressed as "<name>.rom.gz" in the
+        # LittleFS image to save flash (see build_micropython_fs.py). If that file
+        # exists, inflate the whole ROM into RAM via the `deflate` module and parse
+        # it in memory. Otherwise fall through to loading the uncompressed
+        # "<name>.rom" (e.g. the desktop emulator reading straight from the repo).
+        gz_filename = filename + ".gz"
+        try:
+            uos.stat(gz_filename)
+        except OSError:
+            pass
+        else:
+            import deflate
+            romfile = open(gz_filename, "rb")
+            try:
+                stream = deflate.DeflateIO(romfile, deflate.GZIP)
+                try:
+                    self.romdata = memoryview(stream.read())
+                finally:
+                    stream.close()
+            finally:
+                romfile.close()
+            self._parse_rom_memory()
+            return
+
+        romlength = uos.stat(filename)[6]
+        if not getattr(self.platform, "disable_gc", False):
+            self.romdata = None
+            self.palette_data = None
+            self._load_rom_streaming(filename, romlength)
+            return
+
+        rombuffer = bytearray(romlength)
+        romview = memoryview(rombuffer)
+        romfile = open(filename, "rb")
+        try:
+            try:
+                romfile.readinto(romview)
+            except (AttributeError, OSError):
+                data = romfile.read()
+                rombuffer[:len(data)] = data
+        finally:
+            romfile.close()
+        self.romdata = romview
+        self._parse_rom_memory()
 
     def reset_timeout(self):
         self.last_player_action = utime.ticks_ms()
