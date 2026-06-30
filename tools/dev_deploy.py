@@ -4,7 +4,7 @@ Set up an ESP32-S3 board for the WiFi dev loop.
 
 Uploads to the board:
   - vsdk_platform.txt  (tells firmware to use the desktop/WiFi platform)
-  - wifi_config.json   (WiFi credentials)
+  - WiFi credentials written to NVS (namespace "voom_wifi")
   - All Python app files from apps/micropython/ (so edits don't need a reflash)
 
 After running this, reset the board. It will print its IP over USB serial.
@@ -13,7 +13,6 @@ Then start the desktop emulator with:
 """
 
 import argparse
-import json
 import pathlib
 import subprocess
 import sys
@@ -63,12 +62,9 @@ def main():
         platform_file = tmp / "vsdk_platform.txt"
         platform_file.write_text("desktop\n")
 
-        # wifi_config.json — fallback for desktop/emulator mode (no esp32 NVS module)
-        wifi_file = tmp / "wifi_config.json"
-        wifi_file.write_text(json.dumps({"ssid": args.wifi_ssid, "password": args.wifi_password}))
-
         # setup_wifi_nvs.py — writes credentials to NVS namespace "voom_wifi" so both
-        # MicroPython (comms.py) and prboom-go (wb_init) read from the same place.
+        # MicroPython (comms.py) and prboom-go/gwenesis read from the same place. NVS
+        # is the single source of truth and survives firmware/filesystem reflashes.
         wifi_script = tmp / "setup_wifi_nvs.py"
         wifi_script.write_text(
             "import esp32\n"
@@ -81,7 +77,6 @@ def main():
 
         print("\n=== Uploading config files ===")
         mpremote("cp", str(platform_file), ":vsdk_platform.txt", port=args.port)
-        mpremote("cp", str(wifi_file), ":wifi_config.json", port=args.port)
         print("\n=== Writing WiFi credentials to NVS ===")
         mpremote("run", str(wifi_script), port=args.port)
 

@@ -21,6 +21,14 @@ APP_REGISTRY = {
         "native_app": "launcher",
         "title": "Retro-Go Launcher",
     },
+    "native.genesis": {
+        "kind": "native",
+        "native_app": "gwenesis",
+        "title": "Mega Drive",
+        # Booted standalone (no retro-go launcher): hand gwenesis the ROM path via
+        # NVS. Must be the full storage path the emulator reads (RG_STORAGE_ROOT/...).
+        "rom": "/vfs/roms/md/OutRun (USA, Europe).zip",
+    },
 }
 
 
@@ -104,39 +112,12 @@ def request_native_launch(slug):
     }
 
 
-def _sync_wifi_to_nvs():
-    """Copy wifi_config.json credentials into NVS so prboom-go can read them."""
+def _write_genesis_rom_nvs(rom_path):
+    """Hand the ROM path to gwenesis via NVS (it reads voom_md/rom on boot)."""
     try:
         import esp32
-        try:
-            import ujson as _json
-        except ImportError:
-            import json as _json
-        try:
-            with open("wifi_config.json") as _f:
-                cfg = _json.load(_f)
-        except Exception:
-            return
-        ssid = cfg.get("ssid", "")
-        password = cfg.get("password", "")
-        if not ssid:
-            return
-        nvs = esp32.NVS("voom_wifi")
-        nvs.set_blob("ssid", ssid.encode())
-        nvs.set_blob("password", password.encode())
-        nvs.commit()
-    except Exception:
-        pass
-
-
-def _sync_pov_to_nvs():
-    """Copy the current pov_column_offset into NVS so prboom-go/launcher can read it."""
-    try:
-        import esp32
-        from ventilastation import povdisplay
-        offset = povdisplay.get_column_offset()
-        nvs = esp32.NVS("voom_pov")
-        nvs.set_i32("col_offset", offset)
+        nvs = esp32.NVS("voom_md")
+        nvs.set_blob("rom", rom_path.encode())
         nvs.commit()
     except Exception:
         pass
@@ -152,8 +133,15 @@ class NativeLaunchScene(Scene):
         self.call_later(1, self._launch)
 
     def _launch(self):
-        _sync_wifi_to_nvs()
-        _sync_pov_to_nvs()
+        # WiFi credentials (NVS voom_wifi) and pov_column_offset (NVS voom_pov) are
+        # already kept in NVS by dev-deploy and settings.py, so the native apps read
+        # them directly — no copy needed here. A native app that takes a ROM (e.g.
+        # the Mega Drive emulator) gets its path via NVS just before launch.
+        spec = get_app_spec(self.slug) or {}
+        rom = spec.get("rom")
+        if rom:
+            _write_genesis_rom_nvs(rom)
+
         result = request_native_launch(self.slug)
         if result["launched"]:
             return

@@ -56,6 +56,7 @@ palettegroups:
     - strip: menu.png
       frames: 16
     - strip: voom.png
+    - strip: megadrive.png
     - strip: pollitos.png
       frames: 5
     - strip: vslogo.png

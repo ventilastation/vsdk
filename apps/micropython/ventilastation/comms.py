@@ -16,13 +16,8 @@ def _load_wifi_config():
             return {"ssid": ssid, "password": password}
     except Exception:
         pass
-    # Fallback: wifi_config.json (legacy / desktop mode).
-    try:
-        import ujson
-        with open("wifi_config.json") as _f:
-            return ujson.load(_f)
-    except Exception:
-        pass
+    # No credentials in NVS yet — set them with:
+    #   make dev-deploy WIFI_SSID=... WIFI_PASS=...
     return {"ssid": "ventilastation", "password": "plagazombie2"}
 
 try:

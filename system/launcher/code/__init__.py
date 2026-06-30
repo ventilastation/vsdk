@@ -13,6 +13,7 @@ def game_menu_strip(game_slug):
 MAIN_MENU_OPTIONS = [
     ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),
     ("native.voom", "voom.png", 0),
+    ("native.genesis", "megadrive.png", 0),  # Mega Drive (OutRun)
     ("vsjam-oct25.2bam_sencom", game_menu_strip("vsjam-oct25.2bam_sencom"), 0),
     ("vsjam-may25.vasura_espacial", game_menu_strip("vsjam-may25.vasura_espacial"), 0),
     ("gallery", "pollitos.png", 0),
@@ -36,7 +37,9 @@ MAIN_MENU_OPTIONS = [
 ]
 
 SYS_MENU_OPTIONS = [
-    ("native.launcher", "voom.png", 0),
+    # Retro-Go launcher disabled for now — its on-screen text is unreadable at the
+    # POV display's resolution. Emulators are launched directly (see native.genesis).
+    # ("native.launcher", "voom.png", 0),
     ("debugmode", "menu.png", 9),
     # ("calibrate", "menu.png", 8),
     ("tutorial", "menu.png", 10),
