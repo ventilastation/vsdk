@@ -36,6 +36,11 @@ ALLOWED_SUFFIXES = {
     ".yml",
 }
 
+# Genesis/Mega Drive ROM extensions accepted under the "roms/md" tree (read by
+# the gwenesis emulator). Scoped to that tree so .bin/.zip elsewhere aren't
+# swept in. README.md is excluded via SKIP_FILE_NAMES.
+ROM_MD_SUFFIXES = {".md", ".gen", ".bin", ".smd", ".zip"}
+
 
 def iter_copy_jobs(vsdk_root):
     roots = [
@@ -43,6 +48,8 @@ def iter_copy_jobs(vsdk_root):
         ("ventilastation", vsdk_root / "apps/micropython/ventilastation"),
         ("roms", vsdk_root / "apps/micropython/roms"),
         ("roms/doom", vsdk_root / "apps/retro-go/prboom-go/components/prboom/data"),
+        # Genesis ROMs for gwenesis, served from /vfs/roms/md (gitignored locally).
+        ("roms/md", vsdk_root / "apps/retro-go/roms/md"),
         ("games", vsdk_root / "games"),
         ("system", vsdk_root / "system"),
     ]
@@ -65,7 +72,8 @@ def iter_copy_jobs(vsdk_root):
                 relative = path.relative_to(local_root)
                 if path.name in SKIP_FILE_NAMES or path.name.startswith("test_"):
                     continue
-                if path.suffix.lower() not in ALLOWED_SUFFIXES:
+                allowed = ROM_MD_SUFFIXES if remote_root == "roms/md" else ALLOWED_SUFFIXES
+                if path.suffix.lower() not in allowed:
                     continue
 
                 parent = relative.parent
@@ -136,8 +144,8 @@ def main():
     parser.add_argument(
         "--partition-size",
         type=lambda x: int(x, 0),
-        default=0xB10000,
-        help="VFS partition size in bytes (default: 0xB10000 = 11,599,872 bytes, matches partitions-voom.csv)",
+        default=0xA10000,
+        help="VFS partition size in bytes (default: 0xA10000 = 10,551,296 bytes, matches partitions-voom.csv)",
     )
     parser.add_argument(
         "--output",
