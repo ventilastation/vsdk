@@ -1,5 +1,6 @@
 import pyglet
 from audio import sound_init, sound_process_queue
+from emu_audio import emu_audio
 
 if pyglet.version >= "2.0":
     from pyglet2x.inputs import *
@@ -47,6 +48,7 @@ class PygletEngine():
         def animate(dt):
             process_input()
             sound_process_queue()
+            emu_audio.process()  # drive emulator-audio player lifecycle (main thread)
             if self.enable_display:
                 step_starfield()
 

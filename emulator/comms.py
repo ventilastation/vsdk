@@ -12,6 +12,7 @@ import threading
 from pygletengine import all_strips, set_palettes, spritedata
 from vsdk import set_voom_frame, set_voom_frame_rgb, clear_voom_frame
 from audio import playsound, playmusic, playnotes
+from emu_audio import emu_audio
 
 class ConnectionBase:
     def __init__(self):
@@ -177,6 +178,21 @@ def receive_loop():
 
             elif command == b"musicstop":
                 playmusic(b"off")
+
+            elif command == b"achip":
+                # Emulator started on the board: reset the matching host synth.
+                emu_audio.start(args[0] if args else b"unknown")
+
+            elif command == b"aframe":
+                # One emulated video frame of sound-chip register writes.
+                # "aframe <nbytes> <nsamples>" + <nbytes> payload.
+                nbytes = int(args[0])
+                nsamples = int(args[1]) if len(args) > 1 else 0
+                payload = conn.read(nbytes) if nbytes else b""
+                emu_audio.frame(payload, nsamples)
+
+            elif command == b"astop":
+                emu_audio.request_stop()
 
             elif command == b"imagestrip":
                 # print("RECEIVED imagestrip", args)
