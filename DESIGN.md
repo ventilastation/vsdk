@@ -206,3 +206,6 @@ Flash (board on `PORT`):
 Note: the board's native USB-CDC re-enumerates on every reset, so a serial
 handle goes stale after a flash; if a flash reports "port busy / doesn't exist",
 kill stale holders (`lsof -t /dev/cu.usbmodem*`) and/or power-cycle the board.
+The `vsdk/Makefile` flash targets use a host-side `lockf` guard so concurrent
+`make -j` app builds can still overlap, but only one serial flash step runs at a
+time.

@@ -1,7 +1,8 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
 
 PORT ?=
 BAUD ?= 2000000
+SERIAL_LOCK_FILE ?= /tmp/vsdk-serial.lock
 VOOM_WAIT ?= 15
 VOOM_MICROPYTHON_IDF_PATH ?= ../../esp-idf/esp-5.5.2
 VOOM_RETRO_GO_IDF_PATH ?= ../../esp-idf/esp-5.0.4
@@ -22,6 +23,11 @@ VOOM_TCP_BRIDGE ?= 0
 RG_TOOL_EXTRA_DEFINES = -DRG_VS_ENABLE_TCP_BRIDGE=$(VOOM_TCP_BRIDGE)
 export RG_TOOL_EXTRA_DEFINES
 
+# The board's USB-CDC serial port re-enumerates on reset, so concurrent flash
+# commands can interrupt each other mid-transfer. Use a host-side lock to
+# serialize any target that talks to the board over the flashing port.
+SERIAL_LOCK = lockf "$(SERIAL_LOCK_FILE)"
+
 micropython-webassembly:
 	./tools/build-micropython-webassembly.sh
 
@@ -38,7 +44,7 @@ flash-vsdk: vsdk
 ifndef PORT
 	$(error Set PORT=/dev/cu.usbmodemXXXX)
 endif
-	python3 ./hardware/rotor/flash_vsdk_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VOOM_MICROPYTHON_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"
+	$(SERIAL_LOCK) python3 ./hardware/rotor/flash_vsdk_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VOOM_MICROPYTHON_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"
 
 voom:
 	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation build prboom-go'
@@ -47,7 +53,7 @@ flash-voom: voom
 ifndef PORT
 	$(error Set PORT=/dev/cu.usbmodemXXXX)
 endif
-	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash prboom-go'
+	$(SERIAL_LOCK) /bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash prboom-go'
 
 launcher:
 	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation build launcher'
@@ -56,7 +62,16 @@ flash-launcher: launcher
 ifndef PORT
 	$(error Set PORT=/dev/cu.usbmodemXXXX)
 endif
-	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash launcher'
+	$(SERIAL_LOCK) /bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash launcher'
+
+retro-core:
+	/bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation build retro-core'
+
+flash-retro-core: retro-core
+ifndef PORT
+	$(error Set PORT=/dev/cu.usbmodemXXXX)
+endif
+	$(SERIAL_LOCK) /bin/zsh -lc 'source "$(VOOM_RETRO_GO_IDF_PATH)/export.sh" >/dev/null && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash retro-core'
 
 # --- Voom desktop emulator dev loop ---
 # Build/flash prboom-go configured to stream POV frames to the desktop emulator
@@ -95,7 +110,7 @@ deploy-fs:
 ifndef PORT
 	$(error Set PORT=/dev/cu.usbmodemXXXX)
 endif
-	python3 hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)"
+	$(SERIAL_LOCK) python3 hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)"
 
 # Hardware WiFi dev loop
 # Usage:
