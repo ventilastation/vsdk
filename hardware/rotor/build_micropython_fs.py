@@ -36,10 +36,11 @@ ALLOWED_SUFFIXES = {
     ".yml",
 }
 
-# Genesis/Mega Drive ROM extensions accepted under the "roms/md" tree (read by
-# the gwenesis emulator). Scoped to that tree so .bin/.zip elsewhere aren't
+# Console ROM extensions accepted under the emulator "roms/<system>" trees (read
+# by gwenesis / retro-core). Scoped to those trees so .bin/.zip elsewhere aren't
 # swept in. README.md is excluded via SKIP_FILE_NAMES.
-ROM_MD_SUFFIXES = {".md", ".gen", ".bin", ".smd", ".zip"}
+ROM_SUFFIXES = {".md", ".gen", ".bin", ".smd", ".nes", ".sms", ".gg", ".col", ".zip"}
+EMU_ROM_ROOTS = {"roms/md", "roms/nes", "roms/sms"}
 
 
 def iter_copy_jobs(vsdk_root):
@@ -48,8 +49,10 @@ def iter_copy_jobs(vsdk_root):
         ("ventilastation", vsdk_root / "apps/micropython/ventilastation"),
         ("roms", vsdk_root / "apps/micropython/roms"),
         ("roms/doom", vsdk_root / "apps/retro-go/prboom-go/components/prboom/data"),
-        # Genesis ROMs for gwenesis, served from /vfs/roms/md (gitignored locally).
-        ("roms/md", vsdk_root / "apps/retro-go/roms/md"),
+        # Console ROMs, served from /vfs/roms/<system> (gitignored locally).
+        ("roms/md", vsdk_root / "apps/retro-go/roms/md"),      # gwenesis (Mega Drive)
+        ("roms/nes", vsdk_root / "apps/retro-go/roms/nes"),    # retro-core (NES)
+        ("roms/sms", vsdk_root / "apps/retro-go/roms/sms"),    # retro-core (Master System)
         ("games", vsdk_root / "games"),
         ("system", vsdk_root / "system"),
     ]
@@ -72,7 +75,7 @@ def iter_copy_jobs(vsdk_root):
                 relative = path.relative_to(local_root)
                 if path.name in SKIP_FILE_NAMES or path.name.startswith("test_"):
                     continue
-                allowed = ROM_MD_SUFFIXES if remote_root == "roms/md" else ALLOWED_SUFFIXES
+                allowed = ROM_SUFFIXES if remote_root in EMU_ROM_ROOTS else ALLOWED_SUFFIXES
                 if path.suffix.lower() not in allowed:
                     continue
 

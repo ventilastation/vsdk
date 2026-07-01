@@ -34,9 +34,12 @@ static bool native_partition_launch(const native_app_entry_t *entry) {
 }
 
 static const native_app_entry_t native_apps_registry[] = {
-    { "voom",     "prboom-go", NULL },
-    { "launcher", "launcher",  NULL },
-    { "gwenesis", "gwenesis",  NULL },
+    { "voom",       "prboom-go",  NULL },
+    { "gwenesis",   "gwenesis",   NULL },
+    // retro-core hosts NES, Master System, Game Gear, etc. (the app dispatches on
+    // the "system" written to NVS by native_apps.py). Lives in the partition that
+    // used to hold the disabled retro-go launcher.
+    { "retro-core", "retro-core", NULL },
 };
 
 static size_t native_apps_registry_len(void) {

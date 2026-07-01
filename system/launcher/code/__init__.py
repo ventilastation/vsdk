@@ -14,6 +14,8 @@ MAIN_MENU_OPTIONS = [
     ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),
     ("native.voom", "voom.png", 0),
     ("native.genesis", "megadrive.png", 0),  # Mega Drive (OutRun)
+    ("native.nes", "megadrive.png", 0),  # NES (retro-core); placeholder icon
+    ("native.sms", "megadrive.png", 0),  # Master System (retro-core); placeholder icon
     ("vsjam-oct25.2bam_sencom", game_menu_strip("vsjam-oct25.2bam_sencom"), 0),
     ("vsjam-may25.vasura_espacial", game_menu_strip("vsjam-may25.vasura_espacial"), 0),
     ("gallery", "pollitos.png", 0),

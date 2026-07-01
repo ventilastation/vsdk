@@ -16,11 +16,6 @@ APP_REGISTRY = {
         "native_app": "voom",
         "title": "Voom",
     },
-    "native.launcher": {
-        "kind": "native",
-        "native_app": "launcher",
-        "title": "Retro-Go Launcher",
-    },
     "native.genesis": {
         "kind": "native",
         "native_app": "gwenesis",
@@ -28,6 +23,22 @@ APP_REGISTRY = {
         # Booted standalone (no retro-go launcher): hand gwenesis the ROM path via
         # NVS. Must be the full storage path the emulator reads (RG_STORAGE_ROOT/...).
         "rom": "/vfs/roms/md/OutRun (USA, Europe).zip",
+    },
+    # NES and Master System run in the shared retro-core app, which dispatches on
+    # the "system" we hand it via NVS (voom_emu) along with the ROM path.
+    "native.nes": {
+        "kind": "native",
+        "native_app": "retro-core",
+        "title": "NES",
+        "system": "nes",
+        "rom": "/vfs/roms/nes/game.nes",
+    },
+    "native.sms": {
+        "kind": "native",
+        "native_app": "retro-core",
+        "title": "Master System",
+        "system": "sms",
+        "rom": "/vfs/roms/sms/game.sms",
     },
 }
 
@@ -123,6 +134,20 @@ def _write_genesis_rom_nvs(rom_path):
         pass
 
 
+def _write_emu_nvs(system, rom_path):
+    """Hand the system + ROM path to retro-core via NVS (voom_emu); it dispatches
+    on 'system' (nes/sms/...) and loads 'rom' on boot."""
+    try:
+        import esp32
+        nvs = esp32.NVS("voom_emu")
+        nvs.set_blob("system", system.encode())
+        if rom_path:
+            nvs.set_blob("rom", rom_path.encode())
+        nvs.commit()
+    except Exception:
+        pass
+
+
 class NativeLaunchScene(Scene):
     def __init__(self, slug):
         super().__init__()
@@ -139,7 +164,12 @@ class NativeLaunchScene(Scene):
         # the Mega Drive emulator) gets its path via NVS just before launch.
         spec = get_app_spec(self.slug) or {}
         rom = spec.get("rom")
-        if rom:
+        system = spec.get("system")
+        if system:
+            # retro-core (NES/SMS/...): dispatch on system + ROM via NVS voom_emu.
+            _write_emu_nvs(system, rom)
+        elif rom:
+            # gwenesis (Mega Drive): ROM path via NVS voom_md.
             _write_genesis_rom_nvs(rom)
 
         result = request_native_launch(self.slug)
