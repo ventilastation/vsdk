@@ -34,15 +34,18 @@
 - [DONE] make voom run again on the esp32-s3, but be able to start it from micropython. It's ok to reboot the esp when ending doom.
 
 - ease the deployment:
-    - small micropython module compiled in ROM that connects to base and checks for updates
-    - able to download new partitions and update
+    - some easy way to reboot the esp32 controller
+    - small micropython module compiled in ROM in charge of booting, that connects to base and checks for updates
+    - able to download new partitions and update them
     - fetches wifi config and other settings like pov_offset from NVS
     - uses mdns to connect to update server and remote joystick/display
     - able to upgrade voom without rebooting
-    - 
+    - able to sync a folder of roms
 
-
-
+- darker color in the center leds is way off for things like voom. We may have to rework the whole gamma curve
+- sega master system has some display delays, nes gets ugly very fast. What other tasks are running in the same core?
+- exit keys are not working right, maybe force a key combo to exit sms/nes games.
+- a generated list of roms is needed.
 
 = VOOM FIXES =
 - [done] image is rotated 90 degrees clockwise

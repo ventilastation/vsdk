@@ -31,6 +31,7 @@ _LIB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chipsynth")
 # Genesis NTSC audio rate (≈ 888 samples/frame × 60 fps). The device tells us
 # the exact sample count per frame; small rate drift is absorbed by the buffer.
 GENESIS_SAMPLE_RATE = 53267
+SMS_SAMPLE_RATE = 32000
 
 
 def _lib_ext():
@@ -66,10 +67,16 @@ class _Synth:
 _SYNTH_FACTORIES = {
     b"genesis": lambda: _Synth("libgenesissynth." + _lib_ext(),
                                "genesis_synth_reset", "genesis_synth_render"),
+    b"sms-ntsc": lambda: _Synth("libsmssynth." + _lib_ext(),
+                                "sms_synth_reset_ntsc", "sms_synth_render"),
+    b"sms-pal": lambda: _Synth("libsmssynth." + _lib_ext(),
+                               "sms_synth_reset_pal", "sms_synth_render"),
 }
 
 _SYSTEM_RATE = {
     b"genesis": GENESIS_SAMPLE_RATE,
+    b"sms-ntsc": SMS_SAMPLE_RATE,
+    b"sms-pal": SMS_SAMPLE_RATE,
 }
 
 

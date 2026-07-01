@@ -9,7 +9,7 @@ compile the **same** chip cores that run on the device (from
 ## Build
 
 ```sh
-make            # builds libgenesissynth.<dylib|so>
+make            # builds libgenesissynth.<dylib|so> and libsmssynth.<dylib|so>
 ```
 
 `emu_audio.py` loads the library via ctypes at runtime. If it is missing, the
@@ -27,7 +27,8 @@ make RETROGO=/path/to/apps/retro-go
 | Library              | System            | Cores                         | Status |
 |----------------------|-------------------|-------------------------------|--------|
 | `libgenesissynth.*`  | Genesis/Mega Drive| gwenesis YM2612 + SN76489     | Phase 1 |
-| (planned) NES        | NES               | nofrendo APU                  | Phase 2 |
+| `libsmssynth.*`      | SMS / GG / Coleco | smsplus SN76489               | Phase 2 |
+| (planned) NES        | NES               | nofrendo APU                  | Phase 3 |
 | (planned) Lynx       | Atari Lynx        | handy Mikey                   | Phase 3 |
 
 ## API (ctypes)
