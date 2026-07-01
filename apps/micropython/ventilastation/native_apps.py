@@ -29,16 +29,16 @@ APP_REGISTRY = {
     "native.nes": {
         "kind": "native",
         "native_app": "retro-core",
-        "title": "NES",
+        "title": "Super Mario Bros",
         "system": "nes",
-        "rom": "/vfs/roms/nes/game.nes",
+        "rom": "/vfs/roms/nes/Super Mario Bros. (World).zip",
     },
     "native.sms": {
         "kind": "native",
         "native_app": "retro-core",
-        "title": "Master System",
+        "title": "Out Run",
         "system": "sms",
-        "rom": "/vfs/roms/sms/game.sms",
+        "rom": "/vfs/roms/sms/Out Run (World).zip",
     },
 }
 
