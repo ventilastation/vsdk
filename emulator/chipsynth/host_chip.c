@@ -29,6 +29,14 @@ int16_t gwenesis_sn76489_buffer[MAXSAMP];
 int     sn76489_index, sn76489_clock;
 int     frame_counter, scan_line;
 
+// The device sets these to 1 to skip PCM synthesis (it only streams register
+// writes). The host is the synthesizer, so it must leave them 0 — otherwise the
+// cores skip the very synthesis we need. They are referenced (extern) by the
+// chip sources, so they MUST be defined here or the shared lib has an undefined
+// global that segfaults when read at render time.
+int     ym2612_skip_synthesis = 0;
+int     sn76489_skip_synthesis = 0;
+
 // The device taps this from the chip sources; on the host it is a no-op (we are
 // the consumer, not a producer).
 void emu_audio_write(uint8_t op, uint8_t val, uint16_t idx) { (void)op; (void)val; (void)idx; }
