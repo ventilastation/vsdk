@@ -1,7 +1,5 @@
-import asyncio
 import os
 import platform
-import signal
 import time
 import traceback
 
@@ -18,13 +16,13 @@ class ConnectionBase:
     def __init__(self):
         self.sock = None
         self.sockfile = None
-        
+
     def read(self, *args, **kwargs):
         return self.sockfile.read(*args, **kwargs)
 
     def readline(self):
         return self.sockfile.readline()
-    
+
     def close(self):
         if self.sock:
             self.sock.close()
@@ -37,21 +35,43 @@ class ConnIP(ConnectionBase):
 
     def send(self, b):
         if self.sock:
-            self.sock.send(b)            
+            self.sock.send(b)
 
 class ConnSerial(ConnectionBase):
     def setup(self):
         import serial
-        devices = [
-            f for f in os.listdir("/dev/")
-            if f.startswith(config.SERIAL_DEVICE_RASPI2)
-            or f.startswith(config.SERIAL_DEVICE_RASPI3)
-        ]
-        if devices:
-            device = devices[0]
-            self.sock = self.sockfile = serial.Serial("/dev/" + device, 115200)
-        else:
-            raise socket.error("Mondongo")
+
+        port = config.SERIAL_PORT or self._autodetect()
+        if not port:
+            raise socket.error("no serial port found (pass --serial-port /dev/tty... explicitly)")
+        self.sock = self.sockfile = serial.Serial(port, 115200)
+
+    @staticmethod
+    def _autodetect():
+        # Cross-platform: match common USB-serial naming across macOS
+        # (cu.usbmodem*/cu.usbserial*) and Linux (ttyACM*/ttyUSB*) for the
+        # workbench's USB bridge.
+        try:
+            from serial.tools import list_ports
+            candidates = [
+                p.device for p in list_ports.comports()
+                if any(tag in p.device for tag in ("usbmodem", "usbserial", "ttyACM", "ttyUSB"))
+            ]
+            if candidates:
+                return sorted(candidates)[0]
+        except ImportError:
+            pass
+
+        # Legacy /dev scan (Super Ventilagon base on Raspberry Pi).
+        try:
+            devices = [
+                f for f in os.listdir("/dev/")
+                if f.startswith(config.SERIAL_DEVICE_RASPI2)
+                or f.startswith(config.SERIAL_DEVICE_RASPI3)
+            ]
+        except FileNotFoundError:
+            devices = []
+        return "/dev/" + devices[0] if devices else None
 
     def send(self, b):
         if self.sockfile:
@@ -65,9 +85,9 @@ class ConnWinNamedPipe(ConnectionBase):
         import win32pipe
 
         self.pipe = win32pipe.CreateNamedPipe(
-            r'\\.\pipe\ventilastation-emu', 
-            win32pipe.PIPE_ACCESS_DUPLEX, 
-            win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT, 
+            r'\\.\pipe\ventilastation-emu',
+            win32pipe.PIPE_ACCESS_DUPLEX,
+            win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
             1, 65536 * 8, 65536 * 8, 0, None
         )
 
@@ -112,28 +132,143 @@ class ConnWinNamedPipe(ConnectionBase):
 
 looping = True
 
+# display_conn carries LED display frames plus (in hardware mode)
+# reset/rpm control. It's the DUT link in every mode:
+#   - Windows: named pipe to the local desktop MicroPython
+#   - "SERIAL" positional arg: legacy single-transport serial link (Super
+#     Ventilagon base) -- distinct from workbench_conn below
+#   - otherwise: TCP, either loopback to the local desktop MicroPython or
+#     (in hardware mode) to the workbench over Wi-Fi
 if platform.system() == "Windows":
-    conn = ConnWinNamedPipe()
-elif config.USE_IP:
-    conn = ConnIP()
+    display_conn = ConnWinNamedPipe()
+elif not config.USE_IP:
+    display_conn = ConnSerial()
 else:
-    conn = ConnSerial()
+    display_conn = ConnIP()
 
-def waitconnect():
+# workbench_conn carries button state out and audio/sound requests in, over
+# the workbench's serial bridge to the DUT's UART -- only relevant when
+# actually talking to real hardware.
+workbench_conn = ConnSerial() if (config.HARDWARE_MODE and config.USE_IP) else None
+
+last_time_seen = 0
+
+def waitconnect(conn, label):
     while looping:
         try:
             conn.setup()
+            print(f"comms: {label} connected")
             return
-        except socket.error as err:
-            print(err)
+        except (socket.error, OSError) as err:
+            print(f"comms: {label}: {err}")
             time.sleep(.5)
-            print("retry...")
+            print(f"comms: {label} retry...")
 
 
-def receive_loop():
-    last_time_seen = 0
+def dispatch_command(conn, command, args):
+    """Handle one line command + whatever payload it declares, reading the
+    payload from whichever connection (display_conn or workbench_conn) it
+    arrived on. Shared between both receive loops so every command is
+    understood regardless of which transport it comes in on -- in local
+    simulation mode everything (including audio) arrives on display_conn;
+    in hardware mode audio/sound arrives on workbench_conn instead (see
+    vsdk/WORKBENCH.md)."""
+    global last_time_seen
 
-    waitconnect()
+    if command == b"frame":
+        data = conn.read(256 * 54)
+        set_voom_frame(data)
+
+    elif command == b"frame_rgb":
+        data = conn.read(256 * 54 * 3)
+        set_voom_frame_rgb(data)
+
+    elif command == b"sprites":
+        clear_voom_frame()
+        spritedata[:] = conn.read(5*100)
+
+    elif command == b"palette":
+        paldata = conn.read(1024 * int(args[0]))
+        set_palettes(paldata)
+        print(f"DBG comms: palette received ({len(paldata)} bytes)")
+
+    elif command == b"sound":
+        playsound(b" ".join(args))
+
+    elif command == b"notes":
+        playnotes(args[0], args[1])
+
+    elif command == b"arduino":
+        arduino_send(b" ".join(args))
+
+    elif command == b"music":
+        # "music <track> [loop]" — the optional loop flag repeats the track.
+        name = args[0] if args else b"off"
+        playmusic(name, b"loop" in args[1:])
+
+    elif command == b"musicstop":
+        playmusic(b"off")
+
+    elif command == b"achip":
+        # Emulator started on the board: reset the matching host synth.
+        emu_audio.start(args[0] if args else b"unknown", args[1:])
+
+    elif command == b"aframe":
+        # One emulated video frame of sound-chip register writes.
+        # "aframe <nbytes> <nsamples>" + <nbytes> payload.
+        nbytes = int(args[0])
+        nsamples = int(args[1]) if len(args) > 1 else 0
+        payload = conn.read(nbytes) if nbytes else b""
+        emu_audio.frame(payload, nsamples)
+
+    elif command == b"amap":
+        nbytes = int(args[0]) if args else 0
+        payload = conn.read(nbytes) if nbytes else b""
+        emu_audio.mapper_state(payload)
+
+    elif command == b"astop":
+        emu_audio.request_stop()
+
+    elif command == b"imagestrip":
+        slot, length = args
+        slot_number = int(slot.decode())
+        all_strips[slot_number] = conn.read(int(length))
+
+    elif command == b"traceback":
+        length = args[0]
+        tb = conn.read(int(length))
+        print("-------------------------------------")
+        print("Rotor traceback")
+        print("-------------------------------------")
+        print(tb.decode("utf-8"))
+        print("-------------------------------------")
+
+    elif command == b"debug":
+        length = 32 * 16
+        data = conn.read(length)
+
+        readings = []
+        for now, duration in struct.iter_unpack("qq", data):
+            if now < 10000:
+                last_time_seen = 0
+
+            if now > last_time_seen:
+                last_time_seen = now
+                rpm, fps = 1000000 / duration * 60, (1000000/duration)*2
+                print(now, duration, "(%.2f rpm, %.2f fps)" % (rpm, fps))
+                readings.append(rpm)
+
+        if len(readings):
+            avg_rpm = sum(readings) / len(readings)
+            avg_fps = avg_rpm / 30
+            print("average %.2f rpm %.2f fps" % (avg_rpm, avg_fps))
+
+    else:
+        print(command, *args)
+
+
+def _receive_loop(conn, label):
+    waitconnect(conn, label)
     while looping:
         try:
             l = conn.readline()
@@ -144,121 +279,53 @@ def receive_loop():
                 continue
 
             command, *args = l.split()
-
-            if command == b"frame":
-                data = conn.read(256 * 54)
-                set_voom_frame(data)
-
-            elif command == b"frame_rgb":
-                data = conn.read(256 * 54 * 3)
-                set_voom_frame_rgb(data)
-
-            elif command == b"sprites":
-                clear_voom_frame()
-                spritedata[:] = conn.read(5*100)
-
-            elif command == b"palette":
-                paldata = conn.read(1024 * int(args[0]))
-                set_palettes(paldata)
-                print(f"DBG comms: palette received ({len(paldata)} bytes)")
-
-            elif command == b"sound":
-                playsound(b" ".join(args))
-
-            elif command == b"notes":
-                playnotes(args[0], args[1])
-
-            elif command == b"arduino":
-                arduino_send(b" ".join(args))
-
-            elif command == b"music":
-                # "music <track> [loop]" — the optional loop flag repeats the track.
-                name = args[0] if args else b"off"
-                playmusic(name, b"loop" in args[1:])
-
-            elif command == b"musicstop":
-                playmusic(b"off")
-
-            elif command == b"achip":
-                # Emulator started on the board: reset the matching host synth.
-                emu_audio.start(args[0] if args else b"unknown")
-
-            elif command == b"aframe":
-                # One emulated video frame of sound-chip register writes.
-                # "aframe <nbytes> <nsamples>" + <nbytes> payload.
-                nbytes = int(args[0])
-                nsamples = int(args[1]) if len(args) > 1 else 0
-                payload = conn.read(nbytes) if nbytes else b""
-                emu_audio.frame(payload, nsamples)
-
-            elif command == b"astop":
-                emu_audio.request_stop()
-
-            elif command == b"imagestrip":
-                # print("RECEIVED imagestrip", args)
-                slot, length = args
-                slot_number = int(slot.decode())
-                all_strips[slot_number] = conn.read(int(length))
-
-            elif command == b"traceback":
-                length = args[0]
-                tb = conn.read(int(length))
-                print("-------------------------------------")
-                print("Rotor traceback")
-                print("-------------------------------------")
-                print(tb.decode("utf-8"))
-                print("-------------------------------------")
-
-            elif command == b"debug":
-                length = 32 * 16
-                data = conn.read(length)
-
-                readings = []
-                for now, duration in struct.iter_unpack("qq", data):
-                    if now < 10000:
-                        last_time_seen = 0
-
-                    if now > last_time_seen:
-                        last_time_seen = now
-                        rpm, fps = 1000000 / duration * 60, (1000000/duration)*2
-                        print(now, duration, "(%.2f rpm, %.2f fps)" % (rpm, fps))
-                        readings.append(rpm)
-
-                if len(readings):
-                    avg_rpm = sum(readings) / len(readings)
-                    avg_fps = avg_rpm / 30
-                    print("average %.2f rpm %.2f fps" % (avg_rpm, avg_fps))
-                    #send_velocidad(avg_rpm, avg_fps)
-                #print(struct.unpack("q"*32*2, data))
-
-            else:
-                print(command, *args)
-
-
+            dispatch_command(conn, command, args)
 
         except socket.error as err:
-            print(err)
-            waitconnect()
+            print(f"comms: {label}: {err}")
+            waitconnect(conn, label)
 
-        except Exception as err:
+        except Exception:
             print(traceback.format_exc())
             conn.close()
-            waitconnect()
+            waitconnect(conn, label)
 
 
 def shutdown():
     global looping
     looping = False
-    conn.close()
+    display_conn.close()
+    if workbench_conn:
+        workbench_conn.close()
 
-receive_thread = threading.Thread(target=receive_loop)
-receive_thread.daemon = True
-receive_thread.start()
+display_thread = threading.Thread(target=_receive_loop, args=(display_conn, "display"))
+display_thread.daemon = True
+display_thread.start()
+
+if workbench_conn:
+    workbench_thread = threading.Thread(target=_receive_loop, args=(workbench_conn, "workbench-serial"))
+    workbench_thread.daemon = True
+    workbench_thread.start()
 
 def send(b):
+    """Send raw button-state bytes toward the DUT (called from
+    pygletengine's input loop). In hardware mode these go out over the
+    workbench's serial bridge, matching how the physical base sends button
+    state to the rotor over UART; otherwise they go to the same link
+    everything else uses (the local desktop MicroPython subprocess)."""
+    target = workbench_conn or display_conn
     try:
-        conn.send(b)
-    except socket.error as err:
+        target.send(b)
+    except (socket.error, OSError) as err:
+        print(err)
+
+def send_workbench(line):
+    """Send a control command line to the workbench over Wi-Fi, e.g.
+    b"reset" or b"rpm 650" (see the RPM slider / reset button in
+    pyglet2x/pygletdraw.py). No-op if the Wi-Fi link isn't up."""
+    try:
+        display_conn.send(line + b"\n")
+    except (socket.error, OSError) as err:
         print(err)
 
 
@@ -285,4 +352,3 @@ except Exception as e:
         pass
 
 arduino_send(b"attract")
-

@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator workbench-build workbench-flash workbench-monitor workbench-wifi-provision
 
 PORT ?=
 BAUD ?= 2000000
@@ -132,3 +132,41 @@ dev-deploy:
 
 dev-emulator:
 	cd emulator && python emu.py $(BOARD_IP) --no-display
+
+# --- Hardware workbench (second ESP32-S3 board that exercises a real DUT) ---
+# See vsdk/WORKBENCH.md for the full design.
+# Usage:
+#   make workbench-build
+#   make workbench-flash PORT=/dev/cu.usbmodemXXXX
+#   make workbench-wifi-provision PORT=/dev/cu.usbmodemXXXX WIFI_SSID=mywifi WIFI_PASS=mypassword
+#   make workbench-monitor PORT=/dev/cu.usbmodemXXXX
+#
+# wifi-provision writes credentials straight into the workbench's NVS
+# partition (namespace "voom_wifi", same as the DUT reads in
+# apps/micropython/ventilastation/comms.py) without rebuilding or
+# reflashing firmware. Reset the workbench afterwards — it logs its IP and
+# mDNS name over its USB port.
+WORKBENCH_DIR := hardware/workbench/workbench_esp32s3
+WORKBENCH_IDF_PATH ?= $(VOOM_MICROPYTHON_IDF_PATH)
+
+workbench-build:
+	/bin/zsh -lc 'source "$(WORKBENCH_IDF_PATH)/export.sh" >/dev/null && cd "$(WORKBENCH_DIR)" && idf.py build'
+
+workbench-flash: workbench-build
+ifndef PORT
+	$(error Set PORT=/dev/cu.usbmodemXXXX)
+endif
+	$(SERIAL_LOCK) /bin/zsh -lc 'source "$(WORKBENCH_IDF_PATH)/export.sh" >/dev/null && cd "$(WORKBENCH_DIR)" && idf.py -p "$(PORT)" -b "$(BAUD)" flash'
+
+workbench-monitor:
+ifndef PORT
+	$(error Set PORT=/dev/cu.usbmodemXXXX)
+endif
+	/bin/zsh -lc 'source "$(WORKBENCH_IDF_PATH)/export.sh" >/dev/null && cd "$(WORKBENCH_DIR)" && idf.py -p "$(PORT)" monitor'
+
+workbench-wifi-provision:
+	@test -n "$(WIFI_SSID)" || (echo "Usage: make workbench-wifi-provision PORT=... WIFI_SSID=... WIFI_PASS=..."; exit 1)
+ifndef PORT
+	$(error Set PORT=/dev/cu.usbmodemXXXX)
+endif
+	$(SERIAL_LOCK) /bin/zsh -lc 'source "$(WORKBENCH_IDF_PATH)/export.sh" >/dev/null && python3 "$(WORKBENCH_DIR)/tools/provision_wifi.py" --port "$(PORT)" --wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)"'

@@ -1,0 +1,8 @@
+# Explicit partition table (otherwise identical to ESP-IDF's default
+# single-app layout) so the Wi-Fi provisioning tooling
+# (tools/provision_wifi.py, `make workbench-wifi-provision`) can flash
+# straight to a known "nvs" offset without depending on a build first.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 1M,

@@ -7,9 +7,11 @@ laptop's UART cable hanging off the rotor.
 
 It plays three roles at once:
 
-1. **Stimulus generator** — resets the DUT, then feeds it a clean 600 RPM
-   hall-sensor pulse train, exactly like the DUT would see spinning on a
-   real fan.
+1. **Stimulus generator** — resets the DUT, then feeds it a clean,
+   remote-controllable hall-sensor pulse train (0-700 RPM, default 600),
+   exactly like the DUT would see spinning on a real fan. Both the reset
+   and the RPM are controllable live from the pyglet emulator's UI over
+   Wi-Fi.
 2. **LED bus spy** — taps the DUT's LED SPI bus (clock + data only, no CS,
    no MISO) as a passive SPI slave, decodes the APA102-style frames the DUT
    is already driving out to its physical LED strips, and re-streams them
@@ -17,9 +19,15 @@ It plays three roles at once:
    same wire protocol the DUT itself would use if it opened that link
    directly.
 3. **Serial bridge** — bridges the DUT's UART link (used today for
-   base/rotor and multi-unit sync traffic) to the workbench's USB port, so a
-   PC can watch and inject serial traffic without being wired to the DUT
+   base/rotor and multi-unit sync traffic — buttons in, sound/music
+   requests out) to the workbench's USB port, so the pyglet emulator can
+   stand in for the base over serial without being wired to the DUT
    directly.
+
+The workbench joins an existing Wi-Fi network (station mode, like the DUT
+itself does) rather than running its own access point, so the PC running
+the pyglet emulator keeps normal internet access on the same network, and
+finds the workbench via mDNS instead of a hardcoded IP.
 
 The DUT runs its normal, unmodified firmware throughout. See
 ["Why no DUT firmware changes are needed"](#why-no-dut-firmware-changes-are-needed).
@@ -30,40 +38,53 @@ Firmware for the workbench itself lives in
 ## Architecture
 
 ```
-                          +-------------------------+
-                          |     Desktop PC           |
-                          |  vsdk/emulator (pyglet)   |
-                          |  python emu.py 192.168.4.1|
-                          +-------------+-------------+
-                                        ^ Wi-Fi, TCP :5005
-                                        | "frame_rgb\n" + 41472 bytes
-                          +-------------+-------------+
-                          |   Workbench ESP32-S3       |
-                          |  - Wi-Fi AP + TCP server    |
-                          |  - SPI slave (LED bus spy)  |
-                          |  - hall pulse generator     |
-                          |  - reset driver             |
-                          |  - UART <-> USB bridge       |
-                          +---+-----+-----+-----+-------+
-                              |     |     |     |
-                        hall  |     |     |     | UART tx/rx
-                        pulse |     |     |     |
-                              |   led_clk |   led_mosi
-                              |     |     |     |
-                          +---v-----v-----v-----v-------+
-                          |   DUT: real Ventilastation   |
-                          |   rotor board (unmodified     |
-                          |   firmware)                   |
-                          +--------------------------------+
+                    +-----------------------------------------+
+                    |               Desktop PC                 |
+                    |            vsdk/emulator (pyglet)         |
+                    |  python emu.py --remote                   |
+                    |  ------------------------------------      |
+                    |  display_conn (Wi-Fi, TCP :5005):           |
+                    |    <- "frame_rgb\n" + 41472 bytes            |
+                    |    -> "reset\n" / "rpm <n>\n"                 |
+                    |    (RPM slider + reset button in the UI)       |
+                    |  workbench_conn (USB serial):                   |
+                    |    -> button-state byte                          |
+                    |    <- sound/music/notes/... commands              |
+                    +---------+----------------------+------------------+
+                              ^ Wi-Fi (joins existing   ^ USB serial
+                              | AP; found via mDNS as   |
+                              | ventilastation-workbench.local:5005
+                              |                          |
+                    +---------+--------------------------+-------------+
+                    |                Workbench ESP32-S3                 |
+                    |  - Wi-Fi STA + mDNS + TCP server (display/control)  |
+                    |  - SPI slave (LED bus spy)                           |
+                    |  - hall pulse generator (0-700 RPM, remote-settable)  |
+                    |  - reset driver (remote-triggerable)                   |
+                    |  - UART <-> USB bridge                                  |
+                    +---+-----+-----+-----+-----------------------------------+
+                        |     |     |     |
+                  hall  |     |     |     | UART tx/rx
+                  pulse |     |     |     |
+                        |   led_clk |   led_mosi
+                        |     |     |     |
+                    +---v-----v-----v-----v-------+
+                    |   DUT: real Ventilastation    |
+                    |   rotor board (unmodified      |
+                    |   firmware)                     |
+                    +-----------------------------------+
                                         |
                                 reset (EN) pin, driven
                                 by the workbench at boot
+                                or on request from the UI
 ```
 
 The workbench never drives the LED bus (its SPI MOSI/CLK pins are inputs
-only, MISO is unused) and never drives its own UART unless something is
-typed at the USB port, so the DUT's physical LED strips keep working
-exactly as they would standalone — the workbench only listens in.
+only, MISO is unused) and only drives its UART TX with whatever bytes the
+pyglet emulator sends as button state, so the DUT's physical LED strips
+and its UART behavior keep working exactly as they would standalone — the
+workbench mostly listens in, plus the two things it's explicitly asked to
+control (reset, RPM).
 
 ## Pin connections
 
@@ -97,21 +118,30 @@ the octal-PSRAM pins used on `N16R8`-style modules (35-37); swap them in
 ## Sequence of operation
 
 1. Workbench boots, brings up its USB serial console, the DUT UART bridge,
-   the LED-bus SPI slave, and the Wi-Fi AP + TCP server (SSID
-   `ventilastation-workbench`, `192.168.4.1:5005`).
+   and the LED-bus SPI slave, then joins the Wi-Fi network provisioned into
+   its NVS (see [Wi-Fi provisioning](#wi-fi-provisioning-and-mdns-discovery)
+   below) and starts advertising itself over mDNS.
 2. Workbench pulses the reset line low for ~150 ms and releases it —
    equivalent to pressing the DUT's reset button — then starts generating
-   the 600 RPM hall pulse train immediately so the DUT sees rotation from
-   very early in its boot.
+   the hall pulse train (600 RPM by default) immediately so the DUT sees
+   rotation from very early in its boot.
 3. DUT boots its normal firmware, sees hall pulses, and starts driving its
    LED SPI bus as if it were spinning on a real fan.
-4. Whenever a PC on the workbench's Wi-Fi AP runs the desktop emulator
-   (`cd vsdk && python emulator/emu.py 192.168.4.1`), the emulator opens a
-   TCP connection to port 5005. From then on the workbench streams
-   `frame_rgb` frames it has reconstructed from the spied LED bus.
-5. The UART bridge runs continuously: bytes from the DUT's UART TX are
-   forwarded to the workbench's USB serial output, and anything typed at
-   the USB serial console is forwarded to the DUT's UART RX.
+4. Whenever a PC on the same Wi-Fi network runs the desktop emulator in
+   hardware mode (`cd vsdk && python emulator/emu.py --remote`), it resolves
+   `ventilastation-workbench.local` over mDNS and opens a TCP connection to
+   port 5005. From then on the workbench streams `frame_rgb` frames it has
+   reconstructed from the spied LED bus, and accepts `reset`/`rpm <n>`
+   commands from the emulator's RPM slider and reset button (see
+   [RPM and reset control](#rpm-and-reset-control)).
+5. The same emulator process also opens the workbench's USB serial port,
+   over which it sends button-state bytes toward the DUT and receives
+   sound/music requests from it — see
+   [Pyglet transport split](#pyglet-emulator-transport-split).
+6. The UART bridge itself runs continuously regardless of what's connected
+   over USB: bytes from the DUT's UART TX are forwarded to the workbench's
+   USB serial output, and anything arriving on the USB serial input is
+   forwarded to the DUT's UART RX.
 
 ## LED bus capture (no chip-select)
 
@@ -163,7 +193,7 @@ buses that don't have a CS/frame signal.
 
 ## Column tracking and frame reassembly
 
-The pyglet emulator (`vsdk/emulator/comms.py` `receive_loop()`) expects a
+The pyglet emulator (`vsdk/emulator/comms.py` `dispatch_command()`) expects a
 `frame_rgb` command over the TCP link followed by exactly
 `256 * 54 * 3 = 41472` raw bytes: 256 angular columns, 54 LEDs each, plain
 `R, G, B` (see `vsdk/apps/micropython/ventilastation/ventilagon_emu.py`
@@ -173,8 +203,11 @@ it pushes `frame_rgb` telemetry itself).
 Since the workbench is also the thing generating the hall pulses, it
 already knows the current rotation phase precisely — no need to infer it
 from a captured hall edge. `hall_sim.c` tracks the timestamp of the last
-simulated pulse and reproduces the DUT's own column formula from
-`gpu_step()`:
+simulated pulse and the current RPM (settable at runtime — see
+[RPM and reset control](#rpm-and-reset-control) — and clamped to
+`[0, WB_HALL_RPM_MAX]`, where 0 stops the pulse train and freezes the
+column at 0) and reproduces the DUT's own column formula from
+`gpu_step()`: 
 
 ```
 column = ((now_us - last_turn_us) * 256 / rotation_period_us) % 256
@@ -204,23 +237,98 @@ to whichever client is currently connected. Only `frame_rgb` is
 implemented; the workbench doesn't emit `sprites`/`palette`/`sound`/etc.
 telemetry, since none of that is observable from the LED bus alone.
 
-## Wi-Fi telemetry link
+## Wi-Fi provisioning and mDNS discovery
 
-The workbench runs as a Wi-Fi access point (`ventilastation-workbench` /
-`workbench123` by default, see `config.h`) at `192.168.4.1` and listens on
-TCP port 5005 with a plain BSD-socket TCP server (`telemetry.c`), matching
-`vsdk/emulator/config.py`'s historical `SERVER_IP = "192.168.4.1"` /
-`SERVER_PORT = 5005` comment for real hardware. To view the DUT's LED
-output live:
+The workbench joins an existing Wi-Fi network in station mode (`telemetry.c`)
+rather than running its own access point, so the PC running the pyglet
+emulator keeps normal internet access on the same network. Credentials are
+read from NVS namespace `voom_wifi`, keys `ssid`/`password` — **the same
+namespace and keys** `apps/micropython/ventilastation/comms.py` reads on
+the DUT itself, so the mechanism (if not the physical NVS, which is
+per-chip) is deliberately identical on both boards.
+
+Since the workbench is a compiled ESP-IDF app rather than a live
+MicroPython REPL, it can't be provisioned the way `make dev-deploy` does
+for the DUT (`mpremote run` against a live interpreter). Instead,
+`tools/provision_wifi.py` builds a small NVS partition image with
+`nvs_partition_gen.py` and flashes it straight to the `nvs` partition's
+offset (`0x9000`, pinned by `partitions.csv`) — no rebuild or full reflash
+needed to change networks:
+
+```bash
+source /path/to/esp-idf/esp-5.5.2/export.sh
+make workbench-wifi-provision PORT=/dev/cu.usbmodemXXXX \
+    WIFI_SSID=mywifi WIFI_PASS=mypassword
+```
+
+Other workbench make targets (see the top-level `Makefile`, next to the
+DUT's `dev-deploy`/`dev-emulator`):
+
+```bash
+make workbench-build                       # idf.py build
+make workbench-flash PORT=/dev/cu.usbmodemXXXX
+make workbench-monitor PORT=/dev/cu.usbmodemXXXX
+```
+
+After provisioning and a reset, the workbench connects, then advertises
+itself over mDNS (`espressif/mdns` managed component) as
+`ventilastation-workbench.local`, so the emulator doesn't need to know its
+DHCP-assigned IP. `.local` resolution is built into macOS (Bonjour);
+Linux needs `avahi`/`nss-mdns` installed, Windows needs Bonjour (e.g. via
+iTunes) installed. If mDNS isn't available on a given machine, pass the
+workbench's IP explicitly instead (see below).
+
+## RPM and reset control
+
+Once connected, the same TCP link that streams `frame_rgb` also accepts
+simple line commands from the client (`telemetry.c`'s
+`poll_client_commands()`/`handle_client_line()`):
+
+- `reset\n` — pulses the DUT's reset line (`reset_ctl_pulse()`), exactly
+  like the boot-time reset.
+- `rpm <n>\n` — sets the simulated hall RPM at runtime
+  (`hall_sim_set_rpm()`), clamped to `[0, 700]`.
+
+The pyglet emulator's window (`emulator/pyglet2x/pygletdraw.py`) draws an
+RPM slider (0-700, default 600) and a RESET button in the bottom-left
+corner when running against real hardware; dragging the slider sends
+`rpm <n>` (only when the rounded value changes), and clicking RESET sends
+`reset`. Both go out via `comms.send_workbench()`, which writes directly to
+the Wi-Fi connection — harmless no-ops if the workbench isn't connected.
+
+## Pyglet emulator transport split
+
+`vsdk/emulator/comms.py` normally talks to a single link for everything
+(the local desktop MicroPython subprocess, over a loopback TCP socket).
+Against a real workbench (`python emu.py --remote` or `--no-display`) it
+instead opens two:
+
+- `display_conn` (Wi-Fi, TCP `:5005`) — `frame_rgb` in, `reset`/`rpm` out.
+  Everything covered above.
+- `workbench_conn` (USB serial, via the workbench's UART bridge) — button
+  state out, sound/music/notes/etc. requests in. This is exactly the
+  traffic that would normally cross the DUT<->base UART link (see
+  `hardware/base/README.md`: "the code running on the base gathers
+  joystick movement and button presses... the cpu sends back requests for
+  music and sounds"); the emulator, connected through the workbench's
+  serial passthrough, is simply standing in for the base.
+
+Both connections share the same command dispatcher
+(`comms.dispatch_command()`), so nothing needs to know in advance which
+transport a given command arrives on — in local-simulation mode (no
+workbench involved) everything, including audio, still arrives on
+`display_conn` exactly as before this change.
+
+The workbench's serial port is auto-detected (matching common USB-serial
+device names on macOS/Linux) or can be set explicitly with
+`--serial-port /dev/cu.usbmodemXXXX`.
 
 ```bash
 cd vsdk
-# join the workbench's Wi-Fi AP first, then:
-python emulator/emu.py 192.168.4.1
+python emulator/emu.py --remote                          # mDNS + serial auto-detect
+python emulator/emu.py 192.168.1.42 --remote \
+    --serial-port /dev/cu.usbmodem14201                   # explicit overrides
 ```
-
-Only one client connection is served at a time; a new connection replaces
-the previous one the next time it's accepted.
 
 ## UART bridge
 
@@ -231,10 +339,9 @@ the previous one the next time it's accepted.
 and copies bytes in both directions between that UART and the workbench's
 own USB-connected console UART (`UART_NUM_0`). Diagnostic log lines from
 this firmware share that same port, so they're interleaved with raw DUT
-traffic on whatever terminal is watching the workbench's USB port. This
-lets a PC watch and inject the same inter-unit/base-sync traffic the DUT
-would normally exchange with a neighboring rotor or base, without a direct
-wired connection.
+traffic on whatever terminal is watching the workbench's USB port. This is
+the link the pyglet emulator's `workbench_conn` (above) uses for button
+state and audio requests.
 
 ## Why no DUT firmware changes are needed
 
@@ -281,9 +388,11 @@ This has been built (not yet flashed to real hardware) against
 workbench's own sources. `sdkconfig` is generated from
 `sdkconfig.defaults` by `idf.py set-target` and isn't checked in.
 
-No managed/external components are required beyond what ships with
-ESP-IDF (`driver`, `esp_wifi`, `esp_netif`, `esp_event`, `nvs_flash`,
-`esp_timer`, `lwip`).
+Beyond what ships with ESP-IDF (`driver`, `esp_wifi`, `esp_netif`,
+`esp_event`, `nvs_flash`, `esp_timer`, `lwip`), the project pulls in one
+managed component, `espressif/mdns` (declared in `main/idf_component.yml`,
+pinned by `dependencies.lock`; `idf.py build` fetches it into
+`managed_components/` on first build).
 
 ## Known limitations / open risks
 
@@ -291,6 +400,13 @@ ESP-IDF (`driver`, `esp_wifi`, `esp_netif`, `esp_event`, `nvs_flash`,
   of this design and needs real hardware bring-up.
 - `column_offset` is assumed to be 0, so the reconstructed image may be
   rotated relative to a given DUT's own calibrated display.
-- Only `frame_rgb` telemetry is reproduced; no sprite/palette/audio
-  telemetry.
+- Only `frame_rgb` telemetry is reproduced; no sprite/palette telemetry
+  over Wi-Fi (audio telemetry is covered separately, over serial — see
+  [Pyglet emulator transport split](#pyglet-emulator-transport-split)).
 - Single Wi-Fi client at a time.
+- The `reset`/`rpm` control channel is plain, unauthenticated TCP on the
+  local network — acceptable for a bench tool, not something to expose
+  beyond the local Wi-Fi network.
+- `.local` mDNS resolution depends on OS support (built into macOS; needs
+  `avahi`/`nss-mdns` on Linux, Bonjour on Windows) — pass an explicit IP to
+  `emu.py` if it's unavailable.

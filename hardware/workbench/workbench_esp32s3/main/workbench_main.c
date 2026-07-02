@@ -32,6 +32,6 @@ void app_main(void) {
     ESP_LOGI(TAG, "pulsing DUT reset");
     reset_ctl_pulse(WB_RESET_PULSE_MS);
 
-    ESP_LOGI(TAG, "starting hall pulse simulation at %d RPM", WB_HALL_RPM);
+    ESP_LOGI(TAG, "starting hall pulse simulation at %d RPM", WB_HALL_RPM_DEFAULT);
     hall_sim_begin();
 }

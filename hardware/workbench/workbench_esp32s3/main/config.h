@@ -14,7 +14,8 @@
 
 // ---- Hall sensor simulation ----
 #define WB_HALL_PIN             4     // -> DUT hall_gpio
-#define WB_HALL_RPM             600
+#define WB_HALL_RPM_DEFAULT     600
+#define WB_HALL_RPM_MAX         700   // matches the pyglet UI's RPM slider range (0-700)
 #define WB_HALL_PULSE_WIDTH_US  1000  // low-pulse width per simulated revolution
 
 // ---- LED SPI bus capture (workbench acts as SPI slave, input only) ----
@@ -31,8 +32,23 @@
 #define WB_UART_RX_PIN  18   // <- DUT serial_tx
 #define WB_UART_BAUD    115200
 
+// ---- Wi-Fi station + mDNS ----
+// The workbench joins an existing network (so the PC running the pyglet
+// emulator keeps normal internet access on the same Wi-Fi) instead of
+// running its own AP. Credentials come from NVS namespace "voom_wifi" —
+// the same namespace/keys the DUT itself reads in
+// apps/micropython/ventilastation/comms.py — provisioned with
+// `make workbench-wifi-provision` (see WORKBENCH.md).
+#define WB_WIFI_NVS_NAMESPACE  "voom_wifi"
+#define WB_WIFI_CONNECT_RETRY_DELAY_MS  2000
+
+// Advertised as "<hostname>.local" via mDNS so the pyglet emulator can find
+// the workbench without knowing its DHCP-assigned IP.
+#define WB_MDNS_HOSTNAME      "ventilastation-workbench"
+#define WB_MDNS_INSTANCE_NAME "Ventilastation Workbench"
+#define WB_MDNS_SERVICE_TYPE  "_ventilastation-wb"
+#define WB_MDNS_SERVICE_PROTO "_tcp"
+
 // ---- Wi-Fi telemetry link (pyglet emulator) ----
-#define WB_WIFI_AP_SSID                 "ventilastation-workbench"
-#define WB_WIFI_AP_PASSWORD             "workbench123"
 #define WB_TELEMETRY_PORT               5005
 #define WB_TELEMETRY_FRAME_INTERVAL_MS  33

@@ -9,6 +9,7 @@ if pyglet.version < "2.0":
     raise RuntimeError("Pyglet 2.0 or higher is required")
 
 import pyglet.math as pm
+from pyglet import shapes
 from pyglet.gl import GL_FUNC_ADD, GL_MAX, GL_SRC_COLOR, Config, glBlendEquation
 from pyglet.gl import (
     glActiveTexture,
@@ -24,6 +25,7 @@ from pyglet.math import Mat4
 from pyglet.graphics import Group
 from pyglet.graphics.shader import Shader, ShaderProgram
 
+import comms
 import config
 from vsdk import COLUMNS, pack_colors, repeated, render
 
@@ -197,6 +199,98 @@ def display_init(led_count):
 def on_resize(width, height):
     print(f'The window was resized to {width},{height}')
 
+#################################################################
+# Workbench controls: an RPM slider (0-700, default 600) and a
+# reset button, for interacting with the hardware workbench over
+# Wi-Fi (see comms.send_workbench and vsdk/WORKBENCH.md). Harmless
+# no-ops when not connected to a real workbench.
+#################################################################
+RPM_MIN, RPM_MAX, RPM_DEFAULT = 0, 700, 600
+
+controls_batch = pyglet.graphics.Batch()
+
+_slider_x, _slider_y, _slider_w, _slider_h = 20, 20, 200, 6
+_handle_radius = 9
+
+_current_rpm = RPM_DEFAULT
+_last_sent_rpm = None
+_dragging_slider = False
+
+
+def _rpm_to_x(rpm):
+    frac = (rpm - RPM_MIN) / (RPM_MAX - RPM_MIN)
+    return _slider_x + frac * _slider_w
+
+
+def _x_to_rpm(x):
+    frac = max(0.0, min(1.0, (x - _slider_x) / _slider_w))
+    return round(RPM_MIN + frac * (RPM_MAX - RPM_MIN))
+
+
+slider_track = shapes.Rectangle(_slider_x, _slider_y, _slider_w, _slider_h,
+                                 color=(90, 90, 90), batch=controls_batch)
+slider_handle = shapes.Circle(_rpm_to_x(_current_rpm), _slider_y + _slider_h / 2, _handle_radius,
+                               color=(255, 180, 0), batch=controls_batch)
+rpm_label = pyglet.text.Label(f"RPM: {_current_rpm}", font_name="Arial", font_size=11,
+                               x=_slider_x, y=_slider_y + 16,
+                               color=(220, 220, 220, 255), batch=controls_batch)
+
+_reset_x, _reset_y, _reset_w, _reset_h = 250, 12, 70, 24
+reset_button = shapes.Rectangle(_reset_x, _reset_y, _reset_w, _reset_h,
+                                 color=(120, 40, 40), batch=controls_batch)
+reset_label = pyglet.text.Label("RESET", font_name="Arial", font_size=11,
+                                 x=_reset_x + _reset_w / 2, y=_reset_y + _reset_h / 2,
+                                 anchor_x="center", anchor_y="center",
+                                 color=(255, 255, 255, 255), batch=controls_batch)
+
+
+def _set_rpm(rpm):
+    global _current_rpm, _last_sent_rpm
+    rpm = max(RPM_MIN, min(RPM_MAX, round(rpm)))
+    _current_rpm = rpm
+    slider_handle.x = _rpm_to_x(rpm)
+    rpm_label.text = f"RPM: {rpm}"
+    if rpm != _last_sent_rpm:
+        comms.send_workbench(f"rpm {rpm}".encode())
+        _last_sent_rpm = rpm
+
+
+def _point_in_rect(x, y, rx, ry, rw, rh):
+    return rx <= x <= rx + rw and ry <= y <= ry + rh
+
+
+def _unflash_reset_button(dt=None):
+    reset_button.color = (120, 40, 40)
+
+
+@window.event
+def on_mouse_press(x, y, button, modifiers):
+    global _dragging_slider
+    if _point_in_rect(x, y, _slider_x - _handle_radius, _slider_y - _handle_radius,
+                       _slider_w + 2 * _handle_radius, _slider_h + 2 * _handle_radius):
+        _dragging_slider = True
+        _set_rpm(_x_to_rpm(x))
+    elif _point_in_rect(x, y, _reset_x, _reset_y, _reset_w, _reset_h):
+        comms.send_workbench(b"reset")
+        reset_button.color = (220, 80, 80)
+        pyglet.clock.schedule_once(_unflash_reset_button, 0.2)
+
+
+@window.event
+def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
+    if _dragging_slider:
+        _set_rpm(_x_to_rpm(x))
+
+
+@window.event
+def on_mouse_release(x, y, button, modifiers):
+    global _dragging_slider
+    _dragging_slider = False
+
+
+def draw_workbench_controls():
+    controls_batch.draw()
+
 def display_draw():
     window.clear()
     fps_display.draw()
@@ -222,3 +316,5 @@ def display_draw():
         traceback.print_exc()
     finally:
         window.projection = orig_projection
+
+    draw_workbench_controls()

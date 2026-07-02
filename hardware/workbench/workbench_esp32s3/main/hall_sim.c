@@ -3,12 +3,14 @@
 
 #include "driver/gpio.h"
 #include "esp_timer.h"
-
-static const int64_t kRotationPeriodUs = 60000000LL / WB_HALL_RPM;
+#include <stdbool.h>
 
 static esp_timer_handle_t s_period_timer;
 static esp_timer_handle_t s_pulse_end_timer;
 static volatile int64_t s_last_turn_us;
+static volatile int64_t s_rotation_period_us;
+static volatile uint32_t s_rpm;
+static volatile bool s_running;
 
 static void pulse_end_cb(void *arg) {
     gpio_set_level(WB_HALL_PIN, 1);
@@ -18,6 +20,24 @@ static void period_cb(void *arg) {
     s_last_turn_us = esp_timer_get_time();
     gpio_set_level(WB_HALL_PIN, 0);
     esp_timer_start_once(s_pulse_end_timer, WB_HALL_PULSE_WIDTH_US);
+}
+
+static void apply_rpm(uint32_t rpm) {
+    if (esp_timer_is_active(s_period_timer)) {
+        esp_timer_stop(s_period_timer);
+    }
+
+    s_rpm = rpm;
+    if (rpm == 0) {
+        s_running = false;
+        gpio_set_level(WB_HALL_PIN, 1);
+        return;
+    }
+
+    s_rotation_period_us = 60000000LL / rpm;
+    s_last_turn_us = esp_timer_get_time();
+    s_running = true;
+    esp_timer_start_periodic(s_period_timer, s_rotation_period_us);
 }
 
 void hall_sim_begin(void) {
@@ -37,15 +57,28 @@ void hall_sim_begin(void) {
     };
     esp_timer_create(&period_args, &s_period_timer);
 
-    s_last_turn_us = esp_timer_get_time();
-    esp_timer_start_periodic(s_period_timer, kRotationPeriodUs);
+    apply_rpm(WB_HALL_RPM_DEFAULT);
+}
+
+void hall_sim_set_rpm(uint32_t rpm) {
+    if (rpm > WB_HALL_RPM_MAX) {
+        rpm = WB_HALL_RPM_MAX;
+    }
+    apply_rpm(rpm);
+}
+
+uint32_t hall_sim_get_rpm(void) {
+    return s_rpm;
 }
 
 uint32_t hall_sim_current_column(void) {
+    if (!s_running) {
+        return 0;
+    }
     int64_t now = esp_timer_get_time();
     int64_t elapsed = now - s_last_turn_us;
     if (elapsed < 0) {
         elapsed = 0;
     }
-    return (uint32_t)((elapsed * WB_COLUMNS) / kRotationPeriodUs) % WB_COLUMNS;
+    return (uint32_t)((elapsed * WB_COLUMNS) / s_rotation_period_us) % WB_COLUMNS;
 }
