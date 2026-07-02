@@ -1,0 +1,296 @@
+# Hardware Workbench
+
+The workbench is a second ESP32-S3 board used to test a real Ventilastation
+rotor board ("the DUT" — device under test) as close to normal production
+operation as possible, without a spinning fan, a real hall sensor, or a
+laptop's UART cable hanging off the rotor.
+
+It plays three roles at once:
+
+1. **Stimulus generator** — resets the DUT, then feeds it a clean 600 RPM
+   hall-sensor pulse train, exactly like the DUT would see spinning on a
+   real fan.
+2. **LED bus spy** — taps the DUT's LED SPI bus (clock + data only, no CS,
+   no MISO) as a passive SPI slave, decodes the APA102-style frames the DUT
+   is already driving out to its physical LED strips, and re-streams them
+   over Wi-Fi to a desktop `vsdk/emulator` (pyglet) instance using the exact
+   same wire protocol the DUT itself would use if it opened that link
+   directly.
+3. **Serial bridge** — bridges the DUT's UART link (used today for
+   base/rotor and multi-unit sync traffic) to the workbench's USB port, so a
+   PC can watch and inject serial traffic without being wired to the DUT
+   directly.
+
+The DUT runs its normal, unmodified firmware throughout. See
+["Why no DUT firmware changes are needed"](#why-no-dut-firmware-changes-are-needed).
+
+Firmware for the workbench itself lives in
+[`hardware/workbench/`](hardware/workbench/).
+
+## Architecture
+
+```
+                          +-------------------------+
+                          |     Desktop PC           |
+                          |  vsdk/emulator (pyglet)   |
+                          |  python emu.py 192.168.4.1|
+                          +-------------+-------------+
+                                        ^ Wi-Fi, TCP :5005
+                                        | "frame_rgb\n" + 41472 bytes
+                          +-------------+-------------+
+                          |   Workbench ESP32-S3       |
+                          |  - Wi-Fi AP + TCP server    |
+                          |  - SPI slave (LED bus spy)  |
+                          |  - hall pulse generator     |
+                          |  - reset driver             |
+                          |  - UART <-> USB bridge       |
+                          +---+-----+-----+-----+-------+
+                              |     |     |     |
+                        hall  |     |     |     | UART tx/rx
+                        pulse |     |     |     |
+                              |   led_clk |   led_mosi
+                              |     |     |     |
+                          +---v-----v-----v-----v-------+
+                          |   DUT: real Ventilastation   |
+                          |   rotor board (unmodified     |
+                          |   firmware)                   |
+                          +--------------------------------+
+                                        |
+                                reset (EN) pin, driven
+                                by the workbench at boot
+```
+
+The workbench never drives the LED bus (its SPI MOSI/CLK pins are inputs
+only, MISO is unused) and never drives its own UART unless something is
+typed at the USB port, so the DUT's physical LED strips keep working
+exactly as they would standalone — the workbench only listens in.
+
+## Pin connections
+
+All signals are 3.3V and directly compatible between the two ESP32-S3
+boards. Tie the grounds of the workbench and the DUT together.
+
+| Signal              | Workbench pin (suggested) | DUT pin (from `hw_config.py`)         | Direction         | Notes |
+|---------------------|---------------------------|-----------------------------------------|-------------------|-------|
+| Hall sensor          | `GPIO4`  (`WB_HALL_PIN`)  | `hall_gpio`                              | workbench → DUT   | Idles HIGH, pulses LOW once per simulated revolution, matching a real hall sensor with pull-up. |
+| Reset / EN           | `GPIO5`  (`WB_RESET_PIN`) | DUT `EN` / reset pin                     | workbench → DUT   | Open-drain style: workbench drives LOW to assert, then releases to `INPUT` (Hi-Z) so the DUT's own pull-up brings it back HIGH. Never drive HIGH directly. |
+| LED bus clock        | `GPIO12` (`WB_SPI_SCLK_PIN`) | `led_clk`                             | DUT → workbench   | Input only. 20 MHz APA102-style clock. |
+| LED bus data         | `GPIO13` (`WB_SPI_MOSI_PIN`) | `led_mosi`                            | DUT → workbench   | Input only. |
+| LED bus "CS"         | `GPIO14` (`WB_SPI_CS_PIN`)   | *(not wired to the DUT)*              | internal only     | Left unconnected on the workbench and held LOW with an internal pull-down so the ESP-IDF SPI slave peripheral is permanently selected — see [LED bus capture](#led-bus-capture-no-chip-select). |
+| UART TX              | `GPIO17` (`WB_UART_TX_PIN`)  | `serial_rx`                           | workbench → DUT   | Workbench transmits into the DUT's UART RX. |
+| UART RX              | `GPIO18` (`WB_UART_RX_PIN`)  | `serial_tx`                           | DUT → workbench   | Workbench receives from the DUT's UART TX. |
+| Ground               | GND                        | GND                                     | —                 | Common reference, required. |
+
+DUT pin numbers above are the current Ventilastation 2 config in
+[`apps/micropython/ventilastation/hw_config.py`](apps/micropython/ventilastation/hw_config.py)
+(`hall_gpio=6`, `led_clk=15`, `led_mosi=16`, `serial_tx=10`, `serial_rx=9`).
+That file also has commented-out pin sets for the "European Edition" and
+"Ventilastation III" boards — if the DUT under test is one of those
+revisions, rewire to match its actual GPIOs; the workbench-side pins in
+`hardware/workbench/workbench_esp32s3/config.h` don't need to change.
+
+The workbench-side pin choices are arbitrary GPIOs picked to avoid
+ESP32-S3 strapping pins (0, 3, 45, 46), the native USB pins (19, 20), and
+the octal-PSRAM pins used on `N16R8`-style modules (35-37); swap them in
+`config.h` to fit whatever workbench dev board is on hand.
+
+## Sequence of operation
+
+1. Workbench boots, brings up its USB serial console, the DUT UART bridge,
+   the LED-bus SPI slave, and the Wi-Fi AP + TCP server (SSID
+   `ventilastation-workbench`, `192.168.4.1:5005`).
+2. Workbench pulses the reset line low for ~150 ms and releases it —
+   equivalent to pressing the DUT's reset button — then starts generating
+   the 600 RPM hall pulse train immediately so the DUT sees rotation from
+   very early in its boot.
+3. DUT boots its normal firmware, sees hall pulses, and starts driving its
+   LED SPI bus as if it were spinning on a real fan.
+4. Whenever a PC on the workbench's Wi-Fi AP runs the desktop emulator
+   (`cd vsdk && python emulator/emu.py 192.168.4.1`), the emulator opens a
+   TCP connection to port 5005. From then on the workbench streams
+   `frame_rgb` frames it has reconstructed from the spied LED bus.
+5. The UART bridge runs continuously: bytes from the DUT's UART TX are
+   forwarded to the workbench's USB serial output, and anything typed at
+   the USB serial console is forwarded to the DUT's UART RX.
+
+## LED bus capture (no chip-select)
+
+The DUT's LED SPI bus is initialized in
+[`modules/povdisplay/povdisplay.c`](hardware/rotor/modules/povdisplay/povdisplay.c)
+with `miso_io_num = -1` and `spics_io_num = -1` — it is a bare
+clock+data pair with **no chip-select line**, because it feeds an
+APA102-style LED chain, and those chips don't need one either (each
+transaction starts with a 4-byte zero "start frame" and self-frames from
+there). Confirmed by
+[`gpu.c`](hardware/rotor/modules/povdisplay/gpu.c) `render()`/`finish_*()`,
+which builds each LED as `[brightness_byte, B, G, R]`, and
+[`povdisplay.c`](hardware/rotor/modules/povdisplay/povdisplay.c)
+`init_buffers()`, which lays a buffer out as:
+
+```
+[ 4-byte zero start frame ]
+[ 54 × 4-byte LED frame  ]   <- "arm 0" (dma_pixels0, mirror column, LED order reversed)
+[ 54 × 4-byte LED frame  ]   <- "arm 1" (dma_pixels1, current column, direct LED order)
+[ 8-byte end frame        ]
+= 444 bytes total (with the 54-LED bar used today)
+```
+
+`gpu_step()` sends one such 444-byte burst at 20 MHz per column change
+(up to 256 times per revolution), then idles the clock while it renders
+the next columns — so in practice the bus is bursty with real gaps between
+transactions, not a single continuous stream.
+
+The workbench exploits that: it configures the ESP-IDF `spi_slave` driver
+on `SPI2_HOST` with the CS pin tied to a workbench-internal, unconnected
+GPIO held LOW by an internal pull-down (i.e. "always selected"), and keeps
+several 444-byte DMA receive buffers queued back-to-back
+(`hardware/workbench/workbench_esp32s3/main/led_capture.c`). Because there's
+an idle gap between real bursts, the driver has time to retrieve a
+completed transaction and requeue a fresh buffer before the next burst
+starts.
+
+**This is the part of the design most likely to need bring-up work on real
+hardware.** The ESP32 SPI slave peripheral is normally framed by CS edges;
+running it "always selected" and relying purely on the 444-byte transfer
+length to bound each transaction is a known trick but hasn't been
+validated against an actual DUT here. If it proves unreliable in practice
+(missed syncs after long runs, torn frames), the fallback is to resync in
+software off the 4-byte zero start frame, or to switch the capture engine
+to the ESP32-S3 `LCD_CAM` peripheral's camera-RX mode, which can sample an
+arbitrary data pin on an externally-supplied clock into DMA without any
+framing signal at all — a well-worn trick for sniffing clocked serial
+buses that don't have a CS/frame signal.
+
+## Column tracking and frame reassembly
+
+The pyglet emulator (`vsdk/emulator/comms.py` `receive_loop()`) expects a
+`frame_rgb` command over the TCP link followed by exactly
+`256 * 54 * 3 = 41472` raw bytes: 256 angular columns, 54 LEDs each, plain
+`R, G, B` (see `vsdk/apps/micropython/ventilastation/ventilagon_emu.py`
+`render_frame()` for the reference layout the real firmware also uses when
+it pushes `frame_rgb` telemetry itself).
+
+Since the workbench is also the thing generating the hall pulses, it
+already knows the current rotation phase precisely — no need to infer it
+from a captured hall edge. `hall_sim.c` tracks the timestamp of the last
+simulated pulse and reproduces the DUT's own column formula from
+`gpu_step()`:
+
+```
+column = ((now_us - last_turn_us) * 256 / rotation_period_us) % 256
+```
+
+(`column_offset`, a runtime calibration value on real DUTs, is assumed to
+be 0 — the workbench has no way to know a given DUT's calibrated offset,
+so the reconstructed image may appear rotated relative to what that DUT's
+own physical LEDs show. This is a cosmetic limitation only.)
+
+When a 444-byte burst is decoded, `led_capture.c` reads the column at
+that moment, computes the mirror column (`(column + 128) % 256`), and
+writes:
+
+- arm 0's 54 LEDs (order reversed, per `dma_pixels0[n] = draw_buffer0[53-n]`
+  in the real firmware) into the mirror column of the frame buffer,
+- arm 1's 54 LEDs (direct order) into the current column,
+
+dropping each LED's brightness byte and keeping `R, G, B`. There is a
+roughly one-burst pipeline delay versus the DUT's true state (the real
+firmware sends the *previous* column's buffer while it computes the next
+one) — negligible for a visualization tool.
+
+The assembled 256×54×3 buffer is snapshotted under a mutex and sent as one
+`frame_rgb` message roughly every 33 ms (`WB_TELEMETRY_FRAME_INTERVAL_MS`)
+to whichever client is currently connected. Only `frame_rgb` is
+implemented; the workbench doesn't emit `sprites`/`palette`/`sound`/etc.
+telemetry, since none of that is observable from the LED bus alone.
+
+## Wi-Fi telemetry link
+
+The workbench runs as a Wi-Fi access point (`ventilastation-workbench` /
+`workbench123` by default, see `config.h`) at `192.168.4.1` and listens on
+TCP port 5005 with a plain BSD-socket TCP server (`telemetry.c`), matching
+`vsdk/emulator/config.py`'s historical `SERVER_IP = "192.168.4.1"` /
+`SERVER_PORT = 5005` comment for real hardware. To view the DUT's LED
+output live:
+
+```bash
+cd vsdk
+# join the workbench's Wi-Fi AP first, then:
+python emulator/emu.py 192.168.4.1
+```
+
+Only one client connection is served at a time; a new connection replaces
+the previous one the next time it's accepted.
+
+## UART bridge
+
+`serial_bridge.c` opens a second hardware UART (`UART_NUM_1`) on
+`WB_UART_RX_PIN`/`WB_UART_TX_PIN` at `WB_UART_BAUD` (115200, matching
+`machine.UART(2, ...)` in
+[`apps/micropython/ventilastation/serialcomms.py`](apps/micropython/ventilastation/serialcomms.py))
+and copies bytes in both directions between that UART and the workbench's
+own USB-connected console UART (`UART_NUM_0`). Diagnostic log lines from
+this firmware share that same port, so they're interleaved with raw DUT
+traffic on whatever terminal is watching the workbench's USB port. This
+lets a PC watch and inject the same inter-unit/base-sync traffic the DUT
+would normally exchange with a neighboring rotor or base, without a direct
+wired connection.
+
+## Why no DUT firmware changes are needed
+
+- **Hall pin**: the DUT firmware just reads a plain GPIO with a
+  negative-edge interrupt (`hall_init()` in `povdisplay.c`) — it can't
+  tell a workbench-driven square wave from a real hall sensor.
+- **Reset**: pulsing `EN` low/high is a normal hardware reset, identical to
+  pressing the physical reset button.
+- **LED bus**: the workbench only listens (its MOSI/CLK pins are inputs,
+  MISO/CS are never driven onto the DUT's bus), so the DUT drives its bus
+  — and its real physical LEDs, if attached — exactly as in normal
+  operation.
+- **UART**: the DUT's UART is already a general-purpose bidirectional link
+  in current firmware (`serialcomms.py`); the workbench just sits on the
+  other end of it instead of another rotor/base unit.
+
+None of this requires touching `vsdk/apps/micropython/ventilastation/*` or
+the native `hardware/rotor` firmware.
+
+## Firmware location and build
+
+Workbench firmware: [`hardware/workbench/workbench_esp32s3/`](hardware/workbench/workbench_esp32s3/).
+
+It's a plain ESP-IDF project (`idf.py` / CMake, C, no Arduino layer),
+built against **the same ESP-IDF release used to build the DUT's
+MicroPython firmware** — `esp-idf` `v5.5.2`, per
+[`Makefile`](Makefile)'s `VOOM_MICROPYTHON_IDF_PATH`. Matching that
+version matters here because the SPI slave capture in `led_capture.c`
+leans on driver internals (`trans_len`, DMA-buffer requirements) that have
+shifted across ESP-IDF releases.
+
+```bash
+# once, to point the environment at the same IDF tree the DUT uses:
+source /path/to/esp-idf/esp-5.5.2/export.sh
+
+cd vsdk/hardware/workbench/workbench_esp32s3
+idf.py set-target esp32s3   # only needed once, regenerates sdkconfig
+idf.py build
+idf.py -p /dev/tty.<workbench-port> flash monitor
+```
+
+This has been built (not yet flashed to real hardware) against
+`esp-idf` `v5.5.2` for `esp32s3` with no warnings in any of the
+workbench's own sources. `sdkconfig` is generated from
+`sdkconfig.defaults` by `idf.py set-target` and isn't checked in.
+
+No managed/external components are required beyond what ships with
+ESP-IDF (`driver`, `esp_wifi`, `esp_netif`, `esp_event`, `nvs_flash`,
+`esp_timer`, `lwip`).
+
+## Known limitations / open risks
+
+- SPI-slave-without-CS framing (see above) is the biggest unverified piece
+  of this design and needs real hardware bring-up.
+- `column_offset` is assumed to be 0, so the reconstructed image may be
+  rotated relative to a given DUT's own calibrated display.
+- Only `frame_rgb` telemetry is reproduced; no sprite/palette/audio
+  telemetry.
+- Single Wi-Fi client at a time.

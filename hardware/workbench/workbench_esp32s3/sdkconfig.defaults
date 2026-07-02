@@ -1,0 +1,11 @@
+# Built against the same ESP-IDF release used for the DUT's MicroPython
+# firmware (see vsdk/Makefile's VOOM_MICROPYTHON_IDF_PATH). Run
+# `idf.py set-target esp32s3` once before the first build if this file
+# doesn't already carry a target in sdkconfig.
+
+CONFIG_IDF_TARGET="esp32s3"
+
+# Keep the console on the default UART; workbench_main.c installs its own
+# driver on top of it to also carry raw DUT UART bridge bytes (see
+# serial_bridge.c and WORKBENCH.md).
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
