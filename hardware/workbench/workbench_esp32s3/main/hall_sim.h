@@ -18,3 +18,8 @@ uint32_t hall_sim_get_rpm(void);
 // Assumes column_offset == 0 (see WORKBENCH.md). Returns 0 while stopped
 // (rpm == 0).
 uint32_t hall_sim_current_column(void);
+
+// Number of simulated revolutions (hall pulses) since boot. The LED capture
+// uses changes in this to resync its per-burst column counter to column 0 at
+// the start of each revolution.
+uint32_t hall_sim_turn_count(void);

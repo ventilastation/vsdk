@@ -47,27 +47,42 @@ static inline uint8_t *frame_pixel(uint32_t column, uint32_t led) {
     return s_frame + (column * WB_NUM_LEDS + led) * 3;
 }
 
-static void decode_burst(const uint8_t *buf) {
-    uint32_t column = hall_sim_current_column();
+// Each 4-byte LED frame on the wire is [brightness(0xe0|b5), B, G, R].
+// finish_with_gamma() in gpu.c dims the inner/centre LEDs through the APA102
+// 5-bit brightness (b5) so they don't overpower the outer LEDs on the spinning
+// display, where the centre sweeps a much smaller area. The flat emulator view
+// has no such geometry, so we invert that dimming -- divide the colour back out
+// by b5/31 -- to recover the intended per-LED colour. In non-gamma mode b5 == 31
+// (byte 0xff), so this is a no-op. b5 == 0 means the LED is off.
+static inline void put_pixel(uint8_t *out, const uint8_t *w) {
+    uint8_t b5 = w[0] & 0x1f;
+    if (b5 == 0) {
+        out[0] = out[1] = out[2] = 0;
+        return;
+    }
+    unsigned r = (unsigned)w[3] * 31 / b5;
+    unsigned g = (unsigned)w[2] * 31 / b5;
+    unsigned b = (unsigned)w[1] * 31 / b5;
+    out[0] = r > 255 ? 255 : (uint8_t)r;
+    out[1] = g > 255 ? 255 : (uint8_t)g;
+    out[2] = b > 255 ? 255 : (uint8_t)b;
+}
+
+static void decode_burst(const uint8_t *buf, uint32_t column) {
     uint32_t mirror_column = (column + WB_COLUMNS / 2) % WB_COLUMNS;
 
-    const uint8_t *arm0 = buf + START_FRAME_BYTES;                  // dma_pixels0
-    const uint8_t *arm1 = buf + START_FRAME_BYTES + LED_FRAME_BYTES; // dma_pixels1
+    // Buffer layout from povdisplay.c init_buffers(): dma_pixels0 = dma_buffer+1
+    // (byte 4), dma_pixels1 = dma_buffer + PIXELS (byte 4 + (PIXELS-1)*4). The
+    // two arms deliberately share one word (arm0's last LED == arm1's first);
+    // computing arm1 as start+PIXELS*4 instead read one word past it -- into
+    // the 0xff end frame -- which showed as a white line on the outer LED.
+    const uint8_t *arm0 = buf + START_FRAME_BYTES;
+    const uint8_t *arm1 = buf + START_FRAME_BYTES + (WB_NUM_LEDS - 1) * 4;
 
     xSemaphoreTake(s_frame_mutex, portMAX_DELAY);
     for (int n = 0; n < WB_NUM_LEDS; n++) {
-        // word layout on the wire: [brightness, B, G, R]
-        const uint8_t *w0 = arm0 + n * 4;
-        uint8_t *out0 = frame_pixel(mirror_column, WB_NUM_LEDS - 1 - n);
-        out0[0] = w0[3];  // R
-        out0[1] = w0[2];  // G
-        out0[2] = w0[1];  // B
-
-        const uint8_t *w1 = arm1 + n * 4;
-        uint8_t *out1 = frame_pixel(column, n);
-        out1[0] = w1[3];
-        out1[1] = w1[2];
-        out1[2] = w1[1];
+        put_pixel(frame_pixel(mirror_column, WB_NUM_LEDS - 1 - n), arm0 + n * 4);
+        put_pixel(frame_pixel(column, n), arm1 + n * 4);
     }
     xSemaphoreGive(s_frame_mutex);
 }
@@ -81,6 +96,8 @@ static void capture_task(void *arg) {
     }
 
     uint32_t good = 0, other = 0, last_len = 0;
+    uint32_t column = 0;
+    uint32_t last_turn = hall_sim_turn_count();
     int64_t last_report = esp_timer_get_time();
 
     while (1) {
@@ -89,7 +106,18 @@ static void capture_task(void *arg) {
             last_len = done->trans_len / 8;
             if (last_len == BURST_BYTES) {
                 good++;
-                decode_burst((const uint8_t *)done->rx_buffer);
+                // The DUT emits exactly one burst per column, in order, starting
+                // at column 0 after each hall pulse. Assign columns by counting
+                // bursts and resetting each simulated revolution, rather than
+                // recomputing from a clock at decode time (that jitters with
+                // scheduling latency and makes the image unstable).
+                uint32_t turn = hall_sim_turn_count();
+                if (turn != last_turn) {
+                    last_turn = turn;
+                    column = 0;
+                }
+                decode_burst((const uint8_t *)done->rx_buffer, column);
+                column = (column + 1) % WB_COLUMNS;
             } else {
                 other++;
             }

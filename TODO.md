@@ -55,3 +55,10 @@
 - add stereo separation/pan as available in I_StartSound
 - disable board OPL synth and audio playback when in LED and emulator modes.
 - [done] disable LCD framebuffer generation when in LED mode
+
+
+= WORKBENCH FIXES =
+- [DONE] color intensity in the workbench needs a reversal of center intensity, what is done finish_with_gamma from gpu.c (led_capture put_pixel() now inverts the APA102 5-bit brightness dimming -- multiplies each colour by 31/b5 -- so the centre LEDs the firmware dims for the spinning geometry are brought back up in the flat emulator view)
+- [DONE] The unstable display / white line on the outer edge: arm1 offset was one word past dma_pixels1, so the outer LED read the 0xff end frame (white); column was also recomputed from a clock at decode time. Fixed the offset and switched to a per-revolution burst counter for stable columns.
+- new CS activation is missing from prboom and retrogo pov 
+- ventilagon is not rendered properly.
