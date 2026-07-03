@@ -29,8 +29,9 @@ itself does) rather than running its own access point, so the PC running
 the pyglet emulator keeps normal internet access on the same network, and
 finds the workbench via mDNS instead of a hardcoded IP.
 
-The DUT runs its normal, unmodified firmware throughout. See
-["Why no DUT firmware changes are needed"](#why-no-dut-firmware-changes-are-needed).
+The DUT runs its normal firmware, with one small addition: its LED SPI master
+drives a chip-select (`GPIO17`) so the workbench's SPI slave can frame each
+burst. See ["DUT firmware: one small change"](#dut-firmware-one-small-change).
 
 Firmware for the workbench itself lives in
 [`hardware/workbench/`](hardware/workbench/).
@@ -97,7 +98,7 @@ boards. Tie the grounds of the workbench and the DUT together.
 | Reset / EN           | `GPIO5`  (`WB_RESET_PIN`) | DUT `EN` / reset pin                     | workbench → DUT   | Open-drain style: workbench drives LOW to assert, then releases to `INPUT` (Hi-Z) so the DUT's own pull-up brings it back HIGH. Never drive HIGH directly. |
 | LED bus clock        | `GPIO12` (`WB_SPI_SCLK_PIN`) | `led_clk`                             | DUT → workbench   | Input only. 20 MHz APA102-style clock. |
 | LED bus data         | `GPIO13` (`WB_SPI_MOSI_PIN`) | `led_mosi`                            | DUT → workbench   | Input only. |
-| LED bus "CS"         | `GPIO14` (`WB_SPI_CS_PIN`)   | *(not wired to the DUT)*              | internal only     | Left unconnected on the workbench and held LOW with an internal pull-down so the ESP-IDF SPI slave peripheral is permanently selected — see [LED bus capture](#led-bus-capture-no-chip-select). |
+| LED bus CS           | `GPIO14` (`WB_SPI_CS_PIN`)   | `GPIO17` (LED SPI CS)                 | DUT → workbench   | Real chip-select the DUT's LED SPI master now drives (`LEDS_SPI_CS_PIN` in `minispi.c`). Asserted low per 444-byte burst; frames the slave transactions — see [LED bus capture](#led-bus-capture-chip-select). |
 | UART TX              | `GPIO17` (`WB_UART_TX_PIN`)  | `serial_rx`                           | workbench → DUT   | Workbench transmits into the DUT's UART RX. |
 | UART RX              | `GPIO18` (`WB_UART_RX_PIN`)  | `serial_tx`                           | DUT → workbench   | Workbench receives from the DUT's UART TX. |
 | Ground               | GND                        | GND                                     | —                 | Common reference, required. |
@@ -143,19 +144,26 @@ the octal-PSRAM pins used on `N16R8`-style modules (35-37); swap them in
    USB serial output, and anything arriving on the USB serial input is
    forwarded to the DUT's UART RX.
 
-## LED bus capture (no chip-select)
+## LED bus capture (chip-select)
 
-The DUT's LED SPI bus is initialized in
-[`modules/povdisplay/povdisplay.c`](hardware/rotor/modules/povdisplay/povdisplay.c)
-with `miso_io_num = -1` and `spics_io_num = -1` — it is a bare
-clock+data pair with **no chip-select line**, because it feeds an
-APA102-style LED chain, and those chips don't need one either (each
-transaction starts with a 4-byte zero "start frame" and self-frames from
-there). Confirmed by
-[`gpu.c`](hardware/rotor/modules/povdisplay/gpu.c) `render()`/`finish_*()`,
-which builds each LED as `[brightness_byte, B, G, R]`, and
+The DUT's LED SPI master feeds an APA102-style LED chain, which doesn't
+itself need a chip-select. Originally the bus was clock+data only
+(`spics_io_num = -1` in `minispi.c`), and the workbench tried to spy on it
+with an ESP-IDF `spi_slave` held "always selected" (CS tied low). **That did
+not work:** the ESP32-S3 SPI slave peripheral needs CS edges to delimit
+transactions, so with a static CS it never completed a single transfer
+(confirmed on real hardware — clock toggling, zero bursts decoded).
+
+The fix is to give the bus a real chip-select. The DUT's LED SPI master now
+drives CS on `GPIO17` (`LEDS_SPI_CS_PIN` in
+[`minispi.c`](hardware/rotor/modules/povdisplay/minispi.c)), which the ESP32
+hardware asserts low around each `spi_device` transaction and releases
+between them. The LED strips ignore it (they aren't wired to CS); the
+workbench is. `GPIO17` is unused in the active `hw_config`.
+
+Each burst the master sends is a 444-byte buffer built by
 [`povdisplay.c`](hardware/rotor/modules/povdisplay/povdisplay.c)
-`init_buffers()`, which lays a buffer out as:
+`init_buffers()`:
 
 ```
 [ 4-byte zero start frame ]
@@ -165,31 +173,18 @@ which builds each LED as `[brightness_byte, B, G, R]`, and
 = 444 bytes total (with the 54-LED bar used today)
 ```
 
-`gpu_step()` sends one such 444-byte burst at 20 MHz per column change
-(up to 256 times per revolution), then idles the clock while it renders
-the next columns — so in practice the bus is bursty with real gaps between
-transactions, not a single continuous stream.
+each LED frame being `[brightness, B, G, R]` (brightness dropped on decode).
+`gpu_step()` sends one such burst at 20 MHz per column change (up to 256 per
+revolution), so CS pulses low once per column.
 
-The workbench exploits that: it configures the ESP-IDF `spi_slave` driver
-on `SPI2_HOST` with the CS pin tied to a workbench-internal, unconnected
-GPIO held LOW by an internal pull-down (i.e. "always selected"), and keeps
-several 444-byte DMA receive buffers queued back-to-back
-(`hardware/workbench/workbench_esp32s3/main/led_capture.c`). Because there's
-an idle gap between real bursts, the driver has time to retrieve a
-completed transaction and requeue a fresh buffer before the next burst
-starts.
-
-**This is the part of the design most likely to need bring-up work on real
-hardware.** The ESP32 SPI slave peripheral is normally framed by CS edges;
-running it "always selected" and relying purely on the 444-byte transfer
-length to bound each transaction is a known trick but hasn't been
-validated against an actual DUT here. If it proves unreliable in practice
-(missed syncs after long runs, torn frames), the fallback is to resync in
-software off the 4-byte zero start frame, or to switch the capture engine
-to the ESP32-S3 `LCD_CAM` peripheral's camera-RX mode, which can sample an
-arbitrary data pin on an externally-supplied clock into DMA without any
-framing signal at all — a well-worn trick for sniffing clocked serial
-buses that don't have a CS/frame signal.
+The workbench runs the ESP-IDF `spi_slave` driver on `SPI2_HOST` with
+`spics_io_num = WB_SPI_CS_PIN` (`GPIO14`, wired to the DUT's `GPIO17`) and
+keeps several 444-byte DMA receive buffers queued
+(`hardware/workbench/workbench_esp32s3/main/led_capture.c`). Each CS
+deassertion completes a transaction with `trans_len == 444` bytes, which is
+decoded into the frame buffer. Verified end-to-end on hardware at 600 RPM:
+2560 clean 444-byte bursts/second (256 columns × 10 rev/s), zero malformed.
+`led_capture` logs a `bursts/s: good=… other=…` health line once a second.
 
 ## Column tracking and frame reassembly
 
@@ -332,34 +327,45 @@ python emulator/emu.py 192.168.1.42 --remote \
 
 ## UART bridge
 
-`serial_bridge.c` opens a second hardware UART (`UART_NUM_1`) on
+`serial_bridge.c` opens a hardware UART (`UART_NUM_1`) on
 `WB_UART_RX_PIN`/`WB_UART_TX_PIN` at `WB_UART_BAUD` (115200, matching
 `machine.UART(2, ...)` in
 [`apps/micropython/ventilastation/serialcomms.py`](apps/micropython/ventilastation/serialcomms.py))
 and copies bytes in both directions between that UART and the workbench's
-own USB-connected console UART (`UART_NUM_0`). Diagnostic log lines from
-this firmware share that same port, so they're interleaved with raw DUT
+**native USB-Serial-JTAG** — the interface the PC actually opens as
+`/dev/ttyACM*` / `/dev/cu.usbmodem*`. (The host side is *not* `UART_NUM_0`;
+its GPIO43/44 pins aren't on the USB link, so an earlier `UART_NUM_0`
+version silently dropped all button/sound traffic. The console is set to
+USB-Serial-JTAG in `sdkconfig.defaults`, and the bridge installs its driver
+via `usb_serial_jtag_vfs_use_driver()`.) Diagnostic log lines from this
+firmware share that same USB endpoint, so they're interleaved with raw DUT
 traffic on whatever terminal is watching the workbench's USB port. This is
 the link the pyglet emulator's `workbench_conn` (above) uses for button
 state and audio requests.
 
-## Why no DUT firmware changes are needed
+## DUT firmware: one small change
+
+Everything the workbench does is transparent to the DUT except one addition:
+the LED SPI master now drives a chip-select (`GPIO17`) so the workbench slave
+can frame bursts (see [LED bus capture](#led-bus-capture-chip-select)). That
+is the *only* DUT firmware change — a one-line `spics_io_num` in
+[`minispi.c`](hardware/rotor/modules/povdisplay/minispi.c); it's inert on the
+real rotor since nothing else is wired to `GPIO17`. Nothing under
+`vsdk/apps/micropython/ventilastation/*` changes.
+
+Otherwise the DUT behaves exactly as in normal operation:
 
 - **Hall pin**: the DUT firmware just reads a plain GPIO with a
   negative-edge interrupt (`hall_init()` in `povdisplay.c`) — it can't
   tell a workbench-driven square wave from a real hall sensor.
 - **Reset**: pulsing `EN` low/high is a normal hardware reset, identical to
   pressing the physical reset button.
-- **LED bus**: the workbench only listens (its MOSI/CLK pins are inputs,
-  MISO/CS are never driven onto the DUT's bus), so the DUT drives its bus
-  — and its real physical LEDs, if attached — exactly as in normal
-  operation.
+- **LED bus**: the workbench only listens on CLK/MOSI (inputs) and receives
+  the CS the DUT drives; it never drives the DUT's bus, so the DUT's real
+  physical LEDs, if attached, keep working exactly as normal.
 - **UART**: the DUT's UART is already a general-purpose bidirectional link
   in current firmware (`serialcomms.py`); the workbench just sits on the
   other end of it instead of another rotor/base unit.
-
-None of this requires touching `vsdk/apps/micropython/ventilastation/*` or
-the native `hardware/rotor` firmware.
 
 ## Firmware location and build
 
@@ -396,8 +402,9 @@ pinned by `dependencies.lock`; `idf.py build` fetches it into
 
 ## Known limitations / open risks
 
-- SPI-slave-without-CS framing (see above) is the biggest unverified piece
-  of this design and needs real hardware bring-up.
+- LED-bus capture requires the DUT to drive a chip-select (`GPIO17`); the
+  original CS-less "always selected" slave did not work and was replaced (see
+  [LED bus capture](#led-bus-capture-chip-select)). Verified on hardware.
 - `column_offset` is assumed to be 0, so the reconstructed image may be
   rotated relative to a given DUT's own calibrated display.
 - Only `frame_rgb` telemetry is reproduced; no sprite/palette telemetry

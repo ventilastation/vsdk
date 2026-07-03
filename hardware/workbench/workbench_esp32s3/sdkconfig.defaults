@@ -5,10 +5,12 @@
 
 CONFIG_IDF_TARGET="esp32s3"
 
-# Keep the console on the default UART; workbench_main.c installs its own
-# driver on top of it to also carry raw DUT UART bridge bytes (see
-# serial_bridge.c and WORKBENCH.md).
-CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+# Route the console to the native USB-Serial-JTAG -- the interface the PC
+# actually opens over USB (/dev/ttyACM*, /dev/cu.usbmodem*). serial_bridge.c
+# installs its driver and moves raw DUT UART bridge bytes over the same
+# endpoint, interleaved with ESP_LOGx. (Using UART0 sent bridge bytes to
+# unconnected GPIO43/44.) See serial_bridge.c and WORKBENCH.md.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
 # Explicit partition table (see partitions.csv) so Wi-Fi provisioning can
 # flash the NVS partition at a known offset without a full build first.

@@ -9,6 +9,7 @@ idf_component_register(
     INCLUDE_DIRS "."
     PRIV_REQUIRES
         driver
+        esp_driver_usb_serial_jtag
         esp_wifi
         esp_event
         esp_netif

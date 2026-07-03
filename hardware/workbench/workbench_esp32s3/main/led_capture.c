@@ -1,12 +1,11 @@
 // Passive SPI-slave spy on the DUT's LED bus.
 //
-// The DUT drives this bus with no chip-select (see WORKBENCH.md), so the
-// slave peripheral here is configured "always selected" (CS pin tied low
-// via an internal pull-down, not wired to the DUT at all) and relies on
-// each queued transaction's fixed length to bound a burst. This is the
-// part of the design most likely to need hardware bring-up — see
-// WORKBENCH.md's "LED bus capture (no chip-select)" section for the
-// fallback plan if it doesn't sync reliably in practice.
+// The DUT's LED SPI master drives a real chip-select (GPIO17 -> WB_SPI_CS_PIN,
+// GPIO14 on the workbench), asserted low for each 444-byte burst. That CS
+// frames the slave transactions: each queued receive completes on CS deassert
+// with trans_len == BURST_BYTES. (An earlier "no chip-select / always
+// selected" scheme did not work — the ESP32-S3 SPI slave needs CS edges to
+// delimit transactions.)
 //
 // Each burst is a 444-byte APA102-style buffer built by
 // hardware/rotor/modules/povdisplay/povdisplay.c:
@@ -24,10 +23,14 @@
 #include "driver/gpio.h"
 #include "esp_heap_caps.h"
 #include "esp_check.h"
+#include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include <string.h>
+
+static const char *TAG = "led_capture";
 
 #define START_FRAME_BYTES 4
 #define LED_FRAME_BYTES (WB_NUM_LEDS * 4)
@@ -77,13 +80,28 @@ static void capture_task(void *arg) {
         spi_slave_queue_trans(SPI2_HOST, &s_trans[i], portMAX_DELAY);
     }
 
+    uint32_t good = 0, other = 0, last_len = 0;
+    int64_t last_report = esp_timer_get_time();
+
     while (1) {
         spi_slave_transaction_t *done = NULL;
-        if (spi_slave_get_trans_result(SPI2_HOST, &done, portMAX_DELAY) == ESP_OK) {
-            if (done->trans_len / 8 == BURST_BYTES) {
+        if (spi_slave_get_trans_result(SPI2_HOST, &done, pdMS_TO_TICKS(1000)) == ESP_OK) {
+            last_len = done->trans_len / 8;
+            if (last_len == BURST_BYTES) {
+                good++;
                 decode_burst((const uint8_t *)done->rx_buffer);
+            } else {
+                other++;
             }
             spi_slave_queue_trans(SPI2_HOST, done, portMAX_DELAY);
+        }
+
+        int64_t now = esp_timer_get_time();
+        if (now - last_report >= 1000000) {
+            ESP_LOGI(TAG, "bursts/s: good=%lu other=%lu last_len=%lu",
+                     (unsigned long)good, (unsigned long)other, (unsigned long)last_len);
+            good = 0; other = 0;
+            last_report = now;
         }
     }
 }
@@ -92,11 +110,11 @@ void led_capture_begin(void) {
     s_frame_mutex = xSemaphoreCreateMutex();
     memset(s_frame, 0, sizeof(s_frame));
 
-    // Not wired to the DUT: pulled low so the slave peripheral is always
-    // "selected", since this bus has no real chip-select line.
-    gpio_reset_pin(WB_SPI_CS_PIN);
-    gpio_set_direction(WB_SPI_CS_PIN, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(WB_SPI_CS_PIN, GPIO_PULLDOWN_ONLY);
+    // WB_SPI_CS_PIN is wired to the DUT's LED-bus CS (GPIO17): the DUT master
+    // now drives a real chip-select, asserting it low for each 444-byte burst,
+    // which frames the slave transactions. Pull it up so it reads idle/
+    // deasserted while the DUT isn't driving (e.g. before it boots).
+    gpio_set_pull_mode(WB_SPI_CS_PIN, GPIO_PULLUP_ONLY);
 
     spi_bus_config_t buscfg = {
         .mosi_io_num = WB_SPI_MOSI_PIN,
