@@ -48,24 +48,11 @@ static inline uint8_t *frame_pixel(uint32_t column, uint32_t led) {
 }
 
 // Each 4-byte LED frame on the wire is [brightness(0xe0|b5), B, G, R].
-// finish_with_gamma() in gpu.c dims the inner/centre LEDs through the APA102
-// 5-bit brightness (b5) so they don't overpower the outer LEDs on the spinning
-// display, where the centre sweeps a much smaller area. The flat emulator view
-// has no such geometry, so we invert that dimming -- divide the colour back out
-// by b5/31 -- to recover the intended per-LED colour. In non-gamma mode b5 == 31
-// (byte 0xff), so this is a no-op. b5 == 0 means the LED is off.
+// Pass the colour bytes through as-is; intensity correction is deferred.
 static inline void put_pixel(uint8_t *out, const uint8_t *w) {
-    uint8_t b5 = w[0] & 0x1f;
-    if (b5 == 0) {
-        out[0] = out[1] = out[2] = 0;
-        return;
-    }
-    unsigned r = (unsigned)w[3] * 31 / b5;
-    unsigned g = (unsigned)w[2] * 31 / b5;
-    unsigned b = (unsigned)w[1] * 31 / b5;
-    out[0] = r > 255 ? 255 : (uint8_t)r;
-    out[1] = g > 255 ? 255 : (uint8_t)g;
-    out[2] = b > 255 ? 255 : (uint8_t)b;
+    out[0] = w[3]; // R
+    out[1] = w[2]; // G
+    out[2] = w[1]; // B
 }
 
 static void decode_burst(const uint8_t *buf, uint32_t column) {
