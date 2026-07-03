@@ -1,7 +1,27 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator workbench-build workbench-flash workbench-monitor workbench-wifi-provision
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
 BAUD ?= 2000000
+
+# --- Stable board selection (avoid /dev/ttyACM* number swaps) ---
+# ESP32-S3 USB-Serial-JTAG boards re-enumerate on every reset, so with two
+# boards attached their /dev/ttyACM* numbers can swap mid-session -- flashing
+# PORT=/dev/ttyACMx then silently hits the WRONG chip. The /dev/serial/by-id/
+# symlink instead always follows a given chip. Pass MAC=aa:bb:cc:dd:ee:ff to
+# target a board by its USB-JTAG serial (the chip's MAC); it resolves to the
+# matching by-id path regardless of the board's current ttyACM number:
+#   make flash-vsdk    MAC=3C:84:27:C8:5E:58
+#   make workbench-flash MAC=3C:84:27:C9:5D:24
+# `make list-boards` prints the MAC <-> ttyACM mapping of attached boards.
+# (Matching is case-insensitive and ignores colons, so it also works while a
+# board is still showing its pre-flash USB-CDC descriptor.)
+ifdef MAC
+PORT := $(shell w=$$(printf %s "$(MAC)" | tr -d : | tr A-Z a-z); for f in /dev/serial/by-id/*; do [ -e "$$f" ] || continue; n=$$(printf %s "$$f" | tr -d : | tr A-Z a-z); if printf %s "$$n" | grep -qiF -- "$$w"; then printf %s "$$f"; break; fi; done)
+ifeq ($(strip $(PORT)),)
+$(error No attached board matches MAC=$(MAC); run 'make list-boards' to see attached boards)
+endif
+endif
+
 SERIAL_LOCK_FILE ?= /tmp/vsdk-serial.lock
 VOOM_WAIT ?= 15
 VOOM_MICROPYTHON_IDF_PATH ?= ../../esp-idf/esp-5.5.2
@@ -26,7 +46,15 @@ export RG_TOOL_EXTRA_DEFINES
 # The board's USB-CDC serial port re-enumerates on reset, so concurrent flash
 # commands can interrupt each other mid-transfer. Use a host-side lock to
 # serialize any target that talks to the board over the flashing port.
-SERIAL_LOCK = lockf "$(SERIAL_LOCK_FILE)"
+# macOS ships lockf; Linux ships flock (same "<tool> <file> <cmd...>" form).
+# Fall back to no locking rather than failing if neither is present.
+SERIAL_LOCK := $(shell if command -v lockf >/dev/null 2>&1; then echo lockf $(SERIAL_LOCK_FILE); elif command -v flock >/dev/null 2>&1; then echo flock $(SERIAL_LOCK_FILE); fi)
+
+# List attached ESP boards as their stable by-id name -> current /dev/ttyACM*,
+# so you can grab a MAC for MAC= (see the "Stable board selection" note above).
+list-boards:
+	@ls /dev/serial/by-id/ >/dev/null 2>&1 || { echo "no /dev/serial/by-id entries (no boards attached, or no udev)"; exit 0; }
+	@for f in /dev/serial/by-id/*; do [ -e "$$f" ] && printf '  %-72s -> %s\n' "$$(basename "$$f")" "$$(readlink -f "$$f")"; done
 
 micropython-webassembly:
 	./tools/build-micropython-webassembly.sh
