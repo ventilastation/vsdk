@@ -58,7 +58,8 @@
 
 
 = WORKBENCH FIXES =
-- [DONE] color intensity in the workbench needs a reversal of center intensity, what is done finish_with_gamma from gpu.c (led_capture put_pixel() now inverts the APA102 5-bit brightness dimming -- multiplies each colour by 31/b5 -- so the centre LEDs the firmware dims for the spinning geometry are brought back up in the flat emulator view)
+- color intensity in the workbench needs a proper reversal of the full finish_with_gamma pipeline (intensidades table per-LED + brillos). Deferred; put_pixel currently passes wire bytes through unchanged.
 - [DONE] The unstable display / white line on the outer edge: arm1 offset was one word past dma_pixels1, so the outer LED read the 0xff end frame (white); column was also recomputed from a clock at decode time. Fixed the offset and switched to a per-revolution burst counter for stable columns.
-- new CS activation is missing from prboom and retrogo pov 
+- [DONE] new CS activation is missing from prboom and retrogo pov 
 - ventilagon is not rendered properly.
+- color intensity is still wrong. The intensity table comes from https://github.com/alecu/ventilastation/blob/c39710f309f530d385ae7659717445f95740959c/vyruss/images/intensidades.py
