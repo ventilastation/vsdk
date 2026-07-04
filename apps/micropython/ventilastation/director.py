@@ -79,6 +79,31 @@ class Director:
         content = details.encode("utf-8")
         self.report_traceback(content)
 
+    def _dispatch_control(self, cmd_line):
+        """Handle a text control command received on the control port (port 5006)."""
+        parts = cmd_line.split()
+        if not parts:
+            return
+        cmd = parts[0]
+        if cmd == "ota_start":
+            base_url = parts[1] if len(parts) > 1 else ""
+            if not base_url:
+                print("director: ota_start missing URL")
+                return
+            print("director: OTA requested from", base_url, "— rebooting into OTA mode")
+            # Write the request and reboot so OTA runs before the GPU task starts.
+            # Running WiFi while the GPU task holds the SPI bus causes a core crash.
+            try:
+                with open("/ota_request", "w") as _f:
+                    _f.write(base_url)
+            except Exception as _e:
+                print("director: failed to write ota_request:", _e)
+                return
+            import machine
+            machine.reset()
+        else:
+            print("director: unknown control command:", cmd_line)
+
     def _enter_scene(self, scene):
         scene._vs_entered = False
         try:
@@ -305,6 +330,12 @@ class Director:
         val = self.platform.comms.receive(1)
         if val:
             self.buttons = val[0]
+
+        # Check for text control commands (e.g. ota_start) on the control port.
+        if hasattr(self.platform.comms, "next_command"):
+            cmd_line = self.platform.comms.next_command()
+            if cmd_line:
+                self._dispatch_control(cmd_line)
 
         try:
             scene.scene_step()

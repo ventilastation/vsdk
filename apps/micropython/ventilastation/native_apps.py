@@ -16,14 +16,6 @@ APP_REGISTRY = {
         "native_app": "voom",
         "title": "Voom",
     },
-    "native.genesis": {
-        "kind": "native",
-        "native_app": "gwenesis",
-        "title": "Mega Drive",
-        # Booted standalone (no retro-go launcher): hand gwenesis the ROM path via
-        # NVS. Must be the full storage path the emulator reads (RG_STORAGE_ROOT/...).
-        "rom": "/vfs/roms/md/OutRun (USA, Europe).zip",
-    },
     # NES and Master System run in the shared retro-core app, which dispatches on
     # the "system" we hand it via NVS (voom_emu) along with the ROM path.
     "native.nes": {
@@ -123,17 +115,6 @@ def request_native_launch(slug):
     }
 
 
-def _write_genesis_rom_nvs(rom_path):
-    """Hand the ROM path to gwenesis via NVS (it reads voom_md/rom on boot)."""
-    try:
-        import esp32
-        nvs = esp32.NVS("voom_md")
-        nvs.set_blob("rom", rom_path.encode())
-        nvs.commit()
-    except Exception:
-        pass
-
-
 def _write_emu_nvs(system, rom_path):
     """Hand the system + ROM path to retro-core via NVS (voom_emu); it dispatches
     on 'system' (nes/sms/...) and loads 'rom' on boot."""
@@ -168,9 +149,6 @@ class NativeLaunchScene(Scene):
         if system:
             # retro-core (NES/SMS/...): dispatch on system + ROM via NVS voom_emu.
             _write_emu_nvs(system, rom)
-        elif rom:
-            # gwenesis (Mega Drive): ROM path via NVS voom_md.
-            _write_genesis_rom_nvs(rom)
 
         result = request_native_launch(self.slug)
         if result["launched"]:

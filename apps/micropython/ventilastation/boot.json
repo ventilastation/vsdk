@@ -1,1 +1,1 @@
-{"slug": "native.voom", "return_mode": "micropython", "mode": "native", "native_app": "voom"}
+{"mode": "micropython"}

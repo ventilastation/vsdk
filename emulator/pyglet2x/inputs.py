@@ -1,6 +1,7 @@
 import pyglet
 from pyglet.window import key
 
+import comms
 from pyglet2x.pygletdraw import window, help_label
 
 try:
@@ -47,7 +48,7 @@ def init_controller(ctrl):
 controller_man = pyglet.input.ControllerManager()
 
 def update_label():
-    help_label.text = ("joy or " if controller else "") + "keys: ←↕→ SPACE ESC Q"
+    help_label.text = ("joy or " if controller else "") + "keys: ←↕→ SPACE ESC Q  U=OTA"
 
 @controller_man.event
 def on_connect(ctrl):
@@ -75,6 +76,8 @@ def on_key_press(symbol, modifiers):
         return pyglet.event.EVENT_HANDLED
     if symbol == pyglet.window.key.Q:
         pyglet.app.exit()
+    if symbol == pyglet.window.key.U:
+        comms.trigger_ota()
 
 def encode_input_val():
     THR = 0.5

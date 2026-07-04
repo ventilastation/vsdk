@@ -39,8 +39,8 @@ ALLOWED_SUFFIXES = {
 # Console ROM extensions accepted under the emulator "roms/<system>" trees (read
 # by gwenesis / retro-core). Scoped to those trees so .bin/.zip elsewhere aren't
 # swept in. README.md is excluded via SKIP_FILE_NAMES.
-ROM_SUFFIXES = {".md", ".gen", ".bin", ".smd", ".nes", ".sms", ".gg", ".col", ".zip"}
-EMU_ROM_ROOTS = {"roms/md", "roms/nes", "roms/sms"}
+ROM_SUFFIXES = {".nes", ".sms", ".gg", ".col", ".zip"}
+EMU_ROM_ROOTS = {"roms/nes", "roms/sms"}
 
 
 def iter_copy_jobs(vsdk_root):
@@ -50,7 +50,6 @@ def iter_copy_jobs(vsdk_root):
         ("roms", vsdk_root / "apps/micropython/roms"),
         ("roms/doom", vsdk_root / "apps/retro-go/prboom-go/components/prboom/data"),
         # Console ROMs, served from /vfs/roms/<system> (gitignored locally).
-        ("roms/md", vsdk_root / "apps/retro-go/roms/md"),      # gwenesis (Mega Drive)
         ("roms/nes", vsdk_root / "apps/retro-go/roms/nes"),    # retro-core (NES)
         ("roms/sms", vsdk_root / "apps/retro-go/roms/sms"),    # retro-core (Master System)
         ("games", vsdk_root / "games"),
@@ -147,8 +146,8 @@ def main():
     parser.add_argument(
         "--partition-size",
         type=lambda x: int(x, 0),
-        default=0xA10000,
-        help="VFS partition size in bytes (default: 0xA10000 = 10,551,296 bytes, matches partitions-voom.csv)",
+        default=0x910000,
+        help="VFS partition size in bytes (default: 0x910000 = 9,502,720 bytes, matches partitions-voom.csv)",
     )
     parser.add_argument(
         "--output",

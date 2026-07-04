@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards first-flash
 
 PORT ?=
 BAUD ?= 2000000
@@ -126,7 +126,11 @@ run-emulator:
 voom-sounds:
 	cd emulator && python build_voom_sounds.py
 
-flash-all: flash-vsdk flash-voom flash-launcher deploy-fs
+# flash-vsdk already writes micropython to both the factory slot and micropython
+# (ota_2) slot.  On first boot, comms.py migrates from factory to ota_2 automatically.
+first-flash: flash-vsdk flash-voom flash-retro-core deploy-fs
+
+flash-all: flash-vsdk flash-voom flash-retro-core deploy-fs
 
 generate-roms:
 	python3 tools/generate_roms.py

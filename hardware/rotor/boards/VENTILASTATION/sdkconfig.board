@@ -5,3 +5,10 @@
 # MicroPython starts, usb_serial_jtag_tx_strn() hits a 200ms timeout, sets
 # terminal_connected=false, and silently drops all Python output forever.
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# Enable OTA rollback: a new image starts PENDING_VERIFY and must call
+# esp_ota_mark_app_valid_cancel_rollback() within one boot to be confirmed.
+# If the board resets without confirming, the bootloader falls back to the
+# previous valid image (factory).  MicroPython calls this after WiFi connects
+# (see apps/micropython/ventilastation/comms.py).
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y

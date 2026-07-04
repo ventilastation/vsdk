@@ -11,6 +11,9 @@ from pygletengine import all_strips, set_palettes, spritedata
 from vsdk import set_voom_frame, set_voom_frame_rgb, clear_voom_frame
 from audio import playsound, playmusic, playnotes
 from emu_audio import emu_audio
+import upgrade_server
+
+upgrade_server.start(port=8000)
 
 class ConnectionBase:
     def __init__(self):
@@ -234,6 +237,20 @@ def dispatch_command(conn, command, args):
         slot_number = int(slot.decode())
         all_strips[slot_number] = conn.read(int(length))
 
+    elif command == b"ota_progress":
+        stage = args[0].decode() if args else "?"
+        detail = args[1].decode() if len(args) > 1 else ""
+        pct = args[2].decode() if len(args) > 2 else ""
+        print(f"OTA [{stage}] {detail} {pct}%")
+
+    elif command == b"ota_done":
+        status = args[0].decode() if args else "?"
+        print(f"OTA update complete: {status}")
+
+    elif command == b"ota_error":
+        msg = b" ".join(args).decode()
+        print(f"OTA error: {msg}")
+
     elif command == b"traceback":
         length = args[0]
         tb = conn.read(int(length))
@@ -318,6 +335,22 @@ def send(b):
         target.send(b)
     except (socket.error, OSError) as err:
         print(err)
+
+def trigger_ota():
+    """Send ota_start to the device via the control port (5006)."""
+    try:
+        local_ip = display_conn.sock.getsockname()[0]
+        device_ip = config.SERVER_IP
+        url = f"http://{local_ip}:8000"
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(3)
+        s.connect((device_ip, 5006))
+        s.send(f"ota_start {url}\n".encode())
+        s.close()
+        print(f"comms: sent ota_start to {device_ip}:5006 (server at {url})")
+    except Exception as e:
+        print(f"comms: trigger_ota failed: {e}")
+
 
 def send_workbench(line):
     """Send a control command line to the workbench over Wi-Fi, e.g.

@@ -35,6 +35,29 @@ try:
             utime.sleep_ms(333)
         print()
     print('network config:', sta_if.ifconfig())
+
+    # If running from factory (first boot after flash_vsdk_image), migrate to the
+    # updatable micropython (ota_2) slot so future OTA updates don't touch factory.
+    try:
+        import esp32
+        running = esp32.Partition(esp32.Partition.RUNNING)
+        if running.info()[4] == "factory":
+            mp = esp32.Partition.find(esp32.Partition.TYPE_APP, label="micropython")
+            if mp:
+                print("comms: first boot on factory — switching to micropython slot")
+                mp[0].set_boot()
+                import machine
+                machine.reset()
+    except Exception as _me:
+        print("comms: ota migration check failed:", _me)
+
+    # Confirm the running image is healthy so the bootloader doesn't roll back.
+    try:
+        import esp32
+        esp32.Partition.mark_app_valid_cancel_rollback()
+    except Exception:
+        pass  # not an OTA image or already confirmed
+
 except ImportError:
     print("no wifi module, skipping")
 except Exception as _e:
@@ -50,10 +73,22 @@ sock.listen(10)
 sock.setblocking(0)
 print("listening on 5005")
 
+# Control socket on port 5006 accepts one-line text commands from the emulator
+# (e.g. "ota_start http://..."). Separate from the display connection so the
+# button-byte protocol on port 5005 is unchanged.
+_ctrl_sock = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
+_ctrl_sock.setsockopt(usocket.SOL_SOCKET, usocket.SO_REUSEADDR, 1)
+_ctrl_sock.bind(usocket.getaddrinfo("0.0.0.0", 5006)[0][-1])
+_ctrl_sock.listen(2)
+_ctrl_sock.setblocking(0)
+print("listening on 5006 (control)")
+
 poller = uselect.poll()
 poller.register(sock, uselect.POLLIN)
+poller.register(_ctrl_sock, uselect.POLLIN)
 conn = None
 _new_connection = False
+_pending_commands = []   # list of decoded command strings
 
 def was_new_connection():
     global _new_connection
@@ -75,6 +110,16 @@ def receive(bufsize):
             poller.register(conn, uselect.POLLIN)
             _new_connection = True
             print("comms: new connection from", addr)
+        elif obj is _ctrl_sock:
+            # Accept a short-lived control connection, read one command line.
+            try:
+                ctrl_conn, ctrl_addr = _ctrl_sock.accept()
+                line = ctrl_conn.readline()
+                ctrl_conn.close()
+                if line:
+                    _pending_commands.append(line.strip().decode("utf-8", "replace"))
+            except Exception as _e:
+                print("comms: ctrl accept error:", _e)
         else:
             try:
                 b = obj.read(1)
@@ -87,6 +132,11 @@ def receive(bufsize):
                 poller.unregister(obj)
                 conn = None
     return retval
+
+
+def next_command():
+    """Return the next pending control command string, or None."""
+    return _pending_commands.pop(0) if _pending_commands else None
 
 def _drop_conn(reason):
     global conn

@@ -33,14 +33,14 @@
  
 - [DONE] make voom run again on the esp32-s3, but be able to start it from micropython. It's ok to reboot the esp when ending doom.
 
-- ease the deployment:
-    - some easy way to reboot the esp32 controller
+- ease the deployment: [DESIGNED — see OTA.md]
+    - [done] some easy way to reboot the esp32 controller
     - small micropython module compiled in ROM in charge of booting, that connects to base and checks for updates
-    - able to download new partitions and update them
+    - [DESIGNED] able to download new partitions and update them (OTA.md: 3-tier system, emulator HTTP server on :8000)
     - fetches wifi config and other settings like pov_offset from NVS
-    - uses mdns to connect to update server and remote joystick/display
-    - able to upgrade voom without rebooting
-    - able to sync a folder of roms
+    - [done] uses mdns to connect to update server and remote joystick/display
+    - able to upgrade voom without rebooting (OTA.md covers partition OTA but voom still needs a reboot)
+    - [DESIGNED] able to sync a folder of roms (OTA.md tier 1: LFS file sync with SHA256)
 
 - darker color in the center leds is way off for things like voom. We may have to rework the whole gamma curve
 - sega master system has some display delays, nes gets ugly very fast. What other tasks are running in the same core?
