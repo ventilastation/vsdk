@@ -48,7 +48,7 @@ def init_controller(ctrl):
 controller_man = pyglet.input.ControllerManager()
 
 def update_label():
-    help_label.text = ("joy or " if controller else "") + "keys: ←↕→ SPACE ESC Q  U=OTA"
+    help_label.text = ("joy or " if controller else "") + "keys: ←↕→ SPACE ESC Q"
 
 @controller_man.event
 def on_connect(ctrl):

@@ -243,6 +243,14 @@ reset_label = pyglet.text.Label("RESET", font_name="Arial", font_size=11,
                                  anchor_x="center", anchor_y="center",
                                  color=(255, 255, 255, 255), batch=controls_batch)
 
+_ota_x, _ota_y, _ota_w, _ota_h = 330, 12, 70, 24
+ota_button = shapes.Rectangle(_ota_x, _ota_y, _ota_w, _ota_h,
+                               color=(40, 80, 140), batch=controls_batch)
+ota_label = pyglet.text.Label("UPGRADE", font_name="Arial", font_size=11,
+                               x=_ota_x + _ota_w / 2, y=_ota_y + _ota_h / 2,
+                               anchor_x="center", anchor_y="center",
+                               color=(255, 255, 255, 255), batch=controls_batch)
+
 
 def _set_rpm(rpm):
     global _current_rpm, _last_sent_rpm
@@ -263,6 +271,10 @@ def _unflash_reset_button(dt=None):
     reset_button.color = (120, 40, 40)
 
 
+def _unflash_ota_button(dt=None):
+    ota_button.color = (40, 80, 140)
+
+
 @window.event
 def on_mouse_press(x, y, button, modifiers):
     global _dragging_slider
@@ -274,6 +286,10 @@ def on_mouse_press(x, y, button, modifiers):
         comms.send_workbench(b"reset")
         reset_button.color = (220, 80, 80)
         pyglet.clock.schedule_once(_unflash_reset_button, 0.2)
+    elif _point_in_rect(x, y, _ota_x, _ota_y, _ota_w, _ota_h):
+        comms.trigger_ota()
+        ota_button.color = (80, 140, 220)
+        pyglet.clock.schedule_once(_unflash_ota_button, 0.2)
 
 
 @window.event
