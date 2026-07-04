@@ -15,7 +15,7 @@ sound_init()
 class PygletEngine():
     def __init__(self, led_count, comms_send, enable_display=True):
         display_init(led_count)
-        self.last_byte_sent = 0
+        self.last_input_sent = (0, 0)
         self.comms_send = comms_send
         self.enable_display = enable_display
         # self.must_profile = False
@@ -23,11 +23,12 @@ class PygletEngine():
         # pyglet.clock.schedule_once(lambda dt: setattr(self, 'must_profile', True), 5.0)
 
         def process_input():
-            val = encode_input_val()
+            import comms
+            joy1, extra = encode_input_val()
 
-            if val != self.last_byte_sent:
-                self.comms_send(bytes([val]))
-                self.last_byte_sent = val
+            if (joy1, extra) != self.last_input_sent:
+                comms.send_joystick(joy1, extra=extra)
+                self.last_input_sent = (joy1, extra)
 
         @window.event
         def on_draw():

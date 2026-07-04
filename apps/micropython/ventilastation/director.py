@@ -40,20 +40,43 @@ comms = _CommsProxy()
 
 
 class Director:
-    JOY_LEFT = 1
-    JOY_RIGHT = 2
-    JOY_UP = 4
-    JOY_DOWN = 8
-    BUTTON_A = 16
-    BUTTON_B = 32
-    BUTTON_C = 64
-    BUTTON_D = 128
+    # joy1 bit layout (matches wire protocol and config.h):
+    JOY_LEFT  = 0x01
+    JOY_RIGHT = 0x02
+    JOY_UP    = 0x04
+    JOY_DOWN  = 0x08
+    BUTTON_A  = 0x10
+    BUTTON_B  = 0x20
+    BUTTON_C  = 0x40
+    BUTTON_D  = 0x80   # mirrored from extra bit 0; backward-compat for existing games
+
+    # joy2 — same bit layout as joy1
+    JOY2_LEFT  = 0x01
+    JOY2_RIGHT = 0x02
+    JOY2_UP    = 0x04
+    JOY2_DOWN  = 0x08
+    BUTTON2_A  = 0x10
+    BUTTON2_B  = 0x20
+    BUTTON2_C  = 0x40
+
+    # extra buttons (7 available; bit 0 is the physical BUTTON_D)
+    EXTRA_BTN_0 = 0x01
+    EXTRA_BTN_1 = 0x02
+    EXTRA_BTN_2 = 0x04
+    EXTRA_BTN_3 = 0x08
+    EXTRA_BTN_4 = 0x10
+    EXTRA_BTN_5 = 0x20
+    EXTRA_BTN_6 = 0x40
 
     def __init__(self, platform):
         self.platform = platform
         self.scene_stack = []
         self.buttons = 0
         self.last_buttons = 0
+        self.buttons2 = 0
+        self.last_buttons2 = 0
+        self.extra_buttons = 0
+        self.last_extra_buttons = 0
         self.last_player_action = utime.ticks_ms()
         self.timedout = False
         self.romdata = None
@@ -159,6 +182,18 @@ class Director:
 
     def was_released(self, button):
         return not bool(button & self.buttons) and bool(button & self.last_buttons)
+
+    def is_pressed2(self, button):
+        return bool(button & self.buttons2)
+
+    def was_pressed2(self, button):
+        return bool(button & self.buttons2) and not bool(button & self.last_buttons2)
+
+    def was_released2(self, button):
+        return not bool(button & self.buttons2) and bool(button & self.last_buttons2)
+
+    def is_extra(self, button):
+        return bool(button & self.extra_buttons)
 
     def sound_play(self, track):
         if isinstance(track, str):
@@ -331,7 +366,15 @@ class Director:
         if val:
             self.buttons = val[0]
 
-        # Check for text control commands (e.g. ota_start) on the control port.
+        if hasattr(self.platform.comms, "next_joy2"):
+            self.buttons2      = self.platform.comms.next_joy2()
+            self.extra_buttons = self.platform.comms.next_extra()
+            # Mirror EXTRA_BTN_0 → BUTTON_D so existing games work unchanged.
+            if self.extra_buttons & self.EXTRA_BTN_0:
+                self.buttons |= self.BUTTON_D
+            else:
+                self.buttons &= ~self.BUTTON_D & 0xFF
+
         if hasattr(self.platform.comms, "next_command"):
             cmd_line = self.platform.comms.next_command()
             if cmd_line:
@@ -348,6 +391,8 @@ class Director:
         if self.last_buttons != self.buttons:
             self.last_player_action = now
             self.last_buttons = self.buttons
+        self.last_buttons2      = self.buttons2
+        self.last_extra_buttons = self.extra_buttons
 
         self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
         self.platform.display.update()

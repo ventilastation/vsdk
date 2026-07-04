@@ -76,6 +76,7 @@ def encode_input_val():
         accel = keys[key.PAGEUP] or keys[key.P]
         decel = keys[key.PAGEDOWN] or keys[key.O]
 
-    val = (left << 0 | right << 1 | up << 2 | down << 3 | boton << 4 |
-            accel << 5 | decel << 6 | reset << 7)
-    return val
+    joy1 = (left << 0 | right << 1 | up << 2 | down << 3 | boton << 4 |
+             accel << 5 | decel << 6)
+    extra = reset << 0   # BUTTON_D / EXTRA_BTN_0
+    return joy1, extra

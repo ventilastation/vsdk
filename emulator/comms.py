@@ -325,29 +325,29 @@ if workbench_conn:
     workbench_thread.start()
 
 def send(b):
-    """Send raw button-state bytes toward the DUT (called from
-    pygletengine's input loop). In hardware mode these go out over the
-    workbench's serial bridge, matching how the physical base sends button
-    state to the rotor over UART; otherwise they go to the same link
-    everything else uses (the local desktop MicroPython subprocess)."""
+    """Send raw bytes toward the DUT. In hardware mode these go over the
+    workbench serial bridge; otherwise over the main display connection."""
     target = workbench_conn or display_conn
     try:
         target.send(b)
     except (socket.error, OSError) as err:
         print(err)
 
+def send_joystick(joy1: int, joy2: int = 0, extra: int = 0):
+    """Send a 4-byte joystick frame. Call once per game-loop tick."""
+    send(bytes([0x2A, joy1 & 0x7F, joy2 & 0x7F, extra & 0x7F]))
+
+def send_command(cmd: str):
+    """Send a text command frame in-band on the existing connection."""
+    send((cmd + '\n').encode('ascii'))
+
 def trigger_ota():
-    """Send ota_start to the device via the control port (5006)."""
+    """Send ota_start in-band on the existing connection."""
     try:
         local_ip = display_conn.sock.getsockname()[0]
-        device_ip = config.SERVER_IP
         url = f"http://{local_ip}:8000"
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(3)
-        s.connect((device_ip, 5006))
-        s.send(f"ota_start {url}\n".encode())
-        s.close()
-        print(f"comms: sent ota_start to {device_ip}:5006 (server at {url})")
+        send_command(f"ota_start {url}")
+        print(f"comms: sent ota_start (server at {url})")
     except Exception as e:
         print(f"comms: trigger_ota failed: {e}")
 
