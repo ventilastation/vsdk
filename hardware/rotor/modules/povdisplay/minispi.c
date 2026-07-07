@@ -231,7 +231,7 @@
 spi_device_handle_t spi_handle;
 bool spi_ongoing = false;
 
-void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi) {
+void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi, int led_cs) {
     printf("Initializing bus SPI, handle is %p\n", spi_handle);
 
     esp_err_t ret;
@@ -255,7 +255,7 @@ void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi) {
     spi_device_interface_config_t devcfg = {
             .clock_speed_hz = led_freq,     //Clock out at 20 MHz
             .mode = 0,                              //SPI mode 0
-            .spics_io_num = LEDS_SPI_CS_PIN, //CS pin (workbench framing; strips ignore it)
+            .spics_io_num = led_cs, //CS pin (workbench framing; strips ignore it)
             .queue_size=10,
             .pre_cb=NULL,
             .cs_ena_pretrans = 0,

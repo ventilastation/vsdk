@@ -22,6 +22,7 @@ int hall_gpio = 4;
 int irdiode_gpio = 6;
 int led_clk = 15;
 int led_mosi = 16;
+int led_cs = 14;
 uint32_t led_freq = 20000000;
 
 #define COLUMNS 256
@@ -189,7 +190,7 @@ void coreTask( void * pvParameters ){
 
     init_sprites();
 
-    spiStartBuses(led_freq, led_clk, led_mosi);
+    spiStartBuses(led_freq, led_clk, led_mosi, led_cs);
     spiAcquire();
 
     while(true){
@@ -211,7 +212,8 @@ static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
     irdiode_gpio = mp_obj_get_int(args[2]);
     led_clk = mp_obj_get_int(args[3]);
     led_mosi = mp_obj_get_int(args[4]);
-    led_freq = mp_obj_get_int(args[5]);
+    led_cs = mp_obj_get_int(args[5]);
+    led_freq = mp_obj_get_int(args[6]);
 
     if (already_initialized) {
         ventilagon_exit();
@@ -235,7 +237,7 @@ static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
     gamma_mode = 0;
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_init_obj, 6, 6, povdisplay_init);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_init_obj, 7, 7, povdisplay_init);
 
 // ------------------------------
 

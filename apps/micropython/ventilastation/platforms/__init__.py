@@ -724,6 +724,7 @@ def create_hardware_platform():
             hw_config.irdiode_gpio,
             hw_config.led_clk,
             hw_config.led_mosi,
+            hw_config.led_cs,
             hw_config.led_freq,
         ),
         native_launcher=_optional_attr("vshw_native_apps", "launch"),
