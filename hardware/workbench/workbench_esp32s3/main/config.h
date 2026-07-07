@@ -9,11 +9,11 @@
 // whatever dev board is on hand.
 
 // ---- DUT reset (EN) ----
-#define WB_RESET_PIN        5   // -> DUT EN/reset. Open-drain style: LOW to assert, INPUT to release.
+#define WB_RESET_PIN        4   // -> DUT EN/reset. Open-drain style: LOW to assert, INPUT to release.
 #define WB_RESET_PULSE_MS   150
 
 // ---- Hall sensor simulation ----
-#define WB_HALL_PIN             4     // -> DUT hall_gpio
+#define WB_HALL_PIN             7     // -> DUT hall_gpio
 #define WB_HALL_RPM_DEFAULT     600
 #define WB_HALL_RPM_MAX         700   // matches the pyglet UI's RPM slider range (0-700)
 #define WB_HALL_PULSE_WIDTH_US  1000  // low-pulse width per simulated revolution
@@ -28,8 +28,8 @@
 #define WB_FRAME_BYTES (WB_COLUMNS * WB_NUM_LEDS * 3)
 
 // ---- DUT UART bridge ----
-#define WB_UART_TX_PIN  17   // -> DUT serial_rx
-#define WB_UART_RX_PIN  18   // <- DUT serial_tx
+#define WB_UART_TX_PIN  6   // -> DUT serial_rx
+#define WB_UART_RX_PIN  5   // <- DUT serial_tx
 #define WB_UART_BAUD    115200
 
 // ---- Wi-Fi station + mDNS ----

@@ -31,9 +31,40 @@ class ConnectionBase:
             self.sock.close()
 
 class ConnIP(ConnectionBase):
+    # Lazily-created, reused across setup() calls/retries so we don't spin
+    # up a fresh mDNS listener every 0.5s while waiting for the workbench.
+    _zc = None
+
+    def _resolve_mdns(self, timeout=3.0):
+        """Resolve the workbench's mDNS-SD service ourselves via zeroconf,
+        instead of relying on the OS resolver's getaddrinfo() to handle
+        ".local" -- plenty of Python builds (this venv's included) don't get
+        the same Bonjour/.local special-casing that macOS CLI tools and the
+        system Python get, and fail instantly instead of even attempting an
+        mDNS query. See vsdk/WORKBENCH.md."""
+        from zeroconf import Zeroconf
+
+        if ConnIP._zc is None:
+            ConnIP._zc = Zeroconf()
+
+        full_name = f"{config.MDNS_INSTANCE_NAME}.{config.MDNS_SERVICE_TYPE}"
+        info = ConnIP._zc.get_service_info(config.MDNS_SERVICE_TYPE, full_name, timeout=timeout * 1000)
+        if info and info.parsed_addresses():
+            return info.parsed_addresses()[0], info.port
+        return None
+
     def setup(self):
+        if config.RESOLVE_MDNS:
+            resolved = self._resolve_mdns()
+            if not resolved:
+                raise socket.error(f'mDNS: "{config.MDNS_INSTANCE_NAME}" not found on the network yet')
+            host, port = resolved
+            print(f"comms: resolved {config.MDNS_INSTANCE_NAME} via mDNS -> {host}:{port}")
+        else:
+            host, port = config.SERVER_IP, config.SERVER_PORT
+
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((config.SERVER_IP, config.SERVER_PORT))
+        self.sock.connect((host, port))
         self.sockfile = self.sock.makefile(mode="rb")
 
     def send(self, b):

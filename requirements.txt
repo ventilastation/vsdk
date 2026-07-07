@@ -3,6 +3,8 @@ pyglet<2; "Raspbian" in platform_version
 python-ffmpeg
 gmqtt
 pyserial
+zeroconf  # resolves the hardware workbench's mDNS name (see WORKBENCH.md) -- more
+          # portable than relying on the OS resolver's .local handling
 pillow
 PyYAML
 RPi.GPIO; "Raspbian" in platform_version

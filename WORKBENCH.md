@@ -94,20 +94,20 @@ boards. Tie the grounds of the workbench and the DUT together.
 
 | Signal              | Workbench pin (suggested) | DUT pin (from `hw_config.py`)         | Direction         | Notes |
 |---------------------|---------------------------|-----------------------------------------|-------------------|-------|
-| Hall sensor          | `GPIO4`  (`WB_HALL_PIN`)  | `hall_gpio`                              | workbench → DUT   | Idles HIGH, pulses LOW once per simulated revolution, matching a real hall sensor with pull-up. |
-| Reset / EN           | `GPIO5`  (`WB_RESET_PIN`) | DUT `EN` / reset pin                     | workbench → DUT   | Open-drain style: workbench drives LOW to assert, then releases to `INPUT` (Hi-Z) so the DUT's own pull-up brings it back HIGH. Never drive HIGH directly. |
+| Hall sensor          | `GPIO7`  (`WB_HALL_PIN`)  | `hall_gpio`                              | workbench → DUT   | Idles HIGH, pulses LOW once per simulated revolution, matching a real hall sensor with pull-up. |
+| Reset / EN           | `GPIO4`  (`WB_RESET_PIN`) | DUT `EN` / reset pin                     | workbench → DUT   | Open-drain style: workbench drives LOW to assert, then releases to `INPUT` (Hi-Z) so the DUT's own pull-up brings it back HIGH. Never drive HIGH directly. |
 | LED bus clock        | `GPIO12` (`WB_SPI_SCLK_PIN`) | `led_clk`                             | DUT → workbench   | Input only. 20 MHz APA102-style clock. |
 | LED bus data         | `GPIO13` (`WB_SPI_MOSI_PIN`) | `led_mosi`                            | DUT → workbench   | Input only. |
-| LED bus CS           | `GPIO14` (`WB_SPI_CS_PIN`)   | `GPIO17` (LED SPI CS)                 | DUT → workbench   | Real chip-select the DUT's LED SPI master now drives (`LEDS_SPI_CS_PIN` in `minispi.c`). Asserted low per 444-byte burst; frames the slave transactions — see [LED bus capture](#led-bus-capture-chip-select). |
-| UART TX              | `GPIO17` (`WB_UART_TX_PIN`)  | `serial_rx`                           | workbench → DUT   | Workbench transmits into the DUT's UART RX. |
-| UART RX              | `GPIO18` (`WB_UART_RX_PIN`)  | `serial_tx`                           | DUT → workbench   | Workbench receives from the DUT's UART TX. |
+| LED bus CS           | `GPIO14` (`WB_SPI_CS_PIN`)   | `led_cs`                              | DUT → workbench   | Real chip-select the DUT's LED SPI master now drives. Asserted low per 444-byte burst; frames the slave transactions — see [LED bus capture](#led-bus-capture-chip-select). |
+| UART TX              | `GPIO6` (`WB_UART_TX_PIN`)  | `serial_rx`                           | workbench → DUT   | Workbench transmits into the DUT's UART RX. |
+| UART RX              | `GPIO5` (`WB_UART_RX_PIN`)  | `serial_tx`                           | DUT → workbench   | Workbench receives from the DUT's UART TX. |
 | Ground               | GND                        | GND                                     | —                 | Common reference, required. |
 
-DUT pin numbers above are the current Ventilastation 2 config in
+DUT pin numbers above are the current Ventilastation III config in
 [`apps/micropython/ventilastation/hw_config.py`](apps/micropython/ventilastation/hw_config.py)
-(`hall_gpio=6`, `led_clk=15`, `led_mosi=16`, `serial_tx=10`, `serial_rx=9`).
+(`hall_gpio=7`, `led_clk=12`, `led_mosi=13`, `led_cs=14`, `serial_tx=5`, `serial_rx=6`).
 That file also has commented-out pin sets for the "European Edition" and
-"Ventilastation III" boards — if the DUT under test is one of those
+"Ventilastation 2" boards — if the DUT under test is one of those
 revisions, rewire to match its actual GPIOs; the workbench-side pins in
 `hardware/workbench/workbench_esp32s3/config.h` don't need to change.
 
@@ -267,11 +267,20 @@ make workbench-monitor PORT=/dev/cu.usbmodemXXXX
 
 After provisioning and a reset, the workbench connects, then advertises
 itself over mDNS (`espressif/mdns` managed component) as
-`ventilastation-workbench.local`, so the emulator doesn't need to know its
-DHCP-assigned IP. `.local` resolution is built into macOS (Bonjour);
-Linux needs `avahi`/`nss-mdns` installed, Windows needs Bonjour (e.g. via
-iTunes) installed. If mDNS isn't available on a given machine, pass the
-workbench's IP explicitly instead (see below).
+`ventilastation-workbench.local`, with a `_ventilastation-wb._tcp` service
+record, so the emulator doesn't need to know its DHCP-assigned IP.
+
+The emulator resolves that service itself with the `zeroconf` Python
+package (`comms.py`'s `ConnIP._resolve_mdns()`) rather than asking the OS
+resolver for `ventilastation-workbench.local` — plenty of Python builds
+(including a plain venv on macOS) don't get the same Bonjour `.local`
+special-casing that macOS CLI tools (`ping`, `dns-sd`) and the
+Apple-provided system Python get, and fail the hostname lookup instantly
+without ever attempting an mDNS query. Querying the service directly with
+`zeroconf` sidesteps that entirely and works the same way regardless of
+which Python build or OS is running the emulator. If mDNS is somehow
+unavailable on a given network, pass the workbench's IP explicitly instead
+(see below).
 
 ## RPM and reset control
 
@@ -414,6 +423,5 @@ pinned by `dependencies.lock`; `idf.py build` fetches it into
 - The `reset`/`rpm` control channel is plain, unauthenticated TCP on the
   local network — acceptable for a bench tool, not something to expose
   beyond the local Wi-Fi network.
-- `.local` mDNS resolution depends on OS support (built into macOS; needs
-  `avahi`/`nss-mdns` on Linux, Bonjour on Windows) — pass an explicit IP to
-  `emu.py` if it's unavailable.
+- mDNS resolution needs the `zeroconf` Python package (see
+  `requirements.txt`); pass an explicit IP to `emu.py` to skip it entirely.
