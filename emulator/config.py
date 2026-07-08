@@ -32,6 +32,7 @@ _host_arg = next((a for a in _args if not a.startswith("-")), None)
 
 # Must match the firmware's WB_MDNS_* constants in
 # hardware/workbench/workbench_esp32s3/main/config.h.
+MDNS_HOSTNAME = "ventilastation-workbench"
 MDNS_SERVICE_TYPE = "_ventilastation-wb._tcp.local."
 MDNS_INSTANCE_NAME = "Ventilastation Workbench"
 

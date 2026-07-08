@@ -35,13 +35,88 @@ class ConnIP(ConnectionBase):
     # up a fresh mDNS listener every 0.5s while waiting for the workbench.
     _zc = None
 
+    @staticmethod
+    def _resolve_via_dns_sd(hostname, timeout=3.0):
+        """macOS only: resolve via the system's own `dns-sd` binary instead
+        of opening our own mDNS socket. Some machines silently drop the
+        incoming multicast responses a Python-owned socket needs (macOS's
+        per-app firewall can block a venv's less-trusted/unsigned
+        interpreter from receiving UDP, even though the same interpreter
+        can still *send* -- so the query goes out but no reply ever comes
+        back); `dns-sd` is an Apple-signed system tool that isn't subject to
+        that. Returns an IP string, or None if dns-sd isn't available or
+        didn't resolve within timeout.
+
+        dns-sd fully-buffers its stdout when it isn't a tty, so a plain
+        subprocess.PIPE would sit empty until the process exits (dns-sd
+        itself never exits on its own) -- a pty forces it to line-buffer
+        like it would in an interactive terminal."""
+        import os
+        import pty
+        import re
+        import select
+        import shutil
+        import subprocess
+
+        tool = shutil.which("dns-sd")
+        if not tool:
+            return None
+
+        master_fd, slave_fd = pty.openpty()
+        try:
+            proc = subprocess.Popen([tool, "-G", "v4", hostname], stdout=slave_fd, stderr=subprocess.DEVNULL)
+        except OSError:
+            os.close(master_fd)
+            os.close(slave_fd)
+            return None
+        os.close(slave_fd)
+
+        pattern = re.compile(r"Add\s+\S+\s+\S+\s+\S+\s+(\d+\.\d+\.\d+\.\d+)")
+        deadline = time.time() + timeout
+        result = None
+        buf = b""
+        try:
+            while time.time() < deadline:
+                ready, _, _ = select.select([master_fd], [], [], deadline - time.time())
+                if not ready:
+                    break
+                try:
+                    chunk = os.read(master_fd, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    m = pattern.search(line.decode(errors="replace"))
+                    if m:
+                        result = m.group(1)
+                        break
+                if result:
+                    break
+        finally:
+            proc.kill()
+            try:
+                proc.wait(timeout=1)
+            except Exception:
+                pass
+            os.close(master_fd)
+        return result
+
     def _resolve_mdns(self, timeout=3.0):
-        """Resolve the workbench's mDNS-SD service ourselves via zeroconf,
-        instead of relying on the OS resolver's getaddrinfo() to handle
-        ".local" -- plenty of Python builds (this venv's included) don't get
-        the same Bonjour/.local special-casing that macOS CLI tools and the
-        system Python get, and fail instantly instead of even attempting an
+        """Resolve the workbench's address: try the OS's own mDNS tooling
+        first where available (see _resolve_via_dns_sd), then fall back to
+        resolving the _ventilastation-wb._tcp service directly via
+        zeroconf. Both exist because relying on socket.getaddrinfo()'s
+        ".local" handling is unreliable -- plenty of Python builds don't get
+        the same Bonjour ".local" special-casing macOS CLI tools and the
+        system Python get, and fail instantly without even attempting an
         mDNS query. See vsdk/WORKBENCH.md."""
+        ip = self._resolve_via_dns_sd(f"{config.MDNS_HOSTNAME}.local", timeout)
+        if ip:
+            return ip, config.SERVER_PORT
+
         from zeroconf import Zeroconf
 
         if ConnIP._zc is None:

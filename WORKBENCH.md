@@ -270,17 +270,29 @@ itself over mDNS (`espressif/mdns` managed component) as
 `ventilastation-workbench.local`, with a `_ventilastation-wb._tcp` service
 record, so the emulator doesn't need to know its DHCP-assigned IP.
 
-The emulator resolves that service itself with the `zeroconf` Python
-package (`comms.py`'s `ConnIP._resolve_mdns()`) rather than asking the OS
-resolver for `ventilastation-workbench.local` — plenty of Python builds
-(including a plain venv on macOS) don't get the same Bonjour `.local`
-special-casing that macOS CLI tools (`ping`, `dns-sd`) and the
-Apple-provided system Python get, and fail the hostname lookup instantly
-without ever attempting an mDNS query. Querying the service directly with
-`zeroconf` sidesteps that entirely and works the same way regardless of
-which Python build or OS is running the emulator. If mDNS is somehow
-unavailable on a given network, pass the workbench's IP explicitly instead
-(see below).
+The emulator resolves that itself (`comms.py`'s `ConnIP._resolve_mdns()`)
+rather than asking the OS resolver for `ventilastation-workbench.local` —
+plenty of Python builds (including a plain venv on macOS) don't get the
+same Bonjour `.local` special-casing that macOS CLI tools (`ping`,
+`dns-sd`) and the Apple-provided system Python get, and fail the hostname
+lookup instantly without ever attempting an mDNS query. It tries two
+things, in order:
+
+1. **`dns-sd -G v4` (macOS only, via a pty to force line-buffered output)**
+   — shells out to the OS's own, Apple-signed `dns-sd` binary. This exists
+   because a Python-owned socket can itself get silently blocked from
+   *receiving* mDNS responses by macOS's per-app firewall (particularly for
+   a venv's unsigned interpreter) even though it can still send the query —
+   symptom: `ping`/`dns-sd` work fine but the emulator's own resolution
+   fails every single retry, forever, not just intermittently. Shelling out
+   to a pre-trusted system tool sidesteps that.
+2. **`zeroconf`** (Python package, see `requirements.txt`) — resolves the
+   `_ventilastation-wb._tcp` service directly. Portable (Linux, Windows,
+   macOS without `dns-sd` on `PATH`) and used whenever step 1 isn't
+   available or doesn't find anything.
+
+If mDNS is somehow unavailable on a given network, pass the workbench's IP
+explicitly instead (see below) to skip both.
 
 ## RPM and reset control
 
@@ -423,5 +435,6 @@ pinned by `dependencies.lock`; `idf.py build` fetches it into
 - The `reset`/`rpm` control channel is plain, unauthenticated TCP on the
   local network — acceptable for a bench tool, not something to expose
   beyond the local Wi-Fi network.
-- mDNS resolution needs the `zeroconf` Python package (see
-  `requirements.txt`); pass an explicit IP to `emu.py` to skip it entirely.
+- mDNS resolution needs either macOS's `dns-sd` on `PATH` or the
+  `zeroconf` Python package (see `requirements.txt`); pass an explicit IP
+  to `emu.py` to skip both.
