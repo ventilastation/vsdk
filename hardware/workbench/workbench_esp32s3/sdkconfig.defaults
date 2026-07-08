@@ -16,3 +16,15 @@ CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 # flash the NVS partition at a known offset without a full build first.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# hall_sim.c's two timers use ESP_TIMER_ISR dispatch so the simulated hall
+# pulse's GPIO edge lands directly from the systimer alarm interrupt instead
+# of after a FreeRTOS task-switch to the shared "esp_timer" task -- that
+# task-dispatch hop was the dominant source of jitter in the pulse timing.
+CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD=y
+
+# gpio_set_level() must be IRAM-resident for hall_sim.c's ISR-dispatched
+# callbacks to safely call it: the systimer alarm interrupt is installed with
+# ESP_INTR_FLAG_IRAM and can fire while flash cache is disabled (e.g. during
+# an SPI flash/NVS write), so anything it calls must not live in flash.
+CONFIG_GPIO_CTRL_FUNC_IN_IRAM=y

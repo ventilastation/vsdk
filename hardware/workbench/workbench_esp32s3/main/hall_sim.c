@@ -2,6 +2,7 @@
 #include "config.h"
 
 #include "driver/gpio.h"
+#include "esp_attr.h"
 #include "esp_timer.h"
 #include <stdbool.h>
 
@@ -13,11 +14,17 @@ static volatile uint32_t s_rpm;
 static volatile bool s_running;
 static volatile uint32_t s_turn_count;
 
-static void pulse_end_cb(void *arg) {
+// Dispatched from the systimer alarm ISR (ESP_TIMER_ISR below), not a task,
+// so the GPIO edge lands right at the hardware alarm instead of after a
+// FreeRTOS task-switch -- that task-dispatch hop was the dominant source of
+// jitter, well above esp_timer's own 1us/62.5ns (systimer tick) resolution.
+// Requires GPIO_CTRL_FUNC_IN_IRAM=y (sdkconfig.defaults) so gpio_set_level()
+// is itself IRAM-resident, since this can fire while flash cache is off.
+static void IRAM_ATTR pulse_end_cb(void *arg) {
     gpio_set_level(WB_HALL_PIN, 1);
 }
 
-static void period_cb(void *arg) {
+static void IRAM_ATTR period_cb(void *arg) {
     s_last_turn_us = esp_timer_get_time();
     s_turn_count++;
     gpio_set_level(WB_HALL_PIN, 0);
@@ -53,12 +60,14 @@ void hall_sim_begin(void) {
 
     const esp_timer_create_args_t pulse_args = {
         .callback = &pulse_end_cb,
+        .dispatch_method = ESP_TIMER_ISR,
         .name = "hall_pulse_end",
     };
     esp_timer_create(&pulse_args, &s_pulse_end_timer);
 
     const esp_timer_create_args_t period_args = {
         .callback = &period_cb,
+        .dispatch_method = ESP_TIMER_ISR,
         .name = "hall_period",
     };
     esp_timer_create(&period_args, &s_period_timer);
