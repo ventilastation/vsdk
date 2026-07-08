@@ -12,3 +12,25 @@ CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 # previous valid image (factory).  MicroPython calls this after WiFi connects
 # (see apps/micropython/ventilastation/comms.py).
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Core 0 is reserved for the POV LED SPI task (coreTask/gpu_step, see
+# hardware/rotor/modules/povdisplay/povdisplay.c; GPU_TASK_CORE in minispi.h).
+# It's timing-critical -- gpu_step() derives the current column from
+# wall-clock time, so scheduling delays show up as a visible glitch on the
+# spinning display -- and runs a non-yielding loop, so move every IDF system
+# task that would otherwise default onto (or float onto) core 0 to core 1
+# instead, alongside the MicroPython interpreter itself (MP_TASK_COREID,
+# mphalport.h), which was already there for the same reason (see its comment
+# about avoiding WiFi/BLE timing problems).
+#
+# Note: esp_event's default loop task ("sys_evt", ESP_TASKD_EVENT_PRIO) is
+# hardcoded to task_core_id=0 in esp_event/default_event_loop.c and isn't
+# configurable via Kconfig -- it only fires on WiFi/IP state-change events
+# (connect/disconnect/got-ip), not continuously, so its residual impact
+# should be minor.
+# ESP_TIMER_TASK_AFFINITY_CPU1 is gated behind ESP_TIMER_SHOW_EXPERIMENTAL --
+# without it, the choice silently falls back to the CPU0 default.
+CONFIG_ESP_TIMER_SHOW_EXPERIMENTAL=y
+CONFIG_ESP_TIMER_TASK_AFFINITY_CPU1=y
+CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_1=y
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU1=y
