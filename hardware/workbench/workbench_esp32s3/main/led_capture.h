@@ -8,6 +8,6 @@
 void led_capture_begin(void);
 
 // Copies the current frame buffer (WB_FRAME_BYTES bytes, R,G,B per LED,
-// column-major) into out. Safe to call from another task; internally
-// mutex-protected against the capture task.
+// column-major) into out. Safe to call from another task; internally reads
+// from a double-buffered pair so it never contends with the capture task.
 void led_capture_snapshot(uint8_t *out);

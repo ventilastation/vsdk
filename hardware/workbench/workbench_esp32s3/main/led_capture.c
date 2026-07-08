@@ -26,7 +26,6 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include <string.h>
 
@@ -40,11 +39,22 @@ static const char *TAG = "led_capture";
 
 static uint8_t *s_rx_buf[NUM_SLOTS];
 static spi_slave_transaction_t s_trans[NUM_SLOTS];
-static uint8_t s_frame[WB_FRAME_BYTES];
-static SemaphoreHandle_t s_frame_mutex;
+
+// Double-buffered instead of a single mutex-guarded frame: decode_burst()
+// (capture_task, every ~390us at 600 RPM) writes into s_frame[s_write_buf];
+// led_capture_snapshot() (telemetry_task, every WB_TELEMETRY_FRAME_INTERVAL_MS)
+// reads s_frame[1 - s_write_buf]. capture_task flips s_write_buf once per
+// revolution (see the turn-changed branch below), so a snapshot's ~41KB
+// memcpy never overlaps a write to the same buffer -- the previous mutex let
+// telemetry's memcpy block capture_task's SPI-slave queue servicing for its
+// duration (compounded by FreeRTOS priority inheritance), which was enough
+// to miss the 4 pre-queued DMA slots and drop a couple of bursts roughly
+// every revolution (WB_TELEMETRY_FRAME_INTERVAL_MS ~3x per revolution).
+static uint8_t s_frame[2][WB_FRAME_BYTES];
+static volatile uint8_t s_write_buf;
 
 static inline uint8_t *frame_pixel(uint32_t column, uint32_t led) {
-    return s_frame + (column * WB_NUM_LEDS + led) * 3;
+    return s_frame[s_write_buf] + (column * WB_NUM_LEDS + led) * 3;
 }
 
 // Each 4-byte LED frame on the wire is [brightness(0xe0|b5), B, G, R].
@@ -66,12 +76,10 @@ static void decode_burst(const uint8_t *buf, uint32_t column) {
     const uint8_t *arm0 = buf + START_FRAME_BYTES;
     const uint8_t *arm1 = buf + START_FRAME_BYTES + (WB_NUM_LEDS - 1) * 4;
 
-    xSemaphoreTake(s_frame_mutex, portMAX_DELAY);
     for (int n = 0; n < WB_NUM_LEDS; n++) {
         put_pixel(frame_pixel(mirror_column, WB_NUM_LEDS - 1 - n), arm0 + n * 4);
         put_pixel(frame_pixel(column, n), arm1 + n * 4);
     }
-    xSemaphoreGive(s_frame_mutex);
 }
 
 static void capture_task(void *arg) {
@@ -83,7 +91,7 @@ static void capture_task(void *arg) {
     }
 
     uint32_t good = 0, other = 0, last_len = 0;
-    uint32_t column = 0;
+    uint32_t column = 0, last_column = 0;
     uint32_t last_turn = hall_sim_turn_count();
     int64_t last_report = esp_timer_get_time();
 
@@ -101,7 +109,13 @@ static void capture_task(void *arg) {
                 uint32_t turn = hall_sim_turn_count();
                 if (turn != last_turn) {
                     last_turn = turn;
+                    last_column = column;
                     column = 0;
+                    // The buffer we just finished (s_write_buf) now holds a
+                    // complete revolution and becomes the stable snapshot
+                    // source; start writing the new revolution into the other
+                    // one. led_capture_snapshot() always reads 1 - s_write_buf.
+                    s_write_buf ^= 1;
                 }
                 decode_burst((const uint8_t *)done->rx_buffer, column);
                 column = (column + 1) % WB_COLUMNS;
@@ -113,8 +127,8 @@ static void capture_task(void *arg) {
 
         int64_t now = esp_timer_get_time();
         if (now - last_report >= 1000000) {
-            ESP_LOGI(TAG, "bursts/s: good=%lu other=%lu last_len=%lu",
-                     (unsigned long)good, (unsigned long)other, (unsigned long)last_len);
+            ESP_LOGI(TAG, "bursts/s: good=%lu other=%lu last_len=%lu last_column=%lu",
+                     (unsigned long)good, (unsigned long)other, (unsigned long)last_len, (unsigned long)last_column);
             good = 0; other = 0;
             last_report = now;
         }
@@ -122,7 +136,7 @@ static void capture_task(void *arg) {
 }
 
 void led_capture_begin(void) {
-    s_frame_mutex = xSemaphoreCreateMutex();
+    s_write_buf = 0;
     memset(s_frame, 0, sizeof(s_frame));
 
     // WB_SPI_CS_PIN is wired to the DUT's LED-bus CS (GPIO17): the DUT master
@@ -155,7 +169,10 @@ void led_capture_begin(void) {
 }
 
 void led_capture_snapshot(uint8_t *out) {
-    xSemaphoreTake(s_frame_mutex, portMAX_DELAY);
-    memcpy(out, s_frame, sizeof(s_frame));
-    xSemaphoreGive(s_frame_mutex);
+    // Single-byte read of s_write_buf plus a memcpy from the *other* buffer,
+    // no lock: capture_task never touches that buffer again until it flips
+    // s_write_buf back to it a full revolution later (see capture_task),
+    // which at any plausible RPM is far longer than this memcpy takes.
+    uint8_t idx = 1 - s_write_buf;
+    memcpy(out, s_frame[idx], sizeof(s_frame[idx]));
 }
