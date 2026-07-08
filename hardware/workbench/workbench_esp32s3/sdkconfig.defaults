@@ -28,3 +28,15 @@ CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD=y
 # ESP_INTR_FLAG_IRAM and can fire while flash cache is disabled (e.g. during
 # an SPI flash/NVS write), so anything it calls must not live in flash.
 CONFIG_GPIO_CTRL_FUNC_IN_IRAM=y
+
+# Core 1 is reserved for led_capture.c's capture_task (SPI-slave servicing
+# only, see its file comment) -- lwIP's TCPIP task defaults to "no affinity"
+# and can float onto either core, and at CONFIG_LWIP_TCPIP_TASK_PRIO=18 it
+# outranks capture_task's priority, so it was free to preempt capture_task on
+# core 1 for as long as it had network work to do (telemetry_task's TCP
+# sends, WiFi RX, mDNS), causing exactly the same kind of dropped-burst
+# jitter the s_frame_mutex fix addressed for a different reason. Pin it to
+# core 0, where WiFi's own task already defaults
+# (ESP_WIFI_TASK_PINNED_TO_CORE_0) and where serial_bridge/telemetry are now
+# explicitly pinned too.
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y

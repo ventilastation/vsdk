@@ -26,6 +26,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/task.h"
 #include <string.h>
 
@@ -40,16 +41,34 @@ static const char *TAG = "led_capture";
 static uint8_t *s_rx_buf[NUM_SLOTS];
 static spi_slave_transaction_t s_trans[NUM_SLOTS];
 
+// capture_task (core 1) does nothing but SPI-slave plumbing: dequeue a
+// completed DMA transaction, copy its raw bytes out, requeue immediately.
+// Column bookkeeping and pixel decode used to happen inline in that same
+// loop, but core 1 also has lwIP's TCPIP task (priority 18, "no affinity" by
+// default) able to float onto it and preempt a mere-priority-10 capture_task
+// whenever telemetry_task's TCP sends (or WiFi RX, mDNS, etc.) gave it work
+// -- for long enough, occasionally, to miss the 4 pre-queued DMA slots and
+// drop a burst. Pinning lwIP off core 1 (sdkconfig.defaults) addresses that
+// directly, but moving everything not strictly SPI-related to decode_task on
+// core 0 removes the rest of the doubt: core 1 now runs only this loop (plus
+// whatever ISRs the SoC itself routes there).
+#define CAPTURE_QUEUE_DEPTH 8
+
+typedef struct {
+    uint8_t raw[BURST_BYTES];
+} capture_msg_t;
+
+static QueueHandle_t s_capture_queue;
+
 // Double-buffered instead of a single mutex-guarded frame: decode_burst()
-// (capture_task, every ~390us at 600 RPM) writes into s_frame[s_write_buf];
+// (decode_task, every ~390us at 600 RPM) writes into s_frame[s_write_buf];
 // led_capture_snapshot() (telemetry_task, every WB_TELEMETRY_FRAME_INTERVAL_MS)
-// reads s_frame[1 - s_write_buf]. capture_task flips s_write_buf once per
-// revolution (see the turn-changed branch below), so a snapshot's ~41KB
-// memcpy never overlaps a write to the same buffer -- the previous mutex let
-// telemetry's memcpy block capture_task's SPI-slave queue servicing for its
-// duration (compounded by FreeRTOS priority inheritance), which was enough
-// to miss the 4 pre-queued DMA slots and drop a couple of bursts roughly
-// every revolution (WB_TELEMETRY_FRAME_INTERVAL_MS ~3x per revolution).
+// reads s_frame[1 - s_write_buf]. decode_task flips s_write_buf once per
+// revolution (see its turn-changed branch), so a snapshot's ~41KB memcpy
+// never overlaps a write to the same buffer -- an earlier version shared a
+// mutex between the two instead, which let telemetry's memcpy block
+// whichever task served the SPI queue for its duration (worse, via priority
+// inheritance, back when that was capture_task itself).
 static uint8_t s_frame[2][WB_FRAME_BYTES];
 static volatile uint8_t s_write_buf;
 
@@ -82,6 +101,11 @@ static void decode_burst(const uint8_t *buf, uint32_t column) {
     }
 }
 
+// Core 1: SPI-slave plumbing only. Dequeue a completed DMA transaction, copy
+// its raw bytes out to the queue for decode_task, requeue immediately -- no
+// column bookkeeping, no pixel decode, nothing that could take long enough
+// to miss the next burst. xQueueSend uses a zero timeout: if decode_task
+// somehow falls behind, we drop the message rather than ever block this loop.
 static void capture_task(void *arg) {
     for (int i = 0; i < NUM_SLOTS; i++) {
         memset(&s_trans[i], 0, sizeof(s_trans[i]));
@@ -90,9 +114,7 @@ static void capture_task(void *arg) {
         spi_slave_queue_trans(SPI2_HOST, &s_trans[i], portMAX_DELAY);
     }
 
-    uint32_t good = 0, other = 0, last_len = 0;
-    uint32_t column = 0, last_column = 0;
-    uint32_t last_turn = hall_sim_turn_count();
+    uint32_t good = 0, other = 0, drops = 0, last_len = 0;
     int64_t last_report = esp_timer_get_time();
 
     while (1) {
@@ -101,24 +123,11 @@ static void capture_task(void *arg) {
             last_len = done->trans_len / 8;
             if (last_len == BURST_BYTES) {
                 good++;
-                // The DUT emits exactly one burst per column, in order, starting
-                // at column 0 after each hall pulse. Assign columns by counting
-                // bursts and resetting each simulated revolution, rather than
-                // recomputing from a clock at decode time (that jitters with
-                // scheduling latency and makes the image unstable).
-                uint32_t turn = hall_sim_turn_count();
-                if (turn != last_turn) {
-                    last_turn = turn;
-                    last_column = column;
-                    column = 0;
-                    // The buffer we just finished (s_write_buf) now holds a
-                    // complete revolution and becomes the stable snapshot
-                    // source; start writing the new revolution into the other
-                    // one. led_capture_snapshot() always reads 1 - s_write_buf.
-                    s_write_buf ^= 1;
+                capture_msg_t msg;
+                memcpy(msg.raw, done->rx_buffer, BURST_BYTES);
+                if (xQueueSend(s_capture_queue, &msg, 0) != pdTRUE) {
+                    drops++;
                 }
-                decode_burst((const uint8_t *)done->rx_buffer, column);
-                column = (column + 1) % WB_COLUMNS;
             } else {
                 other++;
             }
@@ -127,9 +136,49 @@ static void capture_task(void *arg) {
 
         int64_t now = esp_timer_get_time();
         if (now - last_report >= 1000000) {
-            ESP_LOGI(TAG, "bursts/s: good=%lu other=%lu last_len=%lu last_column=%lu",
-                     (unsigned long)good, (unsigned long)other, (unsigned long)last_len, (unsigned long)last_column);
-            good = 0; other = 0;
+            ESP_LOGI(TAG, "bursts/s: good=%lu other=%lu drops=%lu last_len=%lu",
+                     (unsigned long)good, (unsigned long)other, (unsigned long)drops, (unsigned long)last_len);
+            good = 0; other = 0; drops = 0;
+            last_report = now;
+        }
+    }
+}
+
+// Core 0: everything that isn't strictly SPI plumbing. Owns column
+// bookkeeping (same turn-count-based resync as before, just relocated) and
+// the actual pixel decode into s_frame.
+static void decode_task(void *arg) {
+    uint32_t column = 0, last_column = 0;
+    uint32_t last_turn = hall_sim_turn_count();
+    int64_t last_report = esp_timer_get_time();
+    capture_msg_t msg;
+
+    while (1) {
+        if (xQueueReceive(s_capture_queue, &msg, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            // The DUT emits exactly one burst per column, in order, starting
+            // at column 0 after each hall pulse. Assign columns by counting
+            // bursts (in the order captured, preserved by the FIFO queue) and
+            // resetting each simulated revolution, rather than recomputing
+            // from a clock at decode time (that jitters with scheduling
+            // latency and makes the image unstable).
+            uint32_t turn = hall_sim_turn_count();
+            if (turn != last_turn) {
+                last_turn = turn;
+                last_column = column;
+                column = 0;
+                // The buffer we just finished (s_write_buf) now holds a
+                // complete revolution and becomes the stable snapshot
+                // source; start writing the new revolution into the other
+                // one. led_capture_snapshot() always reads 1 - s_write_buf.
+                s_write_buf ^= 1;
+            }
+            decode_burst(msg.raw, column);
+            column = (column + 1) % WB_COLUMNS;
+        }
+
+        int64_t now = esp_timer_get_time();
+        if (now - last_report >= 1000000) {
+            ESP_LOGI(TAG, "decode: last_column=%lu", (unsigned long)last_column);
             last_report = now;
         }
     }
@@ -165,13 +214,18 @@ void led_capture_begin(void) {
         s_rx_buf[i] = heap_caps_malloc(BURST_BYTES, MALLOC_CAP_DMA);
     }
 
+    s_capture_queue = xQueueCreate(CAPTURE_QUEUE_DEPTH, sizeof(capture_msg_t));
+
+    // capture_task on core 1, alone (see its comment); decode_task on core 0
+    // with everything else (WiFi/telemetry/serial bridge).
     xTaskCreatePinnedToCore(capture_task, "led_capture", 4096, NULL, 10, NULL, 1);
+    xTaskCreatePinnedToCore(decode_task, "led_decode", 4096, NULL, 10, NULL, 0);
 }
 
 void led_capture_snapshot(uint8_t *out) {
     // Single-byte read of s_write_buf plus a memcpy from the *other* buffer,
-    // no lock: capture_task never touches that buffer again until it flips
-    // s_write_buf back to it a full revolution later (see capture_task),
+    // no lock: decode_task never touches that buffer again until it flips
+    // s_write_buf back to it a full revolution later (see decode_task),
     // which at any plausible RPM is far longer than this memcpy takes.
     uint8_t idx = 1 - s_write_buf;
     memcpy(out, s_frame[idx], sizeof(s_frame[idx]));
