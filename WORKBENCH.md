@@ -267,32 +267,20 @@ make workbench-monitor PORT=/dev/cu.usbmodemXXXX
 
 After provisioning and a reset, the workbench connects, then advertises
 itself over mDNS (`espressif/mdns` managed component) as
-`ventilastation-workbench.local`, with a `_ventilastation-wb._tcp` service
-record, so the emulator doesn't need to know its DHCP-assigned IP.
+`ventilastation-workbench.local`, so the emulator doesn't need to know its
+DHCP-assigned IP. `.local` resolution is handled by the OS resolver
+(`socket.getaddrinfo()` in `comms.py`'s `ConnIP.setup()`) — built into
+macOS (Bonjour); Linux needs `avahi`/`nss-mdns` installed, Windows needs
+Bonjour (e.g. via iTunes) installed. If mDNS isn't available on a given
+machine, pass the workbench's IP explicitly instead (see below).
 
-The emulator resolves that itself (`comms.py`'s `ConnIP._resolve_mdns()`)
-rather than asking the OS resolver for `ventilastation-workbench.local` —
-plenty of Python builds (including a plain venv on macOS) don't get the
-same Bonjour `.local` special-casing that macOS CLI tools (`ping`,
-`dns-sd`) and the Apple-provided system Python get, and fail the hostname
-lookup instantly without ever attempting an mDNS query. It tries two
-things, in order:
-
-1. **`dns-sd -G v4` (macOS only, via a pty to force line-buffered output)**
-   — shells out to the OS's own, Apple-signed `dns-sd` binary. This exists
-   because a Python-owned socket can itself get silently blocked from
-   *receiving* mDNS responses by macOS's per-app firewall (particularly for
-   a venv's unsigned interpreter) even though it can still send the query —
-   symptom: `ping`/`dns-sd` work fine but the emulator's own resolution
-   fails every single retry, forever, not just intermittently. Shelling out
-   to a pre-trusted system tool sidesteps that.
-2. **`zeroconf`** (Python package, see `requirements.txt`) — resolves the
-   `_ventilastation-wb._tcp` service directly. Portable (Linux, Windows,
-   macOS without `dns-sd` on `PATH`) and used whenever step 1 isn't
-   available or doesn't find anything.
-
-If mDNS is somehow unavailable on a given network, pass the workbench's IP
-explicitly instead (see below) to skip both.
+**macOS gotcha:** if `.local` resolution hangs/fails for the emulator
+specifically even though `ping ventilastation-workbench.local` and
+`dns-sd -B _ventilastation-wb._tcp` both work fine, check
+System Settings → Privacy & Security → Local Network, and make sure the
+Python interpreter running the emulator (Terminal, or the specific
+python3/venv binary) is allowed there. Without it, macOS silently drops
+the mDNS traffic for that process — no error, it just never resolves.
 
 ## RPM and reset control
 
@@ -435,6 +423,8 @@ pinned by `dependencies.lock`; `idf.py build` fetches it into
 - The `reset`/`rpm` control channel is plain, unauthenticated TCP on the
   local network — acceptable for a bench tool, not something to expose
   beyond the local Wi-Fi network.
-- mDNS resolution needs either macOS's `dns-sd` on `PATH` or the
-  `zeroconf` Python package (see `requirements.txt`); pass an explicit IP
-  to `emu.py` to skip both.
+- `.local` mDNS resolution depends on OS support (built into macOS; needs
+  `avahi`/`nss-mdns` on Linux, Bonjour on Windows) and, on macOS, the
+  Local Network permission for whichever process is running the emulator
+  (see the gotcha above) — pass an explicit IP to `emu.py` if it's
+  unavailable.

@@ -30,27 +30,17 @@ if "--serial-port" in _args:
 # the workbench's separate button/audio serial link above).
 _host_arg = next((a for a in _args if not a.startswith("-")), None)
 
-# Must match the firmware's WB_MDNS_* constants in
-# hardware/workbench/workbench_esp32s3/main/config.h.
-MDNS_HOSTNAME = "ventilastation-workbench"
-MDNS_SERVICE_TYPE = "_ventilastation-wb._tcp.local."
-MDNS_INSTANCE_NAME = "Ventilastation Workbench"
-
-RESOLVE_MDNS = False
-
 if _host_arg == "SERIAL":
     USE_IP = False
     SERVER_IP = None
 elif _host_arg:
     SERVER_IP = _host_arg
 elif HARDWARE_MODE:
-    # Resolved via zeroconf at connect time (see comms.py ConnIP._resolve_mdns)
-    # rather than through the OS resolver's getaddrinfo() -- not every Python
-    # build gets the same Bonjour ".local" special-casing macOS CLI tools and
-    # the system Python do; some fail instantly instead of even attempting an
-    # mDNS query. Pass an explicit positional IP to skip mDNS entirely.
-    RESOLVE_MDNS = True
-    SERVER_IP = None
+    # Found via mDNS (see WORKBENCH.md) instead of a hardcoded IP. .local
+    # resolution is built into macOS (Bonjour); Linux needs avahi/nss-mdns,
+    # Windows needs Bonjour/iTunes installed. Override with an explicit
+    # positional IP if mDNS isn't available on your machine.
+    SERVER_IP = "ventilastation-workbench.local"
 else:
     SERVER_IP = "127.0.0.1"  # local desktop MicroPython subprocess
 
