@@ -14,6 +14,18 @@
 //   [54 x 4-byte LED frame]   arm 1 (current column, direct order)
 //   [8-byte end frame]
 // where each LED frame is [brightness, B, G, R] (brightness is dropped).
+//
+// Real POV firmware (hardware/rotor/modules/povdisplay) only re-sends a
+// burst when an LED's colour actually changes, relying on the physical LEDs
+// to keep glowing their last-shifted-in colour as the rotor sweeps them
+// through new angular positions in between. Ventilagon leans on this hard:
+// it may emit as few as 9-10 bursts per revolution instead of one per
+// column. So a burst's column can't be assigned by counting bursts (that
+// assumes exactly one per column, in order) -- decode_task instead reads
+// hall_sim_current_column() at capture time to get the actual column the
+// burst landed on, and holds+repaints that colour forward through
+// subsequent columns until a later burst supersedes it. See decode_task,
+// hold_and_advance() and flush_hold().
 
 #include "led_capture.h"
 #include "config.h"
@@ -56,19 +68,21 @@ static spi_slave_transaction_t s_trans[NUM_SLOTS];
 #define CAPTURE_QUEUE_DEPTH 8
 
 typedef struct {
-    // Captured at the moment the burst completes, not re-read later in
-    // decode_task: hall_sim_turn_count() must be time-correlated with when
-    // the burst actually arrived, not with whenever decode_task next gets
-    // scheduled to look at it (which, via a queue, is decoupled from capture
-    // and was making every dequeued message look like a new revolution).
+    // Both captured at the moment the burst completes, not re-read later in
+    // decode_task: hall_sim_turn_count()/hall_sim_current_column() must be
+    // time-correlated with when the burst actually arrived, not with
+    // whenever decode_task next gets scheduled to look at it (which, via a
+    // queue, is decoupled from capture and would otherwise jitter with
+    // decode_task's own scheduling latency instead of the DUT's real timing).
     uint32_t turn;
+    uint32_t column;
     uint8_t raw[BURST_BYTES];
 } capture_msg_t;
 
 static QueueHandle_t s_capture_queue;
 
-// Double-buffered instead of a single mutex-guarded frame: decode_burst()
-// (decode_task, every ~390us at 600 RPM) writes into s_frame[s_write_buf];
+// Double-buffered instead of a single mutex-guarded frame: decode_task
+// (via write_row(), on every burst it dequeues) writes into s_frame[s_write_buf];
 // led_capture_snapshot() (telemetry_task, every WB_TELEMETRY_FRAME_INTERVAL_MS)
 // reads s_frame[1 - s_write_buf]. decode_task flips s_write_buf once per
 // revolution (see its turn-changed branch), so a snapshot's ~41KB memcpy
@@ -79,8 +93,12 @@ static QueueHandle_t s_capture_queue;
 static uint8_t s_frame[2][WB_FRAME_BYTES];
 static volatile uint8_t s_write_buf;
 
-static inline uint8_t *frame_pixel(uint32_t column, uint32_t led) {
-    return s_frame[s_write_buf] + (column * WB_NUM_LEDS + led) * 3;
+// One row (all WB_NUM_LEDS pixels, R,G,B each) -- contiguous, same layout as
+// a column's slice of s_frame, so it can be memcpy'd straight in.
+typedef uint8_t led_row_t[WB_NUM_LEDS][3];
+
+static inline void write_row(uint32_t column, const led_row_t row) {
+    memcpy(s_frame[s_write_buf] + column * WB_NUM_LEDS * 3, row, sizeof(led_row_t));
 }
 
 // Each 4-byte LED frame on the wire is [brightness(0xe0|b5), B, G, R].
@@ -91,21 +109,53 @@ static inline void put_pixel(uint8_t *out, const uint8_t *w) {
     out[2] = w[1]; // B
 }
 
-static void decode_burst(const uint8_t *buf, uint32_t column) {
-    uint32_t mirror_column = (column + WB_COLUMNS / 2) % WB_COLUMNS;
-
-    // Buffer layout from povdisplay.c init_buffers(): dma_pixels0 = dma_buffer+1
-    // (byte 4), dma_pixels1 = dma_buffer + PIXELS (byte 4 + (PIXELS-1)*4). The
-    // two arms deliberately share one word (arm0's last LED == arm1's first);
-    // computing arm1 as start+PIXELS*4 instead read one word past it -- into
-    // the 0xff end frame -- which showed as a white line on the outer LED.
+// Buffer layout from povdisplay.c init_buffers(): dma_pixels0 = dma_buffer+1
+// (byte 4), dma_pixels1 = dma_buffer + PIXELS (byte 4 + (PIXELS-1)*4). The
+// two arms deliberately share one word (arm0's last LED == arm1's first);
+// computing arm1 as start+PIXELS*4 instead read one word past it -- into
+// the 0xff end frame -- which showed as a white line on the outer LED.
+static void extract_arm_rows(const uint8_t *buf, led_row_t arm0_row, led_row_t arm1_row) {
     const uint8_t *arm0 = buf + START_FRAME_BYTES;
     const uint8_t *arm1 = buf + START_FRAME_BYTES + (WB_NUM_LEDS - 1) * 4;
 
     for (int n = 0; n < WB_NUM_LEDS; n++) {
-        put_pixel(frame_pixel(mirror_column, WB_NUM_LEDS - 1 - n), arm0 + n * 4);
-        put_pixel(frame_pixel(column, n), arm1 + n * 4);
+        put_pixel(arm0_row[WB_NUM_LEDS - 1 - n], arm0 + n * 4);
+        put_pixel(arm1_row[n], arm1 + n * 4);
     }
+}
+
+// Paints `hold_row` into every column strictly between *last_unwrapped and
+// new_unwrapped (exclusive/exclusive), then paints `new_row` at
+// new_unwrapped itself and folds it into hold_row -- i.e. "whatever colour
+// was active carries forward through the columns this burst skipped, and
+// this burst's colour becomes what carries forward from here." Column
+// indices are taken mod WB_COLUMNS, but the *_unwrapped counters themselves
+// are not wrapped, so a caller can keep extending them across a pen's one
+// wrap-around per revolution (see decode_task's arm0/mirror pen) without
+// the comparisons here going backwards.
+static void hold_and_advance(int32_t *last_unwrapped, uint32_t new_unwrapped,
+                              led_row_t hold_row, const led_row_t new_row) {
+    if ((int32_t)new_unwrapped < *last_unwrapped) {
+        new_unwrapped = (uint32_t)*last_unwrapped;
+    }
+    for (int32_t u = *last_unwrapped + 1; u < (int32_t)new_unwrapped; u++) {
+        write_row((uint32_t)u % WB_COLUMNS, hold_row);
+    }
+    write_row(new_unwrapped % WB_COLUMNS, new_row);
+    memcpy(hold_row, new_row, sizeof(led_row_t));
+    *last_unwrapped = (int32_t)new_unwrapped;
+}
+
+// Extends `hold_row` through the rest of the revolution (up to and
+// including end_unwrapped), with no new burst to write -- used at
+// turn-change to finish painting the buffer that's about to become the
+// stable snapshot, since Ventilagon-style firmware may go the entire rest
+// of a revolution without sending another burst.
+static void flush_hold(int32_t *last_unwrapped, uint32_t end_unwrapped, const led_row_t hold_row) {
+    for (int32_t u = *last_unwrapped + 1; u <= (int32_t)end_unwrapped; u++) {
+        write_row((uint32_t)u % WB_COLUMNS, hold_row);
+    }
+    *last_unwrapped = (int32_t)end_unwrapped;
 }
 
 // Core 1: SPI-slave plumbing only. Dequeue a completed DMA transaction, copy
@@ -132,6 +182,7 @@ static void capture_task(void *arg) {
                 good++;
                 capture_msg_t msg;
                 msg.turn = hall_sim_turn_count();
+                msg.column = hall_sim_current_column();
                 memcpy(msg.raw, done->rx_buffer, BURST_BYTES);
                 if (xQueueSend(s_capture_queue, &msg, 0) != pdTRUE) {
                     drops++;
@@ -153,11 +204,26 @@ static void capture_task(void *arg) {
 }
 
 // Also core 1 (see led_capture_begin()), lower priority than capture_task.
-// Everything that isn't strictly SPI plumbing: owns column bookkeeping
-// (same turn-count-based resync as before, just relocated) and the actual
-// pixel decode into s_frame.
+// Everything that isn't strictly SPI plumbing: owns column bookkeeping and
+// the actual pixel decode into s_frame.
+//
+// Each burst carries two rows -- arm0 (mirror column, LED order reversed)
+// and arm1 (direct column) -- landing 180 degrees apart on the rotor. Each
+// is tracked as its own independent "pen": last-known colour (arm0_row /
+// arm1_row) plus how far it's painted so far this revolution
+// (arm0_last_unwrapped / arm1_last_unwrapped, see hold_and_advance()). A
+// pen's column only ever advances (or holds) as the revolution progresses;
+// it never jumps backward within a turn, since msg.column comes from
+// hall_sim_current_column() at capture time, which is monotonic within a
+// revolution. arm0's target column is msg.column + WB_COLUMNS/2, which
+// wraps exactly once per revolution -- tracking it unwrapped (never modulo
+// until the actual s_frame write) keeps hold_and_advance()'s "did this pen
+// move forward" check correct across that wrap.
 static void decode_task(void *arg) {
-    uint32_t column = 0;
+    led_row_t arm0_row = {0};
+    led_row_t arm1_row = {0};
+    int32_t arm0_last_unwrapped = (int32_t)(WB_COLUMNS / 2) - 1;
+    int32_t arm1_last_unwrapped = -1;
     uint32_t bursts_this_turn = 0, bursts_last_turn = 0;
     uint32_t last_turn = hall_sim_turn_count();
     int64_t last_report = esp_timer_get_time();
@@ -165,37 +231,43 @@ static void decode_task(void *arg) {
 
     while (1) {
         if (xQueueReceive(s_capture_queue, &msg, pdMS_TO_TICKS(1000)) == pdTRUE) {
-            // The DUT emits exactly one burst per column, in order, starting
-            // at column 0 after each hall pulse. Assign columns by counting
-            // bursts (in the order captured, preserved by the FIFO queue) and
-            // resetting each simulated revolution, rather than recomputing
-            // from a clock at decode time (that jitters with scheduling
-            // latency and makes the image unstable). Uses msg.turn (stamped
-            // by capture_task at capture time), not a fresh
-            // hall_sim_turn_count() read here -- this task's own scheduling
-            // latency is decoupled from when the burst actually arrived, so
-            // re-reading the live counter here made almost every dequeued
-            // message look like the start of a new revolution.
+            // Uses msg.turn (stamped by capture_task at capture time), not a
+            // fresh hall_sim_turn_count() read here -- this task's own
+            // scheduling latency is decoupled from when the burst actually
+            // arrived, so re-reading the live counter here made almost every
+            // dequeued message look like the start of a new revolution.
             if (msg.turn != last_turn) {
                 last_turn = msg.turn;
-                // bursts_this_turn, not column: column has already wrapped
-                // to 0 via "% WB_COLUMNS" below on a fully-captured
-                // revolution's last burst, one iteration before we get here
-                // to notice the boundary -- reporting column at this point
-                // would read 0 even when everything's healthy. A genuinely
-                // short revolution (dropped bursts) shows up here as < 256.
+                // A real burst-per-turn count, unlike the old "one burst per
+                // column" assumption: Ventilagon-style firmware that only
+                // sends a burst on colour change legitimately reports single
+                // digits here -- that's not a dropped burst, it's compression.
                 bursts_last_turn = bursts_this_turn;
                 bursts_this_turn = 0;
-                column = 0;
-                // The buffer we just finished (s_write_buf) now holds a
-                // complete revolution and becomes the stable snapshot
-                // source; start writing the new revolution into the other
-                // one. led_capture_snapshot() always reads 1 - s_write_buf.
+
+                // Finish painting the buffer we're about to retire: extend
+                // each pen's last colour through to the end of the
+                // revolution, since with sparse bursts there may be no
+                // further burst all the way to the next hall pulse.
+                flush_hold(&arm1_last_unwrapped, WB_COLUMNS - 1, arm1_row);
+                flush_hold(&arm0_last_unwrapped, WB_COLUMNS - 1 + WB_COLUMNS / 2, arm0_row);
+
+                // The buffer we just finished now holds a complete
+                // revolution and becomes the stable snapshot source; start
+                // writing the new revolution into the other one.
+                // led_capture_snapshot() always reads 1 - s_write_buf.
                 s_write_buf ^= 1;
+                arm1_last_unwrapped = -1;
+                arm0_last_unwrapped = (int32_t)(WB_COLUMNS / 2) - 1;
             }
-            decode_burst(msg.raw, column);
+
+            led_row_t new_arm0_row, new_arm1_row;
+            extract_arm_rows(msg.raw, new_arm0_row, new_arm1_row);
+
+            hold_and_advance(&arm1_last_unwrapped, msg.column, arm1_row, new_arm1_row);
+            hold_and_advance(&arm0_last_unwrapped, msg.column + WB_COLUMNS / 2, arm0_row, new_arm0_row);
+
             bursts_this_turn++;
-            column = (column + 1) % WB_COLUMNS;
         }
 
         int64_t now = esp_timer_get_time();
