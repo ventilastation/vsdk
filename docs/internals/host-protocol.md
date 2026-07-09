@@ -29,13 +29,31 @@ are logged and ignored — hosts must tolerate commands they don't handle.
 | Command | Payload | Meaning |
 |---|---|---|
 | `sprites` | 500 bytes | full sprite table: 100 sprites × 5 bytes (x, y, strip, frame, perspective; frame 255 = hidden) |
+| `vs2_scene <nbytes>` | `<nbytes>` | v2 scene/layer payload; currently decoded by the desktop and web emulators into the sprite renderer shape |
 | `imagestrip <slot> <nbytes>` | `<nbytes>` | one image strip: 4-byte header (w, h, frames, palette) + pixels, same encoding as a ROM strip entry |
 | `palette <n> <version>` | `n × 1024` bytes | palette block, `n` palettes of 256 × 4-byte entries ([rom-format.md](rom-format.md)) |
 | `frame_rgb` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED); sent by the workbench's LED-bus capture and by full-frame renderers such as the Ventilagon port |
 
-The upcoming `vs2` renderer will add a separate scene/layer payload rather
-than extending the legacy 500-byte `sprites` command. See
-[vs2-api-plan.md](vs2-api-plan.md).
+`vs2_scene` is intentionally separate from the legacy 500-byte `sprites`
+command. The first payload version has this little-endian layout:
+
+| Offset | Size | Meaning |
+|---:|---:|---|
+| 0 | 4 | magic bytes `VS2\0` |
+| 4 | 1 | version, currently `1` |
+| 5 | 1 | layer count |
+| 6 | 1 | sprite count |
+| 7 | 1 | payload flags, currently `0` |
+| 8 | 2 | header size, currently `16` |
+| 10 | 2 | layer record size, currently `8` |
+| 12 | 2 | sprite record size, currently `24` |
+| 14 | 2 | reserved |
+
+Layer records are 8 bytes: `id`, `mode`, `flags`, then 5 reserved bytes.
+Sprite records are 24 bytes: `layer`, `strip`, `frame`, `mode`, `flags`,
+3 reserved bytes, then signed 8.8 fixed-point `x` and `y` coordinates as
+32-bit integers. Flag bit `0x01` means visible; `0x02` and `0x04` are
+`flip_x` and `flip_y`.
 
 ## Audio
 

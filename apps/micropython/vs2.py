@@ -5,6 +5,8 @@ implementation is backed by the existing sprite table so games can start
 porting before the v2 renderer lands.
 """
 
+import struct
+
 from ventilastation import api_guard
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene as _Scene
@@ -21,6 +23,20 @@ TUNNEL = 1
 HUD = 2
 
 TRANSPARENT = 255
+
+PAYLOAD_MAGIC = b"VS2\0"
+PAYLOAD_VERSION = 1
+PAYLOAD_HEADER_SIZE = 16
+PAYLOAD_LAYER_SIZE = 8
+PAYLOAD_SPRITE_SIZE = 24
+
+FLAG_VISIBLE = 0x01
+FLAG_FLIP_X = 0x02
+FLAG_FLIP_Y = 0x04
+
+_live_sprites = []
+_active_scene = None
+_next_sprite_order = 0
 
 
 def _render_coord(value, minimum=0, maximum=255):
@@ -39,6 +55,133 @@ def _resolve_strip(strip):
     if isinstance(strip, str):
         return stripes[strip]
     return strip
+
+
+def _fixed_8_8(value):
+    try:
+        fixed = int(value * 256)
+    except TypeError:
+        fixed = 0
+    if fixed < -0x80000000:
+        return -0x80000000
+    if fixed > 0x7FFFFFFF:
+        return 0x7FFFFFFF
+    return fixed
+
+
+def _strip_number(sprite):
+    if sprite._strip is None:
+        return 0
+    return _render_coord(sprite._strip, 0, 255)
+
+
+def _sprite_flags(sprite):
+    flags = 0
+    if sprite.visible:
+        flags |= FLAG_VISIBLE
+    if sprite.flip_x:
+        flags |= FLAG_FLIP_X
+    if sprite.flip_y:
+        flags |= FLAG_FLIP_Y
+    return flags
+
+
+def _sprite_order(sprite):
+    return getattr(sprite, "_vs2_order", 0)
+
+
+def _register_sprite(sprite):
+    global _next_sprite_order
+    if sprite not in _live_sprites:
+        sprite._vs2_order = _next_sprite_order
+        _next_sprite_order += 1
+        _live_sprites.append(sprite)
+
+
+def _scene_sprites(scene):
+    sprites = []
+    seen = set()
+    if scene is not None:
+        for layer in getattr(scene, "layers", ()):
+            for sprite in layer.sprites:
+                if id(sprite) not in seen:
+                    seen.add(id(sprite))
+                    sprites.append(sprite)
+    for sprite in _live_sprites:
+        if scene is not None and getattr(sprite, "_scene", None) is not scene:
+            continue
+        if id(sprite) not in seen:
+            seen.add(id(sprite))
+            sprites.append(sprite)
+    sprites.sort(key=_sprite_order)
+    return sprites
+
+
+def export_scene_payload(scene=None):
+    _claim()
+    layers = []
+    if scene is not None:
+        layers = list(getattr(scene, "layers", ()))
+    if not layers:
+        layers = [Layer(name="default", mode=TUNNEL, visible=True)]
+    layer_index = {}
+    for index, layer in enumerate(layers):
+        layer_index[id(layer)] = index
+
+    sprites = _scene_sprites(scene)
+    payload = bytearray(
+        PAYLOAD_HEADER_SIZE
+        + len(layers) * PAYLOAD_LAYER_SIZE
+        + len(sprites) * PAYLOAD_SPRITE_SIZE
+    )
+    struct.pack_into(
+        "<4sBBBBHHHH",
+        payload,
+        0,
+        PAYLOAD_MAGIC,
+        PAYLOAD_VERSION,
+        len(layers),
+        len(sprites),
+        0,
+        PAYLOAD_HEADER_SIZE,
+        PAYLOAD_LAYER_SIZE,
+        PAYLOAD_SPRITE_SIZE,
+        0,
+    )
+    offset = PAYLOAD_HEADER_SIZE
+    for index, layer in enumerate(layers):
+        flags = FLAG_VISIBLE if layer.visible else 0
+        struct.pack_into(
+            "<BBBBBBBB",
+            payload,
+            offset,
+            index,
+            _render_coord(layer.mode, 0, 2),
+            flags,
+            0, 0, 0, 0, 0,
+        )
+        offset += PAYLOAD_LAYER_SIZE
+    for sprite in sprites:
+        layer = getattr(sprite, "layer", None)
+        index = layer_index.get(id(layer), 0)
+        mode = sprite.mode if layer is None else layer.mode
+        struct.pack_into(
+            "<BBBBBBhhii",
+            payload,
+            offset,
+            index,
+            _strip_number(sprite),
+            _render_coord(sprite.frame, 0, 254),
+            _render_coord(mode, 0, 2),
+            _sprite_flags(sprite),
+            0,
+            0,
+            0,
+            _fixed_8_8(sprite.x),
+            _fixed_8_8(sprite.y),
+        )
+        offset += PAYLOAD_SPRITE_SIZE
+    return payload
 
 
 def reset_sprites():
@@ -62,8 +205,20 @@ class Scene(_Scene):
         super().__init__()
         self.layers = []
 
+    def on_enter(self):
+        global _active_scene
+        _active_scene = self
+        super().on_enter()
+
+    def on_exit(self):
+        global _active_scene
+        if _active_scene is self:
+            _active_scene = None
+        super().on_exit()
+
     def layer(self, name=None, mode=TUNNEL, visible=True):
         layer = Layer(name=name, mode=mode, visible=visible)
+        layer.scene = self
         self.layers.append(layer)
         return layer
 
@@ -72,6 +227,7 @@ class Layer:
     def __init__(self, name=None, mode=TUNNEL, visible=True):
         _claim()
         self.name = name
+        self.scene = None
         self.mode = mode
         self.visible = visible
         self.sprites = []
@@ -80,6 +236,8 @@ class Layer:
         if sprite not in self.sprites:
             self.sprites.append(sprite)
         sprite.layer = self
+        if self.scene is not None:
+            sprite._scene = self.scene
         sprite.mode = self.mode
         return sprite
 
@@ -127,6 +285,8 @@ class Sprite:
         self._flip_x = bool(flip_x)
         self._flip_y = bool(flip_y)
         self.layer = None
+        self._scene = _active_scene
+        _register_sprite(self)
         if layer is not None:
             layer.add(self)
         if strip is not None:

@@ -1,5 +1,6 @@
 import os
 import sys
+import struct
 import time
 import unittest
 
@@ -141,6 +142,47 @@ class Vs2ApiTests(unittest.TestCase):
 
         self.assertEqual(launcher.enters, 2)
         self.assertIsNone(api_guard.current_app())
+
+    def test_scene_payload_exports_layers_and_fixed_point_sprites(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        layer = scene.layer("playfield", mode=vs2.HUD)
+        sprite = layer.add(vs2.Sprite(7, x=12.5, y=-4.25, frame=3, flip_x=True))
+
+        payload = vs2.export_scene_payload(scene)
+        self.assertEqual(payload[0:4], b"VS2\0")
+        self.assertEqual(payload[4], 1)
+        self.assertEqual(payload[5], 1)
+        self.assertEqual(payload[6], 1)
+
+        header_size = struct.unpack_from("<H", payload, 8)[0]
+        layer_size = struct.unpack_from("<H", payload, 10)[0]
+        sprite_size = struct.unpack_from("<H", payload, 12)[0]
+        self.assertEqual(header_size, 16)
+        self.assertEqual(layer_size, 8)
+        self.assertEqual(sprite_size, 24)
+
+        layer_id, mode, flags = struct.unpack_from("<BBB", payload, header_size)
+        self.assertEqual(layer_id, 0)
+        self.assertEqual(mode, vs2.HUD)
+        self.assertEqual(flags & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
+
+        offset = header_size + layer_size
+        fields = struct.unpack_from("<BBBBBBhhii", payload, offset)
+        self.assertEqual(fields[0], 0)
+        self.assertEqual(fields[1], 7)
+        self.assertEqual(fields[2], 3)
+        self.assertEqual(fields[3], vs2.HUD)
+        self.assertEqual(fields[4] & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
+        self.assertEqual(fields[4] & vs2.FLAG_FLIP_X, vs2.FLAG_FLIP_X)
+        self.assertEqual(fields[8], int(12.5 * 256))
+        self.assertEqual(fields[9], int(-4.25 * 256))
+        self.assertIs(sprite.layer, layer)
 
 
 if __name__ == "__main__":

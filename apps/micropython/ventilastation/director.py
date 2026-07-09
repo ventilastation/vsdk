@@ -407,6 +407,9 @@ class Director:
         self.last_extra_buttons = self.extra_buttons
 
         self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
+        prepare_frame = getattr(self.platform.display, "prepare_frame", None)
+        if prepare_frame is not None:
+            prepare_frame(scene)
         self.platform.display.update()
         trace_flags = getattr(self.platform, "trace_flags", 0)
         if trace_flags & TRACE_AUTO_GC_FRAME:

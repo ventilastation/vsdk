@@ -8,6 +8,11 @@
   const COLUMNS = 256;
   const PIXELS = 54;
   const TRANSPARENT_INDEX = 255;
+  const VS2_MAGIC = "VS2\0";
+  const VS2_VERSION = 1;
+  const VS2_FLAG_VISIBLE = 0x01;
+  const VS2_FLAG_FLIP_X = 0x02;
+  const VS2_FLAG_FLIP_Y = 0x04;
   const ROWS = 256;
   const STARS = COLUMNS / 2;
   const STAR_COLOR = [64, 64, 64, 255];
@@ -42,6 +47,90 @@
 
   function positiveMod(value, modulo) {
     return ((value % modulo) + modulo) % modulo;
+  }
+
+  function readAscii(bytes, offset, length) {
+    let value = "";
+    for (let index = 0; index < length; index += 1) {
+      value += String.fromCharCode(bytes[offset + index] || 0);
+    }
+    return value;
+  }
+
+  function decodeVs2SceneBuffer(buffer) {
+    if (!(buffer instanceof Uint8Array) || buffer.length < 16) {
+      return { version: 0, layers: [], sprites: [] };
+    }
+    if (readAscii(buffer, 0, 4) !== VS2_MAGIC) {
+      return { version: 0, layers: [], sprites: [] };
+    }
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    const version = buffer[4];
+    if (version !== VS2_VERSION) {
+      return { version, layers: [], sprites: [] };
+    }
+    const layerCount = buffer[5];
+    const spriteCount = buffer[6];
+    const headerSize = view.getUint16(8, true);
+    const layerSize = view.getUint16(10, true);
+    const spriteSize = view.getUint16(12, true);
+    const layers = [];
+    let offset = headerSize;
+    for (let index = 0; index < layerCount; index += 1) {
+      if (offset + layerSize > buffer.length) {
+        return { version, layers: [], sprites: [] };
+      }
+      layers.push({
+        id: buffer[offset],
+        mode: buffer[offset + 1],
+        visible: Boolean(buffer[offset + 2] & VS2_FLAG_VISIBLE),
+      });
+      offset += layerSize;
+    }
+
+    const sprites = [];
+    for (let slot = 0; slot < spriteCount; slot += 1) {
+      if (offset + spriteSize > buffer.length) {
+        return { version, layers, sprites };
+      }
+      const layerId = buffer[offset];
+      const strip = buffer[offset + 1];
+      const frame = buffer[offset + 2];
+      let mode = buffer[offset + 3];
+      const flags = buffer[offset + 4];
+      const layer = layers[layerId] || null;
+      offset += spriteSize;
+      if (!(flags & VS2_FLAG_VISIBLE)) {
+        continue;
+      }
+      if (layer && !layer.visible) {
+        continue;
+      }
+      if (layer) {
+        mode = layer.mode;
+      }
+      const xFixed = view.getInt32(offset - spriteSize + 10, true);
+      const yFixed = view.getInt32(offset - spriteSize + 14, true);
+      const x = xFixed / 256;
+      const y = yFixed / 256;
+      sprites.push({
+        slot,
+        x: Math.trunc(positiveMod(x, COLUMNS)),
+        y: Math.trunc(y),
+        image_strip: strip,
+        frame,
+        perspective: mode,
+        vs2: {
+          layer: layerId,
+          x,
+          y,
+          flags,
+          flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
+          flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
+        },
+      });
+    }
+    return { version, layers, sprites };
   }
 
   function getVisibleColumn(spriteX, spriteWidth, renderColumn) {
@@ -299,6 +388,7 @@
     TRANSPARENT_INDEX,
     DEEPSPACE,
     getVisibleColumn,
+    decodeVs2SceneBuffer,
     computeLedFramePixels,
     computeLedFramePixelsFromRgb,
     createLedRingGeometry,

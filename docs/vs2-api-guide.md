@@ -69,9 +69,9 @@ Named modes replace the old numeric perspective values:
 | `TUNNEL` | 1 | Perspective tunnel sprites. |
 | `HUD` | 2 | Non-perspective overlay sprites. |
 
-The first implementation stores fractional and negative coordinates on the
-Python object, then clips to the old renderer underneath. Full signed and
-fractional rendering arrives with the v2 renderer.
+The compatibility backend still clips coordinates when publishing to the old
+sprite table, but the v2 scene payload preserves signed 8.8 fixed-point
+coordinates for the new renderer path.
 
 ## Layers
 
@@ -86,6 +86,9 @@ self.world.add(Sprite("enemy.png", x=64, y=120))
 Layers are the future draw-order and grouping unit. The compatibility backend
 still draws through legacy sprite order, but new games should already group
 sprites by layer so they are ready for the native v2 renderer.
+
+The current v2 payload includes layer visibility and mode, so desktop/web
+emulators can already hide whole layers and carry the intended projection mode.
 
 ## Collisions
 

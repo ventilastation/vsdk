@@ -16,6 +16,7 @@ import struct
 import socket
 import threading
 from povrender import all_strips, set_palettes, spritedata
+from povrender import clear_vs2_scene, set_vs2_scene
 from povrender import set_voom_frame_rgb, clear_voom_frame
 from audio import playsound, playmusic, playnotes
 from emu_audio import emu_audio
@@ -186,7 +187,13 @@ def dispatch_command(conn, command, args):
 
     elif command == b"sprites":
         clear_voom_frame()
+        clear_vs2_scene()
         spritedata[:] = conn.read(5*100)
+
+    elif command == b"vs2_scene":
+        clear_voom_frame()
+        length = int(args[0]) if args else 0
+        set_vs2_scene(conn.read(length))
 
     elif command == b"palette":
         paldata = conn.read(1024 * int(args[0]))

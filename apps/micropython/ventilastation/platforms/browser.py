@@ -131,6 +131,7 @@ class BrowserDisplay(NullDisplay):
         self.asset_data = {}
         self.assets = {}
         self.dirty_asset_slots = set()
+        self.vs2_scene_data = None
         self._worker_post_sprites = None
         self._worker_post_frame = None
         self._worker_post_frame_bytes = None
@@ -161,6 +162,7 @@ class BrowserDisplay(NullDisplay):
             "assets": [],
             "events": [],
             "sprites": [],
+            "vs2_scene": None,
             "python_profile": None,
         }
 
@@ -314,6 +316,17 @@ class BrowserDisplay(NullDisplay):
         self.assets[number] = asset
         self.dirty_asset_slots.add(number)
 
+    def prepare_frame(self, scene):
+        if getattr(scene, "_vs_declared_api", None) != "vs2":
+            self.vs2_scene_data = None
+            return
+        try:
+            import vs2
+            self.vs2_scene_data = vs2.export_scene_payload(scene)
+        except Exception:
+            self.vs2_scene_data = None
+            raise
+
     def update(self):
         self.frame += 1
         if self.worker_host is None:
@@ -337,6 +350,8 @@ class BrowserDisplay(NullDisplay):
         else:
             self._post_sprites()
             self._post_frame(full)
+        if self.vs2_scene_data is not None:
+            self._post_command("vs2_scene %d" % len(self.vs2_scene_data), self.vs2_scene_data)
         self.palette_dirty = False
         self.dirty_asset_slots.clear()
 
@@ -396,8 +411,15 @@ class BrowserDisplay(NullDisplay):
         exported["assets"] = [self.assets[slot] for slot in asset_slots if slot in self.assets]
         after_assets_at = ticks_us()
         exported["events"] = self.comms.drain_events()
+        if self.vs2_scene_data is not None:
+            exported["events"].append({
+                "command": "vs2_scene",
+                "args": [str(len(self.vs2_scene_data))],
+                "data": self.vs2_scene_data,
+            })
         after_events_at = ticks_us()
         exported["sprites"] = self._decode_sprites()
+        exported["vs2_scene"] = self.vs2_scene_data
         finished_at = ticks_us()
         display_export_us = ticks_diff_us(finished_at, started_at)
         palette_attach_us = ticks_diff_us(after_palette_at, palette_started_at)

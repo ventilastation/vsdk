@@ -4,6 +4,7 @@ const {
   PIXELS,
   computeLedFramePixels,
   computeLedFramePixelsFromRgb,
+  decodeVs2SceneBuffer,
   getLedColor,
 } = require("./led-render-core.js");
 
@@ -41,6 +42,44 @@ function blankFrame(overrides = {}) {
     events: [],
     ...overrides,
   };
+}
+
+function makeVs2ScenePayload({ layers, sprites }) {
+  const headerSize = 16;
+  const layerSize = 8;
+  const spriteSize = 24;
+  const payload = new Uint8Array(headerSize + layers.length * layerSize + sprites.length * spriteSize);
+  const view = new DataView(payload.buffer);
+  payload[0] = "V".charCodeAt(0);
+  payload[1] = "S".charCodeAt(0);
+  payload[2] = "2".charCodeAt(0);
+  payload[3] = 0;
+  payload[4] = 1;
+  payload[5] = layers.length;
+  payload[6] = sprites.length;
+  view.setUint16(8, headerSize, true);
+  view.setUint16(10, layerSize, true);
+  view.setUint16(12, spriteSize, true);
+
+  let offset = headerSize;
+  for (let index = 0; index < layers.length; index += 1) {
+    const layer = layers[index];
+    payload[offset] = index;
+    payload[offset + 1] = layer.mode;
+    payload[offset + 2] = layer.visible === false ? 0 : 1;
+    offset += layerSize;
+  }
+  for (const sprite of sprites) {
+    payload[offset] = sprite.layer || 0;
+    payload[offset + 1] = sprite.image_strip;
+    payload[offset + 2] = sprite.frame || 0;
+    payload[offset + 3] = sprite.mode || 1;
+    payload[offset + 4] = sprite.flags ?? 1;
+    view.setInt32(offset + 10, Math.trunc((sprite.x || 0) * 256), true);
+    view.setInt32(offset + 14, Math.trunc((sprite.y || 0) * 256), true);
+    offset += spriteSize;
+  }
+  return payload;
 }
 
 function runTests() {
@@ -145,6 +184,32 @@ function runTests() {
 
   assert.equal(COLUMNS, 256);
   assert.equal(PIXELS, 54);
+
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [{ mode: 1, visible: true }, { mode: 2, visible: false }],
+      sprites: [
+        { layer: 0, image_strip: 7, frame: 0, mode: 1, flags: 1 | 2, x: 42.5, y: 120 },
+        { layer: 1, image_strip: 7, frame: 0, mode: 2, flags: 1, x: 10, y: 0 },
+        { layer: 0, image_strip: 7, frame: 0, mode: 1, flags: 0, x: 11, y: 0 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    assert.equal(decoded.version, 1);
+    assert.equal(decoded.layers.length, 2);
+    assert.equal(decoded.sprites.length, 1);
+    assert.equal(decoded.sprites[0].x, 42);
+    assert.equal(decoded.sprites[0].vs2.x, 42.5);
+    assert.equal(decoded.sprites[0].vs2.flip_x, true);
+
+    const palette = createPalette({ 1: [1, 2, 3] });
+    const assets = new Map([
+      [7, makeAsset({ width: 1, height: 1, data: [1] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 42, 7), [1, 2, 3, 255], "VS2 decoded sprite should render through LED core");
+    assert.deepEqual(getLedColor(pixels, 10, 53), [0, 0, 0, 255], "hidden VS2 layer should not render");
+  }
 
   // Raw polar framebuffer path (Super Ventilagon / Voom "frame_rgb").
   {

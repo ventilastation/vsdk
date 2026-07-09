@@ -6,6 +6,7 @@ import gc
 sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
 stripes = {}
 _palette = None
+vs2_scene_data = None
 
 def init(num_pixels, *hw_config):
     pass
@@ -39,6 +40,14 @@ def set_imagestrip(n, stripmap):
     stripes[n] = stripmap
     comms.send(b"imagestrip %s %d" % (n, len(stripmap)), stripmap)
 
+def prepare_frame(scene):
+    global vs2_scene_data
+    if getattr(scene, "_vs_declared_api", None) != "vs2":
+        vs2_scene_data = None
+        return
+    import vs2
+    vs2_scene_data = vs2.export_scene_payload(scene)
+
 def _resend_all():
     print("remotepov: resend_all palette=%s strips=%s" % (_palette is not None, list(stripes.keys())))
     if _palette is not None:
@@ -54,6 +63,8 @@ def update():
         print("remotepov: new connection detected, resending all")
         _resend_all()
     comms.send(b"sprites", sprite_data)
+    if vs2_scene_data is not None:
+        comms.send(b"vs2_scene %d" % len(vs2_scene_data), vs2_scene_data)
 
 def last_turn_duration():
     return 1234000 + randrange(1000)

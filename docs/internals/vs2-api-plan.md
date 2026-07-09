@@ -91,6 +91,13 @@ The long-term renderer-facing model is:
   crop rectangle, and optional text backing.
 - Bitmap layers own a 240 x 240 8-bit paletted buffer with a transparent color.
 
+The branch now has the first concrete payload for this model:
+`vs2.export_scene_payload(scene)` emits a `VS2\0` version-1 byte buffer with
+layer records and sprite records. Sprite coordinates are signed 8.8
+fixed-point integers. The desktop and web emulators understand the
+`vs2_scene <nbytes>` command and adapt visible v2 sprites into the existing
+sprite renderer shape while richer native v2 renderers are built.
+
 ## Renderer Work
 
 ### Hardware
@@ -112,13 +119,14 @@ Recommended shape:
 ### Desktop Emulator
 
 Add a v2 renderer beside `emulator/povrender.py`'s legacy path. The desktop
-emulator should understand both transports:
+emulator now understands both transports:
 
 - legacy `sprites` command: current 500-byte table
-- v2 command: new scene/layer payload, exact command name still to be finalized
+- v2 `vs2_scene <nbytes>` command: scene/layer payload
 
-The first emulator milestone should render v2 sprites and layers with parity
-against the compatibility-backed `vyruss_vs2` scene.
+The first emulator milestone decodes v2 sprites and layers into the legacy
+render path. The next pass should split that adapter into a true v2 renderer
+with signed/fractional clipping and flip support.
 
 ### Web Emulator
 
@@ -126,15 +134,16 @@ Add v2 decoding and rendering beside `web/led-render-core.js`, keeping the
 high-frequency bridge rule: pointer + length for frame payloads, not fresh
 Python byte objects.
 
-The web renderer should get its own parity fixtures before richer layer types
-land, then extend those fixtures for flip, signed Y clipping, tilemaps, and
-bitmap layers.
+The web renderer has a parity fixture for the version-1 `vs2_scene` decoder.
+Next, extend those fixtures for flip, signed Y clipping, tilemaps, and bitmap
+layers.
 
 ## Suggested Milestones
 
 1. API skeleton and guard: `vs2.py`, app metadata, tooling inclusion, docs.
 2. Vyruss pilot copy: port to `vs2`, distinct menu icon, compile check.
 3. v2 memory schema: fixed-point signed coordinates, flags, layers, drawables.
+   Initial `vs2_scene` payload is in place.
 4. v2 hardware module: native MicroPython types and `render_vs2()`.
 5. Desktop v2 renderer and parity tests.
 6. Web v2 renderer and parity tests.
