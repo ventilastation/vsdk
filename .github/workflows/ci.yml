@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install tools
+        run: |
+          pip install mpy-cross pillow numpy pyyaml
+          npm ci --no-audit --no-fund
+
+      - name: Build MicroPython unix port (cached)
+        id: upy
+        uses: actions/cache@v5
+        with:
+          path: ~/micropython-bin
+          key: micropython-unix-v1.24.1
+
+      - name: Compile MicroPython unix port
+        if: steps.upy.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch v1.24.1 https://github.com/micropython/micropython /tmp/mpy
+          make -C /tmp/mpy/mpy-cross -j2
+          make -C /tmp/mpy/ports/unix -j2 submodules
+          make -C /tmp/mpy/ports/unix -j2
+          mkdir -p ~/micropython-bin
+          cp /tmp/mpy/ports/unix/build-standard/micropython ~/micropython-bin/
+
+      - name: Add micropython to PATH
+        run: echo "$HOME/micropython-bin" >> "$GITHUB_PATH"
+
+      - name: Generate sprite ROMs
+        run: python3 tools/generate_roms.py
+
+      - name: Syntax-check web modules
+        run: |
+          for f in web/*.js; do node --check "$f"; done
+
+      - name: Run test suite
+        run: python3 tests/run_tests.py

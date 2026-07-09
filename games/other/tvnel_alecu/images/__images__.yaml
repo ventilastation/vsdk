@@ -1,0 +1,8 @@
+palettegroups:
+  palette1:
+    - strip: target.png
+      frames: 5
+    - strip: bricks.png
+  palette2:
+    - fullscreen: fondo.png
+      radius: 25

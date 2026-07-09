@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ventilastation Emulator</title>
+  <link rel="icon" type="image/png" href="./logo.png">
+  <link rel="stylesheet" href="./styles.css?v=20260622c">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="editor-panel-shell" id="editor-panel-shell" aria-label="Code and sprite editor" hidden>
+        <div class="editor-panel">
+          <div class="editor-toolbar">
+            <div class="editor-actions">
+              <button type="button" id="editor-toggle-games-button" aria-expanded="false">Games</button>
+              <button type="button" id="editor-toggle-files-button" aria-expanded="false">Files</button>
+              <button type="button" id="editor-toggle-new-button" aria-expanded="false">New</button>
+              <button type="button" id="editor-save-button" disabled>Save</button>
+              <button type="button" id="editor-run-button" disabled>Save + Run</button>
+            </div>
+          </div>
+        <div class="editor-drawer-shell">
+          <section class="editor-drawer" id="editor-games-drawer" hidden>
+            <div class="editor-drawer-header">
+              <div class="editor-section-caption">Games</div>
+            </div>
+            <div class="editor-file-list" id="editor-games-list" aria-live="polite"></div>
+          </section>
+          <section class="editor-drawer" id="editor-files-drawer" hidden>
+            <div class="editor-drawer-header">
+              <div class="editor-section-caption">Game Files</div>
+            </div>
+            <div class="editor-file-list" id="editor-file-list" aria-live="polite"></div>
+          </section>
+          <section class="editor-drawer" id="editor-new-drawer" hidden>
+            <div class="editor-drawer-header">
+              <div class="editor-section-caption">Create</div>
+            </div>
+            <div class="editor-create-actions">
+              <button type="button" id="editor-new-game-button">New Game</button>
+              <button type="button" id="editor-new-source-button" disabled>New Source File</button>
+              <button type="button" id="editor-new-stripe-button" disabled>New Image Stripe</button>
+            </div>
+            <div class="editor-create-help" id="editor-create-help" aria-live="polite">
+              Select a game to add files and image strips.
+            </div>
+          </section>
+        </div>
+        <section class="editor-workspace">
+          <div class="editor-active-file-bar">
+            <span class="editor-active-file" id="editor-active-file">No file selected</span>
+            <span class="editor-active-meta" id="editor-active-meta"></span>
+          </div>
+          <div class="editor-surface" id="editor-surface"></div>
+          <div class="editor-message" id="editor-message">
+            Loading editor…
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <dialog class="editor-dialog" id="editor-create-dialog">
+      <form method="dialog" class="editor-dialog-form" id="editor-create-form">
+        <div class="editor-dialog-header">
+          <h2 id="editor-create-title">Create</h2>
+          <p id="editor-create-description"></p>
+        </div>
+        <label class="editor-dialog-field">
+          <span id="editor-create-label">Name</span>
+          <input type="text" id="editor-create-input" autocomplete="off" required>
+        </label>
+        <p class="editor-dialog-hint" id="editor-create-hint"></p>
+        <div class="editor-dialog-actions">
+          <button type="button" id="editor-create-cancel">Cancel</button>
+          <button type="submit" id="editor-create-submit">Create</button>
+        </div>
+      </form>
+    </dialog>
+
+    <section class="stage-panel">
+      <div class="stage-toolbar">
+        <div class="stage-primary-actions">
+          <button type="button" class="stage-control-button" id="toggle-editor-button" aria-pressed="false">Editor</button>
+          <button type="button" class="stage-control-button" id="toggle-inspector-button" aria-expanded="false">Options</button>
+        </div>
+      </div>
+      <div class="stage-display">
+        <canvas id="frame-canvas-gl" width="768" height="768"></canvas>
+        <canvas id="frame-canvas-2d" width="768" height="768" hidden></canvas>
+        <button type="button" class="stage-fullscreen-toggle" id="toggle-fullscreen-button" aria-label="Toggle fullscreen" aria-pressed="false">
+          <span class="fullscreen-icon" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div class="scene-error-banner" id="scene-error-banner" hidden>
+        <div class="scene-error-copy">
+          <strong id="scene-error-title">Scene lifecycle error</strong>
+          <pre id="scene-error-message"></pre>
+        </div>
+        <div class="scene-error-actions">
+          <button type="button" id="scene-error-debug-button">Open debug</button>
+        </div>
+      </div>
+      <section class="mobile-controls" aria-label="Touch controls">
+        <div class="mobile-stick-panel">
+          <div class="mobile-control-caption">Move</div>
+          <div class="touch-stick" id="touch-stick" aria-hidden="true">
+            <div class="touch-stick-base">
+              <div class="touch-stick-knob" id="touch-stick-knob"></div>
+            </div>
+          </div>
+        </div>
+        <div class="mobile-buttons-panel">
+          <div class="mobile-control-caption">Buttons</div>
+          <div class="mobile-buttons-grid">
+            <button type="button" class="touch-button touch-button-top" data-touch-button="BUTTON_C">C</button>
+            <button type="button" class="touch-button touch-button-left" data-touch-button="BUTTON_B">B</button>
+            <button type="button" class="touch-button touch-button-right" data-touch-button="BUTTON_D">D</button>
+            <button type="button" class="touch-button touch-button-bottom" data-touch-button="BUTTON_A">A</button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="inspector-panel" id="inspector-panel" hidden>
+        <div class="inspector-block settings-block">
+          <h2>Settings</h2>
+          <label class="settings-option">
+            <input type="checkbox" id="invert-gamepad-y">
+            Invert gamepad Y axis
+          </label>
+          <label class="settings-option">
+            <input type="checkbox" id="force-2d-fallback">
+            Use 2D renderer
+          </label>
+          <label class="settings-option settings-option-select" for="webgl-resolution-scale">
+            <span>WebGL resolution scale</span>
+            <select id="webgl-resolution-scale">
+              <option value="auto">Auto</option>
+              <option value="1">100%</option>
+              <option value="0.75">75%</option>
+              <option value="0.5">50%</option>
+              <option value="0.375">37.5%</option>
+              <option value="0.25">25%</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="inspector-block section-heading-block">
+          <h2>Debugging</h2>
+        </div>
+
+        <div class="inspector-block settings-block">
+          <div class="block-heading-row">
+            <h2>Heap</h2>
+            <button type="button" id="collect-memory-button">Collect</button>
+          </div>
+          <label class="settings-option">
+            <input type="checkbox" id="refresh-memory-every-frame">
+            Refresh heap values every frame
+          </label>
+          <label class="settings-option">
+            <input type="checkbox" data-trace-flag="auto_gc_frame">
+            Garbage collect on every frame
+          </label>
+          <div id="memory-summary" class="summary-grid memory-summary-grid" aria-live="polite"></div>
+        </div>
+
+        <div class="inspector-block settings-block">
+          <h2>Renderer</h2>
+          <label class="settings-option">
+            <input type="checkbox" id="enable-renderer-profiling">
+            Enable renderer profiling
+          </label>
+          <div class="debug-meta">
+            <span><strong>Canvas</strong> WebGL radial preview</span>
+          </div>
+        </div>
+
+        <div class="inspector-block">
+          <h2>Runtime</h2>
+          <div class="status-row status-row-debug">
+            <span class="status-pill" id="frame-counter">FPS --</span>
+            <span class="status-pill" id="adapter-name">Runtime --</span>
+            <span class="status-pill" id="adapter-source">--</span>
+            <span class="status-pill" id="button-mask">Buttons 0x00</span>
+            <span class="status-pill" id="gamepad-status">Gamepad none</span>
+            <span class="status-pill" id="webgl-scale-status">Scale Auto 100%</span>
+          </div>
+          <div id="runtime-summary" class="summary-grid"></div>
+        </div>
+
+        <div class="inspector-block runtime-banner" id="runtime-banner" hidden>
+          <h2>Runtime Status</h2>
+          <pre id="runtime-message"></pre>
+        </div>
+
+        <div class="inspector-block">
+          <div class="copy-header">
+            <h2>Copy Diagnostics</h2>
+            <div class="copy-actions">
+              <button type="button" id="copy-diagnostics-button">Copy</button>
+              <span id="copy-diagnostics-status" aria-live="polite"></span>
+            </div>
+          </div>
+          <textarea id="copy-diagnostics" rows="18" readonly></textarea>
+        </div>
+    </section>
+  </main>
+
+  <script type="module" src="./micropython-bridge.js?v=20260622c"></script>
+  <script type="module" src="./wasm-adapter.js?v=20260622c"></script>
+  <script src="./led-render-core.js?v=20260622c"></script>
+  <script src="./rom-builder-core.js?v=20260622c"></script>
+  <script src="./rom-builder-browser.js?v=20260622c"></script>
+  <script type="module" src="./app.js?v=20260709a"></script>
+  <script type="module" src="./monaco-ide.js?v=20260622d"></script>
+</body>
+</html>

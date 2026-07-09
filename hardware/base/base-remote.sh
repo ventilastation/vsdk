@@ -1,5 +1,5 @@
 cd `dirname "$0"`/../..
-cd apps/sounds
+cd tools/sounds
 make
 cd ../..
 . .venv/bin/activate

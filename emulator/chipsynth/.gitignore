@@ -1,0 +1,5 @@
+# Built synth libraries (produced by `make`)
+*.dylib
+*.so
+*.o
+*.dSYM/

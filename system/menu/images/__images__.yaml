@@ -1,0 +1,15 @@
+palettegroups:
+  palette1:
+    # One strip per games/<group>/<name>/menu.png, expanded by
+    # tools/generate_roms.py; per-game frame counts come from each game's
+    # meta.json ("menu_frames"). Adding a game needs no edit here.
+    - game_menu_strips: true
+    - strip: menu.png
+      frames: 16
+    - strip: voom.png
+    - strip: megadrive.png
+    - strip: pollitos.png
+      frames: 5
+    - strip: vslogo.png
+    - strip: loviejo-3.png
+    - fullscreen: favalli.png

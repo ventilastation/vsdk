@@ -1,0 +1,20 @@
+palettegroups:
+  palette1:
+    - strip: tincho_palante.png
+      frames: 6
+    - strip: tincho_patras.png
+      frames: 6
+    - strip: suelos.png
+      frames: 6
+    - strip: nubes.png
+      frames: 3
+    - strip: props.png
+      frames: 7
+    - strip: info.png
+      frames: 6
+    - strip: numeritos.png
+      frames: 10
+    - fullscreen: negro.png
+    - fullscreen: rojo.png
+    - fullscreen: amarillo.png
+    - fullscreen: tincho_pescando.png

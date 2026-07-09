@@ -1,0 +1,308 @@
+(function (root, factory) {
+  const api = factory();
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+  root.VentilastationLedRenderCore = api;
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  const COLUMNS = 256;
+  const PIXELS = 54;
+  const TRANSPARENT_INDEX = 255;
+  const ROWS = 256;
+  const STARS = COLUMNS / 2;
+  const STAR_COLOR = [64, 64, 64, 255];
+  const LED_SIZE = 100;
+  const EMPTY_PIXELS = 16;
+  const DEEPSPACE_ROWS = ROWS - EMPTY_PIXELS;
+  const GAMMA = 0.28;
+  const DEEPSPACE = new Uint8Array([
+    ...new Array(EMPTY_PIXELS).fill(PIXELS),
+    ...Array.from({ length: DEEPSPACE_ROWS }, (_, index) => {
+      const n = DEEPSPACE_ROWS - 1 - index;
+      return Math.round(PIXELS * Math.pow(n / DEEPSPACE_ROWS, 1 / GAMMA));
+    }),
+  ]);
+
+  function createRng(seed) {
+    let state = seed >>> 0;
+    return function next() {
+      state = (1664525 * state + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  }
+
+  const starfield = (() => {
+    const random = createRng(0x1badf00d);
+    return Array.from({ length: STARS }, () => ({
+      x0: Math.floor(random() * COLUMNS),
+      y0: Math.floor(random() * ROWS),
+      wraps: Array.from({ length: 8 }, () => Math.floor(random() * COLUMNS)),
+    }));
+  })();
+
+  function positiveMod(value, modulo) {
+    return ((value % modulo) + modulo) % modulo;
+  }
+
+  function getVisibleColumn(spriteX, spriteWidth, renderColumn) {
+    const spriteColumn = spriteWidth - 1 - positiveMod(renderColumn - spriteX, COLUMNS);
+    if (spriteColumn >= 0 && spriteColumn < spriteWidth) {
+      return spriteColumn;
+    }
+    return -1;
+  }
+
+  function getLedOffset(column, led) {
+    if (column < 0 || column >= COLUMNS || led < 0 || led >= PIXELS) {
+      return -1;
+    }
+    return (column * PIXELS + led) * 4;
+  }
+
+  function setLedColor(buffer, column, led, red, green, blue, alpha) {
+    const offset = getLedOffset(column, led);
+    if (offset === -1) {
+      return;
+    }
+    buffer[offset] = red;
+    buffer[offset + 1] = green;
+    buffer[offset + 2] = blue;
+    buffer[offset + 3] = alpha;
+  }
+
+  function setLedColorFromPalette(buffer, palette, paletteIndex, colorIndex, column, led) {
+    const offset = getLedOffset(column, led);
+    if (offset === -1) {
+      return;
+    }
+    const paletteOffset = (paletteIndex * 256 + colorIndex) * 4;
+    buffer[offset] = palette[paletteOffset + 3] || 0;
+    buffer[offset + 1] = palette[paletteOffset + 2] || 0;
+    buffer[offset + 2] = palette[paletteOffset + 1] || 0;
+    buffer[offset + 3] = 255;
+  }
+
+  function getFrameIndex(frame, totalFrames) {
+    if (!totalFrames || totalFrames <= 0) {
+      return 0;
+    }
+    return positiveMod(frame, totalFrames);
+  }
+
+  function drawStarfield(pixels, frameNumber, columnOffset) {
+    const ticks = Math.max(0, Number(frameNumber || 0));
+    for (const star of starfield) {
+      const total = star.y0 - ticks;
+      const wrappedY = positiveMod(total, ROWS);
+      const wrapCount = Math.floor((ticks + (ROWS - 1 - star.y0)) / ROWS);
+      const x = wrapCount <= 0
+        ? star.x0
+        : star.wraps[(wrapCount - 1) % star.wraps.length];
+      const renderColumn = positiveMod(x - columnOffset, COLUMNS);
+      const led = DEEPSPACE[wrappedY];
+      if (led < PIXELS) {
+        setLedColor(pixels, renderColumn, led, STAR_COLOR[0], STAR_COLOR[1], STAR_COLOR[2], STAR_COLOR[3]);
+      }
+    }
+  }
+
+  function computeLedFramePixels(frame, assetIndex, palette) {
+    const pixels = new Uint8Array(COLUMNS * PIXELS * 4);
+    for (let index = 3; index < pixels.length; index += 4) {
+      pixels[index] = 255;
+    }
+
+    const columnOffset = positiveMod(Number(frame?.column_offset || 0), COLUMNS);
+    drawStarfield(pixels, frame?.frame || 0, columnOffset);
+
+    if (!(palette instanceof Uint8Array) || !Array.isArray(frame?.sprites)) {
+      return pixels;
+    }
+
+    const sprites = [...frame.sprites].sort((left, right) => (right.slot || 0) - (left.slot || 0));
+
+    for (let column = 0; column < COLUMNS; column += 1) {
+      const renderColumn = positiveMod(column + columnOffset, COLUMNS);
+
+      for (const sprite of sprites) {
+        const asset = assetIndex.get(sprite.image_strip);
+        if (!asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength) {
+          continue;
+        }
+
+        const width = asset.width === 255 ? 256 : asset.width;
+        const height = asset.height || 0;
+        const totalFrames = Math.max(asset.frames || 1, 1);
+        const visibleColumn = getVisibleColumn(sprite.x || 0, width, renderColumn);
+        if (visibleColumn === -1 || height <= 0) {
+          continue;
+        }
+
+        const frameIndex = getFrameIndex(sprite.frame || 0, totalFrames);
+        const base = visibleColumn * height + frameIndex * width * height;
+        const paletteIndex = asset.palette || 0;
+
+        if (sprite.perspective) {
+          const desde = Math.max(sprite.y || 0, 0);
+          const hasta = Math.min((sprite.y || 0) + height, 255);
+          let src = base + Math.max(-(sprite.y || 0), 0);
+
+          for (let y = desde; y < hasta; y += 1, src += 1) {
+            const colorIndex = asset.data[src];
+            if (colorIndex === TRANSPARENT_INDEX) {
+              continue;
+            }
+            const led = sprite.perspective === 1 ? DEEPSPACE[y] : PIXELS - 1 - y;
+            if (led < PIXELS) {
+              setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);
+            }
+          }
+          continue;
+        }
+
+        const zleds = DEEPSPACE[255 - (sprite.y || 0)];
+        for (let led = 0; led < zleds; led += 1) {
+          const src = Math.floor((led * PIXELS) / zleds);
+          if (src >= height) {
+            break;
+          }
+          const colorIndex = asset.data[base + height - 1 - src];
+          if (colorIndex === TRANSPARENT_INDEX) {
+            continue;
+          }
+          setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);
+        }
+      }
+    }
+
+    return pixels;
+  }
+
+  function computeLedFramePixelsFromRgb(rgb) {
+    // Convert a raw 256-column x PIXELS polar framebuffer (R,G,B per LED, as sent by
+    // Super Ventilagon / Voom via the "frame_rgb" command) into the RGBA ledPixels
+    // array the ring renderers consume. Layout in / out is column-major, led-minor.
+    const pixels = new Uint8Array(COLUMNS * PIXELS * 4);
+    const count = COLUMNS * PIXELS;
+    const usable = rgb instanceof Uint8Array ? Math.min(count, (rgb.length / 3) | 0) : 0;
+    for (let i = 0; i < count; i += 1) {
+      const d = i * 4;
+      pixels[d + 3] = 255;
+      if (i < usable) {
+        const s = i * 3;
+        pixels[d] = rgb[s];
+        pixels[d + 1] = rgb[s + 1];
+        pixels[d + 2] = rgb[s + 2];
+      }
+    }
+    return pixels;
+  }
+
+  function repeatLedColors(ledPixels, multiplier) {
+    const repeated = new Uint8Array(ledPixels.length * multiplier);
+    let dest = 0;
+    for (let src = 0; src < ledPixels.length; src += 4) {
+      for (let index = 0; index < multiplier; index += 1) {
+        repeated[dest] = ledPixels[src];
+        repeated[dest + 1] = ledPixels[src + 1];
+        repeated[dest + 2] = ledPixels[src + 2];
+        repeated[dest + 3] = ledPixels[src + 3];
+        dest += 4;
+      }
+    }
+    return repeated;
+  }
+
+  function createLedRingGeometry() {
+    const ledStep = LED_SIZE / PIXELS;
+    const theta = (Math.PI * 2) / COLUMNS;
+    const positions = [];
+    const texCoords = [];
+    const centers = [];
+
+    function arcChord(radius) {
+      return 2 * radius * Math.sin(theta / 2);
+    }
+
+    for (let column = 0; column < COLUMNS; column += 1) {
+      let x1 = 0;
+      let x2 = 0;
+      for (let led = 0; led < PIXELS; led += 1) {
+        const y1 = ledStep * led - ledStep * 2.5;
+        const y2 = y1 + ledStep * 5;
+        const x3 = arcChord(y2) * 3.5;
+        const x4 = -x3;
+        const angle = -theta * column + Math.PI;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        function rotate(x, y) {
+          return {
+            x: x * cos - y * sin,
+            y: x * sin + y * cos,
+          };
+        }
+
+        const v1 = rotate(x1, y1);
+        const v2 = rotate(x2, y1);
+        const v3 = rotate(x4, y2);
+        const v4 = rotate(x3, y2);
+        const center = rotate(0, (y1 + y2) * 0.5);
+
+        positions.push(
+          v1.x, v1.y,
+          v2.x, v2.y,
+          v3.x, v3.y,
+          v1.x, v1.y,
+          v3.x, v3.y,
+          v4.x, v4.y
+        );
+
+        texCoords.push(
+          0, 0,
+          1, 0,
+          1, 1,
+          0, 0,
+          1, 1,
+          0, 1
+        );
+
+        centers.push(center.x, center.y);
+        x1 = x3;
+        x2 = x4;
+      }
+    }
+
+    return {
+      positions: new Float32Array(positions),
+      texCoords: new Float32Array(texCoords),
+      centers: new Float32Array(centers),
+      ledCount: COLUMNS * PIXELS,
+      vertexCount: COLUMNS * PIXELS * 6,
+      worldRadius: LED_SIZE * 1.9,
+    };
+  }
+
+  function getLedColor(pixels, column, led) {
+    const offset = (column * PIXELS + led) * 4;
+    return [
+      pixels[offset],
+      pixels[offset + 1],
+      pixels[offset + 2],
+      pixels[offset + 3],
+    ];
+  }
+
+  return {
+    COLUMNS,
+    PIXELS,
+    TRANSPARENT_INDEX,
+    DEEPSPACE,
+    getVisibleColumn,
+    computeLedFramePixels,
+    computeLedFramePixelsFromRgb,
+    createLedRingGeometry,
+    repeatLedColors,
+    getLedColor,
+  };
+});

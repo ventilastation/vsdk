@@ -4,5 +4,7 @@ python-ffmpeg
 gmqtt
 pyserial
 pillow
+PyYAML
 RPi.GPIO; "Raspbian" in platform_version
 numpy; "Raspbian" not in platform_version
+littlefs-python  # build the LittleFS image (hardware/rotor/build_micropython_fs.py)

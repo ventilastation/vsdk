@@ -1,7 +1,7 @@
 import sys
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
-from ventilastation.sprites import Sprite, reset_sprites
+from ventilastation.sprites import Sprite
 
 class MenuSprite(Sprite):
     pass
@@ -9,7 +9,7 @@ class MenuSprite(Sprite):
 class Menu(Scene):
 
     def __init__(self, options, selected_index=0):
-        """Where options is a list of: (option id, strip id, frame, width)"""
+        """Where options is a list of (option id, strip name, frame) tuples."""
 
         super(Menu, self).__init__()
         self.options = options[:]
@@ -39,19 +39,19 @@ class Menu(Scene):
 
     def step(self):
         if director.was_pressed(director.JOY_DOWN):
-            director.sound_play(b'vyruss/shoot3')
+            director.sound_play(b'alecu.vyruss/shoot3')
             self.selected_index -= 1
             if self.selected_index == -1:
                 self.selected_index = 0
             print("Selected menu option", self.options[self.selected_index][0])
         if director.was_pressed(director.JOY_UP):
-            director.sound_play(b'vyruss/shoot3')
+            director.sound_play(b'alecu.vyruss/shoot3')
             self.selected_index += 1
             if self.selected_index > len(self.options) - 1:
                 self.selected_index = len(self.options) - 1
             print("Selected menu option", self.options[self.selected_index][0])
         if (director.was_pressed(director.BUTTON_A) or self.both_console_buttons()):
-            director.sound_play(b'vyruss/shoot1')
+            director.sound_play(b'alecu.vyruss/shoot1')
             try:
                 self.on_option_pressed(self.selected_index)
             except StopIteration:

@@ -1,0 +1,6 @@
+palettegroups:
+  palette1:
+    - strip: vga_cp437.png
+      frames: 256
+    - strip: rainbow437.png
+      frames: 256

@@ -1,1 +1,0 @@
-from .dome_defander import main

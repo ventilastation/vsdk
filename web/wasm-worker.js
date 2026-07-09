@@ -1,0 +1,1106 @@
+import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260622T204800Z";
+
+const WORKER_BUILD_VERSION = "worker-debug-20260622T204800Z";
+const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T204800Z";
+
+const DEFAULT_CONFIG = {
+  micropythonWasmUrl: `./vendor/micropython/micropython.wasm?v=${MICROPYTHON_WASM_VERSION}`,
+  runtimeBundleUrl: "./runtime-bundle.json",
+  runtimeManifestUrl: "./runtime-manifest.json",
+  fsRoot: "/games",
+  pystack: 32 * 1024,
+  heapsize: 8 * 1024 * 1024,
+  autostartSlug: null,
+};
+const SCENE_STEP_MS = 30;
+const MAX_CATCH_UP_STEPS = 6;
+const MAX_TICK_BACKLOG_MS = SCENE_STEP_MS * MAX_CATCH_UP_STEPS;
+
+const PY_BOOTSTRAP_SOURCE = `
+import sys
+import uos
+if "/apps/micropython" not in sys.path:
+    sys.path.insert(0, "/apps/micropython")
+uos.chdir("/apps/micropython")
+import ventilastation.wasm_bridge as __vs_wasm_bridge
+__vs_wasm_bridge.boot_runtime()
+`;
+
+const PY_BRIDGE_CALL_SOURCE = "__vs_bridge_result = __vs_wasm_bridge.invoke_from_globals()";
+const PY_STEP_SOURCE = "__vs_wasm_bridge.step(__vs_step_count)";
+const RUNTIME_ROMS_PREFIX = "__runtime_roms__/";
+
+function dirname(path) {
+  const normalized = path.replace(/\\/g, "/");
+  const index = normalized.lastIndexOf("/");
+  return index <= 0 ? "/" : normalized.slice(0, index);
+}
+
+function encodeBase64(bytes) {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+  return btoa(binary);
+}
+
+function normalizeRuntimeRelativePath(path) {
+  const normalized = String(path || "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/u, "")
+    .replace(/^\/+/u, "")
+    .replace(/\/{2,}/gu, "/");
+  if (!normalized || normalized === ".") {
+    return "";
+  }
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.some((segment) => segment === "..")) {
+    throw new Error(`Invalid runtime path: ${path}`);
+  }
+  return segments.join("/");
+}
+
+function getProjectRootCandidates() {
+  const emulatorBaseUrl = new URL(".", self.location.href);
+  return [
+    emulatorBaseUrl,
+    new URL("../", emulatorBaseUrl),
+  ];
+}
+
+function getFetchPathCandidates(path) {
+  const normalized = normalizeRuntimeRelativePath(path);
+  if (!normalized) {
+    return [normalized];
+  }
+  if (normalized.endsWith("/__images__.yaml")) {
+    return [normalized, normalized.replace(/\/__images__\.yaml$/u, "/images-manifest.yaml.txt")];
+  }
+  if (normalized.endsWith("/__images__.yml")) {
+    return [normalized, normalized.replace(/\/__images__\.yml$/u, "/images-manifest.yml.txt")];
+  }
+  if (normalized.endsWith(".yaml") || normalized.endsWith(".yml")) {
+    return [normalized];
+  }
+  return [normalized];
+}
+
+async function fetchFirstAvailable(paths) {
+  const errors = [];
+  for (const baseUrl of getProjectRootCandidates()) {
+    for (const originalPath of paths) {
+      for (const path of getFetchPathCandidates(originalPath)) {
+      const url = new URL(path.replace(/^\/+/, ""), baseUrl);
+      try {
+        const response = await fetch(url, {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (response.ok) {
+          return response;
+        }
+        errors.push(`${response.status} ${url.href}`);
+      } catch (error) {
+        errors.push(`${url.href}: ${error.message || String(error)}`);
+      }
+      }
+    }
+  }
+  throw new Error(`Unable to load asset; tried: ${errors.join(", ")}`);
+}
+
+function reviveBytes(value) {
+  if (Array.isArray(value)) {
+    return value.map(reviveBytes);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  if (Object.keys(value).length === 1 && typeof value.__base64__ === "string") {
+    const decoded = atob(value.__base64__);
+    const bytes = new Uint8Array(decoded.length);
+    for (let i = 0; i < decoded.length; i += 1) {
+      bytes[i] = decoded.charCodeAt(i);
+    }
+    return bytes;
+  }
+  if (Object.keys(value).length === 1 && typeof value.__bytes_meta__ === "number") {
+    return { byteLength: value.__bytes_meta__ };
+  }
+  const revived = {};
+  for (const [key, entry] of Object.entries(value)) {
+    revived[key] = reviveBytes(entry);
+  }
+  return revived;
+}
+
+function decodeBase64(base64) {
+  const decoded = atob(base64);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes;
+}
+
+const exportWorkerProfileTotals = {
+  sampleCount: 0,
+  totalCallMs: 0,
+  totalCallMsMax: 0,
+  runPythonAsyncMs: 0,
+  runPythonAsyncMsMax: 0,
+  globalsGetMs: 0,
+  globalsGetMsMax: 0,
+  jsonParseMs: 0,
+  jsonParseMsMax: 0,
+  reviveBytesMs: 0,
+  reviveBytesMsMax: 0,
+  transferCollectMs: 0,
+  transferCollectMsMax: 0,
+  postMessageMs: 0,
+  postMessageMsMax: 0,
+};
+
+function normalizeWorkerCommandPayload(data) {
+  if (data instanceof Uint8Array) {
+    return data;
+  }
+  if (!data) {
+    return null;
+  }
+  if (typeof data === "string") {
+    return new TextEncoder().encode(data);
+  }
+  if (typeof data === "object" && typeof data[Symbol.iterator] === "function") {
+    try {
+      return Uint8Array.from(data);
+    } catch (_error) {
+      return null;
+    }
+  }
+  return null;
+}
+
+function updateWorkerProfileMetric(sumKey, maxKey, value) {
+  exportWorkerProfileTotals[sumKey] += value;
+  if (value > exportWorkerProfileTotals[maxKey]) {
+    exportWorkerProfileTotals[maxKey] = value;
+  }
+}
+
+function getExportWorkerProfileSnapshot() {
+  const sampleCount = exportWorkerProfileTotals.sampleCount;
+  if (!sampleCount) {
+    return null;
+  }
+  return {
+    sampleCount,
+    totalCallMs: exportWorkerProfileTotals.totalCallMs / sampleCount,
+    totalCallMsMax: exportWorkerProfileTotals.totalCallMsMax,
+    runPythonAsyncMs: exportWorkerProfileTotals.runPythonAsyncMs / sampleCount,
+    runPythonAsyncMsMax: exportWorkerProfileTotals.runPythonAsyncMsMax,
+    globalsGetMs: exportWorkerProfileTotals.globalsGetMs / sampleCount,
+    globalsGetMsMax: exportWorkerProfileTotals.globalsGetMsMax,
+    jsonParseMs: exportWorkerProfileTotals.jsonParseMs / sampleCount,
+    jsonParseMsMax: exportWorkerProfileTotals.jsonParseMsMax,
+    reviveBytesMs: exportWorkerProfileTotals.reviveBytesMs / sampleCount,
+    reviveBytesMsMax: exportWorkerProfileTotals.reviveBytesMsMax,
+    transferCollectMs: exportWorkerProfileTotals.transferCollectMs / sampleCount,
+    transferCollectMsMax: exportWorkerProfileTotals.transferCollectMsMax,
+    postMessageMs: exportWorkerProfileTotals.postMessageMs / sampleCount,
+    postMessageMsMax: exportWorkerProfileTotals.postMessageMsMax,
+  };
+}
+
+class MicroPythonRuntime {
+  constructor(config) {
+    this.config = config;
+    this.initialized = false;
+    this.mp = null;
+    this.workspaceFilePaths = new Set();
+    this.deletedWorkspacePaths = new Set();
+    this.runtimeManifestFiles = [];
+    this.runtimeManifestByTargetPath = new Map();
+  }
+
+  _readHeapBytesFromModule(ptr, length) {
+    const heap = this.mp?._module?.HEAPU8;
+    if (!(heap instanceof Uint8Array)) {
+      throw new Error("mp._module.HEAPU8 unavailable");
+    }
+    const start = Number(ptr);
+    const size = Number(length);
+    if (!Number.isFinite(start) || !Number.isFinite(size)) {
+      throw new Error(`invalid ptr/length ${ptr}/${length}`);
+    }
+    if (start < 0 || size <= 0) {
+      return new Uint8Array(0);
+    }
+    if (start + size > heap.length) {
+      throw new Error(`out of bounds read ${start}+${size} > ${heap.length}`);
+    }
+    return heap.slice(start, start + size);
+  }
+
+  readHeapBytes(ptr, length) {
+    this.assertInitialized();
+    if (typeof this.mp?.readMemoryBytes === "function") {
+      try {
+        const normalizedPtr = Number(ptr) >>> 0;
+        const normalizedLength = Number(length) >>> 0;
+        return this.mp.readMemoryBytes(normalizedPtr, normalizedLength);
+      } catch (_error) {}
+    }
+    try {
+      return this._readHeapBytesFromModule(ptr, length);
+    } catch (_error) {
+      return new Uint8Array(0);
+    }
+  }
+
+  async initialize() {
+    if (this.initialized) {
+      return {
+        runtime: "micropython-webassembly",
+        micropythonWasmUrl: this.config.micropythonWasmUrl,
+        fsRoot: this.config.fsRoot,
+      };
+    }
+
+    this.mp = await loadMicroPython({
+      url: this.config.micropythonWasmUrl,
+      pystack: this.config.pystack,
+      heapsize: this.config.heapsize,
+      stdin: () => null,
+      stdout: (line) => console.log("[mp]", line),
+      stderr: (line) => console.error("[mp]", line),
+    });
+
+    this.mp.registerJsModule("__vs_host", {
+      get_buttons: () => workerHostState.buttons,
+      is_running: () => workerHostState.running,
+      consume_full_frame_request: () => {
+        const shouldSendFullFrame = workerHostState.fullNextFrame;
+        workerHostState.fullNextFrame = false;
+        return shouldSendFullFrame;
+      },
+      post_command: (line, data = null) => {
+        handleRuntimeCommand(String(line || ""), normalizeWorkerCommandPayload(data));
+        return null;
+      },
+      post_command_ptr: (linePtr, lineLength, dataPtr, dataLength) => {
+        const lineBytes = this.readHeapBytes(linePtr, lineLength);
+        const dataBytes = dataLength ? this.readHeapBytes(dataPtr, dataLength) : null;
+        const line = lineBytes.length ? new TextDecoder().decode(lineBytes) : "";
+        handleRuntimeCommand(line, dataBytes);
+        return null;
+      },
+      post_sprites: (data) => {
+        handleRuntimeSprites(normalizeWorkerCommandPayload(data));
+        return null;
+      },
+      post_sprites_ptr: (ptr, length) => {
+        handleRuntimeSprites(this.readHeapBytes(ptr, length));
+        return null;
+      },
+      post_present: (sprites, frameData) => {
+        handleRuntimeSprites(normalizeWorkerCommandPayload(sprites));
+        handleRuntimeFrameBytes(normalizeWorkerCommandPayload(frameData));
+        return null;
+      },
+      post_present_ptr: (spritePtr, spriteLength, framePtr, frameLength) => {
+        handleRuntimeSprites(this.readHeapBytes(spritePtr, spriteLength));
+        handleRuntimeFrameBytes(this.readHeapBytes(framePtr, frameLength));
+        return null;
+      },
+      post_frame_bytes: (data) => {
+        handleRuntimeFrameBytes(normalizeWorkerCommandPayload(data));
+        return null;
+      },
+      post_frame_bytes_ptr: (ptr, length) => {
+        handleRuntimeFrameBytes(this.readHeapBytes(ptr, length));
+        return null;
+      },
+      post_frame: (frame, buttons, gammaMode, columnOffset, paletteLength, paletteVersion, paletteDirty) => {
+        handleRuntimeFrame({
+          frame,
+          buttons,
+          gammaMode,
+          columnOffset,
+          paletteLength,
+          paletteVersion,
+          paletteDirty,
+        });
+        return null;
+      },
+      post_runtime_error: (message, stack = null) => {
+        postEvent("runtime_error", {
+          error: {
+            message: message || "Unknown runtime error",
+            stack: stack || null,
+          },
+        });
+        return null;
+      },
+    });
+
+    await this.populateFilesystem();
+    await this.mp.runPythonAsync(PY_BOOTSTRAP_SOURCE);
+    this.initialized = true;
+    await this.call("ventilastation.browser", "configure_worker_host", ["__vs_host"]);
+    if (typeof this.config.autostartSlug === "string" && this.config.autostartSlug) {
+      await this.call("ventilastation.browser", "autostart_app", [this.config.autostartSlug]);
+    }
+
+    return {
+      runtime: "micropython-webassembly",
+      micropythonWasmUrl: this.config.micropythonWasmUrl,
+      fsRoot: this.config.fsRoot,
+      autostartSlug: this.config.autostartSlug || null,
+    };
+  }
+
+  async loadRuntimeManifest() {
+    const response = await fetch(this.config.runtimeManifestUrl, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`Unable to load runtime manifest: ${response.status} ${response.url}`);
+    }
+    const manifest = await response.json();
+    if (!manifest || !Array.isArray(manifest.files)) {
+      throw new Error("Invalid runtime manifest format");
+    }
+    this.runtimeManifestFiles = manifest.files
+      .filter((entry) => typeof entry === "string")
+      .map((entry) => normalizeRuntimeRelativePath(entry));
+    this.runtimeManifestByTargetPath = new Map();
+    for (const relativePath of this.runtimeManifestFiles) {
+      this.runtimeManifestByTargetPath.set(this.resolveWorkspacePath(relativePath), relativePath);
+    }
+  }
+
+  async populateFilesystem() {
+    await this.loadRuntimeManifest();
+    if (await this.populateFilesystemFromBundle()) {
+      this.applyWorkspaceFiles(this.config.workspaceFiles || [], { replace: true });
+      return;
+    }
+    this.ensureDir("/");
+    this.ensureDir(this.config.fsRoot);
+
+    for (const relativePath of this.runtimeManifestFiles) {
+      const fileResponse = await fetchFirstAvailable([relativePath]);
+      const bytes = new Uint8Array(await fileResponse.arrayBuffer());
+      const targetPath = this.resolveWorkspacePath(relativePath);
+      this.ensureDir(dirname(targetPath));
+      this.mp.FS.writeFile(targetPath, bytes);
+    }
+    this.applyWorkspaceFiles(this.config.workspaceFiles || [], { replace: true });
+  }
+
+  async populateFilesystemFromBundle() {
+    let response;
+    try {
+      response = await fetch(this.config.runtimeBundleUrl, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+    } catch (_error) {
+      return false;
+    }
+    if (!response.ok) {
+      return false;
+    }
+
+    const bundle = await response.json();
+    if (!bundle || !Array.isArray(bundle.files)) {
+      throw new Error("Invalid runtime bundle format");
+    }
+
+    this.ensureDir("/");
+    this.ensureDir(this.config.fsRoot);
+    for (const entry of bundle.files) {
+      if (!entry || typeof entry.path !== "string" || typeof entry.base64 !== "string") {
+        throw new Error("Invalid runtime bundle entry");
+      }
+      const targetPath = this.resolveWorkspacePath(entry.path);
+      this.ensureDir(dirname(targetPath));
+      this.mp.FS.writeFile(targetPath, decodeBase64(entry.base64));
+    }
+    return true;
+  }
+
+  resolveWorkspacePath(path) {
+    const relativePath = normalizeRuntimeRelativePath(path);
+    if (relativePath.startsWith(RUNTIME_ROMS_PREFIX)) {
+      const romRelativePath = relativePath.slice(RUNTIME_ROMS_PREFIX.length);
+      if (!romRelativePath) {
+        return "/apps/micropython/roms";
+      }
+      return `/apps/micropython/roms/${romRelativePath}`;
+    }
+    if (relativePath.startsWith("games/") || relativePath.startsWith("system/") || relativePath.startsWith("apps/")) {
+      return `/${relativePath}`;
+    }
+    const fsRoot = this.config.fsRoot.replace(/\/+$/u, "");
+    return relativePath ? `${fsRoot}/${relativePath}` : fsRoot;
+  }
+
+  applyWorkspaceFiles(files = [], { replace = false } = {}) {
+    if (!Array.isArray(files) || !files.length) {
+      if (replace) {
+        for (const targetPath of this.workspaceFilePaths) {
+          try {
+            this.mp.FS.unlink(targetPath);
+          } catch (_error) {
+            // Ignore missing files while replacing the overlay.
+          }
+        }
+        this.workspaceFilePaths.clear();
+      }
+      return;
+    }
+    const nextWorkspacePaths = new Set();
+    for (const file of files) {
+      if (!file || typeof file.path !== "string") {
+        continue;
+      }
+      const targetPath = this.resolveWorkspacePath(file.path);
+      const encoding = file.encoding === "base64" ? "base64" : "utf8";
+      const content = typeof file.content === "string" ? file.content : "";
+      const bytes = encoding === "base64"
+        ? decodeBase64(content)
+        : new TextEncoder().encode(content);
+      this.ensureDir(dirname(targetPath));
+      this.mp.FS.writeFile(targetPath, bytes);
+      this.deletedWorkspacePaths.delete(targetPath);
+      nextWorkspacePaths.add(targetPath);
+    }
+    if (replace) {
+      for (const targetPath of this.workspaceFilePaths) {
+        if (nextWorkspacePaths.has(targetPath)) {
+          continue;
+        }
+        try {
+          this.mp.FS.unlink(targetPath);
+        } catch (_error) {
+          // Ignore missing files while replacing the overlay.
+        }
+      }
+      this.workspaceFilePaths = nextWorkspacePaths;
+      return;
+    }
+    for (const targetPath of nextWorkspacePaths) {
+      this.workspaceFilePaths.add(targetPath);
+    }
+  }
+
+  workspacePathFromTargetPath(targetPath) {
+    const normalizedTargetPath = String(targetPath || "").replace(/\/+$/u, "");
+    const fsRoot = this.config.fsRoot.replace(/\/+$/u, "");
+    if (normalizedTargetPath === fsRoot) {
+      return "";
+    }
+    if (normalizedTargetPath.startsWith(`${fsRoot}/`)) {
+      return normalizedTargetPath.slice(fsRoot.length + 1);
+    }
+    return normalizedTargetPath.replace(/^\/+/u, "");
+  }
+
+  async loadManifestBackedFile(targetPath) {
+    if (this.deletedWorkspacePaths.has(targetPath)) {
+      throw new Error("File has been deleted in this session");
+    }
+    const manifestPath = this.runtimeManifestByTargetPath.get(targetPath);
+    if (!manifestPath) {
+      return null;
+    }
+    const fileResponse = await fetchFirstAvailable([manifestPath]);
+    const bytes = new Uint8Array(await fileResponse.arrayBuffer());
+    this.ensureDir(dirname(targetPath));
+    this.mp.FS.writeFile(targetPath, bytes);
+    return bytes;
+  }
+
+  listWorkspaceFiles(path = ".") {
+    this.assertInitialized();
+    const rootPath = this.resolveWorkspacePath(path);
+    const entries = new Set();
+    const visit = (currentPath) => {
+      let children = [];
+      try {
+        children = this.mp.FS.readdir(currentPath);
+      } catch (error) {
+        throw new Error(`Unable to list workspace path ${path}: ${error.message || String(error)}`);
+      }
+      for (const child of children) {
+        if (child === "." || child === "..") {
+          continue;
+        }
+        const childPath = `${currentPath.replace(/\/+$/u, "")}/${child}`;
+        const stat = this.mp.FS.stat(childPath);
+        if (this.mp.FS.isDir(stat.mode)) {
+          visit(childPath);
+          continue;
+        }
+        entries.add(this.workspacePathFromTargetPath(childPath));
+      }
+    };
+    visit(rootPath);
+    for (const targetPath of this.runtimeManifestByTargetPath.keys()) {
+      if (this.deletedWorkspacePaths.has(targetPath)) {
+        continue;
+      }
+      if (targetPath === rootPath || targetPath.startsWith(`${rootPath}/`)) {
+        entries.add(this.workspacePathFromTargetPath(targetPath));
+      }
+    }
+    return Array.from(entries).sort((left, right) => left.localeCompare(right));
+  }
+
+  async readWorkspaceFile(path, encoding = "utf8") {
+    this.assertInitialized();
+    const targetPath = this.resolveWorkspacePath(path);
+    if (this.deletedWorkspacePaths.has(targetPath)) {
+      throw new Error(`Unable to read workspace path ${path}: file not found`);
+    }
+    let bytes;
+    try {
+      bytes = this.mp.FS.readFile(targetPath);
+    } catch (_error) {
+      bytes = await this.loadManifestBackedFile(targetPath);
+      if (!bytes) {
+        throw new Error(`Unable to read workspace path ${path}: file not found`);
+      }
+    }
+    const normalizedEncoding = encoding === "base64" ? "base64" : "utf8";
+    return {
+      path: normalizeRuntimeRelativePath(path),
+      encoding: normalizedEncoding,
+      byteLength: bytes.length,
+      content: normalizedEncoding === "base64"
+        ? encodeBase64(bytes)
+        : new TextDecoder().decode(bytes),
+    };
+  }
+
+  writeWorkspaceFile(path, content, encoding = "utf8") {
+    this.assertInitialized();
+    const targetPath = this.resolveWorkspacePath(path);
+    const normalizedEncoding = encoding === "base64" ? "base64" : "utf8";
+    const bytes = normalizedEncoding === "base64"
+      ? decodeBase64(String(content || ""))
+      : new TextEncoder().encode(String(content || ""));
+    this.ensureDir(dirname(targetPath));
+    this.mp.FS.writeFile(targetPath, bytes);
+    this.deletedWorkspacePaths.delete(targetPath);
+    this.workspaceFilePaths.add(targetPath);
+    return {
+      path: normalizeRuntimeRelativePath(path),
+      byteLength: bytes.length,
+      encoding: normalizedEncoding,
+    };
+  }
+
+  deleteWorkspaceFile(path) {
+    this.assertInitialized();
+    const targetPath = this.resolveWorkspacePath(path);
+    try {
+      this.mp.FS.unlink(targetPath);
+    } catch (error) {
+      if (!this.runtimeManifestByTargetPath.has(targetPath)) {
+        throw error;
+      }
+    }
+    this.deletedWorkspacePaths.add(targetPath);
+    this.workspaceFilePaths.delete(targetPath);
+    return {
+      path: normalizeRuntimeRelativePath(path),
+      deleted: true,
+    };
+  }
+
+  ensureDir(path) {
+    const parts = path.split("/").filter(Boolean);
+    let current = "";
+    for (const part of parts) {
+      current += `/${part}`;
+      try {
+        this.mp.FS.mkdir(current);
+      } catch (_error) {
+        // Directory already exists.
+      }
+    }
+  }
+
+  async exec(code) {
+    this.assertInitialized();
+    return this.mp.runPythonAsync(code);
+  }
+
+  async call(moduleName, functionName, args) {
+    this.assertInitialized();
+    const callStartedAt = functionName === "export_frame" ? performance.now() : 0;
+    this.mp.globals.set("__vs_bridge_module_name", moduleName);
+    this.mp.globals.set("__vs_bridge_function_name", functionName);
+    this.mp.globals.set("__vs_bridge_args_json", JSON.stringify(args));
+    await this.mp.runPythonAsync(
+      PY_BRIDGE_CALL_SOURCE
+    );
+    const afterRunPythonAt = functionName === "export_frame" ? performance.now() : 0;
+    const jsonResult = this.mp.globals.get("__vs_bridge_result");
+    this.mp.globals.delete("__vs_bridge_result");
+    this.mp.globals.delete("__vs_bridge_module_name");
+    this.mp.globals.delete("__vs_bridge_function_name");
+    this.mp.globals.delete("__vs_bridge_args_json");
+    const afterGlobalsGetAt = functionName === "export_frame" ? performance.now() : 0;
+    const bridgeResult = JSON.parse(jsonResult);
+    const afterJsonParseAt = functionName === "export_frame" ? performance.now() : 0;
+    if (!bridgeResult || typeof bridgeResult !== "object") {
+      throw new Error("Invalid bridge response from MicroPython runtime");
+    }
+    if (!bridgeResult.ok) {
+      throw new Error(bridgeResult.error || "Unknown MicroPython bridge error");
+    }
+    const result = reviveBytes(bridgeResult.result);
+    if (functionName === "export_frame" && result && typeof result === "object") {
+      const afterReviveAt = performance.now();
+      exportWorkerProfileTotals.sampleCount += 1;
+      updateWorkerProfileMetric("totalCallMs", "totalCallMsMax", afterReviveAt - callStartedAt);
+      updateWorkerProfileMetric("runPythonAsyncMs", "runPythonAsyncMsMax", afterRunPythonAt - callStartedAt);
+      updateWorkerProfileMetric("globalsGetMs", "globalsGetMsMax", afterGlobalsGetAt - afterRunPythonAt);
+      updateWorkerProfileMetric("jsonParseMs", "jsonParseMsMax", afterJsonParseAt - afterGlobalsGetAt);
+      updateWorkerProfileMetric("reviveBytesMs", "reviveBytesMsMax", afterReviveAt - afterJsonParseAt);
+      result.worker_js_profile = getExportWorkerProfileSnapshot();
+    }
+    return result;
+  }
+
+  async step(count = 1) {
+    this.assertInitialized();
+    this.mp.globals.set("__vs_step_count", Number(count) || 0);
+    try {
+      return await this.mp.runPythonAsync(PY_STEP_SOURCE);
+    } finally {
+      this.mp.globals.delete("__vs_step_count");
+    }
+  }
+
+  assertInitialized() {
+    if (!this.initialized || !this.mp) {
+      throw new Error("WASM worker runtime has not been initialized");
+    }
+  }
+
+  getProxyRefInfo() {
+    this.assertInitialized();
+    const refs = Array.isArray(globalThis.proxy_js_ref) ? globalThis.proxy_js_ref : null;
+    let usedSlots = 0;
+    if (refs) {
+      for (const entry of refs) {
+        if (entry !== undefined) {
+          usedSlots += 1;
+        }
+      }
+    }
+    const refMap = globalThis.proxy_js_ref_map;
+    const proxyMap = globalThis.proxy_js_map;
+    return {
+      totalSlots: refs ? refs.length : null,
+      usedSlots,
+      nextSlot: typeof globalThis.proxy_js_ref_next === "number" ? globalThis.proxy_js_ref_next : null,
+      refMapSize: refMap && typeof refMap.size === "number" ? refMap.size : null,
+      proxyMapSize: proxyMap && typeof proxyMap.size === "number" ? proxyMap.size : null,
+    };
+  }
+}
+
+async function createRuntime(config = {}) {
+  const merged = { ...DEFAULT_CONFIG, ...config };
+  return new MicroPythonRuntime(merged);
+}
+
+let runtime = null;
+let runtimeQueue = Promise.resolve();
+const runtimeLoop = {
+  running: false,
+  timerId: null,
+  lastSceneTickAt: null,
+  fullNextFrame: true,
+};
+const workerHostState = {
+  buttons: 0,
+  running: false,
+  fullNextFrame: true,
+};
+const streamedFrameState = {
+  frame: 0,
+  buttons: 0,
+  column_offset: 0,
+  gamma_mode: 1,
+  palette_length: 0,
+  palette_version: 0,
+  palette_dirty: false,
+  events: [],
+  pendingSpritesEvent: null,
+  sprites: [],
+};
+
+function finalizeStreamedFrame() {
+  const events = streamedFrameState.events.slice();
+  if (streamedFrameState.pendingSpritesEvent) {
+    events.push(streamedFrameState.pendingSpritesEvent);
+  }
+  const frame = {
+    frame: streamedFrameState.frame,
+    buttons: streamedFrameState.buttons,
+    column_offset: streamedFrameState.column_offset,
+    gamma_mode: streamedFrameState.gamma_mode,
+    palette_length: streamedFrameState.palette_length,
+    palette_version: streamedFrameState.palette_version,
+    palette_dirty: streamedFrameState.palette_dirty,
+    events,
+    sprites: streamedFrameState.sprites.slice(),
+  };
+  streamedFrameState.palette_dirty = false;
+  streamedFrameState.events = [];
+  streamedFrameState.pendingSpritesEvent = null;
+  return frame;
+}
+
+function handleRuntimeCommand(line, payloadBytes) {
+  const parts = String(line || "").trim().split(/\s+/u);
+  const command = parts[0] || "";
+
+  if (command === "palette") {
+    streamedFrameState.palette_length = Number(parts[1] || 0);
+    streamedFrameState.palette_version = Number(parts[2] || streamedFrameState.palette_version);
+    streamedFrameState.palette_dirty = true;
+    streamedFrameState.events.push({
+      command,
+      args: parts.slice(1),
+      data: payloadBytes || new Uint8Array(0),
+    });
+    return;
+  }
+
+  if (command === "imagestrip") {
+    streamedFrameState.events.push({
+      command,
+      args: parts.slice(1),
+      data: payloadBytes || new Uint8Array(0),
+    });
+    return;
+  }
+
+  if (command === "sprites") {
+    handleRuntimeSprites(payloadBytes);
+    return;
+  }
+
+  if (command === "frame") {
+    handleRuntimeFrame({
+      frame: parts[1],
+      buttons: parts[2],
+      gammaMode: parts[3],
+      columnOffset: parts[4],
+      paletteLength: parts[5],
+      paletteVersion: parts[6],
+      paletteDirty: parts[7],
+    });
+    return;
+  }
+
+  const event = {
+    command,
+    args: parts.slice(1),
+  };
+  if (payloadBytes instanceof Uint8Array && payloadBytes.length) {
+    event.data = payloadBytes;
+  }
+  streamedFrameState.events.push(event);
+}
+
+function handleRuntimeSprites(payloadBytes) {
+  streamedFrameState.pendingSpritesEvent = {
+    command: "sprites",
+    args: [],
+    data: payloadBytes || new Uint8Array(0),
+  };
+  streamedFrameState.sprites = [];
+}
+
+function handleRuntimeFrame({
+  frame,
+  buttons,
+  gammaMode,
+  columnOffset,
+  paletteLength,
+  paletteVersion,
+  paletteDirty,
+}) {
+  streamedFrameState.frame = Number(frame || streamedFrameState.frame);
+  streamedFrameState.buttons = Number(buttons || 0);
+  streamedFrameState.gamma_mode = Number(gammaMode || 1);
+  streamedFrameState.column_offset = Number(columnOffset || 0);
+  streamedFrameState.palette_length = Number(paletteLength || streamedFrameState.palette_length);
+  streamedFrameState.palette_version = Number(paletteVersion || streamedFrameState.palette_version);
+  streamedFrameState.palette_dirty = Boolean(Number(paletteDirty || 0)) || streamedFrameState.palette_dirty;
+  postEvent("frame", { frame: finalizeStreamedFrame() });
+}
+
+function handleRuntimeFrameBytes(payloadBytes) {
+  if (!(payloadBytes instanceof Uint8Array) || payloadBytes.length < 16) {
+    return;
+  }
+  const view = new DataView(
+    payloadBytes.buffer,
+    payloadBytes.byteOffset,
+    payloadBytes.byteLength,
+  );
+  handleRuntimeFrame({
+    frame: view.getUint32(0, true),
+    buttons: view.getUint8(4),
+    gammaMode: view.getUint8(5),
+    columnOffset: view.getUint8(6),
+    paletteDirty: view.getUint8(7),
+    paletteLength: view.getUint32(8, true),
+    paletteVersion: view.getUint32(12, true),
+  });
+}
+
+function enqueueRuntimeWork(work) {
+  const next = runtimeQueue.then(work, work);
+  runtimeQueue = next.catch(() => {});
+  return next;
+}
+
+function collectTransferables(value, transferables = [], seen = new Set()) {
+  if (value instanceof Uint8Array) {
+    const buffer = value.buffer;
+    if (!seen.has(buffer)) {
+      seen.add(buffer);
+      transferables.push(buffer);
+    }
+    return transferables;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectTransferables(entry, transferables, seen);
+    }
+    return transferables;
+  }
+  if (value && typeof value === "object") {
+    for (const entry of Object.values(value)) {
+      collectTransferables(entry, transferables, seen);
+    }
+  }
+  return transferables;
+}
+
+function success(id, result = null) {
+  const transferStartedAt = result && typeof result === "object" && result.worker_js_profile
+    ? performance.now()
+    : 0;
+  const transferables = collectTransferables(result);
+  if (result && typeof result === "object" && result.worker_js_profile) {
+    const afterCollectAt = performance.now();
+    updateWorkerProfileMetric("transferCollectMs", "transferCollectMsMax", afterCollectAt - transferStartedAt);
+    result.worker_js_profile = getExportWorkerProfileSnapshot();
+    const postStartedAt = performance.now();
+    self.postMessage({ id, ok: true, result }, transferables);
+    const afterPostAt = performance.now();
+    updateWorkerProfileMetric("postMessageMs", "postMessageMsMax", afterPostAt - postStartedAt);
+    return;
+  }
+  self.postMessage({ id, ok: true, result }, transferables);
+}
+
+function failure(id, error) {
+  const message = error instanceof Error ? error.message : String(error);
+  self.postMessage({ id, ok: false, error: message });
+}
+
+function postEvent(type, payload = {}) {
+  self.postMessage({ type, ...payload });
+}
+
+function stopRuntimeLoop() {
+  runtimeLoop.running = false;
+  runtimeLoop.lastSceneTickAt = null;
+  runtimeLoop.fullNextFrame = true;
+  workerHostState.running = false;
+  workerHostState.fullNextFrame = true;
+  if (runtimeLoop.timerId !== null) {
+    clearTimeout(runtimeLoop.timerId);
+    runtimeLoop.timerId = null;
+  }
+}
+
+function scheduleRuntimeLoop(delay = 0) {
+  if (!runtimeLoop.running || runtimeLoop.timerId !== null) {
+    return;
+  }
+  runtimeLoop.timerId = setTimeout(async () => {
+    runtimeLoop.timerId = null;
+    await runRuntimeLoopIteration();
+  }, Math.max(0, delay));
+}
+
+async function runRuntimeLoopIteration() {
+  if (!runtime || !runtimeLoop.running) {
+    return;
+  }
+
+  try {
+    const now = performance.now();
+    let stepsDue = 0;
+    if (runtimeLoop.lastSceneTickAt === null) {
+      runtimeLoop.lastSceneTickAt = now;
+      stepsDue = 1;
+    } else {
+      const elapsed = now - runtimeLoop.lastSceneTickAt;
+      if (elapsed > MAX_TICK_BACKLOG_MS) {
+        runtimeLoop.lastSceneTickAt = now - SCENE_STEP_MS;
+        stepsDue = 1;
+      } else {
+        stepsDue = Math.floor(elapsed / SCENE_STEP_MS);
+      }
+    }
+
+    if (stepsDue > MAX_CATCH_UP_STEPS) {
+      stepsDue = MAX_CATCH_UP_STEPS;
+    }
+
+    if (stepsDue > 0) {
+      await enqueueRuntimeWork(async () => runtime.step(stepsDue));
+      runtimeLoop.lastSceneTickAt += stepsDue * SCENE_STEP_MS;
+    }
+  } catch (error) {
+    stopRuntimeLoop();
+    postEvent("runtime_error", {
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? (error.stack || null) : null,
+      },
+    });
+    return;
+  }
+
+  if (!runtimeLoop.running) {
+    return;
+  }
+
+  const now = performance.now();
+  const nextDelay = runtimeLoop.lastSceneTickAt === null
+    ? 0
+    : Math.max(0, SCENE_STEP_MS - (now - runtimeLoop.lastSceneTickAt));
+  scheduleRuntimeLoop(nextDelay);
+}
+
+self.addEventListener("message", async (event) => {
+  const message = event.data;
+  const { id, type } = message || {};
+
+  if (!id || !type) {
+    return;
+  }
+
+  try {
+    if (type === "initialize") {
+      if (!runtime) {
+        runtime = await createRuntime(message.config);
+      }
+      const result = await runtime.initialize();
+      success(id, result);
+      return;
+    }
+
+    if (!runtime) {
+      throw new Error("WASM worker not initialized");
+    }
+
+    if (type === "start_runtime_loop") {
+      runtimeLoop.running = true;
+      runtimeLoop.lastSceneTickAt = null;
+      runtimeLoop.fullNextFrame = message.full !== false;
+      workerHostState.running = true;
+      workerHostState.fullNextFrame = message.full !== false;
+      scheduleRuntimeLoop(0);
+      success(id, { running: true });
+      return;
+    }
+
+    if (type === "stop_runtime_loop") {
+      stopRuntimeLoop();
+      success(id, { running: false });
+      return;
+    }
+
+    if (type === "request_full_frame") {
+      runtimeLoop.fullNextFrame = true;
+      workerHostState.fullNextFrame = true;
+      success(id, { pending: true });
+      return;
+    }
+
+    if (type === "get_proxy_ref_info") {
+      success(id, runtime.getProxyRefInfo());
+      return;
+    }
+
+    if (type === "list_workspace_files") {
+      success(id, await runtime.listWorkspaceFiles(message.path));
+      return;
+    }
+
+    if (type === "read_workspace_file") {
+      success(id, await runtime.readWorkspaceFile(message.path, message.encoding));
+      return;
+    }
+
+    if (type === "write_workspace_file") {
+      success(id, await runtime.writeWorkspaceFile(message.path, message.content, message.encoding));
+      return;
+    }
+
+    if (type === "delete_workspace_file") {
+      success(id, await runtime.deleteWorkspaceFile(message.path));
+      return;
+    }
+
+    if (type === "apply_workspace_snapshot") {
+      runtime.applyWorkspaceFiles(message.files || [], { replace: true });
+      success(id, {
+        applied: Array.isArray(message.files) ? message.files.length : 0,
+      });
+      return;
+    }
+
+    if (type === "set_buttons") {
+      workerHostState.buttons = (message.bitmask || 0) & 0xFF;
+      success(id, null);
+      return;
+    }
+
+    if (type === "exec") {
+      const result = await enqueueRuntimeWork(async () => runtime.exec(message.code));
+      success(id, result);
+      return;
+    }
+
+    if (type === "call") {
+      const result = await enqueueRuntimeWork(async () => (
+        runtime.call(message.moduleName, message.functionName, message.args || [])
+      ));
+      success(id, result);
+      return;
+    }
+
+    throw new Error(`Unsupported worker message type: ${type}`);
+  } catch (error) {
+    failure(id, error);
+  }
+});

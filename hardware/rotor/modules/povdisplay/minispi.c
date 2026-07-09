@@ -222,10 +222,16 @@
 
 #define LEDS_SPI_HOST    SPI2_HOST
 
+// Chip-select for the LED SPI bus. The APA102 LED strips don't need a CS, but
+// driving one lets the hardware workbench's SPI slave frame each 444-byte burst
+// cleanly (a CS-less slave can't). GPIO17 is unused in the active hw_config;
+// on the workbench it is wired to WB_SPI_CS_PIN (GPIO14). See vsdk/docs/internals/workbench.md.
+#define LEDS_SPI_CS_PIN  17
+
 spi_device_handle_t spi_handle;
 bool spi_ongoing = false;
 
-void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi) {
+void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi, int led_cs) {
     printf("Initializing bus SPI, handle is %p\n", spi_handle);
 
     esp_err_t ret;
@@ -249,7 +255,7 @@ void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi) {
     spi_device_interface_config_t devcfg = {
             .clock_speed_hz = led_freq,     //Clock out at 20 MHz
             .mode = 0,                              //SPI mode 0
-            .spics_io_num = -1,             //CS pin
+            .spics_io_num = led_cs, //CS pin (workbench framing; strips ignore it)
             .queue_size=10,
             .pre_cb=NULL,
             .cs_ena_pretrans = 0,
@@ -296,8 +302,10 @@ void spiWaitComplete() {
         return;
     }
     esp_err_t ret;
-    ret = spi_device_get_trans_result(spi_handle, &spi_trans, pdMS_TO_TICKS(100));
+    spi_transaction_t *completed_trans = NULL;
+    ret = spi_device_get_trans_result(spi_handle, &completed_trans, pdMS_TO_TICKS(100));
     ESP_ERROR_CHECK(ret);
+    spi_ongoing = false;
 }
 
 // we need esp-idf v5.4 or later for this function

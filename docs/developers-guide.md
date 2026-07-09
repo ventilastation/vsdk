@@ -1,151 +1,234 @@
 # How to make games and apps for Ventilastation
 
-Ventilastation applications are built using the Micropython language.
-This is a version of the Python programming language, but optimized in its resource and memory usage so it is able to run on Microcontrollers like the ESP32 used by the Ventilastation fan blade.
-
+Ventilastation applications are built using the MicroPython language.
+This is a version of the Python programming language, but optimized in its
+resource and memory usage so it is able to run on microcontrollers like the
+ESP32 used by the Ventilastation fan blade.
 
 ## Part I: setup and overview
 
 ### Requirements: VSDK
-To develop for Ventilastation you first need the sdk and the emulator running. Follow the [steps to install it here](docs/emulator.md).
-Part of the above installation is to clone the [VSDK repository](https://github.com/ventilastation/vsdk) (also known as the Ventilastation Development Kit). 
 
-### VSDK repo, key folders
-In the Ventilastation repo there are a few folders that you'll need to identify, where your code, images and sounds will go.
-* `apps/micropython/apps` is the folder that will hold your code
-* `apps/images` is for your graphic assets
-* `apps/sounds` is for music and sound effects
-* `apps/micropython/roms` - images compiled when starting the emulator are put into this folder
-* `apps/micropython/ventilastation` is a folder with system code
+To develop for Ventilastation you first need the SDK and the emulator
+running: follow the [setup steps for your OS](README.md#the-path). Part of
+that installation is cloning the
+[VSDK repository](https://github.com/ventilastation/vsdk) (the
+Ventilastation Development Kit).
 
-### VSDK repo, scripts
-* `vs-emu.sh` (or `.bat`) is the script to start the emulator.
+### One folder per game
 
+Every game lives in its own folder, `games/<group>/<name>/` — the group is
+usually your name or the game jam it was made at:
+
+* `code/` — the game's Python code; the entry file is `code/<name>.py`
+  and must define a `main()` function returning the initial `Scene`
+* `images/` — PNG graphics plus the `__images__.yaml` that describes them
+* `sounds/` — music and sound effects (MP3)
+* `menu.png` — the icon shown in the console menu (64×30 pixels)
+* `meta.json` — menu placement (see Part V)
+
+Other folders you'll bump into: `system/` holds the launcher and other
+built-in apps, `apps/micropython/ventilastation/` is the SDK runtime, and
+`apps/micropython/roms/` is where your PNGs get compiled to ROM files when
+the emulator starts.
+
+### Running
+
+`./vs-emu.sh` (or `vs-emu.bat`) regenerates ROMs and starts the desktop
+emulator. Arrow keys move the joystick; SPACE is button A; a USB gamepad
+works too.
 
 ## Part II: How to clone the simplest game
 
-Let's start by cloning a very simple game: `ventap`. In the repo find the `apps/micropython/apps` folder, and make a copy of the `ventap.py` file, into a new file called `mygame.py`:
+Let's start by cloning a very simple game, `ventap`, as a new game called
+`mygame` in your own group folder:
 
-```
-cp apps/micropython/apps/ventap.py apps/micropython/apps/mygame.py
-```
-
-In that file, rename the class called `Ventap` to `MyGame`, including its use in `super` calls, and the usage in the `main` function at the bottom.
-
-
-Create a new folder called `mygame` inside `apps/images`, and put some PNG images into it:
-
-```
-mkdir apps/images/mygame
-cp apps/images/ventap/*.png apps/images/mygame
+```sh
+mkdir -p games/myname/mygame/code
+cp games/alecu/ventap/code/ventap.py games/myname/mygame/code/mygame.py
+cp -r games/alecu/ventap/images games/myname/mygame/images
+cp games/alecu/ventap/menu.png games/myname/mygame/menu.png
 ```
 
-Ventilastation cannot directly open PNG images, so in order to transform your assets into a format it can understand, you'll need a definition file. Create the file `apps/images/mygame/stripedefs.py` with the following content:
-``` python
-stripes = [
-    palettegroup(
-        strip("bola.png", frames=12),
-        strip("target.png", frames=5),
-        fullscreen("fondo.png"),
-    )
-]
+In `mygame.py`, rename the class called `Ventap` to `MyGame`, including its
+use in `super` calls and in the `main()` function at the bottom.
+
+Ventilastation cannot directly open PNG images: the definition file
+`images/__images__.yaml` describes how they become sprite strips. The one
+you copied looks like this:
+
+```yaml
+palettegroups:
+  palette1:
+    - strip: bola.png
+      frames: 12
+    - strip: target.png
+      frames: 5
+    - fullscreen: fondo.png
 ```
 
-Whenever you run the emulator, your PNG images are compiled into a ROM file, which is what the physical Ventilastation uses. The first time it will be kinda slow, but this step will only happen if you ever add new images or change the existing files:
+A `strip` is a horizontal filmstrip of equally-sized animation frames; a
+`fullscreen` image is projected onto the whole circular display. Whenever
+you run the emulator, changed PNGs are recompiled into
+`apps/micropython/roms/<group>.<name>.rom` — for us,
+`myname.mygame.rom`. Point your game at it by changing the class attribute:
 
-```
-./vs-emu.sh
-```
-
-The above creates a ROM file in `apps/micropython/roms/mygame.rom`. We can reference it in our source code by changing the line `stripes_rom = "mygame"` in the `MyGame` class.
-
-Finally, to be able to start this app it needs to be added to the main menu.
-Add the following line to `main.py`:
-```
-    ('mygame', "mygame.png", 0),
+```python
+class MyGame(Scene):
+    stripes_rom = "myname.mygame"
 ```
 
-You can modify the file `mygame.png` used in the menu, in the `apps/images/menu` folder. 64x30 pixels is the right size for menu items.
+Finally, create `games/myname/mygame/meta.json` so the launcher places it
+in the menu (an empty `{}` works too — the game then appears at the end):
 
+```json
+{ "order": 15 }
+```
+
+That's it: run `./vs-emu.sh` and your game is on the menu. There is no
+launcher code or menu asset list to edit — the launcher discovers game
+folders and the menu ROM automatically includes every game's `menu.png`.
 
 ## Part III: Scenes and the director
 
-Games and applications created for Ventilastation are composed of one or more `Scenes`.
-These are a logical grouping of `Sprites` (defined in the next section of the documentation.)
+Games and applications created for Ventilastation are composed of one or
+more `Scene`s. These are a logical grouping of `Sprite`s (defined in the
+next section).
 
-Scenes are managed with a singleton called the `director`, which handles the stack of scenes via its `push(scene)` and `pop()` methods.
+Scenes are managed with a singleton called the `director`, which handles
+the stack of scenes via its `push(scene)` and `pop()` methods.
 
-A scene can define an `on_enter()` method that gets called whenever the Scene is shown, and an `on_exit()` method that is called when the scene is popped. Make sure to call `super()` when you define these methods, eg: `super().on_enter()`.
+A scene can define an `on_enter()` method that gets called whenever the
+scene is shown, and an `on_exit()` method that is called when the scene is
+popped. Make sure to call `super()` when you define these methods, e.g.
+`super().on_enter()`.
 
-After the scene is shown, the `director` will start calling your `step()` method every 30 milliseconds. Your game logic usually goes in this method.
+After the scene is shown, the `director` will start calling your `step()`
+method every 30 milliseconds. Your game logic usually goes in this method.
 
-If you need some action to happen later in the future, `Scene` provides a method called `call_later(delay, callable)`. The parameter `delay` is the number of milliseconds in the future, and `callable` is any function or bound method. If the `Scene` is finished via `director.pop()` then all pending calls in the scene are automatically discarded.
+If you need some action to happen later in the future, `Scene` provides
+`call_later(delay, callable)`. The `delay` is in milliseconds, and
+`callable` is any function or bound method. If the scene is finished via
+`director.pop()`, all its pending calls are automatically discarded.
 
-⚠️ *WARNING* ⚠️: it's advised to create all `Sprites` and other objects that will be used in the `on_enter()` method of your `Scene`, and to reuse them as much as possible. Do not create and release objects in the `step()` method, since for performance reasons the Garbage Collection only happens when entering or exiting `Scenes`.
+⚠️ **WARNING**: create all `Sprite`s and other objects in your scene's
+`on_enter()` and reuse them as much as possible. Do not create and release
+objects in `step()`: for performance reasons, garbage collection only
+happens when entering or exiting scenes.
 
-The `director` singleton also has the following constants and methods:
+### Input
 
-- `JOY_LEFT`, `JOY_RIGHT`, `JOY_UP`, `JOY_DOWN`, `BUTTON_A`, `BUTTON_B`, `BUTTON_C`, `BUTTON_D` - Joystick constants
-- `is_pressed(button)` - True if the button or joy direction is currently pressed
-- `was_pressed(button)` - True if the button or joy direction is pressed but was not pressed last step
-- `was_released(button)` - True if the button or joy direction was pressed last step, but is no longer pressed right now
+- `JOY_LEFT`, `JOY_RIGHT`, `JOY_UP`, `JOY_DOWN`, `BUTTON_A`, `BUTTON_B`,
+  `BUTTON_C`, `BUTTON_D` — joystick constants
+- `is_pressed(button)` — True while the button or direction is held
+- `was_pressed(button)` — True only on the step where it went down
+- `was_released(button)` — True only on the step where it went up
+- `director.timedout` — True after 30 seconds without any input; use it to
+  return to attract screens (`director.reset_timeout()` restarts the
+  clock)
 
-- `sound_play(track)` - play this sound effect
-- `music_play(track)` - start playing this sound track, and remember it as the music track
-- `music_off()` - stop the current music track
+### Sound and music
 
+Tracks are named `<group>.<game>/<filename>` after the MP3s in each game's
+`sounds/` folder — you can also play another game's sounds, which is why
+you'll see `alecu.vyruss/shoot1` all over the place.
+
+- `sound_play(track)` — play a one-shot sound effect
+- `music_play(track, loop=False)` — start a music track; with `loop=True`
+  it repeats until stopped or replaced
+- `music_off()` — stop the current music track
+
+By default music stops when a scene is popped; set `keep_music = True` on
+the scene class to let it continue.
 
 ## Part IV: Ventilastation display and Sprites
 
-The radial display of Ventilastation means that its pixels are not square, but instead are similar to tiny arcs. We call them "Arxels". Currently there are 54 LEDs from the center, and there are 256 circular steps where LEDs can change colors. All of this is handled in an optimized piece of C code, but all of this is already done, so you should not worry about that.
+The radial display of Ventilastation means that its pixels are not square
+but tiny arcs — we call them "arxels". There are 54 LEDs from the center
+out, and 256 angular steps where LEDs can change colors. All of this is
+handled by optimized C code (or the emulators), so you don't need to worry
+about it.
 
-As a Ventilastation game developer, you will only handle graphics using the `Sprite` class. These are up to 100 objects that Ventilastation can show and animate on its display.
+As a game developer you handle graphics through the `Sprite` class. Up to
+100 sprites can be shown and animated at once.
 
-In a given `Scene`, Sprites created first are always drawn on top of sprites created later, so it's very important to keep in mind the order in which you create the sprites.
+Within a scene, sprites created **first** are drawn **on top of** sprites
+created later, so the order in which you create them matters.
 
-```
+```python
 from ventilastation.sprites import Sprite
 ```
 
-Each Sprite object has the following methods:
-- X - `set_x()`, `x() -> int`
-- Y -  `set_y(int)`, `y() -> int`
-- Strip - `set_strip(strip_number: int)`
-- Frame - `set_frame(int)`, `frame() -> int`
-- Hide sprite - `disable()`, call `set_frame(int)` to show it again.
-- Perspective `set_perspective(int)`, `perspective() -> int`
-- Width, Height - `width() -> int`, `height() -> int`
-- Collision detection - `collision([list of sprites]) -> target` returns the first sprite that collides from the list, or None if no sprite collides.
+Each `Sprite` has the following methods:
 
-There are three "perspective modes" for sprites:
-- Mode 0: fullscreen images
-- Mode 1: perspective sprites 
-- Mode 2: non-perspective sprites
+- position: `set_x(int)`, `x()`, `set_y(int)`, `y()`
+- image: `set_strip(strip_number)` — look the number up by name with
+  `stripes["bola.png"]` (`from ventilastation.director import stripes`)
+- animation frame: `set_frame(int)`, `frame()`
+- hide: `disable()`; call `set_frame()` again to show it
+- perspective mode: `set_perspective(int)`, `perspective()`
+- size: `width()`, `height()`
+- collisions: `collision([sprites])` — returns the first colliding sprite
+  from the list, or `None`
 
-### Perspective Mode 0: fullscreen images
-These images may be scaled to occupy less than a full screen with the Y property, may be rotated with the X property, but are always centered in the middle of the screen. The game Ventap shows a planet in the middle of the screen with a mode 0 sprite.
-To create artwork, start with a 320x320 png image, with few colors (16 or 32 colors recommended), with optional on-off transparency (there's no fancy alpha channel in Ventilastation). For a sample of a transparent fullscreen image, take a look at the Saturn image of Vyruss.
+There are three "perspective modes":
 
-### Perspective Mode 1: perspective sprites 
-Sprites in this mode are usually the most common sprites in games. They provide a "tunnel-like" perspective, using fewer LEDs as the object moves toward the center to provide a scaling effect.
+### Mode 0: fullscreen images
 
-The X property starts at 0 in the bottom of the screen, rotates up to 64 in the left, 128 at the top, 192 at the right, continues up to 255 and then 0 at the bottom.
+Declared as `fullscreen:` in `__images__.yaml`. These are always centered;
+Y scales them down from full size and X rotates them. Ventap's planet is a
+mode 0 sprite. Start from a 320×320 PNG with few colors (16–32
+recommended) and hard on/off transparency — there is no alpha blending on
+this display. See Vyruss's Saturn for a transparent example.
 
-The Y property starts at 0 outside the screen, goes to 16 where the object is fully seen, and then increases up to 255 at the center of the screen, 
+### Mode 1: perspective sprites
 
-Using the application called Tutorial you to change the X and Y values of different modes of sprites to experiment with it.
+The most common mode: a "tunnel" perspective where objects use fewer LEDs
+as they approach the center, giving a scaling effect.
 
-### Perspective Mode 2: non-perspective sprites
-This mode is usually reserved for images that don't need to be scaled, like scoreboards or the Game Over sign.
+X is the angle: 0 at the bottom, 64 left, 128 top, 192 right, wrapping at
+256. Y is the depth: 0 just outside the display, ~16 fully visible at the
+edge, up to 255 at the center.
 
-The X property is equal to Mode 1 sprites.
+The `tutorial` system app lets you move sprites of every mode around
+interactively — the fastest way to internalize these coordinates.
 
-The Y property goes from 0 at the outermost LED, to (54 - the sprite height) as the innermost LED.
+### Mode 2: non-perspective sprites
 
-## Part V: Submit your game to the Ventilastation project
+For images that shouldn't scale, like scoreboards or the Game Over sign.
+X is the same angle as mode 1; Y runs from 0 at the outermost LED to
+`54 - sprite height` at the innermost.
 
-In order to submit your game to the Ventilastation project, please do it as a Github Pull Request.
+## Part V: the menu and meta.json
 
-More detailed documentation about this process is available on Github itself:
+The launcher builds the console menu by scanning `games/*/*/` folders.
+Each game's `meta.json` controls how it appears:
+
+```json
+{
+  "order": 80,
+  "menu_frames": 2
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `order` | menu position, ascending; omit to appear at the end |
+| `hidden` | `true` keeps the game installed but off the menu |
+| `menu_frames` | frame count when `menu.png` is an animated strip (default 1) |
+| `menu_frame` | frame shown while idle in the menu (default 0) |
+
+`menu.png` should be 64×30 pixels (times `menu_frames` if animated). It is
+compiled into the menu ROM automatically.
+
+## Part VI: Submit your game to the Ventilastation project
+
+Submit your game as a GitHub pull request:
+
 - [Fork a repository](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
 - [Creating a pull request from a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
+
+Keep everything for your game inside its `games/<group>/<name>/` folder —
+if you find yourself needing to touch the SDK or launcher, open an issue
+instead (or read [internals/](internals/README.md) and send that as its
+own PR).

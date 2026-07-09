@@ -1,0 +1,29 @@
+palettegroups:
+  palette1:
+    - strip: explosion2.png
+      frames: 5
+    - strip: mira.png
+    - strip: target.png
+    - strip: misil.png
+    - strip: humo.png
+      frames: 4
+    - strip: cascote.png
+    - strip: tierra.png
+    - strip: cielo.png
+    - strip: pushtostart.png
+    - strip: failed.png
+    - strip: nuke.png
+      frames: 5
+    - strip: numerals.png
+      frames: 12
+    - fullscreen: marte.png
+    - fullscreen: domo.png
+      radius: 6
+    - fullscreen: domo2.png
+      radius: 6
+    - fullscreen: domo3.png
+      radius: 6
+    - fullscreen: domo4.png
+      radius: 6
+    - fullscreen: craters.png
+      radius: 45

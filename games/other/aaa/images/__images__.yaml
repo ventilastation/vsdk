@@ -1,0 +1,6 @@
+palettegroups:
+  palette1:
+    - strip: barra.png
+    - strip: punto.png
+    - strip: rainbow437.png
+      frames: 256

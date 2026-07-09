@@ -1,0 +1,263 @@
+import gc
+from ventilastation.compat import ticks_diff_us as _ticks_diff_us, ticks_us as _ticks_us
+
+from ventilastation.runtime import get_platform
+
+_booted = False
+_export_frame_counter = 0
+_export_profile_totals = {
+    "sampleCount": 0,
+    "browserExportUs": 0,
+    "browserExportUsMax": 0,
+    "gcUs": 0,
+    "gcUsMax": 0,
+    "displayCallUs": 0,
+    "displayCallUsMax": 0,
+    "gcCount": 0,
+}
+
+
+
+
+def _browser_platform():
+    platform = get_platform()
+    if platform.name != "browser":
+        raise RuntimeError("Browser API requires the browser platform")
+    return platform
+
+
+def set_buttons(buttons):
+    _browser_platform().comms.set_buttons(buttons)
+
+
+def clear_buttons():
+    _browser_platform().comms.set_buttons(0)
+
+
+def set_trace_flags(flags=0):
+    flags = int(flags) & 0x20
+    platform = _browser_platform()
+    platform.trace_flags = flags
+    return flags
+
+
+def drain_input_updates():
+    return _browser_platform().comms.drain_input_updates()
+
+
+def drain_host_events():
+    return _browser_platform().comms.drain_events()
+
+
+def _safe_call(target, fallback=None):
+    try:
+        return target()
+    except Exception:
+        return fallback
+
+
+def _display_memory_snapshot(display):
+    asset_data = getattr(display, "asset_data", {}) or {}
+    assets = getattr(display, "assets", {}) or {}
+    dirty_asset_slots = getattr(display, "dirty_asset_slots", set()) or set()
+    palette = getattr(display, "palette", b"") or b""
+    sprite_data = getattr(display, "sprite_data", b"") or b""
+
+    asset_bytes = 0
+    largest_asset_bytes = 0
+    for value in asset_data.values():
+        size = len(value)
+        asset_bytes += size
+        if size > largest_asset_bytes:
+            largest_asset_bytes = size
+
+    return {
+        "assetCount": len(assets),
+        "assetBytes": asset_bytes,
+        "largestAssetBytes": largest_asset_bytes,
+        "dirtyAssetCount": len(dirty_asset_slots),
+        "paletteBytes": len(palette),
+        "spriteStateBytes": len(sprite_data),
+    }
+
+
+def _director_memory_snapshot(director):
+    scene_stack = getattr(director, "scene_stack", []) or []
+    scene_names = [scene.__class__.__name__ for scene in scene_stack]
+    pending_calls = 0
+    for scene in scene_stack:
+        pending_calls += len(getattr(scene, "pending_calls", ()) or ())
+    return {
+        "currentScene": scene_names[-1] if scene_names else None,
+        "sceneStack": scene_names,
+        "sceneStackDepth": len(scene_names),
+        "pendingCalls": pending_calls,
+    }
+
+
+def memory_snapshot(collect=False):
+    if collect:
+        gc.collect()
+
+    gc_mem_alloc = getattr(gc, "mem_alloc", None)
+    gc_mem_free = getattr(gc, "mem_free", None)
+    mem_alloc = gc_mem_alloc() if gc_mem_alloc else None
+    mem_free = gc_mem_free() if gc_mem_free else None
+    mem_total = None
+    mem_used_percent = None
+    if mem_alloc is not None and mem_free is not None:
+        mem_total = mem_alloc + mem_free
+        if mem_total:
+            mem_used_percent = (mem_alloc * 100.0) / mem_total
+
+    platform = _browser_platform()
+    director_module = __import__("ventilastation.director", None, None, ["director"])
+    director = director_module.director
+    director_snapshot = _director_memory_snapshot(director)
+    display_snapshot = _display_memory_snapshot(platform.display)
+
+    return {
+        "gc": {
+            "allocBytes": mem_alloc,
+            "freeBytes": mem_free,
+            "totalBytes": mem_total,
+            "usedPercent": mem_used_percent,
+            "enabled": _safe_call(gc.isenabled, None) if hasattr(gc, "isenabled") else None,
+            "collected": bool(collect),
+        },
+        "runtime": {
+            "platform": platform.name,
+            "frame": getattr(platform.display, "frame", None),
+            "currentScene": director_snapshot["currentScene"],
+            "sceneStack": director_snapshot["sceneStack"],
+            "sceneStackDepth": director_snapshot["sceneStackDepth"],
+            "pendingCalls": director_snapshot["pendingCalls"],
+        },
+        "display": display_snapshot,
+    }
+
+
+def _consume_traceback_messages():
+    comms = _browser_platform().comms
+    events = getattr(comms, "events", None)
+    if events is None:
+        return []
+
+    remaining = []
+    messages = []
+    for event in events:
+        if isinstance(event, dict) and event.get("command") == "traceback":
+            payload = event.get("data", b"")
+            if isinstance(payload, str):
+                messages.append(payload)
+                continue
+            try:
+                messages.append(bytes(payload).decode("utf-8"))
+            except Exception:
+                messages.append(str(payload))
+            continue
+        remaining.append(event)
+    comms.events = remaining
+    return messages
+
+
+def export_frame(full=False):
+    global _export_frame_counter, _export_profile_totals
+    started_at = _ticks_us()
+    _export_frame_counter += 1
+    frame = _browser_platform().display.export_frame(full=full)
+    finished_at = _ticks_us()
+    browser_export_us = _ticks_diff_us(finished_at, started_at)
+    display_call_us = browser_export_us
+    _export_profile_totals["sampleCount"] += 1
+    _export_profile_totals["browserExportUs"] += browser_export_us
+    _export_profile_totals["displayCallUs"] += display_call_us
+    if browser_export_us > _export_profile_totals["browserExportUsMax"]:
+        _export_profile_totals["browserExportUsMax"] = browser_export_us
+    if display_call_us > _export_profile_totals["displayCallUsMax"]:
+        _export_profile_totals["displayCallUsMax"] = display_call_us
+    if isinstance(frame, dict):
+        profile = frame.get("python_profile")
+        if not isinstance(profile, dict):
+            profile = {}
+            frame["python_profile"] = profile
+        sample_count = _export_profile_totals["sampleCount"] or 1
+        gc_count = _export_profile_totals["gcCount"] or 1
+        profile["sampleCount"] = sample_count
+        profile["browserExportMs"] = _export_profile_totals["browserExportUs"] / sample_count / 1000.0
+        profile["browserExportMsMax"] = _export_profile_totals["browserExportUsMax"] / 1000.0
+        profile["gcMs"] = (_export_profile_totals["gcUs"] / gc_count / 1000.0) if _export_profile_totals["gcCount"] else 0.0
+        profile["gcMsMax"] = _export_profile_totals["gcUsMax"] / 1000.0
+        profile["didCollectGc"] = False
+        profile["gcCount"] = _export_profile_totals["gcCount"]
+        profile["displayCallMs"] = _export_profile_totals["displayCallUs"] / sample_count / 1000.0
+        profile["displayCallMsMax"] = _export_profile_totals["displayCallUsMax"] / 1000.0
+    return frame
+
+
+def export_storage():
+    return _browser_platform().storage.export_state()
+
+
+def import_storage(files):
+    _browser_platform().storage.import_state(files)
+
+
+def boot_main():
+    global _booted
+    if _booted:
+        return False
+    import main as main_module
+
+    setup = getattr(main_module, "setup", None)
+    if setup:
+        setup()
+        _booted = True
+        return True
+
+    games_menu_class = getattr(main_module, "GamesMenu", None)
+    menu_options = getattr(main_module, "MAIN_MENU_OPTIONS", None)
+    if games_menu_class and menu_options is not None:
+        director = __import__("ventilastation.director", None, None, ["director"]).director
+        main_menu = games_menu_class(menu_options)
+        main_menu.call_later(700, main_menu.load_images)
+        director.push(main_menu)
+
+        # from apps.ventilagon_game import VentilagonIdle
+        # autostart = VentilagonIdle()
+        # autostart.call_later(700, autostart.load_images)
+        # director.push(autostart)
+
+        _booted = True
+        return True
+
+    raise AttributeError(
+        "Unable to bootstrap main module; available attrs: %s"
+        % ",".join(sorted(dir(main_module)))
+    )
+
+
+def configure_worker_host(worker_host):
+    if isinstance(worker_host, str):
+        worker_host = __import__(worker_host)
+    _browser_platform().set_worker_host(worker_host)
+
+
+def autostart_app(slug):
+    from ventilastation.app_loader import load_app
+
+    load_app(slug)
+    return slug
+
+
+def tick(count=1):
+    director = __import__("ventilastation.director", None, None, ["director"]).director
+    try:
+        while count > 0:
+            director.step_once()
+            count -= 1
+    except Exception as error:
+        messages = _consume_traceback_messages()
+        if messages:
+            raise RuntimeError("Scene lifecycle error\n\n%s" % messages[-1])
+        raise error

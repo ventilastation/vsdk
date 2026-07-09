@@ -1,0 +1,27 @@
+palettegroups:
+  palette1:
+    - strip: disparo.png
+      frames: 2
+    - strip: explosion.png
+      frames: 5
+    - strip: explosion_nave.png
+      frames: 4
+    - strip: galaga.png
+      frames: 12
+    - strip: ll9.png
+      frames: 4
+    - strip: gameover.png
+    - strip: numerals.png
+      frames: 12
+  palette2:
+    - fullscreen: tierra.png
+      radius: 25
+  palette3:
+    - fullscreen: marte.png
+      radius: 25
+  palette4:
+    - fullscreen: jupiter.png
+      radius: 25
+  palette5:
+    - fullscreen: saturno.png
+      radius: 50

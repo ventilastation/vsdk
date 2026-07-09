@@ -1,1 +1,0 @@
-from .vortris import main

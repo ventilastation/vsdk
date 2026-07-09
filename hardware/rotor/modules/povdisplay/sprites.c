@@ -17,7 +17,7 @@ const char* memoryview_data(mp_obj_t mv_obj) {
 sprite_obj_t* to_sprite(mp_obj_t self_in) {
     mp_obj_instance_t *self = MP_OBJ_TO_PTR(self_in);
     for(;;) {
-        mp_obj_type_t* type = mp_obj_get_type(self);
+        const mp_obj_type_t* type = mp_obj_get_type(self);
         if (type == &sprite_type) {
             return (sprite_obj_t*)self;
         } else {

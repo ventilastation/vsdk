@@ -1,246 +1,59 @@
 import io
 import sys
-import utime
 
-from ventilastation.director import director, stripes
-from ventilastation import sprites
-from ventilastation import menu
-from ventilastation import povdisplay
-from ventilastation.shuffler import shuffled
+# Confirm this OTA image is healthy. Must happen at boot before any crash risk.
+try:
+    import esp32
+    esp32.Partition.mark_app_valid_cancel_rollback()
+except Exception:
+    pass
 
-# (rom, image, frame)[] -- see apps/images/menu/stripedefs.py
-MAIN_MENU_OPTIONS = [
-        ('ventilagon_game', "menu.png", 1),
-
-    # Jam Online Oct 2025
-        # ('dome_defander', "domedefander.png", 0),
-        # ('fanphibious_danger', "fanphibious_danger_2.png", 0),
-        # ('tincho_vrunner', "tincho_vrunner.png", 0),
-        # ('peronjam', "peronjam.png", 0),
-        ('2bam_sencom', "2bam_sencom.png", 0),
-        # ('vajon', "vajon.png", 0),
-        # ('2bam_demo', "2bam_demo_menu.png", 0),
-        # ('villalugano_games', "villalugano_games.png", 0),
-
-    # new game by esteban
-        # ('aaa', 'aaa.png', 0),
-
-    # 1er Jam 2025
-        # ('vortris', "vortris.png", 0),
-        ('vailableextreme', "vailableextreme.png", 0),
-        # ('vzumaki', "vzumaki.png", 0),
-        ('vasura_espacial', "vasura_espacial.png", 0),
-        # ('vs', "vs.png", 0),
-        # ('oraculo', "oraculo2.png", 0),
-        # ('tvnel', "tvnel.png", 0),
-        # ('ventrack', "venti808.png", 0),
-
-    # PyCamp 2025
-        # ('vance', "menu.png", 5),
-        # ('vong', "menu.png", 6),
-        # ('vugo', "menu.png", 7),
-
-    # Gallery
-        # ('gallery', "pollitos.png", 0),
-
-    # Flash Party 2023
-        # ('vladfarty', "menu.png", 2),
-
-    # Original content
-        ('vyruss', "menu.png", 0),
-        # ('ventilagon_game', "menu.png", 1),
-        # ('ventap', "menu.png", 4),
-        # ('credits', "menu.png", 3),
-]
-
-SYS_MENU_OPTIONS = [
-    ('debugmode', "menu.png", 9),
-    # ('calibrate', "menu.png", 8),
-    ('tutorial', "menu.png", 10),
-    ('settings', "menu.png", 8),
-    ('upgrade', "menu.png", 11),
-    ('vyruss', "menu.png", 0),
-    ('ventilagon_game', "menu.png", 1),
-    ('credits', "menu.png", 3),
-]
-
-
-def prepare_uploads():
+# OTA boot mode: if /ota_request exists, run OTA before the GPU task starts.
+# The GPU task and WiFi both use the SPI bus (PSRAM); running them concurrently
+# causes a core crash. OTA runs here, in isolation, before ensure_runtime().
+# To trigger: write "http://HOST:8000" to /ota_request and reset the board.
+# director.py does this automatically when it receives an ota_start command.
+def _check_ota_boot():
+    try:
+        with open("/ota_request") as _f:
+            _url = _f.read().strip()
+    except OSError:
+        return
+    if not _url:
+        return
     import os
-    os.remove("main.py")
+    try:
+        os.remove("/ota_request")
+    except OSError:
+        pass
+    print("main: OTA boot mode — url:", _url)
+    from ventilastation import updater
+    updater.run(_url, lambda msg: None)
+    print("main: OTA done, rebooting")
     import machine
     machine.reset()
 
-def update_over_the_air():
-    import ota_update
-    director.push(ota_update.Update())
+_check_ota_boot()
 
-def make_me_a_planet(strip):
-    planet = sprites.Sprite()
-    planet.set_strip(stripes[strip])
-    planet.set_perspective(0)
-    planet.set_x(0)
-    planet.set_y(220)
-    return planet
+from ventilastation.app_loader import ensure_project_root_on_path
+from ventilastation.director import director, ensure_runtime
 
-def load_app(modulename):
-    full_modulename = "apps." + modulename
-    module = __import__(full_modulename, globals, locals, [modulename])
-    main_scene = module.main()
-    director.push(main_scene)
-    if full_modulename in sys.modules:
-        del sys.modules[full_modulename]
+ensure_runtime()
+ensure_project_root_on_path()
 
+from system.launcher.code import setup as setup_launcher
 
-class SystemMenu(menu.Menu):
-    stripes_rom = "menu"
-    def on_enter(self):
-        self.garbage_collect()
-        super().on_enter()
-    
-    def garbage_collect(self):
-        import gc
-        gc.collect()
-        self.call_later(60000, self.garbage_collect)
-
-    def on_option_pressed(self, option_index):
-        app_chosen = self.options[option_index][0]
-        load_app(app_chosen)
-        raise StopIteration()
-
-    def step(self):
-        super(SystemMenu, self).step()
-        if director.was_pressed(director.BUTTON_D):
-            self.finished()
-
-    def finished(self):
-        director.pop()
-        raise StopIteration()
-
-class GamesMenu(menu.Menu):
-    stripes_rom = "menu"
-    def __init__(self, options, selected_index=0):
-        super().__init__(options, selected_index)
-        self.last_shuffle = -1
-        self.shuffle_options()
-
-    def shuffle_options(self):
-        if self.needs_shuffling():
-            self.options = shuffled(self.options)
-            self.last_shuffle = utime.ticks_ms()
-
-    def needs_shuffling(self):
-        return False
-        if self.last_shuffle == -1:
-            return True
-        return utime.ticks_diff(utime.ticks_ms(), self.last_shuffle) > 60000
-
-    def on_enter(self):
-        self.shuffle_options()
-
-        super(GamesMenu, self).on_enter()
-
-        self.animation_frames = 0
-        self.tincho_frames = 0
-        try:
-            pollitos_index = [m[1] for m in self.options].index("pollitos.png")
-            self.pollitos = self.sprites[pollitos_index]
-        except ValueError:
-            self.pollitos = None
-        try:
-            tincho_index = [m[1] for m in self.options].index("tincho_vrunner.png")
-            self.es_tincho = self.sprites[tincho_index]
-        except ValueError:
-            self.es_tincho = None
-
-        # self.boot_screen = make_me_a_planet(strips.other.ventilastation)
-        # self.boot_screen.set_frame(0)
-        # self.call_later(1500, self.boot_screen.disable)
-        self.vslogo = sprites.Sprite()
-        self.vslogo.set_strip(stripes["vslogo.png"])
-        self.vslogo.set_perspective(2)
-        self.vslogo.set_x(128 - self.vslogo.width() // 2)
-        self.vslogo.set_y(0)
-        self.vslogo.set_frame(0)
-        self.loviejo = sprites.Sprite()
-        self.loviejo.set_strip(stripes["loviejo-3.png"])
-        self.loviejo.set_perspective(2)
-        self.loviejo.set_x(128 - self.loviejo.width() // 2)
-        self.loviejo.set_y(11)
-        self.loviejo.set_frame(0)
-        self.fondo = make_me_a_planet("favalli.png")
-        self.fondo.set_frame(0)
-        self.garbage_collect()
-
-    def garbage_collect(self):
-        import gc
-        gc.collect()
-        self.call_later(60000, self.garbage_collect)
-
-    def on_option_pressed(self, option_index):
-        app_chosen = self.options[option_index][0]
-        load_app(app_chosen)
-        raise StopIteration()
-
-    def check_debugmode(self):
-        if (director.is_pressed(director.JOY_UP)
-            and director.is_pressed(director.JOY_LEFT)
-            and director.is_pressed(director.JOY_RIGHT)
-            and director.is_pressed(director.BUTTON_A) ):
-            from apps.debugmode import DebugMode
-            director.sound_play("ventilagon/audio/es/superventilagon")
-            director.push(SystemMenu(SYS_MENU_OPTIONS))
-            return True
-
-        if (director.is_pressed(director.BUTTON_B)
-            and director.is_pressed(director.BUTTON_C)
-            and director.is_pressed(director.BUTTON_A) ):
-            # from apps.calibrate import Calibrate
-            # director.push(Calibrate())
-            return True
-
-    def step(self):
-        # if director.timedout:
-        #     load_app("gallery")
-        #     raise StopIteration()
-
-        if not self.check_debugmode():
-            super(GamesMenu, self).step()
-
-            if director.is_pressed(director.BUTTON_D) \
-                and director.is_pressed(director.BUTTON_B)\
-                and director.is_pressed(director.BUTTON_C):
-                pass
-                #update_over_the_air()
-
-            if self.pollitos and self.pollitos.frame() != 255:
-                self.animation_frames += 1
-                pf = (self.animation_frames // 4) % 5
-                self.pollitos.set_frame(pf)
-
-            if self.es_tincho and self.es_tincho.frame() != 255:
-                self.tincho_frames += 1
-                pf = (self.tincho_frames // 6) % 2
-                self.es_tincho.set_frame(pf)
+def setup():
+    setup_launcher()
 
 def main():
-    
-    main = GamesMenu(MAIN_MENU_OPTIONS)
-    main.call_later(700, main.load_images)
-    director.push(main)
-
-    # AUTOSTART
-    from apps.ventilagon_game import VentilagonIdle
-    autostart = VentilagonIdle()
-    autostart.call_later(700, autostart.load_images)
-    director.push(autostart)
-
+    setup()
     director.run()
 
 if __name__ == '__main__':
     import machine
     try:
-        director.sound_play(b"vyruss/shoot3")
+        director.sound_play(b"alecu.vyruss/shoot3")
         main()
     except Exception as e:
         # raise
