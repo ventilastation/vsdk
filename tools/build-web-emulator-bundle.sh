@@ -10,8 +10,13 @@ python3 "$ROOT_DIR/tools/generate_web_runtime_bundle.py"
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
+# web/ holds symlinks (apps, games, system) so the dev server can reach the
+# asset trees; replace them with real copies so the published output is
+# self-contained.
 cp -R "$ROOT_DIR/web/." "$OUT_DIR/"
-rm -f "$OUT_DIR/apps"
-cp -R "$ROOT_DIR/apps" "$OUT_DIR/apps"
+for tree in apps games system; do
+    rm -f "$OUT_DIR/$tree"
+    cp -R "$ROOT_DIR/$tree" "$OUT_DIR/$tree"
+done
 
 printf 'Built web emulator bundle at %s\n' "$OUT_DIR"

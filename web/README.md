@@ -8,7 +8,11 @@ code editor with live reload, a Piskel pixel-art editor, an in-browser ROM
 builder, and debug/heap inspectors.
 
 This directory is the **source of truth**; the Jekyll site publishes a copy
-of it (see [DEPLOY.md](../DEPLOY.md)). `apps` is a symlink to `../apps`.
+of it (see [DEPLOY.md](../DEPLOY.md)). `apps`, `games` and `system` are
+symlinks to the repo trees so this directory can be served directly as the
+docroot (e.g. `python3 -m http.server` from here): the worker fetches
+non-bundled assets — PNGs, sounds — over HTTP relative to the page. The
+publish script replaces the symlinks with real copies.
 
 ## Layout
 
