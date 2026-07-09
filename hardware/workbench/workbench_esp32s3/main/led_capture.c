@@ -55,6 +55,12 @@ static spi_slave_transaction_t s_trans[NUM_SLOTS];
 #define CAPTURE_QUEUE_DEPTH 8
 
 typedef struct {
+    // Captured at the moment the burst completes, not re-read later in
+    // decode_task: hall_sim_turn_count() must be time-correlated with when
+    // the burst actually arrived, not with whenever decode_task next gets
+    // scheduled to look at it (which, via a queue, is decoupled from capture
+    // and was making every dequeued message look like a new revolution).
+    uint32_t turn;
     uint8_t raw[BURST_BYTES];
 } capture_msg_t;
 
@@ -124,6 +130,7 @@ static void capture_task(void *arg) {
             if (last_len == BURST_BYTES) {
                 good++;
                 capture_msg_t msg;
+                msg.turn = hall_sim_turn_count();
                 memcpy(msg.raw, done->rx_buffer, BURST_BYTES);
                 if (xQueueSend(s_capture_queue, &msg, 0) != pdTRUE) {
                     drops++;
@@ -148,7 +155,8 @@ static void capture_task(void *arg) {
 // bookkeeping (same turn-count-based resync as before, just relocated) and
 // the actual pixel decode into s_frame.
 static void decode_task(void *arg) {
-    uint32_t column = 0, last_column = 0;
+    uint32_t column = 0;
+    uint32_t bursts_this_turn = 0, bursts_last_turn = 0;
     uint32_t last_turn = hall_sim_turn_count();
     int64_t last_report = esp_timer_get_time();
     capture_msg_t msg;
@@ -160,11 +168,22 @@ static void decode_task(void *arg) {
             // bursts (in the order captured, preserved by the FIFO queue) and
             // resetting each simulated revolution, rather than recomputing
             // from a clock at decode time (that jitters with scheduling
-            // latency and makes the image unstable).
-            uint32_t turn = hall_sim_turn_count();
-            if (turn != last_turn) {
-                last_turn = turn;
-                last_column = column;
+            // latency and makes the image unstable). Uses msg.turn (stamped
+            // by capture_task at capture time), not a fresh
+            // hall_sim_turn_count() read here -- this task's own scheduling
+            // latency is decoupled from when the burst actually arrived, so
+            // re-reading the live counter here made almost every dequeued
+            // message look like the start of a new revolution.
+            if (msg.turn != last_turn) {
+                last_turn = msg.turn;
+                // bursts_this_turn, not column: column has already wrapped
+                // to 0 via "% WB_COLUMNS" below on a fully-captured
+                // revolution's last burst, one iteration before we get here
+                // to notice the boundary -- reporting column at this point
+                // would read 0 even when everything's healthy. A genuinely
+                // short revolution (dropped bursts) shows up here as < 256.
+                bursts_last_turn = bursts_this_turn;
+                bursts_this_turn = 0;
                 column = 0;
                 // The buffer we just finished (s_write_buf) now holds a
                 // complete revolution and becomes the stable snapshot
@@ -173,12 +192,13 @@ static void decode_task(void *arg) {
                 s_write_buf ^= 1;
             }
             decode_burst(msg.raw, column);
+            bursts_this_turn++;
             column = (column + 1) % WB_COLUMNS;
         }
 
         int64_t now = esp_timer_get_time();
         if (now - last_report >= 1000000) {
-            ESP_LOGI(TAG, "decode: last_column=%lu", (unsigned long)last_column);
+            ESP_LOGI(TAG, "decode: bursts_last_turn=%lu", (unsigned long)bursts_last_turn);
             last_report = now;
         }
     }
