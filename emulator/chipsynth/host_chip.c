@@ -5,7 +5,7 @@
 // ESP32-S3 (from apps/retro-go/gwenesis), so audio regenerated here is
 // bit-faithful to the device. The spinning board streams the chip register
 // writes over serial ("aframe" chunks); we replay them through these cores and
-// render PCM for pyglet to play. See docs/emulator-audio.md.
+// render PCM for pyglet to play. See docs/internals/emulator-audio.md.
 //
 // Built as a shared library and driven from emu_audio.py via ctypes.
 

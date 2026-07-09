@@ -1,7 +1,7 @@
 #pragma once
 
 // Workbench pin assignments and tunables.
-// See ../../../WORKBENCH.md for the full pinout table and design rationale.
+// See ../../../docs/internals/workbench.md for the full pinout table and design rationale.
 //
 // These are all *workbench-side* GPIOs, chosen to avoid ESP32-S3 strapping
 // pins (0, 3, 45, 46), the native USB pins (19, 20), and the octal-PSRAM
@@ -38,7 +38,7 @@
 // running its own AP. Credentials come from NVS namespace "voom_wifi" —
 // the same namespace/keys the DUT itself reads in
 // apps/micropython/ventilastation/comms.py — provisioned with
-// `make workbench-wifi-provision` (see WORKBENCH.md).
+// `make workbench-wifi-provision` (see docs/internals/workbench.md).
 #define WB_WIFI_NVS_NAMESPACE  "voom_wifi"
 #define WB_WIFI_CONNECT_RETRY_DELAY_MS  2000
 

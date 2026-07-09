@@ -4,7 +4,7 @@ Comms and display talk to the JS worker host registered by
 web/wasm-worker.js. High-frequency payloads (frames, sprites, commands)
 must cross the bridge as pointer + length into WASM memory, NOT as fresh
 Python bytes objects -- object bridging leaks on the MicroPython heap.
-See ARCHITECTURE.md ("Why Pointer Posting Matters"). The direct-object
+See docs/internals/web-emulator-architecture.md ("Why Pointer Posting Matters"). The direct-object
 calls below are kept only as compatibility fallbacks.
 """
 

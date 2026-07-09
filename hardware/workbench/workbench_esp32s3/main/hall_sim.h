@@ -15,7 +15,7 @@ uint32_t hall_sim_get_rpm(void);
 
 // Current angular column (0..WB_COLUMNS-1), reproducing the DUT's own
 // gpu_step() formula: column = ((now - last_turn) * COLUMNS / period) % COLUMNS.
-// Assumes column_offset == 0 (see WORKBENCH.md). Returns 0 while stopped
+// Assumes column_offset == 0 (see docs/internals/workbench.md). Returns 0 while stopped
 // (rpm == 0).
 uint32_t hall_sim_current_column(void);
 

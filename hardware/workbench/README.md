@@ -7,4 +7,4 @@ over Wi-Fi, and bridges the DUT's UART to the workbench's USB port.
 Firmware: [`workbench_esp32s3/`](workbench_esp32s3/).
 
 Full design notes, pin connections, and the LED-bus wire protocol are in
-[`../../WORKBENCH.md`](../../WORKBENCH.md).
+[`../../docs/internals/workbench.md`](../../docs/internals/workbench.md).

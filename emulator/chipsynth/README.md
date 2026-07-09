@@ -4,7 +4,7 @@ These shared libraries regenerate emulator audio on the pyglet host from the
 sound-chip register writes the spinning ESP32-S3 streams over serial. They
 compile the **same** chip cores that run on the device (from
 `../../apps/retro-go`), so the host output matches the board exactly. See
-`../../docs/emulator-audio.md` for the full design.
+`../../docs/internals/emulator-audio.md` for the full design.
 
 ## Build
 

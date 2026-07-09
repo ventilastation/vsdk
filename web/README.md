@@ -8,7 +8,7 @@ code editor with live reload, a Piskel pixel-art editor, an in-browser ROM
 builder, and debug/heap inspectors.
 
 This directory is the **source of truth**; the Jekyll site publishes a copy
-of it (see [DEPLOY.md](../DEPLOY.md)). `apps`, `games` and `system` are
+of it (see [DEPLOY.md](../docs/internals/deploying-web-emulator.md)). `apps`, `games` and `system` are
 symlinks to the repo trees so this directory can be served directly as the
 docroot (e.g. `python3 -m http.server` from here): the worker fetches
 non-bundled assets — PNGs, sounds — over HTTP relative to the page. The
@@ -24,7 +24,7 @@ publish script replaces the symlinks with real copies.
 | `led-ring-renderers.js` | WebGL renderer and 2D-canvas fallback |
 | `audio-host.js` | plays the `sound`/`music`/`notes` commands |
 | `led-render-core.js` | polar frame math shared with the render parity test |
-| `micropython-bridge.js`, `wasm-worker.js`, `wasm-adapter.js` | browser⇄worker⇄WASM bridge (pointer-based frame transport; see ../ARCHITECTURE.md) |
+| `micropython-bridge.js`, `wasm-worker.js`, `wasm-adapter.js` | browser⇄worker⇄WASM bridge (pointer-based frame transport; see ../docs/internals/web-emulator-architecture.md) |
 | `monaco-ide.js`, `piskel-embed.js` | embedded code/sprite editors |
 | `rom-builder-core.js`, `rom-builder-browser.js`, `workspace-rom-builder.js` | in-browser `.rom` building from `__images__.yaml` |
 | `runtime-manifest.json`, `runtime-bundle.json` | generated file list + bundle the worker mounts (`make web-runtime-bundle`) |
@@ -55,4 +55,4 @@ MicroPython filesystem and restart the runtime without rebuilding
   `index.html` (and in module import specifiers) or browsers will keep the
   old file.
 - After bridge/display changes, run the heap regression check described in
-  ../ARCHITECTURE.md ("Manual Regression Check").
+  ../docs/internals/web-emulator-architecture.md ("Manual Regression Check").

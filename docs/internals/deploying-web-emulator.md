@@ -48,7 +48,18 @@ make micropython-webassembly
 
 This clones pinned checkouts, applies the repo's patches, builds
 `micropython.mjs`/`micropython.wasm` into `web/vendor/micropython/`, and
-bumps the worker cache-busting version. See README.md for overrides.
+bumps the worker cache-busting version.
+
+That target clones pinned `micropython` and `emsdk` checkouts into
+`/tmp/vsdk-micropython-webassembly` by default and applies the repo's
+trace-enabled WebAssembly variant and compatibility patch. Useful
+overrides:
+
+```sh
+BUILD_ROOT=/tmp/custom-vsdk-build make micropython-webassembly
+VERSION_TAG=20260618T160000Z make micropython-webassembly
+BUILD_JOBS=8 make micropython-webassembly
+```
 
 ## Post-deploy check
 

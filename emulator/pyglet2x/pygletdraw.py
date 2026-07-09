@@ -201,7 +201,7 @@ def on_resize(width, height):
 #################################################################
 # Workbench controls: an RPM slider (0-700, default 600) and a
 # reset button, for interacting with the hardware workbench over
-# Wi-Fi (see comms.send_workbench and vsdk/WORKBENCH.md). Harmless
+# Wi-Fi (see comms.send_workbench and vsdk/docs/internals/workbench.md). Harmless
 # no-ops when not connected to a real workbench.
 #################################################################
 RPM_MIN, RPM_MAX, RPM_DEFAULT = 0, 700, 600

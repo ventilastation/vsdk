@@ -11,7 +11,7 @@
 // never reached the PC. The console is set to USB-Serial-JTAG in
 // sdkconfig.defaults; we install its driver and route stdio through it, so
 // diagnostic ESP_LOGx lines stay visible on the same port, interleaved with
-// the raw bridge bytes. See WORKBENCH.md.
+// the raw bridge bytes. See docs/internals/workbench.md.
 
 #include "serial_bridge.h"
 #include "config.h"

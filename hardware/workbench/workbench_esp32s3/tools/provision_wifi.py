@@ -41,7 +41,7 @@ def run(cmd, **kwargs):
 def main():
     idf_path = os.environ.get("IDF_PATH")
     if not idf_path:
-        sys.exit("IDF_PATH is not set — source esp-idf's export.sh first (see WORKBENCH.md)")
+        sys.exit("IDF_PATH is not set — source esp-idf's export.sh first (see docs/internals/workbench.md)")
 
     gen_script = pathlib.Path(idf_path) / "components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
     if not gen_script.exists():

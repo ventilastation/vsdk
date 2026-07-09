@@ -25,7 +25,7 @@ history of this file for the record.
 - Go through the Discord suggestions and GitHub bug reports and shape the
   v2 API list (music loop flag already done).
 
-## Deployment / OTA (see OTA.md)
+## Deployment / OTA (see docs/internals/ota.md)
 
 - Upgrade voom without rebooting (partition OTA works; still reboots).
 - Generated list of console ROMs.

@@ -7,7 +7,7 @@
 // vsdk/emulator over Wi-Fi, and bridges the DUT's UART to this board's USB
 // port.
 //
-// See ../../WORKBENCH.md for the full design, pinout, and known risks.
+// See ../../docs/internals/workbench.md for the full design, pinout, and known risks.
 // The DUT's firmware is not modified in any way.
 
 #include "config.h"

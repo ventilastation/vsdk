@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-// Brings up the LED-bus SPI slave (see WORKBENCH.md "LED bus capture (no
+// Brings up the LED-bus SPI slave (see docs/internals/workbench.md "LED bus capture (no
 // chip-select)") and starts two background tasks, both pinned to core 1 (see
 // led_capture.c for why): capture_task (SPI-slave servicing only) and
 // decode_task (column bookkeeping + decoding captured bursts into a

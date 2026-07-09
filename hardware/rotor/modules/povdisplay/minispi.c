@@ -225,7 +225,7 @@
 // Chip-select for the LED SPI bus. The APA102 LED strips don't need a CS, but
 // driving one lets the hardware workbench's SPI slave frame each 444-byte burst
 // cleanly (a CS-less slave can't). GPIO17 is unused in the active hw_config;
-// on the workbench it is wired to WB_SPI_CS_PIN (GPIO14). See vsdk/WORKBENCH.md.
+// on the workbench it is wired to WB_SPI_CS_PIN (GPIO14). See vsdk/docs/internals/workbench.md.
 #define LEDS_SPI_CS_PIN  17
 
 spi_device_handle_t spi_handle;

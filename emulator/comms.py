@@ -2,7 +2,7 @@
 
 Owns the connection(s) to the frame source (local MicroPython, or a real
 board via the workbench), dispatches the wire commands documented in
-docs/protocols.md, and forwards input. No connections or threads are
+docs/internals/host-protocol.md, and forwards input. No connections or threads are
 created at import time: emu.py calls start() once configuration is done.
 """
 
@@ -177,7 +177,7 @@ def dispatch_command(conn, command, args):
     understood regardless of which transport it comes in on -- in local
     simulation mode everything (including audio) arrives on display_conn;
     in hardware mode audio/sound arrives on workbench_conn instead (see
-    WORKBENCH.md)."""
+    docs/internals/workbench.md)."""
     global last_time_seen
 
     if command == b"frame":

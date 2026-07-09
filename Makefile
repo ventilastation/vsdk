@@ -25,7 +25,7 @@ endif
 SERIAL_LOCK_FILE ?= /tmp/vsdk-serial.lock
 
 # ESP-IDF checkouts. MicroPython and Retro-Go need different IDF versions;
-# see BUILDING.md. Override these when your SDKs live elsewhere, e.g.:
+# see docs/internals/building.md. Override these when your SDKs live elsewhere, e.g.:
 #   make vsdk VSDK_IDF_PATH=~/esp/esp-idf-5.5
 VSDK_IDF_PATH ?= ../../esp-idf/esp-5.5.2
 RETRO_GO_IDF_PATH ?= ../../esp-idf/esp-5.0.4
@@ -189,7 +189,7 @@ dev-emulator:
 	cd emulator && python emu.py $(BOARD_IP) --no-display
 
 # --- Hardware workbench (second ESP32-S3 board that exercises a real DUT) ---
-# See WORKBENCH.md for the full design.
+# See docs/internals/workbench.md for the full design.
 # Usage:
 #   make workbench-build
 #   make workbench-flash PORT=/dev/cu.usbmodemXXXX

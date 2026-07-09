@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate built sprite ROMs against docs/rom-format.md, and check that the
+"""Validate built sprite ROMs against docs/internals/rom-format.md, and check that the
 Python and JS builders agree on the menu ROM's structure.
 
     python3 tests/test_rom_format.py
@@ -22,7 +22,7 @@ ROMS = ROOT / "apps" / "micropython" / "roms"
 
 
 def parse_rom(data):
-    """Reference parser for docs/rom-format.md. Returns (strips, palettes)."""
+    """Reference parser for docs/internals/rom-format.md. Returns (strips, palettes)."""
     num_strips, num_palettes = struct.unpack_from("<HH", data, 0)
     offsets = struct.unpack_from("<%dL" % (num_strips + num_palettes), data, 4)
     strip_offsets = offsets[:num_strips]

@@ -13,7 +13,7 @@ FULLSCREEN = False
 #   - Wi-Fi (TCP): LED display frames, and "reset"/"rpm" control
 #   - Serial: button state out, audio/sound requests in (the same traffic
 #     that would normally cross the DUT<->base UART link)
-# See WORKBENCH.md.
+# See docs/internals/workbench.md.
 HARDWARE_MODE = False
 
 # False only for the legacy serial-only transport (Super Ventilagon base).
@@ -51,7 +51,7 @@ def configure(args):
     elif args.host:
         SERVER_IP = args.host
     elif HARDWARE_MODE:
-        # Found via mDNS (see WORKBENCH.md) instead of a hardcoded IP. .local
+        # Found via mDNS (see docs/internals/workbench.md) instead of a hardcoded IP. .local
         # resolution is built into macOS (Bonjour); Linux needs avahi/nss-mdns,
         # Windows needs Bonjour/iTunes installed. Override with an explicit
         # positional IP if mDNS isn't available on your machine.
