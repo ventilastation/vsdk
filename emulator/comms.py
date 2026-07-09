@@ -1,3 +1,11 @@
+"""Host-side communications for the desktop emulator.
+
+Owns the connection(s) to the frame source (local MicroPython, or a real
+board via the workbench), dispatches the wire commands documented in
+docs/protocols.md, and forwards input. No connections or threads are
+created at import time: emu.py calls start() once configuration is done.
+"""
+
 import os
 import platform
 import time
@@ -7,13 +15,12 @@ import config
 import struct
 import socket
 import threading
-from pygletengine import all_strips, set_palettes, spritedata
-from vsdk import set_voom_frame, set_voom_frame_rgb, clear_voom_frame
+from povrender import all_strips, set_palettes, spritedata
+from povrender import set_voom_frame, set_voom_frame_rgb, clear_voom_frame
 from audio import playsound, playmusic, playnotes
 from emu_audio import emu_audio
 import upgrade_server
 
-upgrade_server.start(port=8000)
 
 class ConnectionBase:
     def __init__(self):
@@ -106,7 +113,7 @@ class ConnWinNamedPipe(ConnectionBase):
         while len(self.buffer) < numbytes:
             try:
                 result, data = win32file.ReadFile(self.pipe, 65536, None)
-            except:
+            except Exception:
                 data = b""
             self.buffer += data
         ret, self.buffer = self.buffer[:numbytes], self.buffer[numbytes:]
@@ -117,7 +124,7 @@ class ConnWinNamedPipe(ConnectionBase):
         while b"\n" not in self.buffer:
             try:
                 result, data = win32file.ReadFile(self.pipe, 65536, None)
-            except:
+            except Exception:
                 data = b""
             if not data:
                 break
@@ -128,31 +135,26 @@ class ConnWinNamedPipe(ConnectionBase):
                 return ret
             else:
                 return b""
-        except:
+        except Exception:
             print(traceback.format_exc())
             print("BUFFER WAS:", self.buffer)
             raise
 
 looping = True
 
-# display_conn carries LED display frames plus (in hardware mode)
-# reset/rpm control. It's the DUT link in every mode:
+# Set by start():
+# display_conn carries LED display frames plus (in hardware mode) reset/rpm
+# control. It's the DUT link in every mode:
 #   - Windows: named pipe to the local desktop MicroPython
-#   - "SERIAL" positional arg: legacy single-transport serial link (Super
+#   - host arg "SERIAL": legacy single-transport serial link (Super
 #     Ventilagon base) -- distinct from workbench_conn below
 #   - otherwise: TCP, either loopback to the local desktop MicroPython or
 #     (in hardware mode) to the workbench over Wi-Fi
-if platform.system() == "Windows":
-    display_conn = ConnWinNamedPipe()
-elif not config.USE_IP:
-    display_conn = ConnSerial()
-else:
-    display_conn = ConnIP()
-
+display_conn = None
 # workbench_conn carries button state out and audio/sound requests in, over
 # the workbench's serial bridge to the DUT's UART -- only relevant when
 # actually talking to real hardware.
-workbench_conn = ConnSerial() if (config.HARDWARE_MODE and config.USE_IP) else None
+workbench_conn = None
 
 last_time_seen = 0
 
@@ -175,7 +177,7 @@ def dispatch_command(conn, command, args):
     understood regardless of which transport it comes in on -- in local
     simulation mode everything (including audio) arrives on display_conn;
     in hardware mode audio/sound arrives on workbench_conn instead (see
-    vsdk/WORKBENCH.md)."""
+    WORKBENCH.md)."""
     global last_time_seen
 
     if command == b"frame":
@@ -308,26 +310,50 @@ def _receive_loop(conn, label):
             waitconnect(conn, label)
 
 
+def start():
+    """Create the mode-appropriate connections and start the receive
+    threads plus the OTA upgrade server. Call once, after config.configure()."""
+    global display_conn, workbench_conn
+
+    upgrade_server.start(port=8000)
+
+    if platform.system() == "Windows":
+        display_conn = ConnWinNamedPipe()
+    elif not config.USE_IP:
+        display_conn = ConnSerial()
+    else:
+        display_conn = ConnIP()
+
+    workbench_conn = ConnSerial() if (config.HARDWARE_MODE and config.USE_IP) else None
+
+    display_thread = threading.Thread(target=_receive_loop, args=(display_conn, "display"))
+    display_thread.daemon = True
+    display_thread.start()
+
+    if workbench_conn:
+        workbench_thread = threading.Thread(target=_receive_loop, args=(workbench_conn, "workbench-serial"))
+        workbench_thread.daemon = True
+        workbench_thread.start()
+
+    _arduino_init()
+    arduino_send(b"attract")
+
+
 def shutdown():
     global looping
     looping = False
-    display_conn.close()
+    if display_conn:
+        display_conn.close()
     if workbench_conn:
         workbench_conn.close()
 
-display_thread = threading.Thread(target=_receive_loop, args=(display_conn, "display"))
-display_thread.daemon = True
-display_thread.start()
-
-if workbench_conn:
-    workbench_thread = threading.Thread(target=_receive_loop, args=(workbench_conn, "workbench-serial"))
-    workbench_thread.daemon = True
-    workbench_thread.start()
 
 def send(b):
     """Send raw bytes toward the DUT. In hardware mode these go over the
     workbench serial bridge; otherwise over the main display connection."""
     target = workbench_conn or display_conn
+    if target is None:
+        return
     try:
         target.send(b)
     except (socket.error, OSError) as err:
@@ -356,32 +382,35 @@ def send_workbench(line):
     """Send a control command line to the workbench over Wi-Fi, e.g.
     b"reset" or b"rpm 650" (see the RPM slider / reset button in
     pyglet2x/pygletdraw.py). No-op if the Wi-Fi link isn't up."""
+    if display_conn is None:
+        return
     try:
         display_conn.send(line + b"\n")
     except (socket.error, OSError) as err:
         print(err)
 
 
-try:
-    import serial
-    ARDUINO_DEVICE = "/dev/ttyAMA0"
-    arduino = serial.Serial(ARDUINO_DEVICE, 57600)
+# --- Super Ventilagon base: dedicated Arduino driving the start/stop relay ---
 
-    arduino_commands = {
-        b"start": b"S",
-        b"stop": b"r",
-        b"reset": b"R",
-        b"attract": b"s"
-    }
+ARDUINO_DEVICE = "/dev/ttyAMA0"
+_arduino = None
+_arduino_commands = {
+    b"start": b"S",
+    b"stop": b"r",
+    b"reset": b"R",
+    b"attract": b"s"
+}
 
-    def arduino_send(command):
-        # print("arduino, sending", command)
-        arduino.write(arduino_commands.get(command, b" "))
+def _arduino_init():
+    global _arduino
+    try:
+        import serial
+        _arduino = serial.Serial(ARDUINO_DEVICE, 57600)
+    except Exception:
+        print("NOTE: Super Ventilagon base - Arduino not detected")
+        _arduino = None
 
-except Exception as e:
-    print("NOTE: Super Ventilagon base - Arduino not detected")
-
-    def arduino_send(_):
-        pass
-
-arduino_send(b"attract")
+def arduino_send(command):
+    if _arduino is None:
+        return
+    _arduino.write(_arduino_commands.get(command, b" "))

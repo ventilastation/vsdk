@@ -1,3 +1,10 @@
+"""Polar POV frame renderer + shared display state for the desktop emulator.
+
+Holds the sprite table, image strips, palettes and starfield that comms.py
+fills from the wire protocol, and renders one 54-pixel LED column at a time
+(the same model as the spinning hardware).
+"""
+
 import random
 from struct import pack, unpack
 
@@ -107,7 +114,7 @@ def render(column):
                 print(e, len(pixels), y, px)
                 print(y, deepspace)
 
-    # el sprite 0 se dibuja arriba de todos los otros
+    # sprite 0 is drawn on top of all the others
     for n in range(99, -1, -1):
         x, y, image, frame, perspective = unpack("BBBBb", spritedata[n*5:n*5+5])
         if frame == 255:
@@ -118,7 +125,7 @@ def render(column):
             continue
         w, h, total_frames, pal = unpack("BBBB", strip[0:4])
         pal_base = 256 * pal
-        if w == 255: w = 256 # caso especial, para los planetas
+        if w == 255: w = 256 # special case for the planet backdrops
         pixeldata = memoryview(strip)[4:]
 
         frame %= total_frames
@@ -127,12 +134,12 @@ def render(column):
         if visible_column != -1:
             base = visible_column * h + (frame * w * h)
             if perspective:
-                desde = max(y, 0)
-                hasta = min(y + h, ROWS - 1)
-                comienzo = max( -y, 0)
-                src = base + comienzo
+                y_start = max(y, 0)
+                y_end = min(y + h, ROWS - 1)
+                clipped = max(-y, 0)
+                src = base + clipped
 
-                for y in range(desde, hasta):
+                for y in range(y_start, y_end):
                     index = pixeldata[src]
                     src += 1
                     if index != TRANSPARENT_INDEX:

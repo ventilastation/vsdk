@@ -8,19 +8,16 @@ if pyglet.version >= "2.0":
 else:
     from pyglet1x.inputs import *
     from pyglet1x.pygletdraw import *
-from vsdk import *
+from povrender import step_starfield
 
-sound_init()
 
 class PygletEngine():
     def __init__(self, led_count, comms_send, enable_display=True):
+        sound_init()
         display_init(led_count)
         self.last_input_sent = (0, 0)
         self.comms_send = comms_send
         self.enable_display = enable_display
-        # self.must_profile = False
-        # # schedule the profile after 5 seconds
-        # pyglet.clock.schedule_once(lambda dt: setattr(self, 'must_profile', True), 5.0)
 
         def process_input():
             import comms
@@ -35,16 +32,6 @@ class PygletEngine():
             if not self.enable_display:
                 return
             display_draw()
-            # if self.must_profile:
-            #     from cProfile import Profile
-            #     from pstats import Stats
-            #     profiler = Profile()
-            #     profiler.enable()
-            #     display_draw()
-            #     profiler.disable()
-            #     stats = Stats(profiler).sort_stats('cumulative')
-            #     stats.print_stats(100)
-            #     self.must_profile = False
 
         def animate(dt):
             process_input()
@@ -56,4 +43,3 @@ class PygletEngine():
         init_inputs()
         pyglet.clock.schedule_interval(animate, 1/30.0)
         pyglet.app.run()
-

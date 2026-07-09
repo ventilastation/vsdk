@@ -1,5 +1,4 @@
 import math
-import sys
 import traceback
 
 import pyglet
@@ -7,9 +6,9 @@ from pyglet.gl import Config
 from pyglet.gl import *
 
 import config
-from vsdk import COLUMNS, pack_colors, repeated, render
+from povrender import COLUMNS, pack_colors, repeated, render
 
-display_enabled = "--no-display" not in sys.argv
+display_enabled = config.DISPLAY_ENABLED
 pyglet.options['vsync'] = display_enabled
 
 window = pyglet.window.Window(config=Config(double_buffer=display_enabled), fullscreen=config.FULLSCREEN)
