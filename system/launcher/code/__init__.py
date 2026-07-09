@@ -3,39 +3,26 @@ import utime
 from ventilastation import menu
 from ventilastation import sprites
 from ventilastation.app_loader import load_app
+from ventilastation.catalog import build_menu_options
 from ventilastation.director import director, stripes
 from ventilastation.shuffler import shuffled
 
 def game_menu_strip(game_slug):
     return game_slug.replace(".", "/") + "/menu.png"
 
-# (slug, image, frame)[] -- see menu ROM assets
-MAIN_MENU_OPTIONS = [
-    ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),
-    ("native.voom", "voom.png", 0),
-    ("native.nes", "megadrive.png", 0),  # Super Mario Bros (NES); placeholder icon
-    ("native.sms", "megadrive.png", 0),  # Out Run (Master System); placeholder icon
-    ("vsjam-oct25.2bam_sencom", game_menu_strip("vsjam-oct25.2bam_sencom"), 0),
-    ("vsjam-may25.vasura_espacial", game_menu_strip("vsjam-may25.vasura_espacial"), 0),
-    ("gallery", "pollitos.png", 0),
-    ("vsjam-oct25.tincho_vrunner", game_menu_strip("vsjam-oct25.tincho_vrunner"), 0),
-    ("vsjam-oct25.dome_defander", game_menu_strip("vsjam-oct25.dome_defander"), 0),
-    ("vsjam-oct25.fanphibious_danger", game_menu_strip("vsjam-oct25.fanphibious_danger"), 0),
-    ("vsjam-oct25.peronjam", game_menu_strip("vsjam-oct25.peronjam"), 0),
-    ("other.aaa", game_menu_strip("other.aaa"), 0),
-    ("vsjam-may25.vailableextreme", game_menu_strip("vsjam-may25.vailableextreme"), 0),
-    ("vsjam-may25.vzumaki", game_menu_strip("vsjam-may25.vzumaki"), 0),
-    ("vsjam-may25.vs", game_menu_strip("vsjam-may25.vs"), 0),
-    ("vsjam-may25.oraculo", game_menu_strip("vsjam-may25.oraculo"), 0),
-    ("vsjam-may25.vortris", game_menu_strip("vsjam-may25.vortris"), 0),
-    ("vsjam-may25.ventrack", game_menu_strip("vsjam-may25.ventrack"), 0),
-    ("pycamp-mar25.vance", game_menu_strip("pycamp-mar25.vance"), 0),
-    ("pycamp-mar25.vong", game_menu_strip("pycamp-mar25.vong"), 0),
-    ("pycamp-mar25.vugo", game_menu_strip("pycamp-mar25.vugo"), 0),
-    ("alecu.ventap", game_menu_strip("alecu.ventap"), 0),
-    ("alecu.vladfarty", game_menu_strip("alecu.vladfarty"), 0),
-    ("credits", "menu.png", 3),
+# Games are discovered from games/<group>/<name>/ and positioned by the
+# "order" field in each game's meta.json (see ventilastation/catalog.py).
+# Only the non-game entries -- native apps and system scenes -- are listed
+# here, with the order values that interleave them among the games.
+STATIC_MENU_ENTRIES = [
+    (20, "native.voom", "voom.png", 0),
+    (30, "native.nes", "megadrive.png", 0),   # Super Mario Bros (NES); placeholder icon
+    (40, "native.sms", "megadrive.png", 0),   # Out Run (Master System); placeholder icon
+    (70, "gallery", "pollitos.png", 0),
+    (240, "credits", "menu.png", 3),
 ]
+
+MAIN_MENU_OPTIONS = build_menu_options(STATIC_MENU_ENTRIES)
 
 SYS_MENU_OPTIONS = [
     # Retro-Go launcher disabled for now — its on-screen text is unreadable at the

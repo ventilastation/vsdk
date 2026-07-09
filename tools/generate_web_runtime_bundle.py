@@ -28,6 +28,10 @@ def iter_python_sources():
             if "__pycache__" in path.parts:
                 continue
             yield path.relative_to(ROOT_DIR).as_posix()
+    games_dir = ROOT_DIR / "games"
+    if games_dir.is_dir():
+        for path in sorted(games_dir.glob("*/*/meta.json")):
+            yield path.relative_to(ROOT_DIR).as_posix()
 
 
 def iter_workspace_asset_sources():

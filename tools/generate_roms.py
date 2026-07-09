@@ -186,6 +186,31 @@ def generate_rom(folder, palettegroups, spritedef_path):
 
 STRIPEDEF_FILENAME = "__images__.yaml"
 
+def _game_menu_strip_items(spritedef_path):
+    """Expand a `game_menu_strips: true` item into one strip per
+    games/<group>/<name>/menu.png, so the menu ROM no longer needs a
+    hand-maintained list. Strip ids match ventilastation/catalog.py's
+    default menu_strip; frame counts come from each game's meta.json
+    ("menu_frames", default 1)."""
+    import json
+
+    items = []
+    images_dir = spritedef_path.parent
+    for menu_png in sorted(GAMES_ROOT.glob("*/*/menu.png")):
+        game_dir = menu_png.parent
+        frames = 1
+        meta_path = game_dir / "meta.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text())
+                frames = int(meta.get("menu_frames", 1))
+            except (ValueError, TypeError) as error:
+                raise ValueError(f"{meta_path}: {error}")
+        relative = os.path.relpath(menu_png, images_dir)
+        strip_id = menu_png.relative_to(GAMES_ROOT).as_posix()
+        items.append((relative, {"frames": frames, "id": strip_id}))
+    return items
+
 def _normalize_item(item, source_path, palettegroup_index, item_index):
     if not isinstance(item, dict):
         raise ValueError(
@@ -257,10 +282,15 @@ def load_palettegroups(spritedef_path):
             raise ValueError(
                 f"{spritedef_path}: palette group {group_name!r} must be a list"
             )
-        palettegroups.append([
-            _normalize_item(item, spritedef_path, group_name, item_index)
-            for item_index, item in enumerate(group)
-        ])
+        normalized_group = []
+        for item_index, item in enumerate(group):
+            if isinstance(item, dict) and item.get("game_menu_strips"):
+                normalized_group.extend(_game_menu_strip_items(spritedef_path))
+                continue
+            normalized_group.append(
+                _normalize_item(item, spritedef_path, group_name, item_index)
+            )
+        palettegroups.append(normalized_group)
     return palettegroups
 
 for search_root in SEARCH_ROOTS:
