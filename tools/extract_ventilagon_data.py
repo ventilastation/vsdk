@@ -23,7 +23,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 C_DIR = os.path.join(ROOT, "hardware", "rotor", "modules", "povdisplay", "ventilagon")
-OUT = os.path.join(ROOT, "apps", "micropython", "ventilastation", "ventilagon_data.py")
+OUT = os.path.join(ROOT, "games", "alecu", "ventilagon_game", "code", "ventilagon_data.py")
 
 
 def strip_comments(text):

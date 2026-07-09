@@ -6,7 +6,7 @@ parity with glibc rand() is impossible, so instead we pin the *deterministic* pi
 the generated data tables, the transformation table's identity block, collision math,
 and a headless gameplay smoke run. Run after changing the port or re-extracting data:
 
-    python tools/test_ventilagon_parity.py
+    python tests/test_ventilagon_parity.py
 """
 
 import os
@@ -14,10 +14,11 @@ import random
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "apps", "micropython"))
 
-from ventilastation import ventilagon_data as data
-from ventilastation import ventilagon_emu as v
+from games.alecu.ventilagon_game.code import ventilagon_data as data
+from games.alecu.ventilagon_game.code import ventilagon_emu as v
 
 
 def test_data_tables():

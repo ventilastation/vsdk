@@ -1,5 +1,10 @@
+import os
+import sys
 import unittest
-from shuffler import shuffled
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "apps", "micropython"))
+
+from ventilastation.shuffler import shuffled
 
 class TestShuffler(unittest.TestCase):
     def test_shuffled_returns_permutation(self):

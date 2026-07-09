@@ -2,7 +2,7 @@ try:
     import ventilagon
 except ImportError:
     # Emulators (desktop + web) have no native module: use the MicroPython port.
-    from ventilastation import ventilagon_emu as ventilagon
+    from . import ventilagon_emu as ventilagon
 
 # The native C module loops on the rotor display task; the emulator port has no such
 # task, so the Scene pumps it once per frame. Absent on hardware (getattr -> None).

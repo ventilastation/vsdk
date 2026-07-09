@@ -28,7 +28,7 @@ except ImportError:  # pragma: no cover
     def _randrange(n):
         return urandom.getrandbits(16) % n
 
-from ventilastation import ventilagon_data as _data
+from . import ventilagon_data as _data
 
 # --- constants (ventilagon.h) ---------------------------------------------------------
 NUM_COLUMNS = 6
