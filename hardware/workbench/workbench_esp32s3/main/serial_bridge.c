@@ -71,7 +71,7 @@ void serial_bridge_begin(void) {
     }
     usb_serial_jtag_vfs_use_driver();
 
-    // Core 1 is reserved for led_capture.c's capture_task (SPI-slave
-    // servicing only); keep everything else, including this bridge, on core 0.
+    // Core 1 is reserved for led_capture.c's tasks (SPI-slave capture +
+    // decode); keep everything else, including this bridge, on core 0.
     xTaskCreatePinnedToCore(bridge_task, "serial_bridge", 3072, NULL, 8, NULL, 0);
 }

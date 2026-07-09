@@ -234,7 +234,7 @@ static void telemetry_task(void *arg) {
 }
 
 void telemetry_begin(void) {
-    // Core 1 is reserved for led_capture.c's capture_task (SPI-slave
-    // servicing only); keep the WiFi/TCP telemetry link on core 0.
+    // Core 1 is reserved for led_capture.c's tasks (SPI-slave capture +
+    // decode); keep the WiFi/TCP telemetry link on core 0.
     xTaskCreatePinnedToCore(telemetry_task, "telemetry", 4096, NULL, 5, NULL, 0);
 }

@@ -44,14 +44,15 @@ static spi_slave_transaction_t s_trans[NUM_SLOTS];
 // capture_task (core 1) does nothing but SPI-slave plumbing: dequeue a
 // completed DMA transaction, copy its raw bytes out, requeue immediately.
 // Column bookkeeping and pixel decode used to happen inline in that same
-// loop, but core 1 also has lwIP's TCPIP task (priority 18, "no affinity" by
+// loop, but core 1 also had lwIP's TCPIP task (priority 18, "no affinity" by
 // default) able to float onto it and preempt a mere-priority-10 capture_task
 // whenever telemetry_task's TCP sends (or WiFi RX, mDNS, etc.) gave it work
 // -- for long enough, occasionally, to miss the 4 pre-queued DMA slots and
 // drop a burst. Pinning lwIP off core 1 (sdkconfig.defaults) addresses that
-// directly, but moving everything not strictly SPI-related to decode_task on
-// core 0 removes the rest of the doubt: core 1 now runs only this loop (plus
-// whatever ISRs the SoC itself routes there).
+// directly, but moving everything not strictly SPI-related out of this task
+// removes the rest of the doubt: core 1 now runs only this loop plus
+// decode_task (also pinned here -- see led_capture_begin() for why it isn't
+// on core 0), and whatever ISRs the SoC itself routes there.
 #define CAPTURE_QUEUE_DEPTH 8
 
 typedef struct {
@@ -151,9 +152,10 @@ static void capture_task(void *arg) {
     }
 }
 
-// Core 0: everything that isn't strictly SPI plumbing. Owns column
-// bookkeeping (same turn-count-based resync as before, just relocated) and
-// the actual pixel decode into s_frame.
+// Also core 1 (see led_capture_begin()), lower priority than capture_task.
+// Everything that isn't strictly SPI plumbing: owns column bookkeeping
+// (same turn-count-based resync as before, just relocated) and the actual
+// pixel decode into s_frame.
 static void decode_task(void *arg) {
     uint32_t column = 0;
     uint32_t bursts_this_turn = 0, bursts_last_turn = 0;
@@ -236,10 +238,18 @@ void led_capture_begin(void) {
 
     s_capture_queue = xQueueCreate(CAPTURE_QUEUE_DEPTH, sizeof(capture_msg_t));
 
-    // capture_task on core 1, alone (see its comment); decode_task on core 0
-    // with everything else (WiFi/telemetry/serial bridge).
-    xTaskCreatePinnedToCore(capture_task, "led_capture", 4096, NULL, 10, NULL, 1);
-    xTaskCreatePinnedToCore(decode_task, "led_decode", 4096, NULL, 10, NULL, 0);
+    // Both on core 1: putting decode_task on core 0 alongside lwIP/WiFi
+    // (priority 18/23) worked fine while telemetry_task was idle, but with
+    // the emulator actually connected and streaming a ~41KB frame every
+    // WB_TELEMETRY_FRAME_INTERVAL_MS, that's real sustained higher-priority
+    // network activity that starved decode_task (priority 10) long enough to
+    // overflow the queue. Core 1 has nothing on it that outranks either
+    // task, so there's no equivalent starvation risk here. capture_task gets
+    // a higher priority than decode_task so it always preempts it
+    // immediately when a new SPI transaction completes, rather than the two
+    // waiting on tick-based round-robin as they would at equal priority.
+    xTaskCreatePinnedToCore(capture_task, "led_capture", 4096, NULL, 12, NULL, 1);
+    xTaskCreatePinnedToCore(decode_task, "led_decode", 4096, NULL, 10, NULL, 1);
 }
 
 void led_capture_snapshot(uint8_t *out) {
