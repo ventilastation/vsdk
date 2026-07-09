@@ -1,0 +1,24 @@
+palettegroups:
+  action:
+    - strip: ship.png
+      frames: 4
+    - strip: enemy.png
+      frames: 6
+    - strip: boss.png
+      frames: 2
+    - strip: shots.png
+      frames: 3
+    - strip: explosion.png
+      frames: 6
+    - strip: targets.png
+      frames: 4
+    - strip: reticle.png
+      frames: 3
+  world:
+    - strip: terrain.png
+      frames: 16
+  hud:
+    - strip: digits.png
+      frames: 12
+    - strip: messages.png
+      frames: 3
