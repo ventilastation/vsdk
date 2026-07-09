@@ -195,6 +195,9 @@ export async function findStripedefItemForPath(api, path) {
   const relativePath = getRelativeImagePath(imagesRoot, path);
   for (const group of manifest.palettegroups) {
     for (const item of group.items) {
+      if (!item.filename) {
+        continue; // game_menu_strips placeholder, expanded at build time
+      }
       if (normalizeWorkspacePath(item.filename) === relativePath) {
         return {
           ...item,
@@ -213,6 +216,37 @@ export async function findStripedefItemForPath(api, path) {
   };
 }
 
+// Expand `game_menu_strips: true` from the workspace: one strip per
+// games/<group>/<name>/menu.png, frames from the game's meta.json.
+// Mirrors tools/generate_roms.py's _game_menu_strip_items().
+async function expandWorkspaceGameMenuStrips(api, imagesRoot) {
+  const normalizedRoot = normalizeWorkspacePath(imagesRoot);
+  const depth = normalizedRoot.split("/").filter(Boolean).length;
+  const toGamesRoot = "../".repeat(depth);
+  const paths = await api.listProjectFiles("games");
+  const menuPngs = paths
+    .map((path) => normalizeWorkspacePath(path))
+    .filter((path) => /^games\/[^/]+\/[^/]+\/menu\.png$/u.test(path))
+    .sort();
+  const items = [];
+  for (const menuPath of menuPngs) {
+    const gameDir = menuPath.slice(0, -"/menu.png".length);
+    let frames = 1;
+    try {
+      const meta = await api.readProjectFile(`${gameDir}/meta.json`, "utf8");
+      frames = Number(JSON.parse(meta.content).menu_frames || 1);
+    } catch (error) {
+      // no meta.json (or unreadable): default to a single frame
+    }
+    items.push({
+      filename: `${toGamesRoot}${menuPath}`,
+      id: menuPath.slice("games/".length),
+      frames,
+    });
+  }
+  return items;
+}
+
 export async function rebuildRomForImagesRoot(api, imagesRoot) {
   const normalizedRoot = normalizeWorkspacePath(imagesRoot);
   const builder = window.VentilastationRomBuilder;
@@ -227,6 +261,7 @@ export async function rebuildRomForImagesRoot(api, imagesRoot) {
       const file = await api.readProjectFile(imagePath, "base64");
       return decodePngBase64(file.content);
     },
+    expandGameMenuStrips: () => expandWorkspaceGameMenuStrips(api, normalizedRoot),
   });
   const romPath = deriveRomOutputPath(normalizedRoot);
   await api.writeProjectFile(romPath, uint8ArrayToBase64(rom), "base64");

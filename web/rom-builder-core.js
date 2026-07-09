@@ -85,9 +85,15 @@
         if (!currentGroup) {
           throw new Error(`${at}: item declared before any palette group`);
         }
+        const expandMatch = content.match(/^- game_menu_strips:\s*true\s*$/);
+        if (expandMatch) {
+          currentItem = { kind: "game_menu_strips" };
+          currentGroup.items.push(currentItem);
+          continue;
+        }
         const match = content.match(/^- (strip|fullscreen):\s*(.+?)\s*$/);
         if (!match) {
-          throw new Error(`${at}: expected '- strip: file.png' or '- fullscreen: file.png'`);
+          throw new Error(`${at}: expected '- strip: file.png', '- fullscreen: file.png' or '- game_menu_strips: true'`);
         }
         currentItem = {
           kind: match[1],
@@ -134,6 +140,11 @@
   function normalizeStripedefItem(item, groupName) {
     if (!item || typeof item !== "object") {
       throw new Error(`palette group ${groupName} contains an invalid item`);
+    }
+
+    if (item.kind === "game_menu_strips") {
+      // Placeholder expanded by buildRom via options.expandGameMenuStrips.
+      return { kind: "game_menu_strips" };
     }
 
     if (item.kind !== "strip" && item.kind !== "fullscreen") {
@@ -530,7 +541,31 @@
       const group = palettegroups[paletteIndex];
       const loadedImages = [];
 
+      const items = [];
       for (const item of group.items) {
+        if (item.kind === "game_menu_strips") {
+          if (typeof options?.expandGameMenuStrips !== "function") {
+            throw new Error(
+              "this stripedef uses 'game_menu_strips: true'; buildRom needs an " +
+              "async expandGameMenuStrips() option returning strip items"
+            );
+          }
+          const expanded = await options.expandGameMenuStrips();
+          for (const entry of expanded) {
+            items.push({
+              kind: "strip",
+              filename: String(entry.filename),
+              id: entry.id ? String(entry.id) : "",
+              frames: Number(entry.frames || 1),
+              radius: undefined,
+            });
+          }
+          continue;
+        }
+        items.push(item);
+      }
+
+      for (const item of items) {
         const sourceImage = await loadImage(item.filename, item);
         if (
           !sourceImage ||

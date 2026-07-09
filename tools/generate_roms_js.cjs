@@ -60,6 +60,40 @@ function decodePng(filename) {
   };
 }
 
+// Expand `game_menu_strips: true`: one strip per games/<group>/<name>/menu.png,
+// frame counts from each game's meta.json ("menu_frames"). Mirrors
+// tools/generate_roms.py's _game_menu_strip_items().
+function expandGameMenuStrips(folder) {
+  const items = [];
+  if (!fs.existsSync(GAMES_ROOT)) {
+    return items;
+  }
+  for (const group of fs.readdirSync(GAMES_ROOT).sort()) {
+    const groupDir = path.join(GAMES_ROOT, group);
+    if (!fs.statSync(groupDir).isDirectory()) {
+      continue;
+    }
+    for (const name of fs.readdirSync(groupDir).sort()) {
+      const menuPng = path.join(groupDir, name, "menu.png");
+      if (!fs.existsSync(menuPng)) {
+        continue;
+      }
+      let frames = 1;
+      const metaPath = path.join(groupDir, name, "meta.json");
+      if (fs.existsSync(metaPath)) {
+        const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+        frames = Number(meta.menu_frames || 1);
+      }
+      items.push({
+        filename: path.relative(folder, menuPng).split(path.sep).join("/"),
+        id: `${group}/${name}/menu.png`,
+        frames,
+      });
+    }
+  }
+  return items;
+}
+
 async function generateRomForFolder(folder) {
   const stripedefPath = path.join(folder, STRIPEDEF_FILENAME);
   const romName = romNameForFolder(folder);
@@ -70,6 +104,12 @@ async function generateRomForFolder(folder) {
   const inputFilenames = [stripedefPath];
   for (const group of palettegroups) {
     for (const item of group.items) {
+      if (item.kind === "game_menu_strips") {
+        for (const expanded of expandGameMenuStrips(folder)) {
+          inputFilenames.push(path.join(folder, expanded.filename));
+        }
+        continue;
+      }
       inputFilenames.push(path.join(folder, item.filename));
     }
   }
@@ -86,6 +126,7 @@ async function generateRomForFolder(folder) {
   const rom = await romBuilder.buildRom({
     palettegroups,
     loadImage: async (filename) => decodePng(path.join(folder, filename)),
+    expandGameMenuStrips: async () => expandGameMenuStrips(folder),
   });
   fs.mkdirSync(ROMS_FOLDER, { recursive: true });
   fs.writeFileSync(romFilename, Buffer.from(rom));
