@@ -125,8 +125,9 @@ emulator now understands both transports:
 - v2 `vs2_scene <nbytes>` command: scene/layer payload
 
 The first emulator milestone decodes v2 sprites and layers into the legacy
-render path. The next pass should split that adapter into a true v2 renderer
-with signed/fractional clipping and flip support.
+render path and now honors `flip_x` / `flip_y` in that adapter. The next pass
+should split that adapter into a true v2 renderer with signed/fractional
+clipping.
 
 ### Web Emulator
 
@@ -134,9 +135,9 @@ Add v2 decoding and rendering beside `web/led-render-core.js`, keeping the
 high-frequency bridge rule: pointer + length for frame payloads, not fresh
 Python byte objects.
 
-The web renderer has a parity fixture for the version-1 `vs2_scene` decoder.
-Next, extend those fixtures for flip, signed Y clipping, tilemaps, and bitmap
-layers.
+The web renderer has parity fixtures for the version-1 `vs2_scene` decoder and
+for `flip_x` / `flip_y`. Next, extend those fixtures for signed Y clipping,
+tilemaps, and bitmap layers.
 
 ## Suggested Milestones
 

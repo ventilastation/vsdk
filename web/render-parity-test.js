@@ -235,6 +235,29 @@ function runTests() {
     assert.deepEqual(getLedColor(pixels, 42, 53), [9, 8, 7, 255], "unlayered VS2 HUD sprite should use HUD projection");
   }
 
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [],
+      sprites: [
+        { layer: 255, image_strip: 8, frame: 0, mode: 2, flags: 1 | 2 | 4, x: 20, y: 51 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    const palette = createPalette({
+      1: [10, 0, 0],
+      2: [20, 0, 0],
+      3: [30, 0, 0],
+      4: [40, 0, 0],
+    });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 20, 2), [20, 0, 0, 255], "VS2 flip_x+flip_y should sample mirrored column/row");
+    assert.deepEqual(getLedColor(pixels, 20, 1), [10, 0, 0, 255], "VS2 flip_y should reverse source rows");
+    assert.deepEqual(getLedColor(pixels, 21, 2), [40, 0, 0, 255], "VS2 flip_x should mirror source columns");
+  }
+
   // Raw polar framebuffer path (Super Ventilagon / Voom "frame_rgb").
   {
     const rgb = new Uint8Array(COLUMNS * PIXELS * 3);

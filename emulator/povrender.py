@@ -92,6 +92,8 @@ def decode_vs2_scene(data):
             "image": image,
             "frame": frame,
             "perspective": mode,
+            "flip_x": bool(flags & 0x02),
+            "flip_y": bool(flags & 0x04),
         })
     return decoded
 
@@ -127,6 +129,14 @@ def get_visible_column(sprite_x, sprite_width, render_column):
         return sprite_column
     else:
         return -1
+
+def get_source_column(sprite_x, sprite_width, render_column, flip_x=False):
+    sprite_column = get_visible_column(sprite_x, sprite_width, render_column)
+    if sprite_column == -1:
+        return -1
+    if flip_x:
+        return sprite_width - 1 - sprite_column
+    return sprite_column
 
 def step_starfield():
     for (n, (x, y)) in enumerate(starfield):
@@ -176,6 +186,8 @@ def render(column):
                 "image": image,
                 "frame": frame,
                 "perspective": perspective,
+                "flip_x": False,
+                "flip_y": False,
             })
     else:
         scene_sprites = sorted(scene_sprites, key=lambda sprite: sprite["slot"], reverse=True)
@@ -186,6 +198,8 @@ def render(column):
         image = sprite["image"]
         frame = sprite["frame"]
         perspective = sprite["perspective"]
+        flip_x = sprite.get("flip_x", False)
+        flip_y = sprite.get("flip_y", False)
 
         strip = all_strips.get(image)
         if not strip:
@@ -197,34 +211,36 @@ def render(column):
 
         frame %= total_frames
 
-        visible_column = get_visible_column(int(x), w, column)
+        visible_column = get_source_column(int(x), w, column, flip_x)
         if visible_column != -1:
             base = visible_column * h + (frame * w * h)
             if perspective:
                 y_start = max(y, 0)
                 y_end = min(y + h, ROWS - 1)
-                clipped = max(-y, 0)
-                src = base + clipped
 
-                for y in range(y_start, y_end):
-                    index = pixeldata[src]
-                    src += 1
+                for dest_y in range(y_start, y_end):
+                    source_row = dest_y - y
+                    if flip_y:
+                        source_row = h - 1 - source_row
+                    index = pixeldata[base + source_row]
                     if index != TRANSPARENT_INDEX:
                         color = upalette[index + pal_base]
                         if perspective == 1:
-                            y = deepspace[y]
+                            led = deepspace[dest_y]
                         else:
-                            y = led_count - 1 - y
-                        if y < led_count:
-                            pixels[y] = color
+                            led = led_count - 1 - dest_y
+                        if led < led_count:
+                            pixels[led] = color
             else:
                 zleds = deepspace[255-y]
 
                 for led in range(zleds):
-                    src = led * led_count // zleds
-                    if src >= h:
+                    source_row = led * led_count // zleds
+                    if source_row >= h:
                         break
-                    index = pixeldata[base + h - 1 - src]
+                    if not flip_y:
+                        source_row = h - 1 - source_row
+                    index = pixeldata[base + source_row]
                     if index != TRANSPARENT_INDEX:
                         color = upalette[index + pal_base]
                         pixels[led] = color

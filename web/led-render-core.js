@@ -141,6 +141,24 @@
     return -1;
   }
 
+  function getSourceColumn(sprite, spriteWidth, renderColumn) {
+    const spriteColumn = getVisibleColumn(sprite.x || 0, spriteWidth, renderColumn);
+    if (spriteColumn === -1) {
+      return -1;
+    }
+    if (sprite?.vs2?.flip_x) {
+      return spriteWidth - 1 - spriteColumn;
+    }
+    return spriteColumn;
+  }
+
+  function getSourceRow(sprite, sourceRow, spriteHeight) {
+    if (sprite?.vs2?.flip_y) {
+      return spriteHeight - 1 - sourceRow;
+    }
+    return sourceRow;
+  }
+
   function getLedOffset(column, led) {
     if (column < 0 || column >= COLUMNS || led < 0 || led >= PIXELS) {
       return -1;
@@ -222,7 +240,7 @@
         const width = asset.width === 255 ? 256 : asset.width;
         const height = asset.height || 0;
         const totalFrames = Math.max(asset.frames || 1, 1);
-        const visibleColumn = getVisibleColumn(sprite.x || 0, width, renderColumn);
+        const visibleColumn = getSourceColumn(sprite, width, renderColumn);
         if (visibleColumn === -1 || height <= 0) {
           continue;
         }
@@ -232,12 +250,13 @@
         const paletteIndex = asset.palette || 0;
 
         if (sprite.perspective) {
-          const desde = Math.max(sprite.y || 0, 0);
-          const hasta = Math.min((sprite.y || 0) + height, 255);
-          let src = base + Math.max(-(sprite.y || 0), 0);
+          const spriteY = Math.trunc(sprite.y || 0);
+          const desde = Math.max(spriteY, 0);
+          const hasta = Math.min(spriteY + height, 255);
 
-          for (let y = desde; y < hasta; y += 1, src += 1) {
-            const colorIndex = asset.data[src];
+          for (let y = desde; y < hasta; y += 1) {
+            const sourceRow = getSourceRow(sprite, y - spriteY, height);
+            const colorIndex = asset.data[base + sourceRow];
             if (colorIndex === TRANSPARENT_INDEX) {
               continue;
             }
@@ -251,11 +270,14 @@
 
         const zleds = DEEPSPACE[255 - (sprite.y || 0)];
         for (let led = 0; led < zleds; led += 1) {
-          const src = Math.floor((led * PIXELS) / zleds);
-          if (src >= height) {
+          let sourceRow = Math.floor((led * PIXELS) / zleds);
+          if (sourceRow >= height) {
             break;
           }
-          const colorIndex = asset.data[base + height - 1 - src];
+          if (!sprite?.vs2?.flip_y) {
+            sourceRow = height - 1 - sourceRow;
+          }
+          const colorIndex = asset.data[base + sourceRow];
           if (colorIndex === TRANSPARENT_INDEX) {
             continue;
           }
