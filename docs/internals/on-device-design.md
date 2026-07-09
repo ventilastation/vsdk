@@ -111,9 +111,8 @@ assumes an LCD + SD card + the retro-go launcher. Do these in the app's
    card), but the data partition is LittleFS; without this, `fopen("/vfs/…")`
    returns ENOENT and ROM loading fails. Needs the `joltwallet/littlefs`
    dependency in the app's `idf_component.yml`.
-2. **Start the POV display** — `rg_vs_pov_set_tcp_bridge(NULL, NULL)`. The POV
-   driver's display task blocks until the mode is set; without this call no LEDs
-   light up (frames are computed but never driven onto the strip).
+2. **POV display** — starts on its own: the driver's display task brings up
+   the LED SPI bus as soon as `rg_vs_pov_init()` runs (no per-app call needed).
 3. **Read the ROM (and system) from NVS** — see §3, since there are no bootArgs.
 
 Config that the POV driver / audio bridge read from NVS (WiFi, `col_offset`)

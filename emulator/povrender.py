@@ -22,25 +22,17 @@ all_strips = {}
 qpalette = []
 upalette = []
 
-# Voom display bridge: set by comms.py when a "frame"/"frame_rgb" command arrives.
-# Indexed frame: 256 columns × led_count palette indices (bytes).
-# RGB frame: 256 columns × led_count × 3 bytes (R, G, B per LED).
-_voom_frame = None
+# Full-frame display path: set by comms.py when a "frame_rgb" command arrives
+# (the workbench's LED-bus capture, or a full-frame renderer like the
+# Ventilagon port). 256 columns × led_count × 3 bytes (R, G, B per LED).
 _voom_frame_rgb = None
 
-def set_voom_frame(data):
-    global _voom_frame, _voom_frame_rgb
-    _voom_frame = bytes(data)
-    _voom_frame_rgb = None
-
 def set_voom_frame_rgb(data):
-    global _voom_frame, _voom_frame_rgb
+    global _voom_frame_rgb
     _voom_frame_rgb = bytes(data)
-    _voom_frame = None
 
 def clear_voom_frame():
-    global _voom_frame, _voom_frame_rgb
-    _voom_frame = None
+    global _voom_frame_rgb
     _voom_frame_rgb = None
 
 def change_colors(colors):
@@ -86,11 +78,6 @@ def step_starfield():
 
 
 def render(column):
-    if _voom_frame is not None and upalette:
-        # Indexed voom frame: column N = led_count palette indices at offset N*led_count
-        offset = column * led_count
-        return [upalette[_voom_frame[offset + i]] for i in range(led_count)]
-
     if _voom_frame_rgb is not None:
         # RGB voom frame: column N = led_count × (R, G, B) triples
         # Reconstruct as ABGR uint32 to match the palette entry format used by upalette.

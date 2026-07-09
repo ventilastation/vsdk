@@ -31,8 +31,7 @@ are logged and ignored — hosts must tolerate commands they don't handle.
 | `sprites` | 500 bytes | full sprite table: 100 sprites × 5 bytes (x, y, strip, frame, perspective; frame 255 = hidden) |
 | `imagestrip <slot> <nbytes>` | `<nbytes>` | one image strip: 4-byte header (w, h, frames, palette) + pixels, same encoding as a ROM strip entry |
 | `palette <n> <version>` | `n × 1024` bytes | palette block, `n` palettes of 256 × 4-byte entries ([rom-format.md](rom-format.md)) |
-| `frame <count>` | 256 × 54 bytes | full indexed POV frame, column-major (used by native apps such as Voom) |
-| `frame_rgb <count>` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED) |
+| `frame_rgb` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED); sent by the workbench's LED-bus capture and by full-frame renderers such as the Ventilagon port |
 
 ## Audio
 
@@ -61,9 +60,10 @@ are logged and ignored — hosts must tolerate commands they don't handle.
 
 - **Desktop emulator, local simulation**: TCP to the MicroPython process
   (port 5005); named pipe on Windows.
-- **Desktop emulator, hardware mode**: display commands over TCP from the
-  workbench; audio/system commands over the workbench's USB serial bridge.
-  The dispatcher is shared, so every command is understood on either link.
+- **Desktop emulator, hardware mode**: `frame_rgb` over TCP from the
+  workbench's LED-bus capture; audio/system commands over the workbench's
+  USB serial bridge. The dispatcher is shared, so every command is
+  understood on either link.
 - **Web emulator**: the same commands cross the WASM bridge as pointer +
   length calls (`post_command_ptr`) rather than a socket — see
   [web-emulator-architecture.md](web-emulator-architecture.md).

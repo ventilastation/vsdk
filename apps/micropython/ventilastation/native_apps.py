@@ -139,10 +139,10 @@ class NativeLaunchScene(Scene):
         self.call_later(1, self._launch)
 
     def _launch(self):
-        # WiFi credentials (NVS voom_wifi) and pov_column_offset (NVS voom_pov) are
-        # already kept in NVS by dev-deploy and settings.py, so the native apps read
-        # them directly — no copy needed here. A native app that takes a ROM (e.g.
-        # the Mega Drive emulator) gets its path via NVS just before launch.
+        # pov_column_offset (NVS voom_pov) is already kept in NVS by settings.py,
+        # so the native POV driver reads it directly — no copy needed here. A native
+        # app that takes a ROM (e.g. the console emulators) gets its path via NVS
+        # just before launch.
         spec = get_app_spec(self.slug) or {}
         rom = spec.get("rom")
         system = spec.get("system")

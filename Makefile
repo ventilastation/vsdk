@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core voom-emulator flash-voom-emulator run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
 BAUD ?= 2000000
@@ -42,14 +42,6 @@ MICROPYTHON_ROOT ?= ./hardware/rotor/micropython
 MICROPYTHON_PORT_DIR := $(abspath $(MICROPYTHON_ROOT)/ports/esp32)
 RETRO_GO_DIR := ./apps/retro-go
 
-# POV firmware output mode for prboom-go / launcher (see RG_VS_ENABLE_TCP_BRIDGE):
-#   0 = drive the spinning LED strip over SPI (real hardware) -- the default
-#   1 = stream frames to the desktop emulator over TCP/WiFi (development)
-# The *-emulator targets below set this to 1; override manually with VOOM_TCP_BRIDGE=1.
-VOOM_TCP_BRIDGE ?= 0
-RG_TOOL_EXTRA_DEFINES = -DRG_VS_ENABLE_TCP_BRIDGE=$(VOOM_TCP_BRIDGE)
-export RG_TOOL_EXTRA_DEFINES
-
 # The board's USB-CDC serial port re-enumerates on reset, so concurrent flash
 # commands can interrupt each other mid-transfer. Use a host-side lock to
 # serialize any target that talks to the board over the flashing port.
@@ -70,7 +62,7 @@ rg-flash = $(SERIAL_LOCK) $(call idf-env,$(RETRO_GO_IDF_PATH),cd "$(RETRO_GO_DIR
 # Targets that talk to a board need PORT (or MAC, resolved above); targets
 # that provision WiFi also need credentials. Checked at parse time so the
 # failure is instant even under parallel make.
-PORT_TARGETS := flash-vsdk flash-voom flash-launcher flash-retro-core flash-voom-emulator flash-all deploy-fs workbench-flash workbench-monitor workbench-wifi-provision
+PORT_TARGETS := flash-vsdk flash-voom flash-launcher flash-retro-core flash-all deploy-fs workbench-flash workbench-monitor workbench-wifi-provision
 WIFI_TARGETS := dev-deploy workbench-wifi-provision
 ifneq ($(filter $(PORT_TARGETS),$(MAKECMDGOALS)),)
 ifeq ($(strip $(PORT)),)
@@ -132,26 +124,17 @@ retro-core:
 flash-retro-core: retro-core
 	$(call rg-flash,retro-core)
 
-# --- Voom desktop emulator dev loop ---
-# Build/flash prboom-go configured to stream POV frames to the desktop emulator
-# (RG_VS_ENABLE_TCP_BRIDGE=1), then run the emulator pointed at the board to display them.
-# Usage:
-#   make flash-voom-emulator PORT=/dev/ttyACM0     # build + flash emulator firmware
-#   make run-emulator BOARD_IP=192.168.1.42        # render the stream on the desktop
-# The board needs WiFi creds in NVS "voom_wifi" (provisioned via the MicroPython side
-# or `make dev-deploy`). After reset it prints its IP over USB serial.
-voom-emulator flash-voom-emulator: VOOM_TCP_BRIDGE = 1
-
-voom-emulator: voom
-
-flash-voom-emulator: flash-voom
-
+# --- Hardware dev loop via the workbench ---
+# The workbench captures the DUT's real LED SPI bus and streams the frames to
+# the desktop emulator over Wi-Fi (see docs/internals/workbench.md). BOARD_IP
+# defaults to the workbench's mDNS name when omitted.
 run-emulator:
 	cd emulator && python emu.py $(BOARD_IP) --remote
 
 # --- Voom sound assets ---
-# Pre-render Doom's WAD audio into system/voom/sounds/*.mp3 so the emulator (TCP)
-# and the hardware host (serial) can play the triggers Voom sends. SFX need only
+# Pre-render Doom's WAD audio into system/voom/sounds/*.mp3 so the host that
+# plays audio (the desktop emulator, or the base over serial) has the files
+# for the triggers Voom sends. SFX need only
 # ffmpeg; music needs a MIDI synth + soundfont (one-time: sudo apt install fluidsynth).
 # Re-run whenever the WAD changes.
 voom-sounds:
@@ -174,10 +157,11 @@ deploy-fs:
 #   make dev-emulator BOARD_IP=192.168.1.42
 #
 # After dev-deploy: reset the board — it will print its IP over USB serial.
+# Without BOARD_IP the emulator resolves the workbench via mDNS instead.
 # Run dev-emulator in one terminal, `mpremote connect PORT` in another for console.
 WIFI_SSID ?=
 WIFI_PASS ?=
-BOARD_IP ?= 192.168.1.1
+BOARD_IP ?=
 
 dev-deploy:
 	python3 ./tools/dev_deploy.py \

@@ -16,7 +16,7 @@ import struct
 import socket
 import threading
 from povrender import all_strips, set_palettes, spritedata
-from povrender import set_voom_frame, set_voom_frame_rgb, clear_voom_frame
+from povrender import set_voom_frame_rgb, clear_voom_frame
 from audio import playsound, playmusic, playnotes
 from emu_audio import emu_audio
 import upgrade_server
@@ -180,11 +180,7 @@ def dispatch_command(conn, command, args):
     docs/internals/workbench.md)."""
     global last_time_seen
 
-    if command == b"frame":
-        data = conn.read(256 * 54)
-        set_voom_frame(data)
-
-    elif command == b"frame_rgb":
+    if command == b"frame_rgb":
         data = conn.read(256 * 54 * 3)
         set_voom_frame_rgb(data)
 

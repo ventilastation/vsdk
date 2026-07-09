@@ -2,9 +2,8 @@
 
 Modes (see also config.py):
   (default)      run the local desktop MicroPython as the frame source and render it
-  --remote       connect to a real board (e.g. prboom-go streaming POV frames over
-                 TCP/WiFi via the workbench) and render the received frames here;
-                 no local MicroPython
+  --remote       connect to the hardware workbench and render the POV frames it
+                 captures from the real board; no local MicroPython
   --no-display   connect to a real board for button input only; render nothing
                  (the physical spinning LEDs are the display)
 """
