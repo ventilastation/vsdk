@@ -13,7 +13,6 @@ The rotor firmware in `vsdk` is built as:
 
 Relevant files:
 
-- `hardware/rotor/build.sh`
 - `hardware/rotor/modules/micropython.cmake`
 - `hardware/rotor/modules/povdisplay/povdisplay.c`
 - `apps/micropython/ventilastation/native_apps.py`
@@ -85,8 +84,6 @@ This is a direct launcher hook even though the actual app is still a separate fi
 - partition layout: `hardware/rotor/partitions-voom.csv`
 - image builder: `hardware/rotor/build_voom_image.py`
 - flash helper: `hardware/rotor/flash_voom_image.py`
-- convenience entrypoint: `hardware/rotor/build.sh voom-image`
-- convenience entrypoint: `hardware/rotor/build.sh voom-flash`
 
 That image layout is:
 
@@ -134,13 +131,6 @@ To rebuild and flash in one step:
 ```sh
 cd hardware/rotor
 python3 flash_voom_image.py --build --port /dev/cu.usbmodemXXXX
-```
-
-Or through the shell entrypoint:
-
-```sh
-cd hardware/rotor
-./build.sh voom-flash --build --port /dev/cu.usbmodemXXXX
 ```
 
 ## Launcher Entry
