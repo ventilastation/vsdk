@@ -28,8 +28,15 @@ class MemoryStorage:
 
 
 class RuntimeContext:
-    def __init__(self, platform):
+    """The one place that holds the configured platform and director.
+
+    director.configure_runtime() creates it; everything else reads it
+    through get_runtime()/get_platform()/get_director().
+    """
+
+    def __init__(self, platform, director=None):
         self.platform = platform
+        self.director = director
 
 
 _runtime = None
@@ -46,8 +53,19 @@ def get_runtime():
     return _runtime
 
 
+def peek_runtime():
+    return _runtime
+
+
 def get_platform():
     return get_runtime().platform
+
+
+def get_director():
+    director = get_runtime().director
+    if director is None:
+        raise RuntimeError("Ventilastation runtime has no director")
+    return director
 
 
 def clear_runtime():

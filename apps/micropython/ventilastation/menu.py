@@ -1,7 +1,7 @@
 import sys
 from ventilastation.director import director, stripes
 from ventilastation.scene import Scene
-from ventilastation.sprites import Sprite, reset_sprites
+from ventilastation.sprites import Sprite
 
 class MenuSprite(Sprite):
     pass
@@ -9,7 +9,7 @@ class MenuSprite(Sprite):
 class Menu(Scene):
 
     def __init__(self, options, selected_index=0):
-        """Where options is a list of: (option id, strip id, frame, width)"""
+        """Where options is a list of (option id, strip name, frame) tuples."""
 
         super(Menu, self).__init__()
         self.options = options[:]

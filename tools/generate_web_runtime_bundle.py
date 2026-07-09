@@ -10,6 +10,26 @@ MANIFEST_PATH = ROOT_DIR / "web" / "runtime-manifest.json"
 BUNDLE_PATH = ROOT_DIR / "web" / "runtime-bundle.json"
 
 
+def iter_python_sources():
+    """Auto-discover the Python files the browser runtime needs, so nobody
+    has to hand-edit the manifest when a module is added, moved, or removed."""
+    yield "apps/micropython/main.py"
+    yield "apps/micropython/manifest.py"
+    package_dir = ROOT_DIR / "apps" / "micropython" / "ventilastation"
+    for path in sorted(package_dir.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        yield path.relative_to(ROOT_DIR).as_posix()
+    for root_name in ("games", "system"):
+        root_dir = ROOT_DIR / root_name
+        if not root_dir.is_dir():
+            continue
+        for path in sorted(root_dir.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            yield path.relative_to(ROOT_DIR).as_posix()
+
+
 def iter_workspace_asset_sources():
     for root_name in ("games", "system"):
         root_dir = ROOT_DIR / root_name
@@ -41,6 +61,12 @@ def build_manifest_file_list(existing_files):
             continue
         seen.add(normalized)
         ordered.append(normalized)
+
+    for relative_path in iter_python_sources():
+        if relative_path in seen:
+            continue
+        seen.add(relative_path)
+        ordered.append(relative_path)
 
     for relative_path in sorted(iter_workspace_asset_sources()):
         if relative_path in seen:

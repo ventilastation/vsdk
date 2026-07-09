@@ -7,18 +7,31 @@ import utime
 
 from ventilastation import settings
 from ventilastation.platforms import create_platform
-from ventilastation.runtime import RuntimeContext, clear_runtime, get_platform, set_runtime
+from ventilastation.runtime import (
+    RuntimeContext,
+    clear_runtime,
+    get_director,
+    get_platform,
+    peek_runtime,
+    set_runtime,
+)
 
 DEBUG = False
-INPUT_TIMEOUT = 30 * 1000  # 30 segundos de inactividad, mostrar las instrucciones para empezar a jugar
+INPUT_TIMEOUT = 30 * 1000  # after 30s without input, show the how-to-play attract screens
 PIXELS = 54
 stripes = {}
 TRACE_AUTO_GC_FRAME = 32
 
 
 class _DirectorProxy:
+    """Module-level handle that always resolves to the configured Director.
+
+    Lets app code do `from ventilastation.director import director` once,
+    even though the Director itself is created later by configure_runtime().
+    """
+
     def __getattr__(self, name):
-        return getattr(_director_instance(), name)
+        return getattr(get_director(), name)
 
 
 class _CommsProxy:
@@ -143,11 +156,11 @@ class Director:
             self._report_exception(error, "on_exit", scene)
             raise
 
-    def push(self, scene):
-        previous = self.scene_stack[-1] if self.scene_stack else None
-        if previous:
-            self._exit_scene(previous)
-        self.scene_stack.append(scene)
+    def _enter_top_scene(self):
+        """Enter the scene on top of the stack; on failure pop it and try to
+        re-enter the scene below (popping that one too if it also fails),
+        then re-raise."""
+        scene = self.scene_stack[-1]
         self.platform.sprites.reset_sprites()
         gc.collect()
         try:
@@ -155,13 +168,20 @@ class Director:
         except Exception:
             self.scene_stack.pop()
             self.platform.sprites.reset_sprites()
-            if previous:
+            if self.scene_stack:
                 try:
                     gc.collect()
-                    self._enter_scene(previous)
+                    self._enter_scene(self.scene_stack[-1])
                 except Exception:
                     self.scene_stack.pop()
             raise
+
+    def push(self, scene):
+        previous = self.scene_stack[-1] if self.scene_stack else None
+        if previous:
+            self._exit_scene(previous)
+        self.scene_stack.append(scene)
+        self._enter_top_scene()
 
     def pop(self):
         scene = self.scene_stack.pop()
@@ -347,20 +367,7 @@ class Director:
         now = utime.ticks_ms()
 
         if not getattr(scene, "_vs_entered", False):
-            self.platform.sprites.reset_sprites()
-            gc.collect()
-            try:
-                self._enter_scene(scene)
-            except Exception:
-                self.scene_stack.pop()
-                self.platform.sprites.reset_sprites()
-                if self.scene_stack:
-                    try:
-                        gc.collect()
-                        self._enter_scene(self.scene_stack[-1])
-                    except Exception:
-                        self.scene_stack.pop()
-                raise
+            self._enter_top_scene()
 
         val = self.platform.comms.receive(1)
         if val:
@@ -414,30 +421,21 @@ class Director:
                 utime.sleep_ms(delay)
 
 
-def _director_instance():
-    runtime = director.__dict__.get("_runtime")
-    if runtime is None:
-        raise RuntimeError("Ventilastation runtime has not been configured")
-    return runtime
-
-
 def configure_runtime(platform_name=None, argv=None, environ=None):
     platform = create_platform(platform_name, argv, environ)
-    set_runtime(RuntimeContext(platform))
+    context = RuntimeContext(platform)
+    set_runtime(context)
     platform.initialize(settings)
-    runtime_director = Director(platform)
-    director._runtime = runtime_director
-    return runtime_director
+    context.director = Director(platform)
+    return context.director
 
 
 def ensure_runtime(platform_name=None, argv=None, environ=None):
-    runtime_director = director.__dict__.get("_runtime")
-    if runtime_director is not None:
-        return runtime_director
+    context = peek_runtime()
+    if context is not None and context.director is not None:
+        return context.director
     return configure_runtime(platform_name, argv, environ)
 
 
 def reset_runtime():
-    if "_runtime" in director.__dict__:
-        del director._runtime
     clear_runtime()

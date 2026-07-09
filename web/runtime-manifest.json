@@ -1269,6 +1269,16 @@
     "system/voom/sounds/victor.mp3.wav",
     "system/voom/sounds/wpnup.mp3",
     "system/voom/sounds/wpnup.mp3.wav",
-    "system/menu/images/megadrive.png"
+    "system/menu/images/megadrive.png",
+    "apps/micropython/ventilastation/compat.py",
+    "apps/micropython/ventilastation/input_parser.py",
+    "apps/micropython/ventilastation/native_apps.py",
+    "apps/micropython/ventilastation/platforms/base.py",
+    "apps/micropython/ventilastation/platforms/browser.py",
+    "apps/micropython/ventilastation/platforms/desktop.py",
+    "apps/micropython/ventilastation/platforms/hardware.py",
+    "apps/micropython/ventilastation/platforms/headless.py",
+    "apps/micropython/ventilastation/updater.py",
+    "system/menu/images/src/make_voom_menu.py"
   ]
 }

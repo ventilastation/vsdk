@@ -1,8 +1,5 @@
 import gc
-try:
-    import utime as _time
-except ImportError:
-    import time as _time
+from ventilastation.compat import ticks_diff_us as _ticks_diff_us, ticks_us as _ticks_us
 
 from ventilastation.runtime import get_platform
 
@@ -20,21 +17,6 @@ _export_profile_totals = {
 }
 
 
-def _ticks_us():
-    ticks_us = getattr(_time, "ticks_us", None)
-    if ticks_us is not None:
-        return ticks_us()
-    perf_counter = getattr(_time, "perf_counter", None)
-    if perf_counter is not None:
-        return int(perf_counter() * 1000000)
-    return 0
-
-
-def _ticks_diff_us(end, start):
-    ticks_diff = getattr(_time, "ticks_diff", None)
-    if ticks_diff is not None:
-        return ticks_diff(end, start)
-    return end - start
 
 
 def _browser_platform():
