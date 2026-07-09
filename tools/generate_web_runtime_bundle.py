@@ -53,6 +53,14 @@ def iter_workspace_asset_sources():
                 yield relative_path
 
 
+def iter_rom_sources():
+    roms_dir = ROOT_DIR / "apps" / "micropython" / "roms"
+    if not roms_dir.is_dir():
+        return
+    for path in sorted(roms_dir.glob("*.rom")):
+        yield path.relative_to(ROOT_DIR).as_posix()
+
+
 def build_manifest_file_list(existing_files):
     ordered = []
     seen = set()
@@ -73,6 +81,12 @@ def build_manifest_file_list(existing_files):
         ordered.append(relative_path)
 
     for relative_path in sorted(iter_workspace_asset_sources()):
+        if relative_path in seen:
+            continue
+        seen.add(relative_path)
+        ordered.append(relative_path)
+
+    for relative_path in iter_rom_sources():
         if relative_path in seen:
             continue
         seen.add(relative_path)
