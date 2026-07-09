@@ -150,8 +150,13 @@ void gpu_step() {
         int64_t t_start = esp_timer_get_time();
 #endif
         spi_write_HSPI();
-        render((column + COLUMNS/2) % COLUMNS, draw_buffer0);
-        render(column, draw_buffer1);
+        if (vs2_render_active) {
+            render_vs2((column + COLUMNS/2) % COLUMNS, draw_buffer0, &vs2_active_scene);
+            render_vs2(column, draw_buffer1, &vs2_active_scene);
+        } else {
+            render((column + COLUMNS/2) % COLUMNS, draw_buffer0);
+            render(column, draw_buffer1);
+        }
 
         // need to wait for spi to finish before overwriting the buffers, because the DMA is reading from them
         spiWaitComplete();

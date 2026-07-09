@@ -41,6 +41,10 @@ _next_sprite_order = 0
 _scratch_sprites = []
 
 
+def _vs2_backend():
+    return getattr(get_platform(), "vs2", None)
+
+
 def _render_coord(value, minimum=0, maximum=255):
     try:
         ivalue = int(value)
@@ -51,6 +55,24 @@ def _render_coord(value, minimum=0, maximum=255):
     if ivalue > maximum:
         return maximum
     return ivalue
+
+
+def _floor_coord(value):
+    try:
+        ivalue = int(value)
+    except TypeError:
+        return 0
+    if value < ivalue:
+        return ivalue - 1
+    return ivalue
+
+
+def _wrap_x_coord(value):
+    return _floor_coord(value) % 256
+
+
+def _clip_y_coord(value):
+    return _render_coord(_floor_coord(value), 0, 255)
 
 
 def _resolve_strip(strip):
@@ -237,15 +259,24 @@ class Scene(_Scene):
 
     def on_enter(self):
         global _active_scene
+        backend = _vs2_backend()
+        if backend is not None:
+            backend.reset_scene()
+            backend.set_active(True)
         _active_scene = self
         super().on_enter()
 
     def on_exit(self):
         global _active_scene
+        backend = _vs2_backend()
+        if backend is not None:
+            backend.set_active(False)
         if _active_scene is self:
             _active_scene = None
         _remove_scene_sprites(self)
         self._vs2_payload = None
+        if backend is not None:
+            backend.reset_scene()
         super().on_exit()
 
     def layer(self, name=None, mode=TUNNEL, visible=True):
@@ -260,9 +291,22 @@ class Layer:
         _claim()
         self.name = name
         self.scene = None
-        self.mode = mode
-        self.visible = visible
+        self._mode = mode
+        self._visible = visible
         self.sprites = []
+        backend = _vs2_backend()
+        if backend is not None:
+            self._layer = backend.Layer(mode=mode, visible=visible)
+        else:
+            self._layer = None
+
+    def _sync_mode(self):
+        if self._layer is not None:
+            self._layer.set_mode(_render_coord(self._mode, 0, 2))
+
+    def _sync_visible(self):
+        if self._layer is not None:
+            self._layer.set_visible(self._visible)
 
     def add(self, sprite):
         if sprite not in self.sprites:
@@ -283,6 +327,26 @@ class Layer:
         for sprite in list(self.sprites):
             self.remove(sprite)
 
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, value):
+        self._mode = value
+        self._sync_mode()
+        for sprite in self.sprites:
+            sprite.mode = value
+
+    @property
+    def visible(self):
+        return self._visible
+
+    @visible.setter
+    def visible(self, value):
+        self._visible = bool(value)
+        self._sync_visible()
+
 
 class Sprite:
     def __init__(
@@ -299,10 +363,16 @@ class Sprite:
         replacing=None,
     ):
         _claim()
-        backend = get_platform().sprites
+        backend = _vs2_backend()
+        if backend is None:
+            backend = get_platform().sprites
         if replacing is not None:
-            replacing = replacing._sprite
-        self._sprite = backend.Sprite(replacing=replacing)
+            self._sprite = backend.Sprite(replacing=replacing._sprite)
+        else:
+            self._sprite = backend.Sprite()
+        self._uses_fixed_coords = hasattr(self._sprite, "set_x_fixed")
+        self._has_flags = hasattr(self._sprite, "set_flags")
+        self._has_layer = hasattr(self._sprite, "set_layer")
         self._strip = None
         self._x = x
         self._y = y
@@ -316,7 +386,7 @@ class Sprite:
         self._visible = bool(visible)
         self._flip_x = bool(flip_x)
         self._flip_y = bool(flip_y)
-        self.layer = None
+        self._layer = None
         self._scene = _active_scene
         _register_sprite(self)
         if layer is not None:
@@ -328,23 +398,38 @@ class Sprite:
     def _sync_all(self):
         self._sync_mode()
         self._sync_position()
+        self._sync_layer()
+        self._sync_flags()
         self._sync_frame()
 
     def _sync_position(self):
-        # The compatibility renderer cannot represent negative or fractional
-        # coordinates yet; keep the real v2 values locally and publish a clipped
-        # integer view to the old sprite table.
-        self._sprite.set_x(_render_coord(self._x, 0, 255))
-        self._sprite.set_y(_render_coord(self._y, 0, 255))
+        if self._uses_fixed_coords:
+            self._sprite.set_x_fixed(_fixed_8_8(self._x))
+            self._sprite.set_y_fixed(_fixed_8_8(self._y))
+        else:
+            self._sprite.set_x(_wrap_x_coord(self._x))
+            self._sprite.set_y(_clip_y_coord(self._y))
 
     def _sync_frame(self):
-        if self._visible:
+        if self._uses_fixed_coords:
+            self._sprite.set_frame(_render_coord(self._frame, 0, 254))
+        elif self._visible:
             self._sprite.set_frame(_render_coord(self._frame, 0, 254))
         else:
             self._sprite.set_frame(255)
 
     def _sync_mode(self):
         self._sprite.set_perspective(_render_coord(self._mode, 0, 2))
+
+    def _sync_flags(self):
+        if self._has_flags:
+            self._sprite.set_flags(_sprite_flags(self))
+
+    def _sync_layer(self):
+        if not self._has_layer:
+            return
+        layer = self._layer
+        self._sprite.set_layer(layer._layer if layer is not None else None)
 
     @property
     def x(self):
@@ -372,6 +457,7 @@ class Sprite:
     def frame(self, value):
         self._frame = value
         self._visible = True
+        self._sync_flags()
         self._sync_frame()
 
     @property
@@ -400,6 +486,7 @@ class Sprite:
     @visible.setter
     def visible(self, value):
         self._visible = bool(value)
+        self._sync_flags()
         self._sync_frame()
 
     @property
@@ -409,6 +496,7 @@ class Sprite:
     @flip_x.setter
     def flip_x(self, value):
         self._flip_x = bool(value)
+        self._sync_flags()
 
     @property
     def flip_y(self):
@@ -417,6 +505,16 @@ class Sprite:
     @flip_y.setter
     def flip_y(self, value):
         self._flip_y = bool(value)
+        self._sync_flags()
+
+    @property
+    def layer(self):
+        return self._layer
+
+    @layer.setter
+    def layer(self, value):
+        self._layer = value
+        self._sync_layer()
 
     @property
     def width(self):

@@ -198,7 +198,7 @@ function runTests() {
     assert.equal(decoded.version, 1);
     assert.equal(decoded.layers.length, 2);
     assert.equal(decoded.sprites.length, 1);
-    assert.equal(decoded.sprites[0].x, 42);
+    assert.equal(decoded.sprites[0].x, 42.5);
     assert.equal(decoded.sprites[0].vs2.x, 42.5);
     assert.equal(decoded.sprites[0].vs2.flip_x, true);
 
@@ -256,6 +256,32 @@ function runTests() {
     assert.deepEqual(getLedColor(pixels, 20, 2), [20, 0, 0, 255], "VS2 flip_x+flip_y should sample mirrored column/row");
     assert.deepEqual(getLedColor(pixels, 20, 1), [10, 0, 0, 255], "VS2 flip_y should reverse source rows");
     assert.deepEqual(getLedColor(pixels, 21, 2), [40, 0, 0, 255], "VS2 flip_x should mirror source columns");
+  }
+
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [],
+      sprites: [
+        { layer: 255, image_strip: 8, frame: 0, mode: 2, flags: 1, x: -0.25, y: -0.25 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    assert.equal(decoded.sprites[0].x, -0.25);
+    assert.equal(decoded.sprites[0].y, -0.25);
+
+    const palette = createPalette({
+      1: [10, 0, 0],
+      2: [20, 0, 0],
+      3: [30, 0, 0],
+      4: [40, 0, 0],
+    });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 0, 53), [20, 0, 0, 255], "VS2 x/y=-0.25 should floor and clip vertically");
+    assert.deepEqual(getLedColor(pixels, 1, 53), [0, 0, 0, 255], "VS2 fractional X should occupy only its wrapped sprite columns");
+    assert.deepEqual(getLedColor(pixels, 255, 53), [40, 0, 0, 255], "VS2 negative X should wrap around the circular display");
   }
 
   // Raw polar framebuffer path (Super Ventilagon / Voom "frame_rgb").

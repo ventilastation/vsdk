@@ -91,14 +91,34 @@ The long-term renderer-facing model is:
   crop rectangle, and optional text backing.
 - Bitmap layers own a 240 x 240 8-bit paletted buffer with a transparent color.
 
-The branch now has the first concrete payload for this model:
-`vs2.export_scene_payload(scene)` emits a `VS2\0` version-1 byte buffer with
+The branch now has the first concrete scene memory format for this model:
+`vs2.export_scene_payload(scene)` maintains a `VS2\0` version-1 byte buffer with
 layer records and sprite records. Sprite coordinates are signed 8.8
-fixed-point integers. The desktop and web emulators understand the
-`vs2_scene <nbytes>` command and adapt visible v2 sprites into the existing
+fixed-point integers. The desktop and web emulators receive that buffer through
+the `vs2_scene <nbytes>` command and adapt visible v2 sprites into the existing
 sprite renderer shape while richer native v2 renderers are built.
-The exporter reuses a per-scene byte buffer and scratch sprite list so the web
-MicroPython runtime does not allocate a fresh scene payload every frame.
+
+Important: the byte buffer is a compatibility/transport view, not a license to
+copy scene state on the hot path. The exporter reuses a per-scene byte buffer
+and scratch sprite list so the web MicroPython runtime does not allocate a fresh
+scene payload every frame.
+
+## Memory Ownership Rule
+
+Ventilastation runs on MicroPython and a memory-constrained ESP32-S3, so VS2
+must follow the same design instinct as the original sprite API:
+
+- Share stable MicroPython-managed memory with C wherever possible.
+- Pass pointers plus lengths or expose native objects; do not copy frame state
+  into new buffers every render tick.
+- Allocate objects during scene setup, not in `step()` or `gpu_step()`.
+- Reuse bytearrays, memoryviews, scratch lists, and native structs across frames.
+- Treat copied payloads as host/emulator transport boundaries only. On hardware,
+  C should render directly from the live shared records.
+
+This matches the v1 sprite table, where MicroPython and the C renderer share the
+same native sprite objects, and the web emulator's pointer-posting rule from
+`web-emulator-architecture.md`.
 
 ## Renderer Work
 
@@ -114,8 +134,16 @@ Recommended shape:
 - Add `render_vs2()` for v2 scene/layer state.
 - Move shared color finishing/gamma helpers behind small functions so both
   renderers use the same LED output path.
-- Add a v2 memory module, separate from `sprites.c`, that owns the v2 scene
-  state and exposes a MicroPython module for `vs2`.
+- Add a v2 memory module, separate from `sprites.c`, that exposes MicroPython
+  native types or fixed bytearray-backed records for `vs2`. Python should create
+  and mutate those records directly; C should keep pointers to the same memory
+  and render from it without per-frame copies.
+- Keep object lifetimes explicit: scene-owned arrays/lists remain alive while
+  the scene is active, and the active scene pointer is cleared on exit before
+  those objects can be collected.
+- If a compact exported payload is still needed for desktop/web hosts, keep it
+  as a reused transport buffer derived from the live records, not as the primary
+  hardware state.
 - Starfield becomes an explicit layer/effect or a display flag, default off.
 
 ### Desktop Emulator
@@ -126,10 +154,12 @@ emulator now understands both transports:
 - legacy `sprites` command: current 500-byte table
 - v2 `vs2_scene <nbytes>` command: scene/layer payload
 
-The first emulator milestone decodes v2 sprites and layers into the legacy
-render path and now honors `flip_x` / `flip_y` in that adapter. The next pass
-should split that adapter into a true v2 renderer with signed/fractional
-clipping.
+The desktop emulator understands the v2 payload as a native render path. VS2
+sprites keep signed 8.8 coordinates through decode, floor fractional positions
+onto the pixel grid, and preserve the circular X-axis wrapping behavior from
+v1 (`256 == 0`, `-1 == 255`). Y coordinates remain signed and clip vertically.
+The parity tests cover `flip_x` / `flip_y`, unlayered modes, and negative
+quarter-pixel X wrapping with vertical clipping.
 
 ### Web Emulator
 
@@ -137,25 +167,58 @@ Add v2 decoding and rendering beside `web/led-render-core.js`, keeping the
 high-frequency bridge rule: pointer + length for frame payloads, not fresh
 Python byte objects.
 
-The web renderer has parity fixtures for the version-1 `vs2_scene` decoder and
-for `flip_x` / `flip_y`. Next, extend those fixtures for signed Y clipping,
-tilemaps, and bitmap layers.
+The web renderer has parity fixtures for the version-1 `vs2_scene` decoder,
+`flip_x` / `flip_y`, unlayered modes, signed/fractional Y clipping, and
+circular X wrapping. Next, extend those fixtures for tilemaps and bitmap layers.
 The browser bridge posts the cached `vs2_scene` payload through the pointer
 path to avoid creating Python byte objects each frame.
+
+Future optimization: once the v2 renderer path is fully native in both
+emulators, VS2 scenes should post only the v2 frame data instead of also
+posting the legacy sprite table. Legacy scenes should continue posting only the
+v1 frame data. This is not currently a correctness issue because both paths use
+pointer posting, but removing the redundant payload will reduce per-frame bridge
+and renderer work.
 
 ## Suggested Milestones
 
 1. API skeleton and guard: `vs2.py`, app metadata, tooling inclusion, docs.
 2. Vyruss pilot copy: port to `vs2`, distinct menu icon, compile check.
-3. v2 memory schema: fixed-point signed coordinates, flags, layers, drawables.
-   Initial `vs2_scene` payload is in place.
-4. v2 hardware module: native MicroPython types and `render_vs2()`.
+3. v2 shared-memory schema: fixed-point signed coordinates, flags, layers,
+   drawables, and reused host transport payload. Initial `vs2_scene` payload is
+   in place.
+4. v2 hardware module: native MicroPython/shared records and `render_vs2()`,
+   with no per-frame scene copies.
 5. Desktop v2 renderer and parity tests.
 6. Web v2 renderer and parity tests.
 7. Tilemap support.
 8. Bitmap-backed orthogonal layer support.
 9. Palette quantization preservation.
 10. Deprecation warning path for legacy game docs and, later, runtime use.
+
+## Hardware Renderer Status
+
+The rotor module now has first-pass native v2 scene structs and a `render_vs2()`
+entry point beside the legacy `render()` path. The function accepts signed 8.8
+sprite coordinates, layer visibility/mode overrides, and flip flags, then uses
+the same palette, image strip, starfield, and gamma output conventions as the
+legacy renderer.
+
+The hardware platform now exposes a native `vshw_vs2` module. `vs2.Layer` and
+`vs2.Sprite` create MicroPython native objects whose embedded C records are the
+records read by `render_vs2()`. `gpu_step()` selects `render_vs2()` only while a
+VS2 scene is active; legacy scenes continue to use `render()`. This keeps the
+v1 and v2 APIs parallel without copying a scene into a second C-owned frame
+buffer on every tick.
+
+Current lifecycle rule: create VS2 layers and sprites from `Scene.on_enter()`
+or another scene setup path after `super().on_enter()` has reset and activated
+the native VS2 table. `Scene.on_exit()` deactivates the VS2 renderer and clears
+the native pointer table before returning to legacy system scenes. VS2 sprites
+and layers do not survive across scene visibility lifetimes; games should
+recreate them each time the scene is shown. This keeps ownership clear and
+matches the memory model: allocate during scene setup, share records while the
+scene is active, and release them on scene exit.
 
 ## Deprecation Policy
 

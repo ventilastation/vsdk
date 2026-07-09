@@ -56,6 +56,14 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertEqual(sprite._sprite._state["frame"], 3)
         self.assertEqual(sprite._sprite._state["perspective"], vs2.HUD)
 
+        sprite.x = -0.25
+        self.assertEqual(sprite.x, -0.25)
+        self.assertEqual(sprite._sprite._state["x"], 255)
+
+        sprite.x = 256.25
+        self.assertEqual(sprite.x, 256.25)
+        self.assertEqual(sprite._sprite._state["x"], 0)
+
         sprite.hide()
         self.assertFalse(sprite.visible)
         self.assertEqual(sprite._sprite._state["frame"], 255)
@@ -72,6 +80,30 @@ class Vs2ApiTests(unittest.TestCase):
         sprite.frame = 0
         self.assertTrue(sprite.visible)
         self.assertEqual(sprite._sprite._state["frame"], 0)
+
+    def test_sprite_constructor_omits_replacing_when_not_replacing(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        original_sprite_type = director.platform.sprites.Sprite
+        sentinel = object()
+        calls = []
+
+        class StrictSprite(original_sprite_type):
+            def __init__(self, replacing=sentinel):
+                calls.append(replacing)
+                if replacing is None:
+                    raise AssertionError("replacing=None should be omitted")
+                super().__init__(replacing=None if replacing is sentinel else replacing)
+
+        director.platform.sprites.Sprite = StrictSprite
+
+        sprite = vs2.Sprite()
+        replacement = vs2.Sprite(replacing=sprite)
+
+        self.assertIs(calls[0], sentinel)
+        self.assertIs(calls[1], sprite._sprite)
+        self.assertIs(replacement._sprite._state, sprite._sprite._state)
 
     def test_explicit_constructor_frame_shows_unless_visibility_overridden(self):
         api_guard.begin_app("games.test_vs2", "vs2")
@@ -99,6 +131,104 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertEqual(sprite.mode, vs2.HUD)
         self.assertIn(sprite, layer.sprites)
         self.assertIn(layer, scene.layers)
+
+    def test_native_backend_receives_live_fixed_point_records(self):
+        class NativeLayer:
+            def __init__(self, mode=1, visible=True):
+                self.mode = mode
+                self.visible = visible
+
+            def set_mode(self, mode):
+                self.mode = mode
+
+            def set_visible(self, visible):
+                self.visible = visible
+
+        class NativeSprite:
+            def __init__(self, replacing=None):
+                self.replacing = replacing
+                self.x_fixed = None
+                self.y_fixed = None
+                self.frame = None
+                self.strip = None
+                self.mode = None
+                self.flags = None
+                self.layer = None
+
+            def set_x_fixed(self, value):
+                self.x_fixed = value
+
+            def set_y_fixed(self, value):
+                self.y_fixed = value
+
+            def set_frame(self, value):
+                self.frame = value
+
+            def set_strip(self, value):
+                self.strip = value
+
+            def set_perspective(self, value):
+                self.mode = value
+
+            def set_flags(self, value):
+                self.flags = value
+
+            def set_layer(self, value):
+                self.layer = value
+
+            def width(self):
+                return 8
+
+            def height(self):
+                return 8
+
+        class NativeVs2:
+            Layer = NativeLayer
+            Sprite = NativeSprite
+
+            def __init__(self):
+                self.reset_count = 0
+                self.active = []
+
+            def reset_scene(self):
+                self.reset_count += 1
+
+            def set_active(self, active):
+                self.active.append(active)
+
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        native = NativeVs2()
+        director.platform.vs2 = native
+
+        scene = vs2.Scene()
+        scene.on_enter()
+        layer = scene.layer("hud", mode=vs2.HUD)
+        sprite = layer.add(vs2.Sprite(7, x=-0.25, y=12.5, frame=3, flip_x=True))
+
+        self.assertEqual(native.reset_count, 1)
+        self.assertEqual(native.active, [True])
+        self.assertIs(sprite._sprite.layer, layer._layer)
+        self.assertEqual(sprite._sprite.x_fixed, -64)
+        self.assertEqual(sprite._sprite.y_fixed, 3200)
+        self.assertEqual(sprite._sprite.strip, 7)
+        self.assertEqual(sprite._sprite.mode, vs2.HUD)
+        self.assertEqual(sprite._sprite.frame, 3)
+        self.assertEqual(sprite._sprite.flags & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
+        self.assertEqual(sprite._sprite.flags & vs2.FLAG_FLIP_X, vs2.FLAG_FLIP_X)
+
+        sprite.visible = False
+        self.assertEqual(sprite._sprite.frame, 3)
+        self.assertFalse(sprite._sprite.flags & vs2.FLAG_VISIBLE)
+
+        sprite.frame = 4
+        self.assertEqual(sprite._sprite.frame, 4)
+        self.assertEqual(sprite._sprite.flags & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
+
+        scene.on_exit()
+        self.assertEqual(native.active, [True, False])
+        self.assertEqual(native.reset_count, 2)
 
     def test_declared_vs2_rejects_legacy_sprites(self):
         api_guard.begin_app("games.test_vs2", "vs2")

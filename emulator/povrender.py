@@ -6,6 +6,7 @@ fills from the wire protocol, and renders one 54-pixel LED column at a time
 """
 
 import random
+import math
 from struct import pack, unpack, unpack_from
 
 from deepspace import deepspace, PIXELS
@@ -87,7 +88,7 @@ def decode_vs2_scene(data):
             mode = layer["mode"]
         decoded.append({
             "slot": slot,
-            "x": (x_fixed / 256.0) % COLUMNS,
+            "x": x_fixed / 256.0,
             "y": y_fixed / 256.0,
             "image": image,
             "frame": frame,
@@ -138,6 +139,20 @@ def get_source_column(sprite_x, sprite_width, render_column, flip_x=False):
         return sprite_width - 1 - sprite_column
     return sprite_column
 
+def _floor_coord(value):
+    return int(math.floor(value))
+
+def _clamp(value, minimum, maximum):
+    if value < minimum:
+        return minimum
+    if value > maximum:
+        return maximum
+    return value
+
+def set_pixel(pixels, led, color):
+    if 0 <= led < led_count:
+        pixels[led] = color
+
 def step_starfield():
     for (n, (x, y)) in enumerate(starfield):
         y -= 1
@@ -172,6 +187,7 @@ def render(column):
                 print(y, deepspace)
 
     scene_sprites = vs2_scene_sprites
+    use_vs2_renderer = scene_sprites is not None
     if scene_sprites is None:
         # sprite 0 is drawn on top of all the others
         scene_sprites = []
@@ -193,8 +209,8 @@ def render(column):
         scene_sprites = sorted(scene_sprites, key=lambda sprite: sprite["slot"], reverse=True)
 
     for sprite in scene_sprites:
-        x = sprite["x"]
-        y = int(sprite["y"])
+        x = _floor_coord(sprite["x"]) if use_vs2_renderer else int(sprite["x"])
+        y = _floor_coord(sprite["y"]) if use_vs2_renderer else int(sprite["y"])
         image = sprite["image"]
         frame = sprite["frame"]
         perspective = sprite["perspective"]
@@ -211,12 +227,12 @@ def render(column):
 
         frame %= total_frames
 
-        visible_column = get_source_column(int(x), w, column, flip_x)
+        visible_column = get_source_column(x, w, column, flip_x)
         if visible_column != -1:
             base = visible_column * h + (frame * w * h)
             if perspective:
                 y_start = max(y, 0)
-                y_end = min(y + h, ROWS - 1)
+                y_end = min(y + h, ROWS)
 
                 for dest_y in range(y_start, y_end):
                     source_row = dest_y - y
@@ -229,10 +245,9 @@ def render(column):
                             led = deepspace[dest_y]
                         else:
                             led = led_count - 1 - dest_y
-                        if led < led_count:
-                            pixels[led] = color
+                        set_pixel(pixels, led, color)
             else:
-                zleds = deepspace[255-y]
+                zleds = deepspace[_clamp(255 - y, 0, ROWS - 1)]
 
                 for led in range(zleds):
                     source_row = led * led_count // zleds
@@ -243,6 +258,6 @@ def render(column):
                     index = pixeldata[base + source_row]
                     if index != TRANSPARENT_INDEX:
                         color = upalette[index + pal_base]
-                        pixels[led] = color
+                        set_pixel(pixels, led, color)
 
     return pixels

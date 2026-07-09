@@ -115,8 +115,8 @@
       const y = yFixed / 256;
       sprites.push({
         slot,
-        x: Math.trunc(positiveMod(x, COLUMNS)),
-        y: Math.trunc(y),
+        x,
+        y,
         image_strip: strip,
         frame,
         perspective: mode,
@@ -142,7 +142,8 @@
   }
 
   function getSourceColumn(sprite, spriteWidth, renderColumn) {
-    const spriteColumn = getVisibleColumn(sprite.x || 0, spriteWidth, renderColumn);
+    const spriteX = sprite?.vs2 ? Math.floor(sprite.x || 0) : sprite.x || 0;
+    const spriteColumn = getVisibleColumn(spriteX, spriteWidth, renderColumn);
     if (spriteColumn === -1) {
       return -1;
     }
@@ -187,6 +188,20 @@
     buffer[offset + 1] = palette[paletteOffset + 2] || 0;
     buffer[offset + 2] = palette[paletteOffset + 1] || 0;
     buffer[offset + 3] = 255;
+  }
+
+  function clamp(value, minimum, maximum) {
+    if (value < minimum) {
+      return minimum;
+    }
+    if (value > maximum) {
+      return maximum;
+    }
+    return value;
+  }
+
+  function spritePixelY(sprite) {
+    return sprite?.vs2 ? Math.floor(sprite.y || 0) : Math.trunc(sprite.y || 0);
   }
 
   function getFrameIndex(frame, totalFrames) {
@@ -250,9 +265,9 @@
         const paletteIndex = asset.palette || 0;
 
         if (sprite.perspective) {
-          const spriteY = Math.trunc(sprite.y || 0);
+          const spriteY = spritePixelY(sprite);
           const desde = Math.max(spriteY, 0);
-          const hasta = Math.min(spriteY + height, 255);
+          const hasta = Math.min(spriteY + height, ROWS);
 
           for (let y = desde; y < hasta; y += 1) {
             const sourceRow = getSourceRow(sprite, y - spriteY, height);
@@ -268,7 +283,8 @@
           continue;
         }
 
-        const zleds = DEEPSPACE[255 - (sprite.y || 0)];
+        const spriteY = spritePixelY(sprite);
+        const zleds = DEEPSPACE[clamp(255 - spriteY, 0, ROWS - 1)];
         for (let led = 0; led < zleds; led += 1) {
           let sourceRow = Math.floor((led * PIXELS) / zleds);
           if (sourceRow >= height) {

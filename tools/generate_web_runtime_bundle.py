@@ -29,10 +29,11 @@ def iter_python_sources():
             if "__pycache__" in path.parts:
                 continue
             yield path.relative_to(ROOT_DIR).as_posix()
-    games_dir = ROOT_DIR / "games"
-    if games_dir.is_dir():
-        for path in sorted(games_dir.glob("*/*/meta.json")):
-            yield path.relative_to(ROOT_DIR).as_posix()
+    for root_name, pattern in (("games", "*/*/meta.json"), ("system", "*/meta.json")):
+        root_dir = ROOT_DIR / root_name
+        if root_dir.is_dir():
+            for path in sorted(root_dir.glob(pattern)):
+                yield path.relative_to(ROOT_DIR).as_posix()
 
 
 def iter_runtime_rom_sources():

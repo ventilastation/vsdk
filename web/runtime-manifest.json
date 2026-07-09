@@ -1354,6 +1354,8 @@
     "games/other/aaa/sounds/out_special.mp3.wav",
     "games/other/aaa/sounds/pass.mp3.wav",
     "apps/micropython/roms/alecu.vixeous.rom",
-    "apps/micropython/roms/alecu.vyruss_vs2.rom"
+    "apps/micropython/roms/alecu.vyruss_vs2.rom",
+    "system/tutorial_vs2/code/__init__.py",
+    "system/tutorial_vs2/meta.json"
   ]
 }

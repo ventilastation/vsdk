@@ -15,6 +15,9 @@ const char* memoryview_data(mp_obj_t mv_obj) {
 }
 
 sprite_obj_t* to_sprite(mp_obj_t self_in) {
+    if (!mp_obj_is_obj(self_in)) {
+        return NULL;
+    }
     mp_obj_instance_t *self = MP_OBJ_TO_PTR(self_in);
     for(;;) {
         const mp_obj_type_t* type = mp_obj_get_type(self);
@@ -27,7 +30,7 @@ sprite_obj_t* to_sprite(mp_obj_t self_in) {
             }
         }
     }
-    return mp_const_none;
+    return NULL;
 }
 
 uint8_t add_sprite(sprite_obj_t* sprite) {
@@ -40,6 +43,9 @@ uint8_t add_sprite(sprite_obj_t* sprite) {
 
 uint8_t replace_sprite(sprite_obj_t* sprite, mp_obj_t replacing) {
     sprite_obj_t* replacing_sprite = to_sprite(replacing);
+    if (replacing_sprite == NULL) {
+        mp_raise_TypeError(MP_ERROR_TEXT("replacing must be a Sprite"));
+    }
     uint8_t existing_sprite_num = replacing_sprite->sprite_id;
     if (existing_sprite_num < NUM_SPRITES) {
         sprites[existing_sprite_num] = sprite;
@@ -130,7 +136,7 @@ static mp_obj_t sprite_collision(mp_obj_t self_in, mp_obj_t iterable) {
 
     while ((item = mp_iternext(iter)) != MP_OBJ_STOP_ITERATION) {
         sprite_obj_t *other_sprite = to_sprite(item);
-        if (other_sprite == mp_const_none || other_sprite->frame == DISABLED_FRAME) {
+        if (other_sprite == NULL || other_sprite->frame == DISABLED_FRAME) {
             continue;
         }
         // ESP_LOGI(TAG, "           item=%p", item);

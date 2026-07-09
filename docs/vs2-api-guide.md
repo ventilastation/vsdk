@@ -39,6 +39,11 @@ class MyGame(Scene):
 
 ## Sprites
 
+Sprites and layers are scene-owned. Create them in `Scene.on_enter()` after
+`super().on_enter()`, and recreate them each time the scene is shown. When a
+scene exits, its VS2 sprites and layers are cleared and should not be reused by
+another scene entry.
+
 Create sprites from image strip names or numeric strip ids:
 
 ```python
@@ -69,9 +74,10 @@ Named modes replace the old numeric perspective values:
 | `TUNNEL` | 1 | Perspective tunnel sprites. |
 | `HUD` | 2 | Non-perspective overlay sprites. |
 
-The compatibility backend still clips coordinates when publishing to the old
-sprite table, but the v2 scene payload preserves signed 8.8 fixed-point
-coordinates for the new renderer path.
+The compatibility backend publishes integer coordinates to the old sprite table:
+X wraps around the circular display (`256 == 0`, `-1 == 255`) and Y clips
+vertically. The v2 scene payload preserves signed 8.8 fixed-point coordinates
+for the new renderer path.
 
 ## Layers
 

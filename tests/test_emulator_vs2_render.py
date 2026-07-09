@@ -83,6 +83,20 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(decoded[0]["perspective"], 0)
         self.assertEqual(decoded[1]["perspective"], 2)
 
+    def test_vs2_signed_fractional_x_wraps_while_y_clips(self):
+        povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
+        povrender.set_vs2_scene(make_vs2_scene([], [
+            {"image": 8, "mode": 2, "flags": 1, "x": -0.25, "y": -0.25},
+        ]))
+
+        pixels_column_0 = povrender.render(0)
+        pixels_column_1 = povrender.render(1)
+        pixels_column_255 = povrender.render(255)
+
+        self.assertEqual(pixels_column_0[53], 20)
+        self.assertEqual(pixels_column_1[53], 0)
+        self.assertEqual(pixels_column_255[53], 40)
+
 
 if __name__ == "__main__":
     unittest.main()
