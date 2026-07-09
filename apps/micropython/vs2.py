@@ -33,6 +33,7 @@ PAYLOAD_SPRITE_SIZE = 24
 FLAG_VISIBLE = 0x01
 FLAG_FLIP_X = 0x02
 FLAG_FLIP_Y = 0x04
+NO_LAYER = 255
 
 _live_sprites = []
 _active_scene = None
@@ -122,8 +123,6 @@ def export_scene_payload(scene=None):
     layers = []
     if scene is not None:
         layers = list(getattr(scene, "layers", ()))
-    if not layers:
-        layers = [Layer(name="default", mode=TUNNEL, visible=True)]
     layer_index = {}
     for index, layer in enumerate(layers):
         layer_index[id(layer)] = index
@@ -163,8 +162,12 @@ def export_scene_payload(scene=None):
         offset += PAYLOAD_LAYER_SIZE
     for sprite in sprites:
         layer = getattr(sprite, "layer", None)
-        index = layer_index.get(id(layer), 0)
-        mode = sprite.mode if layer is None else layer.mode
+        if layer is not None and id(layer) in layer_index:
+            index = layer_index[id(layer)]
+            mode = layer.mode
+        else:
+            index = NO_LAYER
+            mode = sprite.mode
         struct.pack_into(
             "<BBBBBBhhii",
             payload,

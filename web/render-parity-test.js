@@ -73,7 +73,7 @@ function makeVs2ScenePayload({ layers, sprites }) {
     payload[offset] = sprite.layer || 0;
     payload[offset + 1] = sprite.image_strip;
     payload[offset + 2] = sprite.frame || 0;
-    payload[offset + 3] = sprite.mode || 1;
+    payload[offset + 3] = sprite.mode ?? 1;
     payload[offset + 4] = sprite.flags ?? 1;
     view.setInt32(offset + 10, Math.trunc((sprite.x || 0) * 256), true);
     view.setInt32(offset + 14, Math.trunc((sprite.y || 0) * 256), true);
@@ -209,6 +209,30 @@ function runTests() {
     const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
     assert.deepEqual(getLedColor(pixels, 42, 7), [1, 2, 3, 255], "VS2 decoded sprite should render through LED core");
     assert.deepEqual(getLedColor(pixels, 10, 53), [0, 0, 0, 255], "hidden VS2 layer should not render");
+  }
+
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [],
+      sprites: [
+        { layer: 255, image_strip: 3, frame: 0, mode: 0, flags: 1, x: 30, y: 255 },
+        { layer: 255, image_strip: 7, frame: 0, mode: 2, flags: 1, x: 42, y: 0 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    assert.equal(decoded.layers.length, 0);
+    assert.equal(decoded.sprites.length, 2);
+    assert.equal(decoded.sprites[0].perspective, 0, "unlayered VS2 sprite must preserve FULLSCREEN mode");
+    assert.equal(decoded.sprites[1].perspective, 2, "unlayered VS2 sprite must preserve HUD mode");
+
+    const palette = createPalette({ 1: [9, 8, 7] });
+    const assets = new Map([
+      [3, makeAsset({ width: 1, height: 4, data: [1, 1, 1, 1] })],
+      [7, makeAsset({ width: 1, height: 1, data: [1] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 30, 0), [9, 8, 7, 255], "unlayered VS2 FULLSCREEN sprite should use fullscreen projection");
+    assert.deepEqual(getLedColor(pixels, 42, 53), [9, 8, 7, 255], "unlayered VS2 HUD sprite should use HUD projection");
   }
 
   // Raw polar framebuffer path (Super Ventilagon / Voom "frame_rgb").

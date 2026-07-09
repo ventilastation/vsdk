@@ -184,6 +184,34 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertEqual(fields[9], int(-4.25 * 256))
         self.assertIs(sprite.layer, layer)
 
+    def test_unlayered_scene_payload_preserves_sprite_mode(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        planet = vs2.Sprite(9, x=0, y=255, frame=0, mode=vs2.FULLSCREEN)
+        sign = vs2.Sprite(10, x=224, y=0, frame=0, mode=vs2.HUD)
+
+        payload = vs2.export_scene_payload(scene)
+        self.assertEqual(payload[5], 0)
+        self.assertEqual(payload[6], 2)
+
+        header_size = struct.unpack_from("<H", payload, 8)[0]
+        sprite_size = struct.unpack_from("<H", payload, 12)[0]
+        first = struct.unpack_from("<BBBBBBhhii", payload, header_size)
+        second = struct.unpack_from("<BBBBBBhhii", payload, header_size + sprite_size)
+        self.assertEqual(first[0], vs2.NO_LAYER)
+        self.assertEqual(first[1], 9)
+        self.assertEqual(first[3], vs2.FULLSCREEN)
+        self.assertEqual(second[0], vs2.NO_LAYER)
+        self.assertEqual(second[1], 10)
+        self.assertEqual(second[3], vs2.HUD)
+        self.assertIs(planet.layer, None)
+        self.assertIs(sign.layer, None)
+
 
 if __name__ == "__main__":
     unittest.main()

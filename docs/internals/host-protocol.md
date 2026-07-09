@@ -52,8 +52,10 @@ command. The first payload version has this little-endian layout:
 Layer records are 8 bytes: `id`, `mode`, `flags`, then 5 reserved bytes.
 Sprite records are 24 bytes: `layer`, `strip`, `frame`, `mode`, `flags`,
 3 reserved bytes, then signed 8.8 fixed-point `x` and `y` coordinates as
-32-bit integers. Flag bit `0x01` means visible; `0x02` and `0x04` are
-`flip_x` and `flip_y`.
+32-bit integers. `layer = 255` means the sprite is not owned by a layer, so
+the sprite's own `mode` must be used. Otherwise the referenced layer can
+hide the sprite and provides the projection mode. Flag bit `0x01` means
+visible; `0x02` and `0x04` are `flip_x` and `flip_y`.
 
 ## Audio
 
