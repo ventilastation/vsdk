@@ -8,6 +8,21 @@ try:
 except Exception:
     pass
 
+# If running from factory (first boot after flash_vsdk_image, or after a
+# native app set factory as the boot partition), migrate to the updatable
+# micropython (ota_2) slot so OTA updates never touch factory.
+try:
+    import esp32
+    if esp32.Partition(esp32.Partition.RUNNING).info()[4] == "factory":
+        _mp = esp32.Partition.find(esp32.Partition.TYPE_APP, label="micropython")
+        if _mp:
+            print("main: running on factory — switching to micropython slot")
+            _mp[0].set_boot()
+            import machine
+            machine.reset()
+except Exception as _me:
+    print("main: ota migration check failed:", _me)
+
 # OTA boot mode: if /ota_request exists, run OTA before the GPU task starts.
 # The GPU task and WiFi both use the SPI bus (PSRAM); running them concurrently
 # causes a core crash. OTA runs here, in isolation, before ensure_runtime().

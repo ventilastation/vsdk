@@ -4,7 +4,9 @@ Called from the comms/director layer when the emulator sends:
     ota_start http://<emulator-ip>:8000
 
 Tiers run in order:
-  1. LFS file sync     — Python files, assets; atomic rename per file
+  1. LFS file sync     — the full LittleFS content (code, ROMs, game assets);
+                         SHA256-skip so only changed files transfer, atomic
+                         rename per file
   2. Native partitions — prboom-go, retro-core; stream + SHA256 verify
   3. MicroPython fw    — micropython (ota_2); stream + SHA256 verify + set_boot + reboot
 
@@ -355,7 +357,7 @@ def _wifi_connect():
         return False
     try:
         import esp32
-        nvs = esp32.NVS("voom_wifi")
+        nvs = esp32.NVS("devel_wifi")
         ssid_buf = bytearray(33)
         pass_buf = bytearray(65)
         ssid_len = nvs.get_blob("ssid", ssid_buf)
@@ -365,7 +367,7 @@ def _wifi_connect():
     except Exception as e:
         raise OSError("NVS read failed: %s" % e)
     if not ssid:
-        raise OSError("no WiFi credentials in NVS (run dev-deploy first)")
+        raise OSError("no WiFi credentials in NVS (run: make wifi-provision)")
     print("updater: connecting WiFi to", ssid)
     sta.active(True)
     sta.connect(ssid, password)

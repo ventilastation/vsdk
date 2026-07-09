@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Provision Wi-Fi credentials into the workbench's NVS partition, without
-rebuilding or reflashing firmware — the same idea as vsdk/tools/dev_deploy.py
+rebuilding or reflashing firmware — the same idea as vsdk/tools/provision_wifi.py
 for the DUT, just implemented for a compiled ESP-IDF app instead of a live
 MicroPython REPL: there's no `mpremote run` to poke NVS live, so this
-generates a small NVS partition image (namespace "voom_wifi", the same
+generates a small NVS partition image (namespace "devel_wifi", the same
 namespace/keys the DUT itself reads) and flashes it directly to the "nvs"
 partition's offset from partitions.csv.
 
@@ -64,7 +64,7 @@ def main():
         # both are read back with nvs_get_blob().
         csv_path.write_text(
             "key,type,encoding,value\n"
-            "voom_wifi,namespace,,\n"
+            "devel_wifi,namespace,,\n"
             f"ssid,data,binary,{args.wifi_ssid}\n"
             f"password,data,binary,{args.wifi_password}\n"
         )

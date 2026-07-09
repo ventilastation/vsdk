@@ -237,13 +237,15 @@ telemetry, since none of that is observable from the LED bus alone.
 The workbench joins an existing Wi-Fi network in station mode (`telemetry.c`)
 rather than running its own access point, so the PC running the pyglet
 emulator keeps normal internet access on the same network. Credentials are
-read from NVS namespace `voom_wifi`, keys `ssid`/`password` — **the same
-namespace and keys** `apps/micropython/ventilastation/comms.py` reads on
+read from NVS namespace `devel_wifi`, keys `ssid`/`password` — **the same
+namespace and keys** `apps/micropython/ventilastation/updater.py` reads on
 the DUT itself, so the mechanism (if not the physical NVS, which is
-per-chip) is deliberately identical on both boards.
+per-chip) is deliberately identical on both boards. (Workbenches provisioned
+before the rename from `voom_wifi` still work: the firmware falls back to
+the old namespace and logs a migration hint.)
 
 Since the workbench is a compiled ESP-IDF app rather than a live
-MicroPython REPL, it can't be provisioned the way `make dev-deploy` does
+MicroPython REPL, it can't be provisioned the way `make wifi-provision` does
 for the DUT (`mpremote run` against a live interpreter). Instead,
 `tools/provision_wifi.py` builds a small NVS partition image with
 `nvs_partition_gen.py` and flashes it straight to the `nvs` partition's
@@ -257,7 +259,7 @@ make workbench-wifi-provision PORT=/dev/cu.usbmodemXXXX \
 ```
 
 Other workbench make targets (see the top-level `Makefile`, next to the
-DUT's `dev-deploy`/`dev-emulator`):
+DUT's `wifi-provision`):
 
 ```bash
 make workbench-build                       # idf.py build

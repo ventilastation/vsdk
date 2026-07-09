@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs dev-deploy dev-emulator workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
 BAUD ?= 2000000
@@ -63,7 +63,7 @@ rg-flash = $(SERIAL_LOCK) $(call idf-env,$(RETRO_GO_IDF_PATH),cd "$(RETRO_GO_DIR
 # that provision WiFi also need credentials. Checked at parse time so the
 # failure is instant even under parallel make.
 PORT_TARGETS := flash-vsdk flash-voom flash-launcher flash-retro-core flash-all deploy-fs workbench-flash workbench-monitor workbench-wifi-provision
-WIFI_TARGETS := dev-deploy workbench-wifi-provision
+WIFI_TARGETS := wifi-provision workbench-wifi-provision
 ifneq ($(filter $(PORT_TARGETS),$(MAKECMDGOALS)),)
 ifeq ($(strip $(PORT)),)
 $(error Set PORT=/dev/cu.usbmodemXXXX (or MAC=aa:bb:...; run 'make list-boards'))
@@ -151,26 +151,20 @@ build-fs:
 deploy-fs:
 	$(SERIAL_LOCK) python3 hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)"
 
-# Hardware WiFi dev loop
-# Usage:
-#   make dev-deploy PORT=/dev/ttyACM0 WIFI_SSID=mywifi WIFI_PASS=mypassword
-#   make dev-emulator BOARD_IP=192.168.1.42
-#
-# After dev-deploy: reset the board — it will print its IP over USB serial.
-# Without BOARD_IP the emulator resolves the workbench via mDNS instead.
-# Run dev-emulator in one terminal, `mpremote connect PORT` in another for console.
+# --- Board WiFi provisioning (for OTA upgrades) ---
+# Writes credentials to the main board's NVS (namespace "devel_wifi").
+# The board only joins WiFi when an OTA upgrade is requested over serial;
+# see docs/internals/ota.md. One-time per board:
+#   make wifi-provision PORT=/dev/cu.usbmodemXXXX WIFI_SSID=mywifi WIFI_PASS=mypassword
 WIFI_SSID ?=
 WIFI_PASS ?=
 BOARD_IP ?=
 
-dev-deploy:
-	python3 ./tools/dev_deploy.py \
+wifi-provision:
+	$(SERIAL_LOCK) python3 ./tools/provision_wifi.py \
 		$(if $(PORT),--port $(PORT),) \
 		--wifi-ssid "$(WIFI_SSID)" \
 		--wifi-password "$(WIFI_PASS)"
-
-dev-emulator:
-	cd emulator && python emu.py $(BOARD_IP) --no-display
 
 # --- Hardware workbench (second ESP32-S3 board that exercises a real DUT) ---
 # See docs/internals/workbench.md for the full design.
@@ -180,9 +174,9 @@ dev-emulator:
 #   make workbench-wifi-provision PORT=/dev/cu.usbmodemXXXX WIFI_SSID=mywifi WIFI_PASS=mypassword
 #   make workbench-monitor PORT=/dev/cu.usbmodemXXXX
 #
-# wifi-provision writes credentials straight into the workbench's NVS
-# partition (namespace "voom_wifi", same as the DUT reads in
-# apps/micropython/ventilastation/comms.py) without rebuilding or
+# workbench-wifi-provision writes credentials straight into the workbench's
+# NVS partition (namespace "devel_wifi", same as the DUT reads in
+# apps/micropython/ventilastation/updater.py) without rebuilding or
 # reflashing firmware. Reset the workbench afterwards — it logs its IP and
 # mDNS name over its USB port.
 WORKBENCH_DIR := hardware/workbench/workbench_esp32s3

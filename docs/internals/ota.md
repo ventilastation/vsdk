@@ -1,13 +1,22 @@
 # OTA Update System
 
-Safe over-the-air updates for Ventilastation via the pyglet emulator, covering LFS
-Python files, native app partition binaries, and the MicroPython firmware itself.
+Safe over-the-air updates for Ventilastation, covering LFS files (Python
+code, sprite ROMs, game assets), native app partition binaries, and the
+MicroPython firmware itself.
+
+This is also the fast dev loop for real hardware: the device skips every
+file whose SHA256 already matches, so after the one-time USB flash you can
+test a code change on the spinning fan in seconds — no stopping the fan,
+no cover removal, no USB cable.
 
 ---
 
 ## Goals
 
-- Update everything via WiFi, triggered from the emulator UI.
+- Update everything via WiFi, triggered over the serial host link.
+- WiFi is **only** up during an OTA session — the board never joins a
+  network at boot (WiFi and the GPU task fight over the SPI bus; see
+  "Trigger and boot mode" below).
 - Never leave the board unbootable after a failure or power-loss.
 - Keep MicroPython usable after any failed update so a retry is possible.
 - No USB cable required after the initial factory flash.
@@ -16,13 +25,7 @@ Python files, native app partition binaries, and the MicroPython firmware itself
 
 ## Partition layout
 
-Remove `gwenesis` (slow on this CPU) and add a `micropython` OTA slot in its place,
-extended to match the `factory` size. The freed 1 MB from `gwenesis` plus the
-1.375 MB net cost of replacing the 1 MB `gwenesis` slot with a 2.375 MB `micropython`
-slot results in a LFS partition of 9.3 MB — only 0.75 MB smaller than the original
-10 MB — which is acceptable.
-
-### New `hardware/rotor/partitions-voom.csv`
+`hardware/rotor/partitions-voom.csv`:
 
 ```
 # Name,        Type, SubType, Offset,   Size
@@ -36,14 +39,6 @@ micropython,   app,  ota_2,   0x4F0000, 0x200000
 vfs,           data, fat,     0x6F0000, 0x910000
 ```
 
-Address arithmetic check (16 MB = 0x1000000):
-`0x6F0000 + 0x910000 = 0x1000000` ✓
-
-LFS = 0x910000 = 9.5 MB (was 10 MB; 0.5 MB reduction, acceptable).
-`micropython` = 0x200000 = 2 MB — fits the 1.6 MB binary with 400 KB headroom.
-
-### Roles of each partition
-
 | Partition | Role | Ever OTA-written? |
 |---|---|---|
 | `factory` | Emergency MicroPython. Bootloader boots this if `otadata` is blank or ota_2 fails rollback check. | **Never** — written once over USB, then left alone. |
@@ -52,114 +47,88 @@ LFS = 0x910000 = 9.5 MB (was 10 MB; 0.5 MB reduction, acceptable).
 | `micropython` | Active MicroPython firmware (ota_2). Normal boot target after first flash. | Yes — OTA tier 3. |
 | `vfs` | LittleFS: Python code, ROMs, user data. | Yes — OTA tier 1 (file-by-file). |
 
----
+`make flash-vsdk` writes the MicroPython image to both `factory` and
+`micropython` (ota_2). On any boot where `main.py` finds itself running from
+`factory` (first boot, or after a native app handed control back via the
+factory partition), it switches the boot partition to `micropython` and
+resets, so OTA updates never touch `factory`.
 
-## First-time USB flash
-
-After the partition table changes, the board must be flashed once over USB to establish the
-new layout. Subsequent updates are WiFi-only.
-
-The `make flash-all` target does this:
-
-1. Flash `factory` with the current MicroPython firmware.
-2. Flash `micropython` (ota_2) with the same firmware binary.
-3. Write `otadata` pointing to `ota_2` as the active boot partition.
-4. Flash `prboom-go` and `retro-core` with their current binaries.
-5. Flash the LFS partition with the initial filesystem image.
-
-After this, normal boot is: bootloader → `otadata` → `micropython` (ota_2) → MicroPython runs.
-`factory` sits untouched as the permanent safety net.
-
-### Native app return path change
-
-Currently `hardware/rotor/modules/native_apps/native_apps.c` returns to `factory` after a
-native app exits (via `esp_ota_set_boot_partition()` on the factory partition). After the
-migration, it must return to `micropython` (ota_2) instead:
-
-```c
-// Find the "micropython" partition; fall back to factory if not present
-// (handles the transition period where ota_2 hasn't been written yet).
-esp_partition_t *mp = esp_partition_find_first(
-    ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, "micropython");
-if (!mp)
-    mp = esp_partition_find_first(
-        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
-esp_ota_set_boot_partition(mp);
-esp_restart();
-```
-
-This change is backward-safe: before the first `make flash-all`, the `micropython` partition does
-not exist and the code falls back to `factory`. After it, ota_2 is used.
+Rollback: `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` is set for the
+MicroPython build. `main.py` calls
+`esp32.Partition.mark_app_valid_cancel_rollback()` first thing at boot; if a
+freshly OTA'd ota_2 image can't get that far, two resets later the
+bootloader reverts to `factory`.
 
 ---
 
-## Rollback protection for MicroPython
+## Trigger and boot mode
 
-Enable `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` in the MicroPython ESP-IDF sdkconfig.
-
-With rollback enabled, an app image starts in `ESP_OTA_IMG_PENDING_VERIFY` state. If the
-chip resets twice without the app calling `mark_app_valid_cancel_rollback()`, the
-bootloader reverts to the previous valid image (i.e., `factory`).
-
-Add the confirmation call in `apps/micropython/ventilastation/comms.py`, immediately after
-WiFi connects successfully:
-
-```python
-try:
-    import esp32
-    esp32.Partition.mark_app_valid_cancel_rollback()
-except Exception:
-    pass  # not an OTA image, or already confirmed — safe to ignore
-```
-
-This means: if a new MicroPython ota_2 image cannot connect to WiFi, two reboots later the
-bootloader falls back to `factory` automatically.
-
----
-
-## Update protocol overview
-
-Three tiers are always run in order within a single update session. If any tier fails, the
-session aborts — whichever tiers completed successfully are done; the failed tier and
-anything after it will be retried on the next session.
+An OTA session is requested over the **serial host link** (the same
+line-based command channel that carries sprites/sound — from the base, the
+workbench UART bridge, or the desktop emulator):
 
 ```
-Tier 1: LFS file sync        (Python code, ROMs — file-by-file, safe)
+ota_start http://<host-ip>:8000
+```
+
+The desktop emulator sends this when you press **U** in the pyglet window
+(`emulator/pyglet2x/pygletdraw.py` → `comms.trigger_ota()`), deriving the
+URL from its own IP on the connection's interface. Its `upgrade_server`
+(below) is already listening on port 8000.
+
+The device does **not** run the update inline: the GPU task and WiFi both
+use the SPI bus, and running them concurrently crashes the core. Instead
+`director._dispatch_control()` writes the URL to `/ota_request` and resets
+the board. Early in the next boot — before `ensure_runtime()` starts the
+GPU task — `main.py` sees `/ota_request`, deletes it, and runs
+`ventilastation/updater.py` in isolation:
+
+1. Connect WiFi using NVS namespace `devel_wifi` (keys `ssid`/`password`),
+   provisioned once per board with
+   `make wifi-provision PORT=... WIFI_SSID=... WIFI_PASS=...`
+   (`tools/provision_wifi.py`). No credentials → `ota_error`, normal boot.
+2. Fetch `GET /manifest`, run the three tiers (below).
+3. Disconnect WiFi (if the updater brought it up) and reset into the
+   updated system.
+
+```
+Tier 1: LFS file sync         (full LittleFS content — file-by-file, safe)
 Tier 2: Native app partitions (prboom-go, retro-core — stream + verify)
 Tier 3: MicroPython firmware  (micropython ota_2 — stream + verify + set_boot)
 ```
+
+Progress is reported back over the comms channel as
+`ota_progress <stage> <detail> <pct>`, completion as `ota_done ok`, errors
+as `ota_error <message>`.
 
 ---
 
 ## Emulator HTTP upgrade server
 
-The pyglet emulator adds a lightweight HTTP server on port 8000 running in its own thread.
-It is started when the emulator launches and serves build artefacts directly from the
-working tree.
-
-### Server module: `emulator/upgrade_server.py`
+`emulator/upgrade_server.py` runs on port 8000 in a daemon thread, started
+by `emulator/comms.py` alongside the display connection.
 
 ```
 GET /manifest           → JSON manifest (see format below)
-GET /files/<path>       → raw bytes, path relative to apps/micropython/
+GET /files/<path>       → file bytes, path as it appears on the device
 GET /partitions/<name>  → raw .bin bytes from build outputs
 ```
 
-The server is started from `emulator/comms.py` alongside the existing TCP server:
+### Manifest = the LFS image, exactly
 
-```python
-import upgrade_server
-upgrade_server.start(port=8000)  # launches a daemon thread
-```
-
-### Manifest format
+The file manifest reuses `hardware/rotor/build_micropython_fs.py`'s
+`iter_copy_jobs()` — the same walker that builds the USB-flashed LittleFS
+image — so OTA and USB deploys can never drift apart. It covers `main.py`,
+`ventilastation/`, sprite ROMs, Doom WADs, console ROMs, `games/` and
+`system/`, with the same skip rules. Sprite `.rom` files get the same
+deterministic gzip transform as the image and appear as `.rom.gz`.
 
 ```json
 {
-  "version": "<git-describe or timestamp>",
   "files": [
     {"path": "ventilastation/director.py", "size": 4120, "sha256": "aabbcc..."},
-    {"path": "main.py",                    "size": 312,  "sha256": "112233..."}
+    {"path": "games/alecu/vyruss/code/__init__.py", "size": 9311, "sha256": "..."},
+    {"path": "roms/menu.rom.gz", "size": 68210, "sha256": "..."}
   ],
   "partitions": {
     "prboom-go":   {"size": 1245184, "sha256": "...", "url": "/partitions/prboom-go"},
@@ -169,105 +138,41 @@ upgrade_server.start(port=8000)  # launches a daemon thread
 }
 ```
 
-The server generates this dynamically at request time: it walks `apps/micropython/` for the
-file list, hashes each file, and looks for the pre-built `.bin` artefacts in
-`hardware/rotor/build/` and `apps/retro-go/*/build/`.
-
-### Triggering from the emulator UI
-
-Add a keyboard shortcut `U` in the pyglet window (`pygletdraw.py`). Pressing it:
-1. Checks that a device connection is active.
-2. Determines the emulator's own IP address from the existing TCP connection's local socket.
-3. Sends the comms command `ota_start http://<emulator-ip>:8000` to the device.
-
-A new branch in `dispatch_command()` handles the reverse direction: the device sends back
-`ota_progress <tier> <item> <percent>` lines that the emulator prints to the console (and
-optionally displays in a status overlay).
+Partition binaries are picked up from `apps/retro-go/*/build/` and the
+MicroPython ESP32 build directory; absent binaries are simply omitted from
+the manifest. Hashes (and the gzipped ROM payloads) are cached keyed on the
+source file's mtime+size, so repeated manifests only re-hash what changed.
 
 ---
 
 ## MicroPython update client
 
-### New file: `apps/micropython/ventilastation/updater.py`
+`apps/micropython/ventilastation/updater.py`. Persistent state in NVS
+namespace `"vsdk_ota"`: `prboom_sha`, `retro_sha`, `mp_sha` — the SHA256 of
+the last successfully verified write of each partition, so unchanged
+binaries are skipped without downloading.
 
-Called when the device receives `ota_start <base_url>` over the comms channel.
+### Tier 1 — `_sync_lfs_files()`
 
-Persistent state in NVS namespace `"vsdk_ota"`:
-- `"fw_ver"` — version string of last successful full update (string blob, max 64 bytes)
-- `"prboom_sha"` — SHA256 hex of last successfully verified prboom-go (blob)
-- `"retro_sha"` — SHA256 hex of last successfully verified retro-core (blob)
-- `"mp_sha"` — SHA256 hex of last successfully verified micropython firmware (blob)
+For each manifest file entry: compute SHA256 of the local file; if it
+matches, skip (this is what makes the dev loop fast — an unchanged tree
+transfers nothing). Otherwise stream to `<path>.tmp`, verify SHA256, then
+`os.rename()` — atomic on LittleFS. Failures skip to the next file and are
+retried next session. `_cleanup_tmp_files()` removes stale `.tmp` debris at
+the start of each session. Files deleted from the host tree are *not*
+deleted on the device; reflash the filesystem (`make deploy-fs`) for that.
 
-```python
-def run(base_url):
-    manifest = fetch_json(base_url + "/manifest")
-    _cleanup_tmp_files()          # scan & delete any leftover .tmp from previous session
-    _sync_lfs_files(base_url, manifest["files"])
-    _update_partitions(base_url, manifest["partitions"])
-    _send_comms("ota_done ok")
-```
+### Tiers 2–3 — `_update_partitions()`
 
-#### `_cleanup_tmp_files()`
+For each partition in `retro-core`, `prboom-go`, `micropython` order: skip
+if the NVS-stored SHA256 matches the manifest; otherwise erase, stream in
+4096-byte blocks, verify SHA256, store it in NVS. A mismatch leaves NVS
+unchanged (retried next session) and never touches MicroPython. The
+partition currently executing is never written.
 
-Called at the start of each update session (not at boot). Walks the entire LittleFS tree,
-finds any file ending in `.tmp`, logs it, and deletes it. This cleans up the debris from
-any previously interrupted file-sync without adding latency to normal boot.
-
-#### `_sync_lfs_files(base_url, files)`
-
-For each entry in `manifest["files"]`:
-
-1. Compute SHA256 of the local file (if it exists).
-2. If it matches the manifest SHA256, skip.
-3. Otherwise:
-   a. Download to `<path>.tmp` (streaming, 4 KB chunks).
-   b. Verify SHA256 of the downloaded `.tmp`.
-   c. `os.rename("<path>.tmp", path)` — atomic on LittleFS.
-   d. On any error: delete `.tmp`, log, continue to next file.
-
-Files that fail do not abort the session — the others are still updated. The failed file
-will be retried in the next session.
-
-#### `_update_partitions(base_url, partitions)`
-
-For each named partition in `manifest["partitions"]`:
-
-1. Read the stored SHA256 from NVS. If it matches the manifest, skip.
-2. Find the partition: `esp32.Partition.find(label=name)[0]`.
-3. Erase the partition.
-4. Download in 64 KB blocks, write each block immediately:
-   ```python
-   offset = 0
-   sha = hashlib.sha256()
-   while offset < size:
-       chunk = fetch_chunk(url, offset, 65536)
-       partition.writeblocks(offset // 512, chunk)
-       sha.update(chunk)
-       offset += len(chunk)
-       _send_comms(f"ota_progress partition {name} {offset*100//size}")
-   ```
-5. Compare computed SHA256 against manifest.
-6. **On mismatch**: log error, do not update NVS, continue to next partition.
-   The bad partition stays on flash but MicroPython is unaffected. The native app
-   will not launch correctly, but the next OTA session will overwrite it.
-7. **On match**: store the SHA256 in NVS.
-
-Partition update order: `retro-core` → `prboom-go` → `micropython`.
-
-`micropython` is handled last with one extra step after SHA256 verification:
-
-```python
-mp_partition = esp32.Partition.find(label="micropython")[0]
-mp_partition.set_boot()
-_send_comms("ota_progress micropython reboot")
-import machine
-machine.reset()
-# After reboot, comms.py calls mark_app_valid_cancel_rollback() on WiFi connect.
-```
-
-If the device resets before `set_boot()` is called, the `micropython` partition has been
-written but `otadata` still points to the old image (or factory). The next OTA session
-will re-download and re-write it — partition writes are idempotent.
+`micropython` goes last: after verification it calls `set_boot()` and
+resets; the new image confirms itself via `mark_app_valid_cancel_rollback()`
+in `main.py`, or the bootloader rolls back to `factory`.
 
 ---
 
@@ -285,82 +190,30 @@ will re-download and re-write it — partition writes are idempotent.
 
 ---
 
-## Files to create or modify
+## Key files
 
-### New files
-
-| File | Purpose |
+| File | Role |
 |---|---|
-| `apps/micropython/ventilastation/updater.py` | Three-tier OTA client |
-| `emulator/upgrade_server.py` | HTTP server serving manifest + files + partition bins |
-
-### Modified files
-
-| File | Change |
-|---|---|
-| `hardware/rotor/partitions-voom.csv` | Add `micropython` (ota_2), remove `gwenesis`, shrink `vfs` |
-| `hardware/rotor/modules/native_apps/native_apps.c` | Return to `micropython` partition instead of `factory` |
-| `hardware/rotor/micropython/ports/esp32/boards/VENTILASTATION/sdkconfig` (or equivalent) | Add `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` |
-| `apps/micropython/ventilastation/comms.py` | Call `mark_app_valid_cancel_rollback()` after WiFi up |
-| `emulator/comms.py` | Add `ota_start` command dispatch; import and start `upgrade_server` |
-| `emulator/pygletdraw.py` | Add `U` key binding → send `ota_start` command |
-| `Makefile` | `flash-all` target; remove `gwenesis` from flash steps |
-| `apps/retro-go/partitions.csv` | Remove `gwenesis` row |
-| `apps/micropython/ventilastation/native_apps.py` | Remove `native.genesis` entry from `APP_REGISTRY` |
-
----
-
-## Implementation order
-
-These are roughly ordered by dependency. Each step can be independently tested.
-
-1. **Partition table** — update `partitions-voom.csv` and `apps/retro-go/partitions.csv`.
-   Remove `gwenesis` from `APP_REGISTRY` and the Makefile. Build and USB-flash the new
-   layout as `make flash-all`. Verify the board boots from ota_2 (log should show
-   `"Booting from ota_2"`).
-
-2. **Native app return path** — update `native_apps.c` to find and boot the
-   `"micropython"` partition label on exit. Rebuild MicroPython. Test: launch Voom, exit,
-   confirm MicroPython resumes.
-
-3. **Rollback + confirm** — add `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` to sdkconfig,
-   add `mark_app_valid_cancel_rollback()` call in `comms.py`. Test: flash a known-bad
-   ota_2 (e.g. zeroed header), confirm two reboots later the board is running `factory`.
-
-4. **Emulator HTTP server** — implement `upgrade_server.py`. Test with `curl` from the
-   host: `curl http://localhost:8000/manifest | python3 -m json.tool`.
-
-5. **LFS file sync** — implement `updater._sync_lfs_files()` using SHA256. Test by
-   modifying one Python file on the host, triggering OTA, confirming only that file is
-   transferred and the device reflects the change after the session.
-
-6. **Partition OTA (native apps)** — implement `updater._update_partitions()` for
-   `prboom-go` and `retro-core`. Test by building a trivially different binary (bumped
-   version string), triggering OTA, verifying the new binary is running.
-
-7. **MicroPython OTA** — extend `_update_partitions()` for `micropython`. Test by flashing
-   a build with an incremented version string, confirming `mark_app_valid_cancel_rollback()`
-   is called, and that the manifest version in NVS is updated.
-
-8. **Emulator UI** — add `U` key and `ota_progress` display in `pygletdraw.py`. End-to-end
-   test: full update cycle from emulator keypress.
+| `apps/micropython/ventilastation/updater.py` | Three-tier OTA client (also the only WiFi user on the board) |
+| `apps/micropython/main.py` | Rollback confirm, factory→ota_2 migration, `/ota_request` boot mode |
+| `apps/micropython/ventilastation/director.py` | `ota_start` dispatch → `/ota_request` + reset |
+| `emulator/upgrade_server.py` | HTTP server: manifest + files + partition bins |
+| `emulator/comms.py` | Starts `upgrade_server`; `trigger_ota()` sends `ota_start` |
+| `hardware/rotor/build_micropython_fs.py` | Single source of truth for the LFS file set (USB image *and* OTA manifest) |
+| `tools/provision_wifi.py` / `make wifi-provision` | One-time `devel_wifi` NVS provisioning |
 
 ---
 
 ## Open questions
 
-- **ROM storage in LFS**: at 9.3 MB the LFS can hold a few small ROMs (NES, SMS).
-  Larger ROMs (MD was ~2 MB) no longer fit comfortably alongside Python code. Options:
-  stream ROMs directly to retro-core at launch time rather than storing them in LFS, or
-  accept that only one large ROM can be stored at a time. This is independent of the OTA
-  system but the decision affects which ROMs should be listed in the file manifest.
-
-- **Incremental partition writes**: writing a full 1.5 MB prboom-go binary over WiFi takes
-  ~10–15 s at typical ESP32 TCP throughput (~1 MB/s). If this becomes a bottleneck, a
-  simple binary diff (bsdiff) could be layered on top of the HTTP endpoint — the server
-  diffs against the SHA256-matched previous version and the device patches in place.
-  Not needed for v1.
-
-- **Manifest signing**: nothing in this design authenticates the emulator or the manifest.
-  Acceptable for a local-network dev workflow. If the board is ever on an untrusted network,
-  add an HMAC over the manifest using a shared secret stored in NVS.
+- **Deletions**: tier 1 never deletes device files that vanished from the
+  host tree. Harmless for the dev loop (stale `.py` files may shadow moves,
+  though); a `deleted` list in the manifest would close it.
+- **Incremental partition writes**: writing a full 1.5 MB prboom-go binary
+  over WiFi takes ~10–15 s at typical ESP32 TCP throughput (~1 MB/s). If
+  this becomes a bottleneck, a binary diff (bsdiff) could be layered on top
+  of the HTTP endpoint. Not needed for v1.
+- **Manifest signing**: nothing in this design authenticates the server or
+  the manifest. Acceptable for a local-network dev workflow. If the board
+  is ever on an untrusted network, add an HMAC over the manifest using a
+  shared secret stored in NVS.
