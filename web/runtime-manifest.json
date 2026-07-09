@@ -1306,6 +1306,18 @@
     "games/vsjam-oct25/fanphibious_danger/meta.json",
     "games/vsjam-oct25/peronjam/meta.json",
     "games/vsjam-oct25/tincho_vrunner/meta.json",
-    "games/vsjam-oct25/vajon/meta.json"
+    "games/vsjam-oct25/vajon/meta.json",
+    "games/alecu/vixeous/sounds/area.mp3.wav",
+    "games/alecu/vixeous/sounds/bomb.mp3.wav",
+    "games/alecu/vixeous/sounds/boom.mp3.wav",
+    "games/alecu/vixeous/sounds/boss.mp3.wav",
+    "games/alecu/vixeous/sounds/flight.mp3.wav",
+    "games/alecu/vixeous/sounds/gameover.mp3.wav",
+    "games/alecu/vixeous/sounds/hit.mp3.wav",
+    "games/alecu/vixeous/sounds/shoot.mp3.wav",
+    "games/other/aaa/sounds/fail.mp3",
+    "games/other/aaa/sounds/out.mp3",
+    "games/other/aaa/sounds/out_special.mp3",
+    "games/other/aaa/sounds/pass.mp3"
   ]
 }
