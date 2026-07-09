@@ -59,7 +59,7 @@ LFS = 0x910000 = 9.5 MB (was 10 MB; 0.5 MB reduction, acceptable).
 After the partition table changes, the board must be flashed once over USB to establish the
 new layout. Subsequent updates are WiFi-only.
 
-A new Makefile target `make first-flash` should:
+The `make flash-all` target does this:
 
 1. Flash `factory` with the current MicroPython firmware.
 2. Flash `micropython` (ota_2) with the same firmware binary.
@@ -88,8 +88,8 @@ esp_ota_set_boot_partition(mp);
 esp_restart();
 ```
 
-This change is backward-safe: before `make first-flash`, `micropython` partition does not
-exist and the code falls back to `factory`. After `make first-flash`, it uses ota_2.
+This change is backward-safe: before the first `make flash-all`, the `micropython` partition does
+not exist and the code falls back to `factory`. After it, ota_2 is used.
 
 ---
 
@@ -304,7 +304,7 @@ will re-download and re-write it — partition writes are idempotent.
 | `apps/micropython/ventilastation/comms.py` | Call `mark_app_valid_cancel_rollback()` after WiFi up |
 | `emulator/comms.py` | Add `ota_start` command dispatch; import and start `upgrade_server` |
 | `emulator/pygletdraw.py` | Add `U` key binding → send `ota_start` command |
-| `Makefile` | Add `first-flash` target; remove `gwenesis` from flash steps |
+| `Makefile` | `flash-all` target; remove `gwenesis` from flash steps |
 | `apps/retro-go/partitions.csv` | Remove `gwenesis` row |
 | `apps/micropython/ventilastation/native_apps.py` | Remove `native.genesis` entry from `APP_REGISTRY` |
 
@@ -316,7 +316,7 @@ These are roughly ordered by dependency. Each step can be independently tested.
 
 1. **Partition table** — update `partitions-voom.csv` and `apps/retro-go/partitions.csv`.
    Remove `gwenesis` from `APP_REGISTRY` and the Makefile. Build and USB-flash the new
-   layout as `make first-flash`. Verify the board boots from ota_2 (log should show
+   layout as `make flash-all`. Verify the board boots from ota_2 (log should show
    `"Booting from ota_2"`).
 
 2. **Native app return path** — update `native_apps.c` to find and boot the

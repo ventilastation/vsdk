@@ -1,65 +1,55 @@
-= Pending prompts =
+# TODO
 
-- Close the loop. Allow the agent to access a sandboxed browser and http server so it can watch and interact with the emulator
+Open work items. Completed and discarded entries are pruned; see git
+history of this file for the record.
 
-- Merge the common boot code from the browser and main, the part where the games_menu_class is created and pushed, and the commented part where the Default VentilagonIdle is created and pushed.
+## Tooling / emulator
 
-- [ONGOING] Have some way to see running micropython code and step by step it.
+- Close the loop: let an agent drive a sandboxed browser + HTTP server so
+  it can watch and interact with the web emulator.
+- Merge the common boot code between `ventilastation/browser.py` and
+  `main.py` (games menu creation/push).
+- [ONGOING] Step-by-step debugging of running MicroPython code.
+- [ONGOING] Pixel editor integrated into the web workflow (Piskel embed
+  exists; finish the flow).
+- Create an editor for tiles.
+- Add a pill showing the WebGL resolution scale when Auto is selected.
+- Split the remaining `BrowserHostApp` class in `web/app.js` by concern
+  (renderers/audio/support modules are already split out).
 
-- [DONE] Create some way to edit the micropython code for some app, and do live reloading without going back to the menu
+## Runtime / API v2
 
-- [DONE] Integrate the compilation of PNG images into ROM files, inside the web workflow. This will need replacing python's Pillow for something that can run more natively in the browser.
+- New sprite type holding a byte array rendered as text from a strip; also
+  usable for tile-based backgrounds.
+- Port existing games to the v2 APIs.
+- Go through the Discord suggestions and GitHub bug reports and shape the
+  v2 API list (music loop flag already done).
 
-- [ONGOING] Create a pixel editor integrated into the workflow, so assets can be created without leaving the emulator.
+## Deployment / OTA (see OTA.md)
 
-- Create a new type of sprite, that can hold an array of bytes to be used as text, taking the images from a given strip. It could also be used for tile based rendering of backgrounds.
+- Upgrade voom without rebooting (partition OTA works; still reboots).
+- Generated list of console ROMs.
 
-- Create an editor for tiles
+## Display quality
 
-- [DONE] Compile the Super Ventilagon C code into wasm, and have it displayable inside the desktop and browser renderers. Or port it to micropython (ported to MicroPython in ventilagon_emu.py, rendered via the frame_rgb polar path in both emulators)
+- Darker colors in the center LEDs are way off for Voom; the gamma curve
+  may need a rework.
+- Master System shows display delays; NES degrades quickly — audit what
+  else runs on the POV core.
+- Exit keys are unreliable in SMS/NES; consider forcing a key combo.
 
-- Port existing games to the v2 APIs
+## Voom
 
-- The app.js source file is huge. Please split it in a few files per each concern
+- [ONGOING] Make the rest of retro-go usable on the LED POV and emulator
+  displays, including the launcher menus (text illegible at POV
+  resolution today).
+- Stereo separation/pan as available in I_StartSound.
+- Disable the board OPL synth and audio playback in LED/emulator modes.
 
-- Add a pill that shows the webgl resolution scale, useful for when Auto is selected
+## Workbench
 
-
-- Go thru the list of suggestions in Discord and bug reports in Github, and create a Ventilastation API v2, with breaking changes but cleaner:
- - [done] Allow music to automatically repeat. To the method "director.music_play" add an optional named parameter "loops" that defaults to False.
- - 
-
-- [DISCARDED] have some way to import binary modules. For eg, ventilastation, and voom. Replaced with booting into Voom, the retrogo launcher and other emulators.
- 
-- [DONE] make voom run again on the esp32-s3, but be able to start it from micropython. It's ok to reboot the esp when ending doom.
-
-- ease the deployment: [DESIGNED — see OTA.md]
-    - [done] some easy way to reboot the esp32 controller
-    - small micropython module compiled in ROM in charge of booting, that connects to base and checks for updates
-    - [DESIGNED] able to download new partitions and update them (OTA.md: 3-tier system, emulator HTTP server on :8000)
-    - fetches wifi config and other settings like pov_offset from NVS
-    - [done] uses mdns to connect to update server and remote joystick/display
-    - able to upgrade voom without rebooting (OTA.md covers partition OTA but voom still needs a reboot)
-    - [DESIGNED] able to sync a folder of roms (OTA.md tier 1: LFS file sync with SHA256)
-
-- darker color in the center leds is way off for things like voom. We may have to rework the whole gamma curve
-- sega master system has some display delays, nes gets ugly very fast. What other tasks are running in the same core?
-- exit keys are not working right, maybe force a key combo to exit sms/nes games.
-- a generated list of roms is needed.
-
-= VOOM FIXES =
-- [done] image is rotated 90 degrees clockwise
-- [done] buttons don't stay pressed
-- [done] sounds are missing. The emulator should have a local copy of the wad file, should be able to convert the midis to mp3s, and prboom should send the triggers to play a sound or music, or stop the music, like micropython games do.
-- [ongoing] make sure the rest of retrogo uses the LED POV and emulator displays, including the launcher menus
-- add stereo separation/pan as available in I_StartSound
-- disable board OPL synth and audio playback when in LED and emulator modes.
-- [done] disable LCD framebuffer generation when in LED mode
-
-
-= WORKBENCH FIXES =
-- color intensity in the workbench needs a proper reversal of the full finish_with_gamma pipeline (intensidades table per-LED + brillos). Deferred; put_pixel currently passes wire bytes through unchanged.
-- [DONE] The unstable display / white line on the outer edge: arm1 offset was one word past dma_pixels1, so the outer LED read the 0xff end frame (white); column was also recomputed from a clock at decode time. Fixed the offset and switched to a per-revolution burst counter for stable columns.
-- [DONE] new CS activation is missing from prboom and retrogo pov 
-- ventilagon is not rendered properly.
-- color intensity is still wrong. The intensity table comes from https://github.com/alecu/ventilastation/blob/c39710f309f530d385ae7659717445f95740959c/vyruss/images/intensidades.py
+- Color intensity needs a proper reversal of the full finish_with_gamma
+  pipeline (per-LED intensity table + brightness); put_pixel currently
+  passes wire bytes through unchanged. The intensity table's origin:
+  vyruss/images/intensidades.py in the pre-vsdk repo.
+- Ventilagon is not rendered properly on the workbench capture.

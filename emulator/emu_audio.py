@@ -1,7 +1,7 @@
 """Host playback for the Ventilastation emulator audio bridge.
 
 The spinning board streams its console sound-chip register writes over serial
-(see EMULATOR_AUDIO_PLAN.md). Here we replay those writes through the *same*
+(see docs/emulator-audio.md). Here we replay those writes through the *same*
 chip cores (compiled into chipsynth/libgenesissynth.*) to regenerate PCM, and
 feed it to a pyglet streaming player.
 

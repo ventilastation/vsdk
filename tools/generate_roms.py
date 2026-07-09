@@ -23,19 +23,17 @@ def grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return zip_longest(*args, fillvalue=fillvalue)
 
-"""
-La funcion toma un archivo *.png y devuelve en binario (RGBI) la secuencia 
-de n_leds prendidos para n_ang diferentes
-"""
+"""Reproject a *.png into polar form: for each of n_ang angles, the RGBI
+sequence of the n_led LEDs along that ray."""
 def reproject(image, n_led=54, n_ang=256):
-    src = array(image)                    # Levanta la imagen
-    dst = ndarray((n_led, n_ang, 4), uint8)        # Imagen de destino
+    src = array(image)
+    dst = ndarray((n_led, n_ang, 4), uint8)
 
-    wx, wy, dim = src.shape         # Me da las dimensiones del frame en pixeles
+    wx, wy, dim = src.shape
 
-    center_x = int((wx-1)/2)        # Calcula la cordenada x del centro de la imagen
-    center_y = int((wy-1)/2)        # Calcula la cordenada y del centro de la imagen
-    rad = min(center_x, center_y)   # Calcula el radio que barre la imagen dentro del frame
+    center_x = int((wx-1)/2)
+    center_y = int((wy-1)/2)
+    rad = min(center_x, center_y)   # radius the image sweeps inside the frame
 
     for m in range(0,n_ang):
         for n in range(0,n_led):

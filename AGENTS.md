@@ -1,40 +1,53 @@
-# AGENTS
+# Working on vsdk
 
-This file captures the standing guidance and preferences the user has given during work on this project.
+Standing guidance for agents and new contributors. Directory-specific
+detail lives in each area's README; docs/README.md is the documentation
+index.
 
-## Scope Boundaries
+## Repo shape
 
-- Do not change game code under `apps/micropython/apps` in this branch.
-- Keep changes confined to `apps/micropython/ventilastation` and the web emulator paths unless the user explicitly says otherwise.
-- When fixing emulator/runtime behavior, prefer infrastructure changes over app-specific fixes.
+- `apps/micropython/ventilastation/` — the SDK runtime (director, scenes,
+  platform selection: desktop / hardware / browser / headless).
+- `games/<group>/<name>/` — one folder per game: `code/`, `images/`,
+  `sounds/`, `menu.png`, `meta.json` (menu order/visibility; discovered by
+  `ventilastation/catalog.py`, no launcher edit needed).
+- `system/` — launcher and system scenes, shared UI assets.
+- `emulator/` — the desktop (pyglet) emulator host. Entry point `emu.py`.
+- `web/` — the browser emulator + IDE. **Source of truth**; the website
+  repo's `emulator/` directory is published output — never edit that copy
+  (see DEPLOY.md).
+- `hardware/` — rotor board (MicroPython user C modules), workbench, base.
+- `apps/retro-go` — submodule. Ventilastation-specific code stays under
+  `components/retro-go/` (targets/ventilastation, vs_host_bridge,
+  ventilastation_pov) with minimal diffs elsewhere.
+- `tools/`, `tests/` — host-side generators and the test suite.
 
-## Web Emulator UX
+## Rules that keep biting
 
-- Move `Keyboard Arrows + Space/O/P/Esc` outside the debug panel, directly under the `Ventilastation Emulator` title.
-- Add a bit more spacing between that keyboard hint and the `Show debug` button.
-- Show a button to stop the rendering.
-- On mobile browsers, provide controls below the display area:
-  - a directional control on the left
-  - four buttons on the right
-  - the directional control should use the usual mobile-game pattern: hold with the left thumb and drag
+- Prefer infrastructure fixes in `ventilastation/` over app-specific
+  workarounds in a game.
+- Jam game code is historical — don't restyle it. Spanish is fine inside
+  games; everything else (core, system, emulators, docs) is English.
+- High-frequency MicroPython→JS payloads must cross the WASM bridge as
+  pointer + length, never as fresh bytes objects (ARCHITECTURE.md explains
+  the heap leak this avoids). Re-run the heap regression check after
+  touching the bridge.
+- Browser changes need `make web-runtime-bundle` (Python/ROM/meta changes)
+  and a `?v=` cache-bust (JS changes) before they show up; see DEPLOY.md.
+- MicroPython quirks: no bytearray slice deletion; module `__getattr__`
+  works; code under `apps/micropython`, `system/`, `games/` must compile
+  with mpy-cross (CI checks this).
+- Flash only through the Makefile targets — they serialize the serial port
+  so concurrent flashes can't corrupt each other. `make list-boards` and
+  `MAC=aa:bb:...` select a board when several are attached. Firmware needs
+  two different ESP-IDF trees (BUILDING.md).
+- Scene lifecycle errors must surface: the director reports tracebacks
+  over comms; don't swallow exceptions when changing scene handling.
 
-## Error Handling
+## Workflow
 
-- Errors in any `Scene.step`, `Scene.on_enter`, or `Scene.on_exit` should be shown prominently in the browser.
-- The browser UI should offer a way to open the debugger when those errors happen.
-
-## Deployment / Hosting
-
-- Fix asset paths so the web emulator can be served from the site root.
-- Prefer deploy-friendly solutions for static hosting.
-- For GitHub Pages / Jekyll hosting, prefer an in-repo workaround that bundles runtime assets into one archive/blob instead of relying on individual Python package files being published.
-
-## Version Control / Workflow
-
-- Commit changes per concern when practical.
-- Before committing, compare branch history with `main` if needed to confirm whether game code changed.
-- Keep game code untouched on this branch unless the user explicitly changes that rule.
-
-## Documentation / Traceability
-
-- Record important standing instructions in repo-visible documentation when useful, so future sessions can follow the same boundaries.
+- Commit per concern with messages that explain why, not just what.
+- Before committing runtime changes: run the tests in `tests/` (they run
+  under both python3 and micropython where applicable).
+- Before pushing firmware changes: build the touched image (`make vsdk`,
+  `make voom`, `make workbench-build`).

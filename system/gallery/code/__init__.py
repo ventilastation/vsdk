@@ -1,4 +1,4 @@
-# == Iterando por imágenes ==
+# == Iterating over the gallery images ==
 # - rosedew
 # - Laura P
 # - bambi de fuego

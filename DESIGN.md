@@ -2,7 +2,7 @@
 
 How the spinning ESP32-S3 board is partitioned, how MicroPython and the native
 retro-go apps share configuration, and how each is launched. Companion to
-`EMULATOR_AUDIO_PLAN.md` (emulator audio bridge).
+`docs/emulator-audio.md` (emulator audio bridge).
 
 ## 1. Flash layout (16 MB)
 
@@ -141,7 +141,7 @@ the vfs partition — enough to add the gwenesis app partition and Genesis ROMs.
 The native emulators have no DAC on the spinning board, and 115200 baud is far
 too slow for PCM. Instead the board streams the **sound-chip register writes**
 (a VGM-style score) over the UART; the base-station host re-runs the *same* chip
-cores to regenerate the audio. Full design in `EMULATOR_AUDIO_PLAN.md`.
+cores to regenerate the audio. Full design in `docs/emulator-audio.md`.
 
 **Done — Genesis (gwenesis).**
 - Device: `emu_audio_bridge.{c,h}` (shared, in `components/retro-go`) encodes a

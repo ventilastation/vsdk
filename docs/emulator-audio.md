@@ -1,6 +1,7 @@
-# Plan: Streaming NES / Genesis / Lynx audio to the pyglet emulator over 115200 serial
+# Streaming NES / Genesis / Lynx audio to the pyglet emulator over 115200 serial
 
-Branch: `emulator-audio-serial-bridge`
+Originally a plan (branch `emulator-audio-serial-bridge`); phase 1 has shipped,
+see the status section below for what is real vs still planned.
 
 ## 0. Implementation status
 
