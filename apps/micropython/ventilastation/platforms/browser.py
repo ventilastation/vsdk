@@ -132,6 +132,9 @@ class BrowserDisplay(NullDisplay):
         self.assets = {}
         self.dirty_asset_slots = set()
         self.vs2_scene_data = None
+        self._vs2_scene_line = None
+        self._vs2_scene_line_length = -1
+        self._worker_post_command_ptr = None
         self._worker_post_sprites = None
         self._worker_post_frame = None
         self._worker_post_frame_bytes = None
@@ -168,6 +171,7 @@ class BrowserDisplay(NullDisplay):
 
     def set_worker_host(self, worker_host):
         self.worker_host = worker_host
+        self._worker_post_command_ptr = getattr(worker_host, "post_command_ptr", None)
         self._worker_post_sprites = getattr(worker_host, "post_sprites", None)
         self._worker_post_sprites_ptr = getattr(worker_host, "post_sprites_ptr", None)
         self._worker_post_frame_bytes = getattr(worker_host, "post_frame_bytes", None)
@@ -180,6 +184,28 @@ class BrowserDisplay(NullDisplay):
         if self.worker_host is None:
             return False
         return _post_worker_command(self.worker_host, line, data)
+
+    def _post_vs2_scene(self):
+        data = self.vs2_scene_data
+        if data is None:
+            return False
+        length = len(data)
+        if self._vs2_scene_line is None or self._vs2_scene_line_length != length:
+            self._vs2_scene_line = b"vs2_scene %d" % length
+            self._vs2_scene_line_length = length
+        post_command_ptr = self._worker_post_command_ptr
+        if post_command_ptr is not None:
+            try:
+                post_command_ptr(
+                    uctypes.addressof(self._vs2_scene_line),
+                    len(self._vs2_scene_line),
+                    uctypes.addressof(data),
+                    length,
+                )
+                return True
+            except Exception:
+                pass
+        return self._post_command(self._vs2_scene_line, data)
 
     def _post_sprites(self):
         if self.worker_host is None:
@@ -351,7 +377,7 @@ class BrowserDisplay(NullDisplay):
             self._post_sprites()
             self._post_frame(full)
         if self.vs2_scene_data is not None:
-            self._post_command("vs2_scene %d" % len(self.vs2_scene_data), self.vs2_scene_data)
+            self._post_vs2_scene()
         self.palette_dirty = False
         self.dirty_asset_slots.clear()
 

@@ -97,6 +97,8 @@ layer records and sprite records. Sprite coordinates are signed 8.8
 fixed-point integers. The desktop and web emulators understand the
 `vs2_scene <nbytes>` command and adapt visible v2 sprites into the existing
 sprite renderer shape while richer native v2 renderers are built.
+The exporter reuses a per-scene byte buffer and scratch sprite list so the web
+MicroPython runtime does not allocate a fresh scene payload every frame.
 
 ## Renderer Work
 
@@ -138,6 +140,8 @@ Python byte objects.
 The web renderer has parity fixtures for the version-1 `vs2_scene` decoder and
 for `flip_x` / `flip_y`. Next, extend those fixtures for signed Y clipping,
 tilemaps, and bitmap layers.
+The browser bridge posts the cached `vs2_scene` payload through the pointer
+path to avoid creating Python byte objects each frame.
 
 ## Suggested Milestones
 

@@ -38,6 +38,7 @@ NO_LAYER = 255
 _live_sprites = []
 _active_scene = None
 _next_sprite_order = 0
+_scratch_sprites = []
 
 
 def _render_coord(value, minimum=0, maximum=255):
@@ -99,36 +100,62 @@ def _register_sprite(sprite):
         _live_sprites.append(sprite)
 
 
-def _scene_sprites(scene):
-    sprites = []
-    seen = set()
-    if scene is not None:
-        for layer in getattr(scene, "layers", ()):
-            for sprite in layer.sprites:
-                if id(sprite) not in seen:
-                    seen.add(id(sprite))
-                    sprites.append(sprite)
+def reset_runtime_state():
+    global _active_scene, _next_sprite_order
+    del _live_sprites[:]
+    del _scratch_sprites[:]
+    _active_scene = None
+    _next_sprite_order = 0
+
+
+def _remove_scene_sprites(scene):
+    write = 0
+    for read in range(len(_live_sprites)):
+        sprite = _live_sprites[read]
+        if getattr(sprite, "_scene", None) is scene:
+            sprite._scene = None
+            continue
+        if write != read:
+            _live_sprites[write] = sprite
+        write += 1
+    del _live_sprites[write:]
+
+
+def _collect_scene_sprites(scene, sprites):
+    del sprites[:]
     for sprite in _live_sprites:
         if scene is not None and getattr(sprite, "_scene", None) is not scene:
             continue
-        if id(sprite) not in seen:
-            seen.add(id(sprite))
-            sprites.append(sprite)
-    sprites.sort(key=_sprite_order)
+        sprites.append(sprite)
     return sprites
+
+
+def _layer_index(layers, layer):
+    for index, candidate in enumerate(layers):
+        if candidate is layer:
+            return index
+    return NO_LAYER
+
+
+def _payload_buffer(scene, size):
+    if scene is None:
+        return bytearray(size)
+    payload = getattr(scene, "_vs2_payload", None)
+    if payload is None or len(payload) != size:
+        payload = bytearray(size)
+        scene._vs2_payload = payload
+    return payload
 
 
 def export_scene_payload(scene=None):
     _claim()
-    layers = []
+    layers = ()
     if scene is not None:
-        layers = list(getattr(scene, "layers", ()))
-    layer_index = {}
-    for index, layer in enumerate(layers):
-        layer_index[id(layer)] = index
+        layers = getattr(scene, "layers", ())
 
-    sprites = _scene_sprites(scene)
-    payload = bytearray(
+    sprites = _collect_scene_sprites(scene, _scratch_sprites)
+    payload = _payload_buffer(
+        scene,
         PAYLOAD_HEADER_SIZE
         + len(layers) * PAYLOAD_LAYER_SIZE
         + len(sprites) * PAYLOAD_SPRITE_SIZE
@@ -162,11 +189,10 @@ def export_scene_payload(scene=None):
         offset += PAYLOAD_LAYER_SIZE
     for sprite in sprites:
         layer = getattr(sprite, "layer", None)
-        if layer is not None and id(layer) in layer_index:
-            index = layer_index[id(layer)]
+        index = _layer_index(layers, layer) if layer is not None else NO_LAYER
+        if index != NO_LAYER:
             mode = layer.mode
         else:
-            index = NO_LAYER
             mode = sprite.mode
         struct.pack_into(
             "<BBBBBBhhii",
@@ -207,6 +233,7 @@ class Scene(_Scene):
         _claim()
         super().__init__()
         self.layers = []
+        self._vs2_payload = None
 
     def on_enter(self):
         global _active_scene
@@ -217,6 +244,8 @@ class Scene(_Scene):
         global _active_scene
         if _active_scene is self:
             _active_scene = None
+        _remove_scene_sprites(self)
+        self._vs2_payload = None
         super().on_exit()
 
     def layer(self, name=None, mode=TUNNEL, visible=True):

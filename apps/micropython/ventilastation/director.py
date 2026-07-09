@@ -446,4 +446,9 @@ def ensure_runtime(platform_name=None, argv=None, environ=None):
 
 
 def reset_runtime():
+    try:
+        import vs2
+        vs2.reset_runtime_state()
+    except ImportError:
+        pass
     clear_runtime()

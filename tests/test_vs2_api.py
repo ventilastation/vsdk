@@ -212,6 +212,44 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertIs(planet.layer, None)
         self.assertIs(sign.layer, None)
 
+    def test_scene_payload_reuses_buffer_when_shape_is_stable(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        sprite = vs2.Sprite(7, x=1, y=2, frame=0)
+
+        first = vs2.export_scene_payload(scene)
+        sprite.x = 3
+        second = vs2.export_scene_payload(scene)
+
+        self.assertIs(first, second)
+        header_size = struct.unpack_from("<H", second, 8)[0]
+        x_fixed = struct.unpack_from("<i", second, header_size + 10)[0]
+        self.assertEqual(x_fixed, 3 * 256)
+
+    def test_scene_exit_releases_live_sprites_and_payload_buffer(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        vs2.Sprite(7, frame=0)
+        vs2.export_scene_payload(scene)
+
+        self.assertTrue(scene._vs2_payload)
+        self.assertGreaterEqual(len(vs2._live_sprites), 1)
+
+        director.pop()
+
+        self.assertIsNone(scene._vs2_payload)
+        self.assertNotIn(scene, [getattr(sprite, "_scene", None) for sprite in vs2._live_sprites])
+
 
 if __name__ == "__main__":
     unittest.main()
