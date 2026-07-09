@@ -21,6 +21,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 MPY_SOURCE_ROOTS = [
     ROOT / "apps" / "micropython" / "main.py",
+    ROOT / "apps" / "micropython" / "vs2.py",
     ROOT / "apps" / "micropython" / "ventilastation",
     ROOT / "system",
     ROOT / "games",
@@ -30,6 +31,7 @@ CPYTHON_TESTS = [
     "tests/test_shuffler.py",
     "tests/test_ventilagon_parity.py",
     "tests/test_rom_format.py",
+    "tests/test_vs2_api.py",
 ]
 
 MICROPYTHON_TESTS = [

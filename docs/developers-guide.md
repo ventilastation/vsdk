@@ -143,6 +143,11 @@ the scene class to let it continue.
 
 ## Part IV: Ventilastation display and Sprites
 
+New games should use the newer [vs2 API](vs2-api-guide.md). This section
+documents the original `ventilastation.sprites` API because existing games and
+older tutorials still use it. The original API remains supported for now, but
+it is legacy and will be deprecated after `vs2` reaches renderer parity.
+
 The radial display of Ventilastation means that its pixels are not square
 but tiny arcs — we call them "arxels". There are 54 LEDs from the center
 out, and 256 angular steps where LEDs can change colors. All of this is
@@ -158,6 +163,9 @@ created later, so the order in which you create them matters.
 ```python
 from ventilastation.sprites import Sprite
 ```
+
+Do not import `ventilastation.sprites` and `vs2` from the same game. A game can
+declare its intended API in `meta.json` with `{ "api": "vs2" }`.
 
 Each `Sprite` has the following methods:
 

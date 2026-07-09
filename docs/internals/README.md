@@ -35,6 +35,8 @@ shape and the rules that keep biting.
 
 ## Subsystems
 
+- **[vs2-api-plan.md](vs2-api-plan.md)** — the API v2 rollout plan: new
+  `vs2` game API, compatibility guard, v2 memory model, and renderer phases.
 - **[workbench.md](workbench.md)** — the second ESP32-S3 that exercises a
   real board: LED-bus capture, hall simulation, UART bridge, telemetry.
 - **[emulator-audio.md](emulator-audio.md)** — streaming console

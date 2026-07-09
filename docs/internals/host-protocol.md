@@ -33,6 +33,10 @@ are logged and ignored — hosts must tolerate commands they don't handle.
 | `palette <n> <version>` | `n × 1024` bytes | palette block, `n` palettes of 256 × 4-byte entries ([rom-format.md](rom-format.md)) |
 | `frame_rgb` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED); sent by the workbench's LED-bus capture and by full-frame renderers such as the Ventilagon port |
 
+The upcoming `vs2` renderer will add a separate scene/layer payload rather
+than extending the legacy 500-byte `sprites` command. See
+[vs2-api-plan.md](vs2-api-plan.md).
+
 ## Audio
 
 | Command | Payload | Meaning |

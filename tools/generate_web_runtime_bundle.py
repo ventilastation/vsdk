@@ -13,8 +13,9 @@ BUNDLE_PATH = ROOT_DIR / "web" / "runtime-bundle.json"
 def iter_python_sources():
     """Auto-discover the Python files the browser runtime needs, so nobody
     has to hand-edit the manifest when a module is added, moved, or removed."""
-    yield "apps/micropython/main.py"
-    yield "apps/micropython/manifest.py"
+    micropython_dir = ROOT_DIR / "apps" / "micropython"
+    for path in sorted(micropython_dir.glob("*.py")):
+        yield path.relative_to(ROOT_DIR).as_posix()
     package_dir = ROOT_DIR / "apps" / "micropython" / "ventilastation"
     for path in sorted(package_dir.rglob("*.py")):
         if "__pycache__" in path.parts:
@@ -32,6 +33,14 @@ def iter_python_sources():
     if games_dir.is_dir():
         for path in sorted(games_dir.glob("*/*/meta.json")):
             yield path.relative_to(ROOT_DIR).as_posix()
+
+
+def iter_runtime_rom_sources():
+    rom_dir = ROOT_DIR / "apps" / "micropython" / "roms"
+    if not rom_dir.is_dir():
+        return
+    for path in sorted(rom_dir.glob("*.rom")):
+        yield path.relative_to(ROOT_DIR).as_posix()
 
 
 def iter_workspace_asset_sources():
@@ -67,6 +76,12 @@ def build_manifest_file_list(existing_files):
         ordered.append(normalized)
 
     for relative_path in iter_python_sources():
+        if relative_path in seen:
+            continue
+        seen.add(relative_path)
+        ordered.append(relative_path)
+
+    for relative_path in iter_runtime_rom_sources():
         if relative_path in seen:
             continue
         seen.add(relative_path)

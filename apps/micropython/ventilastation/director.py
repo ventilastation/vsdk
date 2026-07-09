@@ -6,6 +6,7 @@ import uos
 import utime
 
 from ventilastation import settings
+from ventilastation import api_guard
 from ventilastation.platforms import create_platform
 from ventilastation.runtime import (
     RuntimeContext,
@@ -141,6 +142,10 @@ class Director:
             print("director: unknown control command:", cmd_line)
 
     def _enter_scene(self, scene):
+        api_guard.begin_app(
+            getattr(scene, "_vs_api_slug", None),
+            getattr(scene, "_vs_declared_api", None),
+        )
         scene._vs_entered = False
         try:
             scene.on_enter()
