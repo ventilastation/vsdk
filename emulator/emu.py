@@ -27,7 +27,9 @@ def parse_args(argv=None):
     parser.add_argument("--no-display", action="store_true",
                         help="input/audio host only; the spinning LEDs are the display")
     parser.add_argument("--serial-port", default=None,
-                        help="workbench USB bridge serial port (default: autodetect)")
+                        help="USB serial transport port (default: autodetect)")
+    parser.add_argument("--ota-host", default=None,
+                        help="LAN address the board should use to reach this emulator's OTA server")
     return parser.parse_args(argv)
 
 

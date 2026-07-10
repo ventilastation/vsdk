@@ -72,9 +72,18 @@ ota_start http://<host-ip>:8000
 ```
 
 The desktop emulator sends this when you press **U** in the pyglet window
-(`emulator/pyglet2x/pygletdraw.py` → `comms.trigger_ota()`), deriving the
-URL from its own IP on the connection's interface. Its `upgrade_server`
-(below) is already listening on port 8000.
+(`emulator/pyglet2x/pygletdraw.py` → `comms.trigger_ota()`). With a TCP
+workbench connection it uses that connection's local interface; with a direct
+serial board connection it discovers the host's default LAN/Wi-Fi address, so
+the serial control link and Wi-Fi OTA server work together. Its
+`upgrade_server` (below) is already listening on port 8000.
+
+On a computer with several active networks, specify the address reachable by
+the board explicitly:
+
+```sh
+python emu.py SERIAL --serial-port /dev/tty.usbserial-144220 --ota-host 192.168.1.42
+```
 
 The device does **not** run the update inline: the GPU task and WiFi both
 use the SPI bus, and running them concurrently crashes the core. Instead
