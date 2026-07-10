@@ -143,6 +143,16 @@ def _remove_scene_sprites(scene):
     del _live_sprites[write:]
 
 
+def _clear_scene_objects(scene):
+    """Drop the Python ownership links for one scene's drawables."""
+    _remove_scene_sprites(scene)
+    for layer in scene.layers:
+        layer.clear()
+        layer.scene = None
+        layer._layer = None
+    del scene.layers[:]
+
+
 def _collect_scene_sprites(scene, sprites):
     del sprites[:]
     for sprite in _live_sprites:
@@ -260,6 +270,7 @@ class Scene(_Scene):
     def on_enter(self):
         global _active_scene
         backend = _vs2_backend()
+        _clear_scene_objects(self)
         if backend is not None:
             backend.reset_scene()
             backend.set_active(True)
@@ -273,7 +284,7 @@ class Scene(_Scene):
             backend.set_active(False)
         if _active_scene is self:
             _active_scene = None
-        _remove_scene_sprites(self)
+        _clear_scene_objects(self)
         self._vs2_payload = None
         if backend is not None:
             backend.reset_scene()
@@ -324,8 +335,8 @@ class Layer:
             sprite.layer = None
 
     def clear(self):
-        for sprite in list(self.sprites):
-            self.remove(sprite)
+        while self.sprites:
+            self.remove(self.sprites[-1])
 
     @property
     def mode(self):

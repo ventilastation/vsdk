@@ -218,7 +218,15 @@ the native pointer table before returning to legacy system scenes. VS2 sprites
 and layers do not survive across scene visibility lifetimes; games should
 recreate them each time the scene is shown. This keeps ownership clear and
 matches the memory model: allocate during scene setup, share records while the
-scene is active, and release them on scene exit.
+scene is active, and release them on scene exit. The Python scene also drops its
+layer and sprite ownership links on exit, so re-entering the same `Scene`
+instance starts with empty collections and creates fresh drawables. References
+held by game code are no longer registered with the renderer and must not be
+reused after `on_exit()`.
+
+The lifecycle regression checks live in `tests/test_vs2_api.py` and cover native
+record updates, stable payload-buffer reuse, teardown, and re-entry. Run them
+with `python3 tests/run_tests.py`.
 
 ## Deprecation Policy
 

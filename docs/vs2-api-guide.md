@@ -42,7 +42,10 @@ class MyGame(Scene):
 Sprites and layers are scene-owned. Create them in `Scene.on_enter()` after
 `super().on_enter()`, and recreate them each time the scene is shown. When a
 scene exits, its VS2 sprites and layers are cleared and should not be reused by
-another scene entry.
+another scene entry. This includes reusing the same `Scene` instance: its
+`layers` collection is empty on the next entry, and old sprite/layer references
+are detached from the renderer. Keep gameplay state such as scores separately,
+but rebuild all drawable objects during `on_enter()`.
 
 Create sprites from image strip names or numeric strip ids:
 
@@ -95,6 +98,20 @@ sprites by layer so they are ready for the native v2 renderer.
 
 The current v2 payload includes layer visibility and mode, so desktop/web
 emulators can already hide whole layers and carry the intended projection mode.
+
+## Memory and Rendering Contract
+
+VS2 is designed for MicroPython on a memory-constrained board. Sprite and layer
+objects created during scene setup hold the live records rendered by the native
+backend; the renderer does not receive a copied scene graph each frame. Mutate
+those objects in `step()`, reuse the same objects and buffers, and avoid making
+temporary frame payloads in the hot path.
+
+Desktop and web hosts may serialize a reused compatibility payload at the
+transport boundary. That payload is not the authoritative scene state, and its
+buffer should be reused while the number of layers and sprites is stable. The
+web bridge sends high-frequency data by pointer and length where available, as
+described in [Why Pointer Posting Matters](internals/web-emulator-architecture.md#why-pointer-posting-matters).
 
 ## Collisions
 

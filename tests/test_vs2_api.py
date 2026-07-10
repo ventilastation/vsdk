@@ -380,6 +380,73 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertIsNone(scene._vs2_payload)
         self.assertNotIn(scene, [getattr(sprite, "_scene", None) for sprite in vs2._live_sprites])
 
+    def test_scene_exit_clears_layer_ownership(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        layer = scene.layer("world")
+        sprite = layer.add(vs2.Sprite(7, frame=0))
+
+        director.pop()
+
+        self.assertEqual(scene.layers, [])
+        self.assertEqual(layer.sprites, [])
+        self.assertIsNone(layer.scene)
+        self.assertIsNone(layer._layer)
+        self.assertIsNone(sprite.layer)
+        self.assertIsNone(sprite._scene)
+
+    def test_reentering_scene_recreates_layers_and_sprites(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        class Reenterable(vs2.Scene):
+            _vs_api_slug = "games.test_vs2"
+            _vs_declared_api = "vs2"
+
+            def on_enter(self):
+                super().on_enter()
+                layer = self.layer("world")
+                self.sprite = layer.add(vs2.Sprite(7, frame=0))
+
+        scene = Reenterable()
+        director.push(scene)
+        old_layer = scene.layers[0]
+        old_sprite = scene.sprite
+        director.pop()
+        director.push(scene)
+
+        self.assertIsNot(scene.layers[0], old_layer)
+        self.assertIsNot(scene.sprite, old_sprite)
+        self.assertEqual(len(scene.layers), 1)
+        self.assertEqual(len(scene.layers[0].sprites), 1)
+        self.assertIs(scene.layers[0].sprites[0], scene.sprite)
+        self.assertNotIn(old_sprite, vs2._live_sprites)
+
+    def test_stable_scene_payload_is_mutated_in_place(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        sprite = vs2.Sprite(7, x=1, y=2, frame=0)
+        payload = vs2.export_scene_payload(scene)
+        payload_id = id(payload)
+
+        sprite.x = -3.25
+        updated = vs2.export_scene_payload(scene)
+
+        self.assertEqual(id(updated), payload_id)
+        header_size = struct.unpack_from("<H", updated, 8)[0]
+        x_fixed = struct.unpack_from("<i", updated, header_size + 10)[0]
+        self.assertEqual(x_fixed, int(-3.25 * 256))
+
 
 if __name__ == "__main__":
     unittest.main()
