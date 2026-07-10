@@ -19,10 +19,10 @@ history of this file for the record.
 
 ## Runtime / API v2
 
-- New sprite type holding a byte array rendered as text from a strip; also
+- [planned] New sprite type holding a byte array rendered as text from a strip; also
   usable for tile-based backgrounds.
-- Port existing games to the v2 APIs.
-- Go through the Discord suggestions and GitHub bug reports and shape the
+- [vyruss vs2] Port existing games to the v2 APIs.
+- [done] Go through the Discord suggestions and GitHub bug reports and shape the
   v2 API list (music loop flag already done).
 
 ## Deployment / OTA (see docs/internals/ota.md)
@@ -45,6 +45,9 @@ history of this file for the record.
   resolution today).
 - Stereo separation/pan as available in I_StartSound.
 - Disable the board OPL synth and audio playback in LED/emulator modes.
+- LEDs on the base get red with damage (taking black from palette)
+- LEDs on the base show a shade of blue indicating percentage of shielding
+- servo on the base reflects the percentage of damage.
 
 ## Workbench
 
@@ -56,12 +59,12 @@ history of this file for the record.
 
 ## New game
 
-- Let's plan a new ventilastation game called "Vixeous", make a new branch for that. It should play similarly to Xevious, the 1983 game by Namco, but the surface of the game should be similar to a tube, like Gyruss. I expect it to have waves of enemies, dropping bombs on targets, bosses, different areas. And all with fast action, cool graphics and music, fun gameplay. The tubular world would rotate as the player moves, but keeping the spaceship always centered. The game Tincho Vrunner already manipulates a lot of sprites that may be needed for a game like this, but we may need to extend the VSDK apis with a scrolling tile renderer to accelerate the display of an extensive playfield.
+- [ongoing] Let's plan a new ventilastation game called "Vixeous", make a new branch for that. It should play similarly to Xevious, the 1983 game by Namco, but the surface of the game should be similar to a tube, like Gyruss. I expect it to have waves of enemies, dropping bombs on targets, bosses, different areas. And all with fast action, cool graphics and music, fun gameplay. The tubular world would rotate as the player moves, but keeping the spaceship always centered. The game Tincho Vrunner already manipulates a lot of sprites that may be needed for a game like this, but we may need to extend the VSDK apis with a scrolling tile renderer to accelerate the display of an extensive playfield.
 
 ## cleanups
 
 - [done] Since the workbench was added to this project, the feature to have the main board emit display frames via wifi no longer makes sense (the tcp bridge). Remove that feature, and all references to it in the project, Makefiles, documentation, etc.
-- Create some script that identifies what USB port the ventilastation board and the workbench board are connected to. Perhaps add some identification in the build or flash process, or in the NVS partition, so the two types of boards can be told apart. Then make all Makefile targets that expect a PORT default to using this new script so the user does not need to specify the PORT all of the time, only if more than one board is found of the same type, or if the user wants to force the reflash of a given type of board.
+- [done] Create some script that identifies what USB port the ventilastation board and the workbench board are connected to. Perhaps add some identification in the build or flash process, or in the NVS partition, so the two types of boards can be told apart. Then make all Makefile targets that expect a PORT default to using this new script so the user does not need to specify the PORT all of the time, only if more than one board is found of the same type, or if the user wants to force the reflash of a given type of board.
 - the sync-server.py and sync.py combo were the fastest way to upload changes files to the lfs partition. I want them integrated into the upgrade_server, so 
 
 - provide a way to start an upgrade from the web editor. Using webserial, and having the browser connect to the micropython board via websockets. 
@@ -72,7 +75,11 @@ history of this file for the record.
 - [alecu] code a whole new game in the editor.
 
 - move hw_config to NVS, use the GPIOs defined there for retro-go, prboom, et al.
+- rename the Makefile targets so they follow a coherent pattern. Right now there's workbench-flash and flash-vsdk and deploy-fs and flash-all, if they do mostly the same they should be named similarly.
 
+- [ongoing] Let's plan a new vsdk branch, call it "vsdk-api-v2" and branch it from main. I want to build a new API for ventilastation games, but for now keep the existing API in parallel. Games should be able to import from one API or the other, not both. There are some requests for this new API in the issue tracker at [https://github.com/ventilastation/vsdk/issues](https://github.com/ventilastation/vsdk/issues) , issues #89, #90, #91, #92, #93, #95, #96, #97, #98, #109, #110, #111, #112. All of this work might need a separate render function in gpu.c and a different memory structure for sprites, and new renderers in both emulators. We can create a copy of Vyruss and port it to this new API, but please change the menu icon so we can tell them apart.
+- API shape refinement: deciding what VS2 should expose for layers, sprite groups, transforms, text/HUD, fullscreen sprites, and whether we want helper abstractions above the raw shared sprite memory.
 
+- [HIGH] The json manifests are a disgrace. They should not live in the repository, and should only be generated if at all needed.
 
-- Let's plan a new vsdk branch, call it "vsdk-api-v2" and branch it from main. I want to build a new API for ventilastation games, but for now keep the existing API in parallel. Games should be able to import from one API or the other, not both. There are some requests for this new API in the issue tracker at [https://github.com/ventilastation/vsdk/issues](https://github.com/ventilastation/vsdk/issues) , issues #89, #90, #91, #92, #93, #95, #96, #97, #98, #109, #110, #111, #112. All of this work might need a separate render function in gpu.c and a different memory structure for sprites, and new renderers in both emulators. We can create a copy of Vyruss and port it to this new API, but please change the menu icon so we can tell them apart.
+- sounds and music: be able to specify a base, so later commands dont need to specify it. Ej: setSoundFolder("/alecu/vyruss"), and later playSound("mondongo.mp3") or playSound("/other/mondongo2.mp3")
