@@ -8,6 +8,11 @@
   const COLUMNS = 256;
   const PIXELS = 54;
   const TRANSPARENT_INDEX = 255;
+  const VS2_MAGIC = "VS2\0";
+  const VS2_VERSION = 1;
+  const VS2_FLAG_VISIBLE = 0x01;
+  const VS2_FLAG_FLIP_X = 0x02;
+  const VS2_FLAG_FLIP_Y = 0x04;
   const ROWS = 256;
   const STARS = COLUMNS / 2;
   const STAR_COLOR = [64, 64, 64, 255];
@@ -44,12 +49,115 @@
     return ((value % modulo) + modulo) % modulo;
   }
 
+  function readAscii(bytes, offset, length) {
+    let value = "";
+    for (let index = 0; index < length; index += 1) {
+      value += String.fromCharCode(bytes[offset + index] || 0);
+    }
+    return value;
+  }
+
+  function decodeVs2SceneBuffer(buffer) {
+    if (!(buffer instanceof Uint8Array) || buffer.length < 16) {
+      return { version: 0, layers: [], sprites: [] };
+    }
+    if (readAscii(buffer, 0, 4) !== VS2_MAGIC) {
+      return { version: 0, layers: [], sprites: [] };
+    }
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    const version = buffer[4];
+    if (version !== VS2_VERSION) {
+      return { version, layers: [], sprites: [] };
+    }
+    const layerCount = buffer[5];
+    const spriteCount = buffer[6];
+    const headerSize = view.getUint16(8, true);
+    const layerSize = view.getUint16(10, true);
+    const spriteSize = view.getUint16(12, true);
+    const layers = [];
+    let offset = headerSize;
+    for (let index = 0; index < layerCount; index += 1) {
+      if (offset + layerSize > buffer.length) {
+        return { version, layers: [], sprites: [] };
+      }
+      layers.push({
+        id: buffer[offset],
+        mode: buffer[offset + 1],
+        visible: Boolean(buffer[offset + 2] & VS2_FLAG_VISIBLE),
+      });
+      offset += layerSize;
+    }
+
+    const sprites = [];
+    for (let slot = 0; slot < spriteCount; slot += 1) {
+      if (offset + spriteSize > buffer.length) {
+        return { version, layers, sprites };
+      }
+      const layerId = buffer[offset];
+      const strip = buffer[offset + 1];
+      const frame = buffer[offset + 2];
+      let mode = buffer[offset + 3];
+      const flags = buffer[offset + 4];
+      const layer = layers[layerId] || null;
+      offset += spriteSize;
+      if (!(flags & VS2_FLAG_VISIBLE)) {
+        continue;
+      }
+      if (layer && !layer.visible) {
+        continue;
+      }
+      if (layer) {
+        mode = layer.mode;
+      }
+      const xFixed = view.getInt32(offset - spriteSize + 10, true);
+      const yFixed = view.getInt32(offset - spriteSize + 14, true);
+      const x = xFixed / 256;
+      const y = yFixed / 256;
+      sprites.push({
+        slot,
+        x,
+        y,
+        image_strip: strip,
+        frame,
+        perspective: mode,
+        vs2: {
+          layer: layerId,
+          x,
+          y,
+          flags,
+          flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
+          flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
+        },
+      });
+    }
+    return { version, layers, sprites };
+  }
+
   function getVisibleColumn(spriteX, spriteWidth, renderColumn) {
     const spriteColumn = spriteWidth - 1 - positiveMod(renderColumn - spriteX, COLUMNS);
     if (spriteColumn >= 0 && spriteColumn < spriteWidth) {
       return spriteColumn;
     }
     return -1;
+  }
+
+  function getSourceColumn(sprite, spriteWidth, renderColumn) {
+    const spriteX = sprite?.vs2 ? Math.floor(sprite.x || 0) : sprite.x || 0;
+    const spriteColumn = getVisibleColumn(spriteX, spriteWidth, renderColumn);
+    if (spriteColumn === -1) {
+      return -1;
+    }
+    if (sprite?.vs2?.flip_x) {
+      return spriteWidth - 1 - spriteColumn;
+    }
+    return spriteColumn;
+  }
+
+  function getSourceRow(sprite, sourceRow, spriteHeight) {
+    if (sprite?.vs2?.flip_y) {
+      return spriteHeight - 1 - sourceRow;
+    }
+    return sourceRow;
   }
 
   function getLedOffset(column, led) {
@@ -80,6 +188,20 @@
     buffer[offset + 1] = palette[paletteOffset + 2] || 0;
     buffer[offset + 2] = palette[paletteOffset + 1] || 0;
     buffer[offset + 3] = 255;
+  }
+
+  function clamp(value, minimum, maximum) {
+    if (value < minimum) {
+      return minimum;
+    }
+    if (value > maximum) {
+      return maximum;
+    }
+    return value;
+  }
+
+  function spritePixelY(sprite) {
+    return sprite?.vs2 ? Math.floor(sprite.y || 0) : Math.trunc(sprite.y || 0);
   }
 
   function getFrameIndex(frame, totalFrames) {
@@ -133,7 +255,7 @@
         const width = asset.width === 255 ? 256 : asset.width;
         const height = asset.height || 0;
         const totalFrames = Math.max(asset.frames || 1, 1);
-        const visibleColumn = getVisibleColumn(sprite.x || 0, width, renderColumn);
+        const visibleColumn = getSourceColumn(sprite, width, renderColumn);
         if (visibleColumn === -1 || height <= 0) {
           continue;
         }
@@ -143,12 +265,13 @@
         const paletteIndex = asset.palette || 0;
 
         if (sprite.perspective) {
-          const desde = Math.max(sprite.y || 0, 0);
-          const hasta = Math.min((sprite.y || 0) + height, 255);
-          let src = base + Math.max(-(sprite.y || 0), 0);
+          const spriteY = spritePixelY(sprite);
+          const desde = Math.max(spriteY, 0);
+          const hasta = Math.min(spriteY + height, ROWS);
 
-          for (let y = desde; y < hasta; y += 1, src += 1) {
-            const colorIndex = asset.data[src];
+          for (let y = desde; y < hasta; y += 1) {
+            const sourceRow = getSourceRow(sprite, y - spriteY, height);
+            const colorIndex = asset.data[base + sourceRow];
             if (colorIndex === TRANSPARENT_INDEX) {
               continue;
             }
@@ -160,13 +283,17 @@
           continue;
         }
 
-        const zleds = DEEPSPACE[255 - (sprite.y || 0)];
+        const spriteY = spritePixelY(sprite);
+        const zleds = DEEPSPACE[clamp(255 - spriteY, 0, ROWS - 1)];
         for (let led = 0; led < zleds; led += 1) {
-          const src = Math.floor((led * PIXELS) / zleds);
-          if (src >= height) {
+          let sourceRow = Math.floor((led * PIXELS) / zleds);
+          if (sourceRow >= height) {
             break;
           }
-          const colorIndex = asset.data[base + height - 1 - src];
+          if (!sprite?.vs2?.flip_y) {
+            sourceRow = height - 1 - sourceRow;
+          }
+          const colorIndex = asset.data[base + sourceRow];
           if (colorIndex === TRANSPARENT_INDEX) {
             continue;
           }
@@ -299,6 +426,7 @@
     TRANSPARENT_INDEX,
     DEEPSPACE,
     getVisibleColumn,
+    decodeVs2SceneBuffer,
     computeLedFramePixels,
     computeLedFramePixelsFromRgb,
     createLedRingGeometry,

@@ -34,8 +34,9 @@ import {
   formatBytes,
   buildRenderProfileSnapshot,
   decodeSpriteStateBuffer,
+  decodeVs2SceneBuffer,
   decodeImageStripPayload,
-} from "./app-support.js?v=20260709a";
+} from "./app-support.js?v=20260709b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260709a";
@@ -189,7 +190,8 @@ class BrowserHostApp {
       event &&
       typeof event === "object" &&
       (event.command === "palette" || event.command === "imagestrip" ||
-        event.command === "sprites" || event.command === "frame_rgb")
+        event.command === "sprites" || event.command === "vs2_scene" ||
+        event.command === "frame_rgb")
     ));
   }
 
@@ -205,6 +207,7 @@ class BrowserHostApp {
     }
 
     let decodedSprites = null;
+    let decodedVs2Scene = null;
     const remainingEvents = [];
 
     for (const event of frame.events) {
@@ -244,7 +247,14 @@ class BrowserHostApp {
         continue;
       }
       if (event.command === "sprites" && event.data instanceof Uint8Array) {
-        decodedSprites = decodeSpriteStateBuffer(event.data);
+        if (decodedVs2Scene === null) {
+          decodedSprites = decodeSpriteStateBuffer(event.data);
+        }
+        continue;
+      }
+      if (event.command === "vs2_scene" && event.data instanceof Uint8Array) {
+        decodedVs2Scene = decodeVs2SceneBuffer(event.data);
+        decodedSprites = decodedVs2Scene.sprites;
         continue;
       }
       if (event.command === "frame_rgb" && event.data instanceof Uint8Array) {
@@ -256,6 +266,7 @@ class BrowserHostApp {
     }
 
     frame.sprites = decodedSprites || [];
+    frame.vs2Scene = decodedVs2Scene;
     frame.assets = [];
     frame.events = remainingEvents;
   }

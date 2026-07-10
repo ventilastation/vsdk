@@ -6,7 +6,8 @@ fills from the wire protocol, and renders one 54-pixel LED column at a time
 """
 
 import random
-from struct import pack, unpack
+import math
+from struct import pack, unpack, unpack_from
 
 from deepspace import deepspace, PIXELS
 
@@ -18,6 +19,7 @@ led_count = PIXELS
 
 starfield = [(random.randrange(COLUMNS), random.randrange(ROWS)) for n in range(STARS)]
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
+vs2_scene_sprites = None
 all_strips = {}
 qpalette = []
 upalette = []
@@ -34,6 +36,67 @@ def set_voom_frame_rgb(data):
 def clear_voom_frame():
     global _voom_frame_rgb
     _voom_frame_rgb = None
+
+def clear_vs2_scene():
+    global vs2_scene_sprites
+    vs2_scene_sprites = None
+
+def set_vs2_scene(data):
+    global vs2_scene_sprites
+    vs2_scene_sprites = decode_vs2_scene(data)
+
+def decode_vs2_scene(data):
+    if len(data) < 16 or data[0:4] != b"VS2\0":
+        return None
+    version, layer_count, sprite_count, _flags, header_size, layer_size, sprite_size, _reserved = unpack_from(
+        "<BBBBHHHH",
+        data,
+        4,
+    )
+    if version != 1:
+        return None
+
+    layers = []
+    offset = header_size
+    for _ in range(layer_count):
+        if offset + layer_size > len(data):
+            return None
+        layer_id, mode, flags = unpack_from("<BBB", data, offset)
+        layers.append({
+            "id": layer_id,
+            "mode": mode,
+            "visible": bool(flags & 0x01),
+        })
+        offset += layer_size
+
+    decoded = []
+    for slot in range(sprite_count):
+        if offset + sprite_size > len(data):
+            return None
+        layer_id, image, frame, mode, flags, _reserved0, _reserved1, _reserved2, x_fixed, y_fixed = unpack_from(
+            "<BBBBBBhhii",
+            data,
+            offset,
+        )
+        layer = layers[layer_id] if layer_id < len(layers) else None
+        offset += sprite_size
+        if not flags & 0x01:
+            continue
+        if layer is not None and not layer["visible"]:
+            continue
+        if layer is not None:
+            mode = layer["mode"]
+        decoded.append({
+            "slot": slot,
+            "x": x_fixed / 256.0,
+            "y": y_fixed / 256.0,
+            "image": image,
+            "frame": frame,
+            "perspective": mode,
+            "flip_x": bool(flags & 0x02),
+            "flip_y": bool(flags & 0x04),
+        })
+    return decoded
 
 def change_colors(colors):
     # byteswap all longs
@@ -68,6 +131,28 @@ def get_visible_column(sprite_x, sprite_width, render_column):
     else:
         return -1
 
+def get_source_column(sprite_x, sprite_width, render_column, flip_x=False):
+    sprite_column = get_visible_column(sprite_x, sprite_width, render_column)
+    if sprite_column == -1:
+        return -1
+    if flip_x:
+        return sprite_width - 1 - sprite_column
+    return sprite_column
+
+def _floor_coord(value):
+    return int(math.floor(value))
+
+def _clamp(value, minimum, maximum):
+    if value < minimum:
+        return minimum
+    if value > maximum:
+        return maximum
+    return value
+
+def set_pixel(pixels, led, color):
+    if 0 <= led < led_count:
+        pixels[led] = color
+
 def step_starfield():
     for (n, (x, y)) in enumerate(starfield):
         y -= 1
@@ -101,11 +186,36 @@ def render(column):
                 print(e, len(pixels), y, px)
                 print(y, deepspace)
 
-    # sprite 0 is drawn on top of all the others
-    for n in range(99, -1, -1):
-        x, y, image, frame, perspective = unpack("BBBBb", spritedata[n*5:n*5+5])
-        if frame == 255:
-            continue
+    scene_sprites = vs2_scene_sprites
+    use_vs2_renderer = scene_sprites is not None
+    if scene_sprites is None:
+        # sprite 0 is drawn on top of all the others
+        scene_sprites = []
+        for n in range(99, -1, -1):
+            x, y, image, frame, perspective = unpack("BBBBb", spritedata[n*5:n*5+5])
+            if frame == 255:
+                continue
+            scene_sprites.append({
+                "slot": n,
+                "x": x,
+                "y": y,
+                "image": image,
+                "frame": frame,
+                "perspective": perspective,
+                "flip_x": False,
+                "flip_y": False,
+            })
+    else:
+        scene_sprites = sorted(scene_sprites, key=lambda sprite: sprite["slot"], reverse=True)
+
+    for sprite in scene_sprites:
+        x = _floor_coord(sprite["x"]) if use_vs2_renderer else int(sprite["x"])
+        y = _floor_coord(sprite["y"]) if use_vs2_renderer else int(sprite["y"])
+        image = sprite["image"]
+        frame = sprite["frame"]
+        perspective = sprite["perspective"]
+        flip_x = sprite.get("flip_x", False)
+        flip_y = sprite.get("flip_y", False)
 
         strip = all_strips.get(image)
         if not strip:
@@ -117,36 +227,37 @@ def render(column):
 
         frame %= total_frames
 
-        visible_column = get_visible_column(x, w, column)
+        visible_column = get_source_column(x, w, column, flip_x)
         if visible_column != -1:
             base = visible_column * h + (frame * w * h)
             if perspective:
                 y_start = max(y, 0)
-                y_end = min(y + h, ROWS - 1)
-                clipped = max(-y, 0)
-                src = base + clipped
+                y_end = min(y + h, ROWS)
 
-                for y in range(y_start, y_end):
-                    index = pixeldata[src]
-                    src += 1
+                for dest_y in range(y_start, y_end):
+                    source_row = dest_y - y
+                    if flip_y:
+                        source_row = h - 1 - source_row
+                    index = pixeldata[base + source_row]
                     if index != TRANSPARENT_INDEX:
                         color = upalette[index + pal_base]
                         if perspective == 1:
-                            y = deepspace[y]
+                            led = deepspace[dest_y]
                         else:
-                            y = led_count - 1 - y
-                        if y < led_count:
-                            pixels[y] = color
+                            led = led_count - 1 - dest_y
+                        set_pixel(pixels, led, color)
             else:
-                zleds = deepspace[255-y]
+                zleds = deepspace[_clamp(255 - y, 0, ROWS - 1)]
 
                 for led in range(zleds):
-                    src = led * led_count // zleds
-                    if src >= h:
+                    source_row = led * led_count // zleds
+                    if source_row >= h:
                         break
-                    index = pixeldata[base + h - 1 - src]
+                    if not flip_y:
+                        source_row = h - 1 - source_row
+                    index = pixeldata[base + source_row]
                     if index != TRANSPARENT_INDEX:
                         color = upalette[index + pal_base]
-                        pixels[led] = color
+                        set_pixel(pixels, led, color)
 
     return pixels

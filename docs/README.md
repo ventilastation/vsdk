@@ -23,6 +23,9 @@ apps — head to [internals/](internals/README.md) instead.
    whole way: cloning a minimal game, the folder layout, Scenes and the
    director, Sprites and the circular display, images, sounds, and getting
    your game onto the menu. That one document is most of what you need.
+   New games should also read the [vs2 API guide](vs2-api-guide.md); the
+   older `ventilastation.sprites` API remains available for existing games
+   but is now the legacy API.
 
 3. **Poke at real games.** `games/alecu/ventap` is the smallest complete
    game; `games/alecu/vyruss` shows most of the API in anger. The
@@ -40,6 +43,8 @@ apps — head to [internals/](internals/README.md) instead.
 - The display is polar: 54 LEDs from center to edge × 256 angular steps.
   You draw with up to 100 hardware-accelerated `Sprite`s; PNG assets are
   compiled into ROM files automatically when the emulator starts.
+- New games should import `vs2`; existing games using
+  `ventilastation.sprites` continue to run during the deprecation period.
 - Your game appears in the console menu just by existing: the launcher
   discovers `games/*/*/` folders and orders them by `meta.json`. No
   launcher code to edit.

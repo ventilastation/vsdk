@@ -6,6 +6,7 @@ import uos
 import utime
 
 from ventilastation import settings
+from ventilastation import api_guard
 from ventilastation.platforms import create_platform
 from ventilastation.runtime import (
     RuntimeContext,
@@ -141,6 +142,10 @@ class Director:
             print("director: unknown control command:", cmd_line)
 
     def _enter_scene(self, scene):
+        api_guard.begin_app(
+            getattr(scene, "_vs_api_slug", None),
+            getattr(scene, "_vs_declared_api", None),
+        )
         scene._vs_entered = False
         try:
             scene.on_enter()
@@ -402,6 +407,9 @@ class Director:
         self.last_extra_buttons = self.extra_buttons
 
         self.timedout = utime.ticks_diff(now, self.last_player_action) > INPUT_TIMEOUT
+        prepare_frame = getattr(self.platform.display, "prepare_frame", None)
+        if prepare_frame is not None:
+            prepare_frame(scene)
         self.platform.display.update()
         trace_flags = getattr(self.platform, "trace_flags", 0)
         if trace_flags & TRACE_AUTO_GC_FRAME:
@@ -438,4 +446,9 @@ def ensure_runtime(platform_name=None, argv=None, environ=None):
 
 
 def reset_runtime():
+    try:
+        import vs2
+        vs2.reset_runtime_state()
+    except ImportError:
+        pass
     clear_runtime()

@@ -46,6 +46,7 @@ EMU_ROM_ROOTS = {"roms/nes", "roms/sms"}
 def iter_copy_jobs(vsdk_root):
     roots = [
         ("main.py", vsdk_root / "apps/micropython/main.py"),
+        ("vs2.py", vsdk_root / "apps/micropython/vs2.py"),
         ("ventilastation", vsdk_root / "apps/micropython/ventilastation"),
         ("roms", vsdk_root / "apps/micropython/roms"),
         ("roms/doom", vsdk_root / "apps/retro-go/prboom-go/components/prboom/data"),

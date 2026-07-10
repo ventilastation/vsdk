@@ -4,6 +4,7 @@ const {
   PIXELS,
   computeLedFramePixels,
   computeLedFramePixelsFromRgb,
+  decodeVs2SceneBuffer,
   getLedColor,
 } = require("./led-render-core.js");
 
@@ -41,6 +42,44 @@ function blankFrame(overrides = {}) {
     events: [],
     ...overrides,
   };
+}
+
+function makeVs2ScenePayload({ layers, sprites }) {
+  const headerSize = 16;
+  const layerSize = 8;
+  const spriteSize = 24;
+  const payload = new Uint8Array(headerSize + layers.length * layerSize + sprites.length * spriteSize);
+  const view = new DataView(payload.buffer);
+  payload[0] = "V".charCodeAt(0);
+  payload[1] = "S".charCodeAt(0);
+  payload[2] = "2".charCodeAt(0);
+  payload[3] = 0;
+  payload[4] = 1;
+  payload[5] = layers.length;
+  payload[6] = sprites.length;
+  view.setUint16(8, headerSize, true);
+  view.setUint16(10, layerSize, true);
+  view.setUint16(12, spriteSize, true);
+
+  let offset = headerSize;
+  for (let index = 0; index < layers.length; index += 1) {
+    const layer = layers[index];
+    payload[offset] = index;
+    payload[offset + 1] = layer.mode;
+    payload[offset + 2] = layer.visible === false ? 0 : 1;
+    offset += layerSize;
+  }
+  for (const sprite of sprites) {
+    payload[offset] = sprite.layer || 0;
+    payload[offset + 1] = sprite.image_strip;
+    payload[offset + 2] = sprite.frame || 0;
+    payload[offset + 3] = sprite.mode ?? 1;
+    payload[offset + 4] = sprite.flags ?? 1;
+    view.setInt32(offset + 10, Math.trunc((sprite.x || 0) * 256), true);
+    view.setInt32(offset + 14, Math.trunc((sprite.y || 0) * 256), true);
+    offset += spriteSize;
+  }
+  return payload;
 }
 
 function runTests() {
@@ -145,6 +184,105 @@ function runTests() {
 
   assert.equal(COLUMNS, 256);
   assert.equal(PIXELS, 54);
+
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [{ mode: 1, visible: true }, { mode: 2, visible: false }],
+      sprites: [
+        { layer: 0, image_strip: 7, frame: 0, mode: 1, flags: 1 | 2, x: 42.5, y: 120 },
+        { layer: 1, image_strip: 7, frame: 0, mode: 2, flags: 1, x: 10, y: 0 },
+        { layer: 0, image_strip: 7, frame: 0, mode: 1, flags: 0, x: 11, y: 0 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    assert.equal(decoded.version, 1);
+    assert.equal(decoded.layers.length, 2);
+    assert.equal(decoded.sprites.length, 1);
+    assert.equal(decoded.sprites[0].x, 42.5);
+    assert.equal(decoded.sprites[0].vs2.x, 42.5);
+    assert.equal(decoded.sprites[0].vs2.flip_x, true);
+
+    const palette = createPalette({ 1: [1, 2, 3] });
+    const assets = new Map([
+      [7, makeAsset({ width: 1, height: 1, data: [1] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 42, 7), [1, 2, 3, 255], "VS2 decoded sprite should render through LED core");
+    assert.deepEqual(getLedColor(pixels, 10, 53), [0, 0, 0, 255], "hidden VS2 layer should not render");
+  }
+
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [],
+      sprites: [
+        { layer: 255, image_strip: 3, frame: 0, mode: 0, flags: 1, x: 30, y: 255 },
+        { layer: 255, image_strip: 7, frame: 0, mode: 2, flags: 1, x: 42, y: 0 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    assert.equal(decoded.layers.length, 0);
+    assert.equal(decoded.sprites.length, 2);
+    assert.equal(decoded.sprites[0].perspective, 0, "unlayered VS2 sprite must preserve FULLSCREEN mode");
+    assert.equal(decoded.sprites[1].perspective, 2, "unlayered VS2 sprite must preserve HUD mode");
+
+    const palette = createPalette({ 1: [9, 8, 7] });
+    const assets = new Map([
+      [3, makeAsset({ width: 1, height: 4, data: [1, 1, 1, 1] })],
+      [7, makeAsset({ width: 1, height: 1, data: [1] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 30, 0), [9, 8, 7, 255], "unlayered VS2 FULLSCREEN sprite should use fullscreen projection");
+    assert.deepEqual(getLedColor(pixels, 42, 53), [9, 8, 7, 255], "unlayered VS2 HUD sprite should use HUD projection");
+  }
+
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [],
+      sprites: [
+        { layer: 255, image_strip: 8, frame: 0, mode: 2, flags: 1 | 2 | 4, x: 20, y: 51 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    const palette = createPalette({
+      1: [10, 0, 0],
+      2: [20, 0, 0],
+      3: [30, 0, 0],
+      4: [40, 0, 0],
+    });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 20, 2), [20, 0, 0, 255], "VS2 flip_x+flip_y should sample mirrored column/row");
+    assert.deepEqual(getLedColor(pixels, 20, 1), [10, 0, 0, 255], "VS2 flip_y should reverse source rows");
+    assert.deepEqual(getLedColor(pixels, 21, 2), [40, 0, 0, 255], "VS2 flip_x should mirror source columns");
+  }
+
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [],
+      sprites: [
+        { layer: 255, image_strip: 8, frame: 0, mode: 2, flags: 1, x: -0.25, y: -0.25 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    assert.equal(decoded.sprites[0].x, -0.25);
+    assert.equal(decoded.sprites[0].y, -0.25);
+
+    const palette = createPalette({
+      1: [10, 0, 0],
+      2: [20, 0, 0],
+      3: [30, 0, 0],
+      4: [40, 0, 0],
+    });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 0, 53), [20, 0, 0, 255], "VS2 x/y=-0.25 should floor and clip vertically");
+    assert.deepEqual(getLedColor(pixels, 1, 53), [0, 0, 0, 255], "VS2 fractional X should occupy only its wrapped sprite columns");
+    assert.deepEqual(getLedColor(pixels, 255, 53), [40, 0, 0, 255], "VS2 negative X should wrap around the circular display");
+  }
 
   // Raw polar framebuffer path (Super Ventilagon / Voom "frame_rgb").
   {

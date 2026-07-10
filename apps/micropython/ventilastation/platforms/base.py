@@ -18,6 +18,7 @@ class Platform:
         hw_config=None,
         pixels=54,
         disable_gc=False,
+        vs2_backend=None,
         native_launcher=None,
         native_available=None,
         native_last_exit_reason=None,
@@ -33,6 +34,7 @@ class Platform:
         # GC pauses would glitch the POV image, so the director disables GC and
         # collects at safe points instead.
         self.disable_gc = disable_gc
+        self.vs2 = vs2_backend
         self.native_launcher = native_launcher
         self.native_available = native_available
         self.native_last_exit_reason_fn = native_last_exit_reason

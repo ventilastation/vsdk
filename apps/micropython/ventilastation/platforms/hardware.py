@@ -27,6 +27,7 @@ def create_hardware_platform():
             hw_config.led_freq,
         ),
         disable_gc=True,
+        vs2_backend=LazyModule("vshw_vs2"),
         native_launcher=optional_attr("vshw_native_apps", "launch"),
         native_available=optional_attr("vshw_native_apps", "available"),
         native_last_exit_reason=optional_attr("vshw_native_apps", "last_exit_reason"),

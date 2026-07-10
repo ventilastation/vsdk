@@ -131,6 +131,10 @@ class BrowserDisplay(NullDisplay):
         self.asset_data = {}
         self.assets = {}
         self.dirty_asset_slots = set()
+        self.vs2_scene_data = None
+        self._vs2_scene_line = None
+        self._vs2_scene_line_length = -1
+        self._worker_post_command_ptr = None
         self._worker_post_sprites = None
         self._worker_post_frame = None
         self._worker_post_frame_bytes = None
@@ -161,11 +165,13 @@ class BrowserDisplay(NullDisplay):
             "assets": [],
             "events": [],
             "sprites": [],
+            "vs2_scene": None,
             "python_profile": None,
         }
 
     def set_worker_host(self, worker_host):
         self.worker_host = worker_host
+        self._worker_post_command_ptr = getattr(worker_host, "post_command_ptr", None)
         self._worker_post_sprites = getattr(worker_host, "post_sprites", None)
         self._worker_post_sprites_ptr = getattr(worker_host, "post_sprites_ptr", None)
         self._worker_post_frame_bytes = getattr(worker_host, "post_frame_bytes", None)
@@ -178,6 +184,28 @@ class BrowserDisplay(NullDisplay):
         if self.worker_host is None:
             return False
         return _post_worker_command(self.worker_host, line, data)
+
+    def _post_vs2_scene(self):
+        data = self.vs2_scene_data
+        if data is None:
+            return False
+        length = len(data)
+        if self._vs2_scene_line is None or self._vs2_scene_line_length != length:
+            self._vs2_scene_line = b"vs2_scene %d" % length
+            self._vs2_scene_line_length = length
+        post_command_ptr = self._worker_post_command_ptr
+        if post_command_ptr is not None:
+            try:
+                post_command_ptr(
+                    uctypes.addressof(self._vs2_scene_line),
+                    len(self._vs2_scene_line),
+                    uctypes.addressof(data),
+                    length,
+                )
+                return True
+            except Exception:
+                pass
+        return self._post_command(self._vs2_scene_line, data)
 
     def _post_sprites(self):
         if self.worker_host is None:
@@ -314,6 +342,17 @@ class BrowserDisplay(NullDisplay):
         self.assets[number] = asset
         self.dirty_asset_slots.add(number)
 
+    def prepare_frame(self, scene):
+        if getattr(scene, "_vs_declared_api", None) != "vs2":
+            self.vs2_scene_data = None
+            return
+        try:
+            import vs2
+            self.vs2_scene_data = vs2.export_scene_payload(scene)
+        except Exception:
+            self.vs2_scene_data = None
+            raise
+
     def update(self):
         self.frame += 1
         if self.worker_host is None:
@@ -337,6 +376,8 @@ class BrowserDisplay(NullDisplay):
         else:
             self._post_sprites()
             self._post_frame(full)
+        if self.vs2_scene_data is not None:
+            self._post_vs2_scene()
         self.palette_dirty = False
         self.dirty_asset_slots.clear()
 
@@ -396,8 +437,15 @@ class BrowserDisplay(NullDisplay):
         exported["assets"] = [self.assets[slot] for slot in asset_slots if slot in self.assets]
         after_assets_at = ticks_us()
         exported["events"] = self.comms.drain_events()
+        if self.vs2_scene_data is not None:
+            exported["events"].append({
+                "command": "vs2_scene",
+                "args": [str(len(self.vs2_scene_data))],
+                "data": self.vs2_scene_data,
+            })
         after_events_at = ticks_us()
         exported["sprites"] = self._decode_sprites()
+        exported["vs2_scene"] = self.vs2_scene_data
         finished_at = ticks_us()
         display_export_us = ticks_diff_us(finished_at, started_at)
         palette_attach_us = ticks_diff_us(after_palette_at, palette_started_at)

@@ -745,6 +745,7 @@ const streamedFrameState = {
   palette_dirty: false,
   events: [],
   pendingSpritesEvent: null,
+  pendingVs2SceneEvent: null,
   sprites: [],
 };
 
@@ -752,6 +753,9 @@ function finalizeStreamedFrame() {
   const events = streamedFrameState.events.slice();
   if (streamedFrameState.pendingSpritesEvent) {
     events.push(streamedFrameState.pendingSpritesEvent);
+  }
+  if (streamedFrameState.pendingVs2SceneEvent) {
+    events.push(streamedFrameState.pendingVs2SceneEvent);
   }
   const frame = {
     frame: streamedFrameState.frame,
@@ -767,6 +771,7 @@ function finalizeStreamedFrame() {
   streamedFrameState.palette_dirty = false;
   streamedFrameState.events = [];
   streamedFrameState.pendingSpritesEvent = null;
+  streamedFrameState.pendingVs2SceneEvent = null;
   return frame;
 }
 
@@ -800,6 +805,11 @@ function handleRuntimeCommand(line, payloadBytes) {
     return;
   }
 
+  if (command === "vs2_scene") {
+    handleRuntimeVs2Scene(payloadBytes);
+    return;
+  }
+
   if (command === "frame") {
     handleRuntimeFrame({
       frame: parts[1],
@@ -826,6 +836,15 @@ function handleRuntimeCommand(line, payloadBytes) {
 function handleRuntimeSprites(payloadBytes) {
   streamedFrameState.pendingSpritesEvent = {
     command: "sprites",
+    args: [],
+    data: payloadBytes || new Uint8Array(0),
+  };
+  streamedFrameState.sprites = [];
+}
+
+function handleRuntimeVs2Scene(payloadBytes) {
+  streamedFrameState.pendingVs2SceneEvent = {
+    command: "vs2_scene",
     args: [],
     data: payloadBytes || new Uint8Array(0),
   };

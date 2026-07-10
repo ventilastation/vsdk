@@ -15,6 +15,7 @@ def game_menu_strip(game_slug):
 # Only the non-game entries -- native apps and system scenes -- are listed
 # here, with the order values that interleave them among the games.
 STATIC_MENU_ENTRIES = [
+    (2, "tutorial_vs2", "menu.png", 10),
     (20, "native.voom", "voom.png", 0),
     (30, "native.nes", "megadrive.png", 0),   # Super Mario Bros (NES); placeholder icon
     (40, "native.sms", "megadrive.png", 0),   # Out Run (Master System); placeholder icon
@@ -31,6 +32,7 @@ SYS_MENU_OPTIONS = [
     ("debugmode", "menu.png", 9),
     # ("calibrate", "menu.png", 8),
     ("tutorial", "menu.png", 10),
+    ("tutorial_vs2", "menu.png", 10),
     ("settings", "menu.png", 8),
     ("upgrade", "menu.png", 11),
     ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),

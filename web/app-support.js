@@ -50,6 +50,7 @@ const {
   computeLedFramePixels,
   computeLedFramePixelsFromRgb,
   createLedRingGeometry,
+  decodeVs2SceneBuffer,
 } = LedRenderCore;
 
 const FORCE_2D_STORAGE_KEY = "ventilastation.force2dFallback";
@@ -301,5 +302,6 @@ export {
   fillRepeatedLedColors,
   resolveFirstAvailableUrl,
   decodeSpriteStateBuffer,
+  decodeVs2SceneBuffer,
   decodeImageStripPayload,
 };
