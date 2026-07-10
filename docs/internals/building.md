@@ -35,23 +35,33 @@ make vsdk VSDK_IDF_PATH=~/esp/esp-idf-v5.5 RETRO_GO_IDF_PATH=~/esp/esp-idf-v5.0.
 
 ## Selecting a board
 
-Every target that touches a board needs `PORT=...`. On Linux, `/dev/ttyACM*`
-numbers can swap between resets when two boards are attached; pass
-`MAC=aa:bb:cc:dd:ee:ff` instead to select the board by its USB-JTAG serial.
-`make list-boards` shows what is attached. Flash commands are serialized
-through a host-side lock so parallel invocations cannot corrupt a transfer.
+The two boards use the same ESP32-S3 USB descriptor, so
+`tools/find_board.py` asks each firmware which kind of board it is. Targets
+select the board type they need automatically:
+
+```sh
+make flash-vsdk       # selects the unique Ventilastation rotor board
+make workbench-flash  # selects the unique workbench board
+make list-boards      # show ports, board types and USB-JTAG serials
+```
+
+If more than one board of the requested type is connected, pass `PORT=...` to
+choose one. An explicit `PORT` always overrides automatic selection. `MAC=...`
+can also select a USB-JTAG serial where the host exposes it (including Linux
+`/dev/serial/by-id` names). Flash commands are serialized through a host-side
+lock so parallel invocations cannot corrupt a transfer.
 
 ## Common targets
 
 ```sh
 make vsdk                     # build MicroPython firmware (POV modules + frozen manifest)
-make flash-vsdk PORT=...      # build + flash it (factory and ota_2 slots)
+make flash-vsdk               # build + flash it (factory and ota_2 slots)
 make voom                     # build the Doom (prboom-go) Retro-Go app
-make flash-voom PORT=...      # build + flash it
-make flash-retro-core PORT=...# the multi-console emulator core
+make flash-voom               # build + flash it
+make flash-retro-core         # the multi-console emulator core
 make build-fs                 # pack games/system Python + ROMs into a LittleFS image
-make deploy-fs PORT=...       # flash that filesystem image
-make flash-all PORT=...       # everything a fresh board needs
+make deploy-fs                # flash that filesystem image
+make flash-all                # everything a fresh board needs
 ```
 
 For the desktop-emulator development loop against real hardware

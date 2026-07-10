@@ -23,6 +23,7 @@ static const char *TAG = "workbench";
 
 void app_main(void) {
     ESP_LOGI(TAG, "Ventilastation workbench starting");
+    ESP_LOGI(TAG, "VSDK_BOARD_ID=workbench");
 
     reset_ctl_begin();
     serial_bridge_begin();

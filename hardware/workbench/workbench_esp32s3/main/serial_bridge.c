@@ -26,6 +26,43 @@
 #define BRIDGE_BUF_SIZE 256
 #define UART_RING_BUF_SIZE (BRIDGE_BUF_SIZE * 4)
 
+static const uint8_t BOARD_PROBE[] = "VSDK_BOARD_PROBE\n";
+static const uint8_t BOARD_PROBE_REPLY[] = "VSDK_BOARD_ID=workbench\n";
+
+static void forward_to_dut(const uint8_t *buf, size_t len) {
+    if (len > 0) {
+        uart_write_bytes(DUT_UART_PORT, (const char *)buf, len);
+    }
+}
+
+// Keep the board-identification request out of the DUT UART. All other bytes
+// remain byte-for-byte transparent for the emulator's normal bridge traffic.
+static void handle_host_bytes(const uint8_t *buf, size_t len) {
+    static uint8_t candidate[sizeof(BOARD_PROBE) - 1];
+    static size_t candidate_len;
+
+    for (size_t i = 0; i < len; i++) {
+        uint8_t byte = buf[i];
+        if (byte == BOARD_PROBE[candidate_len]) {
+            candidate[candidate_len++] = byte;
+            if (candidate_len == sizeof(BOARD_PROBE) - 1) {
+                usb_serial_jtag_write_bytes(BOARD_PROBE_REPLY, sizeof(BOARD_PROBE_REPLY) - 1,
+                                            pdMS_TO_TICKS(20));
+                candidate_len = 0;
+            }
+            continue;
+        }
+
+        forward_to_dut(candidate, candidate_len);
+        candidate_len = 0;
+        if (byte == BOARD_PROBE[0]) {
+            candidate[candidate_len++] = byte;
+        } else {
+            forward_to_dut(&byte, 1);
+        }
+    }
+}
+
 static void bridge_task(void *arg) {
     uint8_t buf[BRIDGE_BUF_SIZE];
 
@@ -41,7 +78,7 @@ static void bridge_task(void *arg) {
         // DUT's UART RX (button state, etc.).
         n = usb_serial_jtag_read_bytes(buf, sizeof(buf), 0);
         if (n > 0) {
-            uart_write_bytes(DUT_UART_PORT, (const char *)buf, n);
+            handle_host_bytes(buf, n);
         }
     }
 }
