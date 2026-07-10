@@ -38,9 +38,11 @@ index.
   works; code under `apps/micropython`, `system/`, `games/` must compile
   with mpy-cross (CI checks this).
 - Flash only through the Makefile targets — they serialize the serial port
-  so concurrent flashes can't corrupt each other. `make list-boards` and
-  `MAC=aa:bb:...` select a board when several are attached. Firmware needs
-  two different ESP-IDF trees (docs/internals/building.md).
+  so concurrent flashes can't corrupt each other. Board-specific targets
+  auto-select the unique matching board; use `make list-boards` to inspect
+  the USB mapping and `PORT=...` when several are attached or a specific board
+  must be forced. Firmware needs two different ESP-IDF trees
+  (docs/internals/building.md).
 - Scene lifecycle errors must surface: the director reports tracebacks
   over comms; don't swallow exceptions when changing scene handling.
 

@@ -1,24 +1,44 @@
 .PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
+MAC ?=
 BAUD ?= 2000000
 
-# --- Stable board selection (avoid /dev/ttyACM* number swaps) ---
-# ESP32-S3 USB-Serial-JTAG boards re-enumerate on every reset, so with two
-# boards attached their /dev/ttyACM* numbers can swap mid-session -- flashing
-# PORT=/dev/ttyACMx then silently hits the WRONG chip. The /dev/serial/by-id/
-# symlink instead always follows a given chip. Pass MAC=aa:bb:cc:dd:ee:ff to
-# target a board by its USB-JTAG serial (the chip's MAC); it resolves to the
-# matching by-id path regardless of the board's current ttyACM number:
-#   make flash-vsdk    MAC=3C:84:27:C8:5E:58
-#   make workbench-flash MAC=3C:84:27:C9:5D:24
-# `make list-boards` prints the MAC <-> ttyACM mapping of attached boards.
-# (Matching is case-insensitive and ignores colons, so it also works while a
-# board is still showing its pre-flash USB-CDC descriptor.)
-ifdef MAC
-PORT := $(shell w=$$(printf %s "$(MAC)" | tr -d : | tr A-Z a-z); for f in /dev/serial/by-id/*; do [ -e "$$f" ] || continue; n=$$(printf %s "$$f" | tr -d : | tr A-Z a-z); if printf %s "$$n" | grep -qiF -- "$$w"; then printf %s "$$f"; break; fi; done)
+# --- Board selection ---
+# Both boards use identical ESP32-S3 USB descriptors. The detector performs a
+# firmware-level probe and returns the unique board of the type required by
+# the target. An explicit PORT always wins, which is useful when several
+# boards of one type are attached or when a particular board must be forced.
+PYTHON ?= python3
+BOARD_DETECTOR := $(abspath tools/find_board.py)
+ROTOR_PORT_TARGETS := flash-vsdk flash-voom flash-launcher flash-retro-core flash-all deploy-fs wifi-provision
+WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
+PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS)
+ROTOR_GOALS := $(filter $(ROTOR_PORT_TARGETS),$(MAKECMDGOALS))
+WORKBENCH_GOALS := $(filter $(WORKBENCH_PORT_TARGETS),$(MAKECMDGOALS))
+
+ifneq ($(strip $(ROTOR_GOALS)),)
+ifneq ($(strip $(WORKBENCH_GOALS)),)
 ifeq ($(strip $(PORT)),)
-$(error No attached board matches MAC=$(MAC); run 'make list-boards' to see attached boards)
+$(error Targets for both board types need separate invocations or an explicit PORT=...)
+endif
+endif
+endif
+
+BOARD_KIND :=
+ifneq ($(strip $(ROTOR_GOALS)),)
+BOARD_KIND := ventilastation
+endif
+ifneq ($(strip $(WORKBENCH_GOALS)),)
+BOARD_KIND := workbench
+endif
+
+ifneq ($(strip $(BOARD_KIND)),)
+ifeq ($(strip $(PORT)),)
+PORT := $(shell $(PYTHON) "$(BOARD_DETECTOR)" --board "$(BOARD_KIND)" $(if $(MAC),--mac "$(MAC)",))
+endif
+ifeq ($(strip $(PORT)),)
+$(error Could not select a $(BOARD_KIND) board; run 'make list-boards' or pass PORT=...)
 endif
 endif
 
@@ -59,14 +79,13 @@ idf-env = $(IDF_SHELL) 'source "$(1)/export.sh" >/dev/null && $(2)'
 rg-build = $(call idf-env,$(RETRO_GO_IDF_PATH),cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation build $(1))
 rg-flash = $(SERIAL_LOCK) $(call idf-env,$(RETRO_GO_IDF_PATH),cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash $(1))
 
-# Targets that talk to a board need PORT (or MAC, resolved above); targets
-# that provision WiFi also need credentials. Checked at parse time so the
-# failure is instant even under parallel make.
-PORT_TARGETS := flash-vsdk flash-voom flash-launcher flash-retro-core flash-all deploy-fs workbench-flash workbench-monitor workbench-wifi-provision
+# Targets that talk to a board need PORT (auto-selected above); targets that
+# provision WiFi also need credentials. Checked at parse time so the failure
+# is instant even under parallel make.
 WIFI_TARGETS := wifi-provision workbench-wifi-provision
 ifneq ($(filter $(PORT_TARGETS),$(MAKECMDGOALS)),)
 ifeq ($(strip $(PORT)),)
-$(error Set PORT=/dev/cu.usbmodemXXXX (or MAC=aa:bb:...; run 'make list-boards'))
+$(error Set PORT=/dev/cu.usbmodemXXXX (or run 'make list-boards'))
 endif
 endif
 ifneq ($(filter $(WIFI_TARGETS),$(MAKECMDGOALS)),)
@@ -75,18 +94,8 @@ $(error Set WIFI_SSID=... WIFI_PASS=...)
 endif
 endif
 
-# List attached ESP boards as their stable by-id name -> current /dev/ttyACM*,
-# so you can grab a MAC for MAC= (see the "Stable board selection" note above).
-# On macOS there is no /dev/serial/by-id; list the /dev/cu.usbmodem* ports
-# instead (macOS names already stay stable per chip serial).
 list-boards:
-	@if ls /dev/serial/by-id/* >/dev/null 2>&1; then \
-		for f in /dev/serial/by-id/*; do printf '  %-72s -> %s\n' "$$(basename "$$f")" "$$(readlink -f "$$f")"; done; \
-	elif ls /dev/cu.usbmodem* >/dev/null 2>&1; then \
-		ls -1 /dev/cu.usbmodem* | sed 's/^/  /'; \
-	else \
-		echo "no boards attached (looked for /dev/serial/by-id/* and /dev/cu.usbmodem*)"; \
-	fi
+	$(PYTHON) "$(BOARD_DETECTOR)" --list
 
 micropython-webassembly:
 	./tools/build-micropython-webassembly.sh
@@ -155,14 +164,14 @@ deploy-fs:
 # Writes credentials to the main board's NVS (namespace "devel_wifi").
 # The board only joins WiFi when an OTA upgrade is requested over serial;
 # see docs/internals/ota.md. One-time per board:
-#   make wifi-provision PORT=/dev/cu.usbmodemXXXX WIFI_SSID=mywifi WIFI_PASS=mypassword
+#   make wifi-provision WIFI_SSID=mywifi WIFI_PASS=mypassword
 WIFI_SSID ?=
 WIFI_PASS ?=
 BOARD_IP ?=
 
 wifi-provision:
 	$(SERIAL_LOCK) python3 ./tools/provision_wifi.py \
-		$(if $(PORT),--port $(PORT),) \
+		--port "$(PORT)" \
 		--wifi-ssid "$(WIFI_SSID)" \
 		--wifi-password "$(WIFI_PASS)"
 
@@ -170,9 +179,9 @@ wifi-provision:
 # See docs/internals/workbench.md for the full design.
 # Usage:
 #   make workbench-build
-#   make workbench-flash PORT=/dev/cu.usbmodemXXXX
-#   make workbench-wifi-provision PORT=/dev/cu.usbmodemXXXX WIFI_SSID=mywifi WIFI_PASS=mypassword
-#   make workbench-monitor PORT=/dev/cu.usbmodemXXXX
+#   make workbench-flash
+#   make workbench-wifi-provision WIFI_SSID=mywifi WIFI_PASS=mypassword
+#   make workbench-monitor
 #
 # workbench-wifi-provision writes credentials straight into the workbench's
 # NVS partition (namespace "devel_wifi", same as the DUT reads in
