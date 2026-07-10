@@ -220,7 +220,7 @@ Add `#include <esp_system.h>` and `#include <stdio.h>` to the top include
 block.
 
 Add a shared byte-stream parser above the TCP / UART `#if` split, inside the
-existing `#if defined(ESP_PLATFORM) && defined(RG_VS_SERIAL_UART_NUM)` guard.
+existing `#if defined(ESP_PLATFORM) && defined(RG_VS_ENABLE_HOST_BRIDGE)` guard.
 The parser is a C mirror of `InputParser`: a three-state struct
 (`VS_SCAN` / `VS_JOY` / `VS_CMD`) with a `vs_feed_bytes(data, n)` function
 and a command handler `vs_handle_command(cmd)`.

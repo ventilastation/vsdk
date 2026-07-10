@@ -1,8 +1,13 @@
 import machine
-from ventilastation.hw_config import serial_rx, serial_tx
+from ventilastation import board_config
 from ventilastation.input_parser import InputParser
 
-uart    = machine.UART(2, tx=serial_tx, rx=serial_rx)
+uart = machine.UART(
+    board_config.get("serial_uart"),
+    tx=board_config.get("serial_tx"),
+    rx=board_config.get("serial_rx"),
+    baudrate=board_config.get("serial_baud"),
+)
 _parser = InputParser()
 
 def _drain():

@@ -38,7 +38,6 @@
     "apps/micropython/ventilastation/director.py",
     "apps/micropython/ventilastation/emu_spritelib.py",
     "apps/micropython/ventilastation/emu_sprites.py",
-    "apps/micropython/ventilastation/hw_config.py",
     "apps/micropython/ventilastation/menu.py",
     "apps/micropython/ventilastation/platforms/__init__.py",
     "apps/micropython/ventilastation/povdisplay.py",
@@ -1377,6 +1376,9 @@
     "games/alecu/vixeous/sounds/flight.mp3",
     "games/alecu/vixeous/sounds/gameover.mp3",
     "games/alecu/vixeous/sounds/hit.mp3",
-    "games/alecu/vixeous/sounds/shoot.mp3"
+    "games/alecu/vixeous/sounds/shoot.mp3",
+    "apps/micropython/vsdk_board.py",
+    "apps/micropython/ventilastation/board_config.py",
+    "apps/micropython/roms/alecu.torta50.rom"
   ]
 }

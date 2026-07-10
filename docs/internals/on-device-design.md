@@ -44,6 +44,9 @@ flashing). There are no more `wifi_config.json` / `settings.json` files.
 |------------|--------------|------|------------|---------|
 | `devel_wifi`| `ssid`      | blob | `tools/provision_wifi.py` (`mpremote run`) | MicroPython `updater.py` (OTA only) |
 | `devel_wifi`| `password`  | blob | `tools/provision_wifi.py` | same |
+| `vs_board` | `hall_gpio`, `irdiode_gpio` | i32 | `tools/provision_board.py` / `make configure-board*` | MicroPython POV display; native POV display |
+| `vs_board` | `led_spi_host`, `led_clk`, `led_mosi`, `led_cs`, `led_freq` | i32 | same | MicroPython LED SPI; native POV display |
+| `vs_board` | `serial_uart`, `serial_tx`, `serial_rx`, `serial_baud` | i32 | same | MicroPython comms; native host/audio bridge |
 | `voom_pov` | `col_offset` | i32  | MicroPython `settings.py` (POV calibration) | POV driver `ventilastation_pov.c` (all native apps) |
 | `voom_md`  | `rom`        | blob | MicroPython `native_apps.py` (before launch) | gwenesis `main.c` |
 | `voom_emu` | `system`     | blob | MicroPython `native_apps.py` (before launch) | retro-core `main.c` (selects the emulator) |
@@ -59,6 +62,12 @@ Notes:
   `voom_pov`/`col_offset` directly, the exact key the native POV driver reads —
   no copy step. On desktop (no `esp32` module) settings fall back to in-memory
   defaults.
+- **Main-board wiring**: set after the first flash with `make configure-board`
+  (Ventilastation III), `make configure-board-v2`, or
+  `make configure-board-eu`. `vs_board` is the single source of truth for the
+  Hall sensor, LED SPI and base-station UART, so changing a board revision no
+  longer requires rebuilding MicroPython, prboom-go or retro-core. Override
+  individual Make variables for a custom revision; see [building.md](building.md).
 - **Mega Drive ROM path**: see §3.
 
 ## 3. Launching native apps from MicroPython
@@ -117,8 +126,8 @@ assumes an LCD + SD card + the retro-go launcher. Do these in the app's
    the LED SPI bus as soon as `rg_vs_pov_init()` runs (no per-app call needed).
 3. **Read the ROM (and system) from NVS** — see §3, since there are no bootArgs.
 
-Config that the POV driver / audio bridge read from NVS (WiFi, `col_offset`)
-needs no per-app work — it is already in NVS (§2).
+Config that the POV driver / audio bridge read from NVS (the `vs_board` wiring,
+WiFi and `col_offset`) needs no per-app work — it is already in NVS (§2).
 
 **Performance (why NES/SMS, not Genesis).** The Genesis is a dual-CPU
 (68000 + Z80) machine and gwenesis runs at ~9 fps / 100 % CPU on the S3. The NES
@@ -196,12 +205,15 @@ Rebuild after changes:
 Flash (board on `PORT`):
 1. `make flash-vsdk PORT=<p>` — bootloader + partition table + MicroPython. Only
    needed when the partition table or a C module (`native_apps.c`) changed.
-2. `esptool --port <p> erase_region 0xd000 0x2000` — reset OTA selection (keeps
+2. On a newly flashed board, `make configure-board PORT=<p>` — seed the shared
+   `vs_board` NVS wiring before MicroPython or a native app uses the display or
+   base-station UART. This survives later reflashes.
+3. `esptool --port <p> erase_region 0xd000 0x2000` — reset OTA selection (keeps
    NVS) so it boots cleanly to MicroPython. Do after a partition-table change.
-3. `rm -f apps/retro-go/partitions.bin` then
+4. `rm -f apps/retro-go/partitions.bin` then
    `rg_tool.py --target=ventilastation --port=<p> flash prboom-go retro-core gwenesis`
    — flash only the apps that changed.
-4. `make deploy-fs PORT=<p>` — vfs image at 0x5F0000 (or
+5. `make deploy-fs PORT=<p>` — vfs image at 0x5F0000 (or
    `deploy_micropython_fs.py --skip-build` to flash an already-built image).
 
 Note: the board's native USB-CDC re-enumerates on every reset, so a serial

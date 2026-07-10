@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
 MAC ?=
@@ -11,7 +11,7 @@ BAUD ?= 2000000
 # boards of one type are attached or when a particular board must be forced.
 PYTHON ?= python3
 BOARD_DETECTOR := $(abspath tools/find_board.py)
-ROTOR_PORT_TARGETS := flash-vsdk flash-voom flash-launcher flash-retro-core flash-all deploy-fs wifi-provision
+ROTOR_PORT_TARGETS := flash-vsdk flash-voom flash-launcher flash-retro-core flash-all deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision
 WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
 PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS)
 ROTOR_GOALS := $(filter $(ROTOR_PORT_TARGETS),$(MAKECMDGOALS))
@@ -159,6 +159,39 @@ build-fs:
 
 deploy-fs:
 	$(SERIAL_LOCK) python3 hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)"
+
+# --- Main-board wiring configuration ---
+# The physical wiring is stored in NVS namespace "vs_board", shared by
+# MicroPython and every native Retro-Go app. The default values are for a
+# Ventilastation III. Re-run after changing a board's wiring; it survives every
+# firmware and filesystem reflash.
+HALL_GPIO ?= 7
+IRDIODE_GPIO ?= 7
+LED_SPI_HOST ?= 2
+LED_CLK ?= 12
+LED_MOSI ?= 13
+LED_CS ?= 14
+LED_FREQ ?= 20000000
+SERIAL_UART ?= 2
+SERIAL_TX ?= 5
+SERIAL_RX ?= 6
+SERIAL_BAUD ?= 115200
+
+configure-board:
+	$(SERIAL_LOCK) python3 ./tools/provision_board.py --port "$(PORT)" \
+		--hall-gpio "$(HALL_GPIO)" --irdiode-gpio "$(IRDIODE_GPIO)" \
+		--led-spi-host "$(LED_SPI_HOST)" --led-clk "$(LED_CLK)" \
+		--led-mosi "$(LED_MOSI)" --led-cs "$(LED_CS)" --led-freq "$(LED_FREQ)" \
+		--serial-uart "$(SERIAL_UART)" --serial-tx "$(SERIAL_TX)" \
+		--serial-rx "$(SERIAL_RX)" --serial-baud "$(SERIAL_BAUD)"
+
+# The legacy boards use the original LED/UART wiring. The European Edition
+# differs only in the Hall sensor pin.
+configure-board-v2:
+	$(MAKE) configure-board HALL_GPIO=6 IRDIODE_GPIO=6 LED_CLK=15 LED_MOSI=16 LED_CS=14 SERIAL_TX=10 SERIAL_RX=9
+
+configure-board-eu:
+	$(MAKE) configure-board HALL_GPIO=4 IRDIODE_GPIO=6 LED_CLK=15 LED_MOSI=16 LED_CS=14 SERIAL_TX=10 SERIAL_RX=9
 
 # --- Board WiFi provisioning (for OTA upgrades) ---
 # Writes credentials to the main board's NVS (namespace "devel_wifi").

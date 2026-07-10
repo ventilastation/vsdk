@@ -56,13 +56,45 @@ lock so parallel invocations cannot corrupt a transfer.
 ```sh
 make vsdk                     # build MicroPython firmware (POV modules + frozen manifest)
 make flash-vsdk               # build + flash it (factory and ota_2 slots)
+make configure-board          # store Ventilastation III wiring in the board's NVS
+make configure-board-v2       # store the original Ventilastation 2 wiring
+make configure-board-eu       # store the European Edition wiring
 make voom                     # build the Doom (prboom-go) Retro-Go app
 make flash-voom               # build + flash it
 make flash-retro-core         # the multi-console emulator core
 make build-fs                 # pack games/system Python + ROMs into a LittleFS image
 make deploy-fs                # flash that filesystem image
-make flash-all                # everything a fresh board needs
+make flash-all                # all firmware/filesystem images for a configured board
 ```
+
+## Configuring the main board
+
+The GPIO and bus wiring is not compiled into either firmware. It lives in the
+main board's NVS partition, so the same configuration is used by MicroPython,
+Voom and retro-core and it survives firmware/filesystem reflashes. A freshly
+flashed board must be configured before it can drive the display or talk to the
+base station:
+
+```sh
+make configure-board           # Ventilastation III (the default)
+make configure-board-v2        # original Ventilastation 2
+make configure-board-eu        # Ventilastation European Edition
+```
+
+`flash-all` deliberately does not overwrite NVS, so it preserves an existing
+board's wiring. On a new board, run `make configure-board` after `flash-vsdk`
+and before using it.
+
+The target uses the same automatic board selection and serial lock as flashing.
+Pass `PORT=...` when needed. For a custom revision, override the individual
+values, for example:
+
+```sh
+make configure-board PORT=/dev/cu.usbmodemXXXX HALL_GPIO=4 LED_CLK=15 LED_MOSI=16
+```
+
+The complete key list and the ownership of each value are in
+[on-device-design.md](on-device-design.md#2-shared-configuration-in-nvs-single-source-of-truth).
 
 For the desktop-emulator development loop against real hardware
 (`run-emulator` via the workbench, OTA sync via `wifi-provision` + the

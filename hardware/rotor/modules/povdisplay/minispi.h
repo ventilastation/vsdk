@@ -3,7 +3,7 @@
 
 #define GPU_TASK_CORE 0
 
-void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi, int led_cs);
+void spiStartBuses(int led_spi_host, uint32_t led_freq, int led_clk, int led_mosi, int led_cs);
 void spiAcquire();
 void spiWriteNL(const void * data_in, size_t len);
 void spiWaitComplete();

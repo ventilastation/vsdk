@@ -17,13 +17,14 @@
 #include "gpu.h"
 #include "ventilagon/ventilagon.h"
 
-// Ventilastation 2 defaults
-int hall_gpio = 4;
-int irdiode_gpio = 6;
-int led_clk = 15;
-int led_mosi = 16;
-int led_cs = 14;
-uint32_t led_freq = 20000000;
+// Wiring is provided by the NVS-backed MicroPython board configuration at init.
+int hall_gpio;
+int irdiode_gpio;
+int led_spi_host;
+int led_clk;
+int led_mosi;
+int led_cs;
+uint32_t led_freq;
 
 #define COLUMNS 256
 #define FASTEST_CREDIBLE_TURN 10000 // if the fan is going over 100 FPS, then I don't believe it, and discard the reading
@@ -195,7 +196,7 @@ void coreTask( void * pvParameters ){
 
     init_sprites();
 
-    spiStartBuses(led_freq, led_clk, led_mosi, led_cs);
+    spiStartBuses(led_spi_host, led_freq, led_clk, led_mosi, led_cs);
     spiAcquire();
 
     while(true){
@@ -215,10 +216,11 @@ static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
     int num_pixels = mp_obj_get_int(args[0]);
     hall_gpio = mp_obj_get_int(args[1]);
     irdiode_gpio = mp_obj_get_int(args[2]);
-    led_clk = mp_obj_get_int(args[3]);
-    led_mosi = mp_obj_get_int(args[4]);
-    led_cs = mp_obj_get_int(args[5]);
-    led_freq = mp_obj_get_int(args[6]);
+    led_spi_host = mp_obj_get_int(args[3]);
+    led_clk = mp_obj_get_int(args[4]);
+    led_mosi = mp_obj_get_int(args[5]);
+    led_cs = mp_obj_get_int(args[6]);
+    led_freq = mp_obj_get_int(args[7]);
 
     if (already_initialized) {
         ventilagon_exit();
@@ -242,7 +244,7 @@ static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
     gamma_mode = 0;
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_init_obj, 7, 7, povdisplay_init);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_init_obj, 8, 8, povdisplay_init);
 
 // ------------------------------
 

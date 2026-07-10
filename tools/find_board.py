@@ -188,7 +188,7 @@ def probe_port(port: str) -> tuple[str | None, str]:
         # Ventilastation package, rather than treating every MicroPython REPL
         # as a rotor board.
         if ROTOR_REPLY not in repl_response and b"ImportError" in repl_response:
-            write_all(fd, b'import ventilastation.hw_config; print("VSDK_BOARD_ID=ventilastation")\r\n')
+            write_all(fd, b'import ventilastation.board_config; print("VSDK_BOARD_ID=ventilastation")\r\n')
             repl_response += read_for(fd, 0.75)
         if ROTOR_REPLY in repl_response or (
             b"Ventilastation with ESP32S3" in repl_response and b">>>" in repl_response

@@ -21,7 +21,7 @@
 // ---- LED SPI bus capture (workbench acts as SPI slave, input only) ----
 #define WB_SPI_SCLK_PIN  12  // <- DUT led_clk
 #define WB_SPI_MOSI_PIN  13  // <- DUT led_mosi
-#define WB_SPI_CS_PIN    14  // <- DUT LED-bus CS (GPIO17). Real chip-select; frames each burst.
+#define WB_SPI_CS_PIN    14  // <- DUT LED-bus CS (`vs_board` led_cs; 14 by default). Frames each burst.
 
 #define WB_NUM_LEDS   54     // must match PIXELS in hardware/rotor/modules/povdisplay/gpu.c
 #define WB_COLUMNS    256

@@ -30,7 +30,7 @@ the pyglet emulator keeps normal internet access on the same network, and
 finds the workbench via mDNS instead of a hardcoded IP.
 
 The DUT runs its normal firmware, with one small addition: its LED SPI master
-drives a chip-select (`GPIO17`) so the workbench's SPI slave can frame each
+drives a chip-select (`GPIO14` in the default configuration) so the workbench's SPI slave can frame each
 burst. See ["DUT firmware: one small change"](#dut-firmware-one-small-change).
 
 Firmware for the workbench itself lives in
@@ -92,7 +92,7 @@ control (reset, RPM).
 All signals are 3.3V and directly compatible between the two ESP32-S3
 boards. Tie the grounds of the workbench and the DUT together.
 
-| Signal              | Workbench pin (suggested) | DUT pin (from `hw_config.py`)         | Direction         | Notes |
+| Signal              | Workbench pin (suggested) | DUT pin (from `vs_board` NVS)          | Direction         | Notes |
 |---------------------|---------------------------|-----------------------------------------|-------------------|-------|
 | Hall sensor          | `GPIO7`  (`WB_HALL_PIN`)  | `hall_gpio`                              | workbench → DUT   | Idles HIGH, pulses LOW once per simulated revolution, matching a real hall sensor with pull-up. |
 | Reset / EN           | `GPIO4`  (`WB_RESET_PIN`) | DUT `EN` / reset pin                     | workbench → DUT   | Open-drain style: workbench drives LOW to assert, then releases to `INPUT` (Hi-Z) so the DUT's own pull-up brings it back HIGH. Never drive HIGH directly. |
@@ -103,13 +103,14 @@ boards. Tie the grounds of the workbench and the DUT together.
 | UART RX              | `GPIO5` (`WB_UART_RX_PIN`)  | `serial_tx`                           | DUT → workbench   | Workbench receives from the DUT's UART TX. |
 | Ground               | GND                        | GND                                     | —                 | Common reference, required. |
 
-DUT pin numbers above are the current Ventilastation III config in
-[`apps/micropython/ventilastation/hw_config.py`](apps/micropython/ventilastation/hw_config.py)
-(`hall_gpio=7`, `led_clk=12`, `led_mosi=13`, `led_cs=14`, `serial_tx=5`, `serial_rx=6`).
-That file also has commented-out pin sets for the "European Edition" and
-"Ventilastation 2" boards — if the DUT under test is one of those
-revisions, rewire to match its actual GPIOs; the workbench-side pins in
-`hardware/workbench/workbench_esp32s3/config.h` don't need to change.
+DUT pin numbers above are the Ventilastation III defaults written by
+`make configure-board` (`hall_gpio=7`, `led_clk=12`, `led_mosi=13`,
+`led_cs=14`, `serial_tx=5`, `serial_rx=6`). The board's NVS `vs_board`
+namespace is the source of truth for both MicroPython and the native apps.
+For an original Ventilastation 2 or European Edition DUT, configure it with
+`make configure-board-v2` or `make configure-board-eu` and rewire to match its
+actual GPIOs; the workbench-side pins in
+`hardware/workbench/workbench_esp32s3/config.h` do not need to change.
 
 The workbench-side pin choices are arbitrary GPIOs picked to avoid
 ESP32-S3 strapping pins (0, 3, 45, 46), the native USB pins (19, 20), and
@@ -155,11 +156,10 @@ transactions, so with a static CS it never completed a single transfer
 (confirmed on real hardware — clock toggling, zero bursts decoded).
 
 The fix is to give the bus a real chip-select. The DUT's LED SPI master now
-drives CS on `GPIO17` (`LEDS_SPI_CS_PIN` in
-[`minispi.c`](hardware/rotor/modules/povdisplay/minispi.c)), which the ESP32
+drives the configured `led_cs` pin (the default is `GPIO14`), which the ESP32
 hardware asserts low around each `spi_device` transaction and releases
 between them. The LED strips ignore it (they aren't wired to CS); the
-workbench is. `GPIO17` is unused in the active `hw_config`.
+workbench is. The default Ventilastation III wiring uses `GPIO14` for `led_cs`.
 
 Each burst the master sends is a 444-byte buffer built by
 [`povdisplay.c`](hardware/rotor/modules/povdisplay/povdisplay.c)
@@ -178,7 +178,7 @@ each LED frame being `[brightness, B, G, R]` (brightness dropped on decode).
 revolution), so CS pulses low once per column.
 
 The workbench runs the ESP-IDF `spi_slave` driver on `SPI2_HOST` with
-`spics_io_num = WB_SPI_CS_PIN` (`GPIO14`, wired to the DUT's `GPIO17`) and
+`spics_io_num = WB_SPI_CS_PIN` (`GPIO14`, wired to the DUT's configured `led_cs`) and
 keeps several 444-byte DMA receive buffers queued
 (`hardware/workbench/workbench_esp32s3/main/led_capture.c`). Each CS
 deassertion completes a transaction with `trans_len == 444` bytes, which is
@@ -357,11 +357,11 @@ state and audio requests.
 ## DUT firmware: one small change
 
 Everything the workbench does is transparent to the DUT except one addition:
-the LED SPI master now drives a chip-select (`GPIO17`) so the workbench slave
+the LED SPI master now drives its configured chip-select (default `GPIO14`) so the workbench slave
 can frame bursts (see [LED bus capture](#led-bus-capture-chip-select)). That
 is the *only* DUT firmware change — a one-line `spics_io_num` in
 [`minispi.c`](hardware/rotor/modules/povdisplay/minispi.c); it's inert on the
-real rotor since nothing else is wired to `GPIO17`. Nothing under
+real rotor since nothing else uses the configured chip-select. Nothing under
 `vsdk/apps/micropython/ventilastation/*` changes.
 
 Otherwise the DUT behaves exactly as in normal operation:
@@ -413,7 +413,8 @@ pinned by `dependencies.lock`; `idf.py build` fetches it into
 
 ## Known limitations / open risks
 
-- LED-bus capture requires the DUT to drive a chip-select (`GPIO17`); the
+- LED-bus capture requires the DUT to drive its configured chip-select (default
+  `GPIO14`); the
   original CS-less "always selected" slave did not work and was replaced (see
   [LED bus capture](#led-bus-capture-chip-select)). Verified on hardware.
 - `column_offset` is assumed to be 0, so the reconstructed image may be

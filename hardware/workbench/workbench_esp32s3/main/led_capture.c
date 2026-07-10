@@ -1,7 +1,7 @@
 // Passive SPI-slave spy on the DUT's LED bus.
 //
-// The DUT's LED SPI master drives a real chip-select (GPIO17 -> WB_SPI_CS_PIN,
-// GPIO14 on the workbench), asserted low for each 444-byte burst. That CS
+// The DUT's LED SPI master drives its configured led_cs pin (GPIO14 by
+// default, wired to WB_SPI_CS_PIN), asserted low for each 444-byte burst. That CS
 // frames the slave transactions: each queued receive completes on CS deassert
 // with trans_len == BURST_BYTES. (An earlier "no chip-select / always
 // selected" scheme did not work — the ESP32-S3 SPI slave needs CS edges to
@@ -282,7 +282,7 @@ void led_capture_begin(void) {
     s_write_buf = 0;
     memset(s_frame, 0, sizeof(s_frame));
 
-    // WB_SPI_CS_PIN is wired to the DUT's LED-bus CS (GPIO17): the DUT master
+    // WB_SPI_CS_PIN is wired to the DUT's configured LED-bus CS: the DUT master
     // now drives a real chip-select, asserting it low for each 444-byte burst,
     // which frames the slave transactions. Pull it up so it reads idle/
     // deasserted while the DUT isn't driving (e.g. before it boots).

@@ -220,18 +220,10 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 
-#define LEDS_SPI_HOST    SPI2_HOST
-
-// Chip-select for the LED SPI bus. The APA102 LED strips don't need a CS, but
-// driving one lets the hardware workbench's SPI slave frame each 444-byte burst
-// cleanly (a CS-less slave can't). GPIO17 is unused in the active hw_config;
-// on the workbench it is wired to WB_SPI_CS_PIN (GPIO14). See vsdk/docs/internals/workbench.md.
-#define LEDS_SPI_CS_PIN  17
-
 spi_device_handle_t spi_handle;
 bool spi_ongoing = false;
 
-void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi, int led_cs) {
+void spiStartBuses(int led_spi_host, uint32_t led_freq, int led_clk, int led_mosi, int led_cs) {
     printf("Initializing bus SPI, handle is %p\n", spi_handle);
 
     esp_err_t ret;
@@ -247,7 +239,7 @@ void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi, int led_cs) {
     };
 
 
-    ret = spi_bus_initialize(LEDS_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    ret = spi_bus_initialize((spi_host_device_t)led_spi_host, &buscfg, SPI_DMA_CH_AUTO);
     ESP_ERROR_CHECK(ret);
         //const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
         //vTaskDelay( xDelay );
@@ -263,7 +255,7 @@ void spiStartBuses(uint32_t led_freq, int led_clk, int led_mosi, int led_cs) {
             .input_delay_ns = 62.5,
     };
 
-    spi_bus_add_device(LEDS_SPI_HOST, &devcfg, &spi_handle);
+    ret = spi_bus_add_device((spi_host_device_t)led_spi_host, &devcfg, &spi_handle);
     ESP_ERROR_CHECK(ret);
     printf("adding device returned... %d\n", ret);
 
