@@ -113,6 +113,31 @@ buffer should be reused while the number of layers and sprites is stable. The
 web bridge sends high-frequency data by pointer and length where available, as
 described in [Why Pointer Posting Matters](internals/web-emulator-architecture.md#why-pointer-posting-matters).
 
+## Planned Tilemaps (#111)
+
+Tilemaps are planned as a single drawable backed by a caller-owned byte buffer,
+not as one `Sprite` object per cell. The intended API is:
+
+```python
+from vs2 import Tilemap
+
+terrain = bytearray([0, 1, 1, 0, 1, 2, 2, 1, 1, 2, 2, 1, 0, 1, 1, 0])
+world.add(Tilemap(
+    "terrain.png", terrain,
+    columns=4, rows=4,
+    tile_width=8, tile_height=8,
+    x=96, y=32,
+    crop=(0, 0, 4, 4),
+))
+```
+
+The supplied fixed-size buffer is retained and shared with the native
+renderer. Updating `terrain[index]` changes a cell without allocating a new
+tilemap or copying the map. Resizing or replacing the buffer while the
+tilemap is active is unsupported. `crop` is measured in tile cells and limits
+which cells are rendered. This API is planned, not available in the current
+runtime; see [the internal #111 plan](internals/vs2-api-plan.md#tilemap-plan-111).
+
 ## Collisions
 
 Use:

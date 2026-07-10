@@ -120,6 +120,130 @@ This matches the v1 sprite table, where MicroPython and the C renderer share the
 same native sprite objects, and the web emulator's pointer-posting rule from
 `web-emulator-architecture.md`.
 
+## Tilemap Plan (#111)
+
+The tilemap is the next VS2 drawable after ordinary sprites. It is a single
+scene-owned object that references a tileset image strip and a fixed-size byte
+buffer of tile frame ids. It must not expand into one Python or C sprite per
+cell; that would multiply object count and defeat the shared-memory design.
+
+### Proposed API
+
+The public shape is intentionally small and close to the existing `Layer` and
+`Sprite` API:
+
+```python
+from vs2 import Tilemap
+
+class MyGame(Scene):
+    def on_enter(self):
+        super().on_enter()
+        self.world = self.layer("world", mode=TUNNEL)
+        self.map_data = bytearray([
+            0, 1, 1, 0,
+            1, 2, 2, 1,
+            1, 2, 2, 1,
+            0, 1, 1, 0,
+        ])
+        self.map = self.world.add(Tilemap(
+            "terrain.png", self.map_data,
+            columns=4, rows=4,
+            tile_width=8, tile_height=8,
+            x=96, y=32,
+            crop=(0, 0, 4, 4),
+        ))
+
+    def step(self):
+        self.map_data[5] = 3
+```
+
+The initial contract is:
+
+- `frames` is a buffer-protocol object containing one unsigned-byte frame id
+  per cell in row-major order. The API retains the supplied object; it never
+  copies it. A fixed-size `bytearray` is the normal mutable form.
+- `columns`, `rows`, `tile_width`, and `tile_height` are fixed after creation.
+  `len(frames)` must equal `columns * rows`, and resizing the backing buffer
+  while the tilemap is active is unsupported because it could invalidate the
+  native pointer.
+- `x` and `y` are signed 8.8 fixed-point origin coordinates, with the same
+  circular X wrapping and signed Y behavior as sprites.
+- `crop=(column, row, width, height)` is a rectangle in tile-cell coordinates.
+  Only cells inside the rectangle are visited by the renderer; the tilemap
+  origin remains in world coordinates. The default is the complete map.
+- A tile frame id selects a frame from the supplied image strip. Frame ids are
+  not transformed into separate sprite objects, and a missing/transparent
+  frame follows the existing sprite transparency rules.
+- The tilemap inherits its layer's mode and visibility. It is drawn in the
+  layer's ordered drawable sequence, so sprites can appear before or after it.
+- Optional text backing remains a follow-up within #111: a second fixed-size
+  byte buffer can provide glyph/frame ids using the same cell geometry, but it
+  must not complicate the first native path.
+
+### Shared-memory implementation
+
+`vs2.Tilemap` will retain the original Python buffer and a native tilemap
+object. The native record will contain a pointer, byte length, dimensions,
+origin, crop rectangle, and tileset strip id. The C module will receive the
+buffer address through the buffer protocol and render directly from it. No
+map copy or per-cell allocation is allowed on the hardware path.
+
+The Python wrapper must keep both the backing buffer and native object alive
+through the scene's layer ownership. `Layer.clear()` and `Scene.on_exit()` will
+drop those ownership links together with ordinary sprites. A tilemap reference
+held after scene exit is invalid for rendering and must not be reused. Buffer
+contents may be changed by indexed writes while the scene is active; changing
+the buffer's size or replacing the buffer requires creating a new tilemap.
+
+### Payload and renderer work
+
+The existing `VS2\0` version-1 payload remains valid for sprite-only scenes.
+Tilemap scenes will use a version-2 payload with a tilemap record table and a
+packed frame-buffer section. The record will carry the layer id, strip id,
+fixed-point origin, dimensions, crop rectangle, and offset/length into the
+frame section. Desktop and web decoders must continue accepting version 1.
+The host payload is a reused transport view only; hardware renders from the
+live native record and buffer.
+
+Implementation order:
+
+1. Add `Tilemap` and drawable ownership to `vs2.py`, preserving existing
+   `Layer.add(Sprite(...))` behavior and adding no per-cell objects.
+2. Add the native `vs2_tilemap_t` record and MicroPython type. Validate the
+   buffer once, retain the Python owner through the wrapper, and expose direct
+   indexed mutation without a copy.
+3. Extend payload export/decode to version 2. Reuse the scene payload buffer
+   while shape and map size are stable; only rewrite the frame section when
+   map contents or transport state changes.
+4. Add the hardware tilemap renderer in `gpu.c`. Clip to the crop rectangle
+   before walking cells, use the existing column wrapping and projection
+   helpers, and preserve layer order and transparency.
+5. Add matching desktop and web renderer paths. Keep the same frame indexing,
+   crop, X wrapping, Y clipping, flip/projection conventions, and draw order.
+6. Add a small tilemap fixture to the VS2 tutorial or a dedicated test scene,
+   then verify desktop, web, and ESP32 output before considering #111 complete.
+
+### Tests and acceptance criteria
+
+The feature is complete when the following are covered:
+
+- Python tests prove the exact supplied frame buffer is retained, indexed
+  writes are visible to the native record, invalid dimensions are rejected,
+  and scene exit releases tilemap/layer ownership.
+- Payload tests cover version-1 compatibility, version-2 decode, map data,
+  crop bounds, signed fractional origins, and stable-buffer reuse.
+- Renderer parity tests draw a multi-frame 2x2 map, mutate one cell, exercise
+  crop edges, wrap the map across X=0/255, and compare layer order on desktop
+  and web.
+- Hardware build tests compile the native module and exercise the same fixture
+  on the board without allocating a scene copy or one object per tile.
+- Web memory checks show no per-frame growth while a static tilemap is idle;
+  map updates reuse the existing transport allocation.
+
+The non-goals for the first #111 slice are scrolling cameras, animated tile
+metadata, collision maps, atlas packing, and text rendering. Those can build
+on the fixed frame-buffer and crop contracts later.
+
 ## Renderer Work
 
 ### Hardware
@@ -191,7 +315,8 @@ and renderer work.
    with no per-frame scene copies.
 5. Desktop v2 renderer and parity tests.
 6. Web v2 renderer and parity tests.
-7. Tilemap support.
+7. Tilemap support (#111): shared frame buffer, crop rectangle, payload v2,
+   hardware/desktop/web parity, and lifecycle tests.
 8. Bitmap-backed orthogonal layer support.
 9. Palette quantization preservation.
 10. Deprecation warning path for legacy game docs and, later, runtime use.
