@@ -47,14 +47,15 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 
 // Reads "ssid"/"password" blobs from NVS namespace WB_WIFI_NVS_NAMESPACE,
-// the same namespace+keys apps/micropython/ventilastation/comms.py reads on
-// the DUT. out_ssid/out_password must be zero-initialized by the caller so
-// the copied blob (which isn't necessarily NUL-terminated on its own) ends
-// up as a valid C string as long as it fits in ssid_size-1/password_size-1.
-static bool load_wifi_credentials(char *out_ssid, size_t ssid_size, char *out_password, size_t password_size) {
+// the same namespace+keys apps/micropython/ventilastation/updater.py reads
+// on the DUT (falling back to the pre-rename namespace for boards
+// provisioned before it). out_ssid/out_password must be zero-initialized by
+// the caller so the copied blob (which isn't necessarily NUL-terminated on
+// its own) ends up as a valid C string as long as it fits in
+// ssid_size-1/password_size-1.
+static bool load_wifi_credentials_from(const char *ns, char *out_ssid, size_t ssid_size, char *out_password, size_t password_size) {
     nvs_handle_t handle;
-    if (nvs_open(WB_WIFI_NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
-        ESP_LOGE(TAG, "no \"%s\" NVS namespace — run `make workbench-wifi-provision`", WB_WIFI_NVS_NAMESPACE);
+    if (nvs_open(ns, NVS_READONLY, &handle) != ESP_OK) {
         return false;
     }
 
@@ -63,12 +64,21 @@ static bool load_wifi_credentials(char *out_ssid, size_t ssid_size, char *out_pa
     bool ok = nvs_get_blob(handle, "ssid", out_ssid, &ssid_len) == ESP_OK &&
               nvs_get_blob(handle, "password", out_password, &password_len) == ESP_OK;
     nvs_close(handle);
-
-    if (!ok) {
-        ESP_LOGE(TAG, "\"%s\" NVS namespace is missing ssid/password — run `make workbench-wifi-provision`",
-                 WB_WIFI_NVS_NAMESPACE);
-    }
     return ok;
+}
+
+static bool load_wifi_credentials(char *out_ssid, size_t ssid_size, char *out_password, size_t password_size) {
+    if (load_wifi_credentials_from(WB_WIFI_NVS_NAMESPACE, out_ssid, ssid_size, out_password, password_size)) {
+        return true;
+    }
+    if (load_wifi_credentials_from(WB_WIFI_NVS_NAMESPACE_LEGACY, out_ssid, ssid_size, out_password, password_size)) {
+        ESP_LOGW(TAG, "using legacy \"%s\" WiFi credentials — re-run `make workbench-wifi-provision` to migrate",
+                 WB_WIFI_NVS_NAMESPACE_LEGACY);
+        return true;
+    }
+    ESP_LOGE(TAG, "no ssid/password in NVS namespace \"%s\" — run `make workbench-wifi-provision`",
+             WB_WIFI_NVS_NAMESPACE);
+    return false;
 }
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {

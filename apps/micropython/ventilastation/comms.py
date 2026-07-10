@@ -1,68 +1,10 @@
+"""Desktop-platform comms: TCP server on port 5005 that the desktop
+emulator (emulator/emu.py) connects to. The board never uses this module;
+hardware uses serialcomms (WiFi comes up only for OTA, see updater.py)."""
+
 import uselect
 import usocket
 from ventilastation.input_parser import InputParser
-
-def _load_wifi_config():
-    # Primary: NVS namespace "voom_wifi" — shared with prboom-go, written by dev-deploy.
-    try:
-        import esp32
-        nvs = esp32.NVS("voom_wifi")
-        ssid_buf = bytearray(33)
-        pass_buf = bytearray(65)
-        ssid_len = nvs.get_blob("ssid", ssid_buf)
-        pass_len = nvs.get_blob("password", pass_buf)
-        ssid = ssid_buf[:ssid_len].decode()
-        password = pass_buf[:pass_len].decode()
-        if ssid:
-            return {"ssid": ssid, "password": password}
-    except Exception:
-        pass
-    # No credentials in NVS yet — set them with:
-    #   make dev-deploy WIFI_SSID=... WIFI_PASS=...
-    return {"ssid": "ventilastation", "password": "plagazombie2"}
-
-try:
-    import network
-    import utime
-
-    _wifi = _load_wifi_config()
-    sta_if = network.WLAN(network.STA_IF)
-    if not sta_if.isconnected():
-        print('connecting to network', _wifi["ssid"], end="")
-        sta_if.active(True)
-        sta_if.connect(_wifi["ssid"], _wifi["password"])
-        while not sta_if.isconnected():
-            print(".", end="")
-            utime.sleep_ms(333)
-        print()
-    print('network config:', sta_if.ifconfig())
-
-    # If running from factory (first boot after flash_vsdk_image), migrate to the
-    # updatable micropython (ota_2) slot so future OTA updates don't touch factory.
-    try:
-        import esp32
-        running = esp32.Partition(esp32.Partition.RUNNING)
-        if running.info()[4] == "factory":
-            mp = esp32.Partition.find(esp32.Partition.TYPE_APP, label="micropython")
-            if mp:
-                print("comms: first boot on factory — switching to micropython slot")
-                mp[0].set_boot()
-                import machine
-                machine.reset()
-    except Exception as _me:
-        print("comms: ota migration check failed:", _me)
-
-    # Confirm the running image is healthy so the bootloader doesn't roll back.
-    try:
-        import esp32
-        esp32.Partition.mark_app_valid_cancel_rollback()
-    except Exception:
-        pass  # not an OTA image or already confirmed
-
-except ImportError:
-    print("no wifi module, skipping")
-except Exception as _e:
-    print("wifi setup failed:", _e)
 
 UDP_THIS = "0.0.0.0", 5005
 this_addr = usocket.getaddrinfo(*UDP_THIS)[0][-1]

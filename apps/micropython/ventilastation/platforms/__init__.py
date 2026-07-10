@@ -34,14 +34,6 @@ def resolve_platform_name(platform_name=None, argv=None, environ=None):
     if env_name:
         return env_name
 
-    try:
-        with open("vsdk_platform.txt") as _f:
-            _file_name = _f.read().strip()
-        if _file_name:
-            return _file_name
-    except OSError:
-        pass
-
     return "hardware" if sys.platform in ("rp2", "esp32") else "desktop"
 
 

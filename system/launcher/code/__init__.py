@@ -34,7 +34,6 @@ SYS_MENU_OPTIONS = [
     ("tutorial", "menu.png", 10),
     ("tutorial_vs2", "menu.png", 10),
     ("settings", "menu.png", 8),
-    ("upgrade", "menu.png", 11),
     ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),
     ("alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0),
     ("credits", "menu.png", 3),

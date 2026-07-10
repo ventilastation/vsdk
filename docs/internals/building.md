@@ -55,9 +55,10 @@ make flash-all PORT=...       # everything a fresh board needs
 ```
 
 For the desktop-emulator development loop against real hardware
-(`run-emulator` via the workbench, `dev-deploy`) and the workbench board
-(`workbench-*` targets), see the comments in the [Makefile](../../Makefile)
-and [workbench.md](workbench.md).
+(`run-emulator` via the workbench, OTA sync via `wifi-provision` + the
+emulator's U key) and the workbench board (`workbench-*` targets), see the
+comments in the [Makefile](../../Makefile), [ota.md](ota.md) and
+[workbench.md](workbench.md).
 
 ## Web emulator runtime
 

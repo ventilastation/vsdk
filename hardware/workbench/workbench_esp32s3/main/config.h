@@ -35,11 +35,14 @@
 // ---- Wi-Fi station + mDNS ----
 // The workbench joins an existing network (so the PC running the pyglet
 // emulator keeps normal internet access on the same Wi-Fi) instead of
-// running its own AP. Credentials come from NVS namespace "voom_wifi" —
+// running its own AP. Credentials come from NVS namespace "devel_wifi" —
 // the same namespace/keys the DUT itself reads in
-// apps/micropython/ventilastation/comms.py — provisioned with
+// apps/micropython/ventilastation/updater.py — provisioned with
 // `make workbench-wifi-provision` (see docs/internals/workbench.md).
-#define WB_WIFI_NVS_NAMESPACE  "voom_wifi"
+#define WB_WIFI_NVS_NAMESPACE  "devel_wifi"
+// Pre-rename namespace, still read as a fallback so workbenches provisioned
+// before the "devel_wifi" rename keep connecting without re-provisioning.
+#define WB_WIFI_NVS_NAMESPACE_LEGACY  "voom_wifi"
 #define WB_WIFI_CONNECT_RETRY_DELAY_MS  2000
 
 // Advertised as "<hostname>.local" via mDNS so the pyglet emulator can find

@@ -48,7 +48,7 @@ def generate_partition_table(idf_path, partition_csv, output_path):
 def flash_images(args, bootloader_path, partition_table_path, micropython_path):
     # Always flash micropython to both the factory slot (0x10000) and the
     # updatable micropython slot (ota_2, 0x4F0000).  On first boot from factory,
-    # comms.py detects it's running on factory and automatically switches to ota_2.
+    # main.py detects it's running on factory and automatically switches to ota_2.
     MICROPYTHON_OTA2_OFFSET = "0x4F0000"
     command = [
         "python3",

@@ -42,17 +42,19 @@ flashing). There are no more `wifi_config.json` / `settings.json` files.
 
 | Namespace  | Key          | Type | Written by | Read by |
 |------------|--------------|------|------------|---------|
-| `voom_wifi`| `ssid`       | blob | `tools/dev_deploy.py` (`mpremote run`) | MicroPython `comms.py`, prboom-go/gwenesis `wb_init` |
-| `voom_wifi`| `password`   | blob | `tools/dev_deploy.py` | same |
+| `devel_wifi`| `ssid`      | blob | `tools/provision_wifi.py` (`mpremote run`) | MicroPython `updater.py` (OTA only) |
+| `devel_wifi`| `password`  | blob | `tools/provision_wifi.py` | same |
 | `voom_pov` | `col_offset` | i32  | MicroPython `settings.py` (POV calibration) | POV driver `ventilastation_pov.c` (all native apps) |
 | `voom_md`  | `rom`        | blob | MicroPython `native_apps.py` (before launch) | gwenesis `main.c` |
 | `voom_emu` | `system`     | blob | MicroPython `native_apps.py` (before launch) | retro-core `main.c` (selects the emulator) |
 | `voom_emu` | `rom`        | blob | MicroPython `native_apps.py` (before launch) | retro-core `main.c` |
 
 Notes:
-- **WiFi**: set once with `make dev-deploy WIFI_SSID=... WIFI_PASS=...`, which
-  runs a tiny script on the board writing `voom_wifi`. `comms.py` reads it, with
-  a hardcoded default network as last resort. Survives every reflash.
+- **WiFi**: set once with `make wifi-provision WIFI_SSID=... WIFI_PASS=...`,
+  which runs a tiny script on the board writing `devel_wifi`. The board never
+  joins WiFi at boot — only `updater.py` reads the credentials, when an OTA
+  upgrade is requested over the serial host link (see ota.md). Survives every
+  reflash.
 - **POV calibration** (`pov_column_offset`): `settings.py` reads/writes
   `voom_pov`/`col_offset` directly, the exact key the native POV driver reads —
   no copy step. On desktop (no `esp32` module) settings fall back to in-memory

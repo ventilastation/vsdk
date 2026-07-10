@@ -4,19 +4,29 @@ Listens on port 8000 in a daemon thread. The device calls GET /manifest to
 discover what's available, then fetches individual files or partition binaries.
 Triggered from the emulator UI (U key) which sends "ota_start <url>" to the
 device via the existing comms channel.
+
+The file manifest covers the complete LittleFS content — the same file set,
+device paths and gzip transform as the USB-flashed image — by reusing
+hardware/rotor/build_micropython_fs.py's iter_copy_jobs(). The device skips
+files whose SHA256 already matches, so a typical dev-loop sync transfers
+only the files that changed since the last OTA.
 """
 
+import gzip
 import hashlib
+import importlib.util
 import json
-import os
 import pathlib
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 _VSDK_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# Directories and files served by each endpoint.
-_MP_ROOT = _VSDK_ROOT / "apps/micropython"   # files endpoint root
+_spec = importlib.util.spec_from_file_location(
+    "build_micropython_fs", _VSDK_ROOT / "hardware/rotor/build_micropython_fs.py"
+)
+_build_fs = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_build_fs)
 
 _PARTITION_BINS = {
     "prboom-go":   _VSDK_ROOT / "apps/retro-go/prboom-go/build/prboom-go.bin",
@@ -28,13 +38,47 @@ _PARTITION_BINS = {
     ),
 }
 
-# Directories whose Python files are included in the LFS manifest.
-_FILE_DIRS = [
-    _MP_ROOT / "ventilastation",
-    _MP_ROOT,  # main.py etc. at root level
-]
+# Per-device-path cache keyed on (mtime_ns, size) of the source file, so
+# repeated /manifest requests don't re-hash (and re-gzip) unchanged files.
+# Entries: {"stat": (mtime_ns, size), "sha256": hex, "size": served size,
+#           "gz": compressed bytes or None}
+_cache = {}
+_cache_lock = threading.Lock()
 
-_FILE_EXTENSIONS = {".py", ".json"}
+
+def _lfs_files():
+    """Yield (device_path, local_path) for every file in the LFS image."""
+    for kind, remote_path, local_path in _build_fs.iter_copy_jobs(_VSDK_ROOT):
+        if kind == "file":
+            yield remote_path, local_path
+
+
+def _file_entry(device_path, local_path):
+    """Return the cached {sha256, size, gz} entry for one file, refreshing
+    it when the source file changed. Sprite ROMs are stored gzip-compressed
+    on device (see build_micropython_fs.py), so they are hashed and served
+    in their compressed form under a ".rom.gz" device path."""
+    stat = local_path.stat()
+    key = (stat.st_mtime_ns, stat.st_size)
+    with _cache_lock:
+        entry = _cache.get(device_path)
+        if entry and entry["stat"] == key:
+            return entry
+    data = local_path.read_bytes()
+    gz = None
+    if device_path.endswith(".rom.gz"):
+        # mtime=0 keeps the output deterministic, matching the flashed image.
+        gz = gzip.compress(data, compresslevel=9, mtime=0)
+        data = gz
+    entry = {
+        "stat": key,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "size": len(data),
+        "gz": gz,
+    }
+    with _cache_lock:
+        _cache[device_path] = entry
+    return entry
 
 
 def _sha256_file(path):
@@ -45,27 +89,22 @@ def _sha256_file(path):
     return h.hexdigest()
 
 
+def _device_path(remote_path):
+    return remote_path + ".gz" if remote_path.endswith(".rom") else remote_path
+
+
 def _build_manifest():
     files = []
-    seen = set()
-    for base in _FILE_DIRS:
-        if not base.is_dir():
+    for remote_path, local_path in _lfs_files():
+        if not local_path.is_file():
             continue
-        for p in sorted(base.rglob("*")):
-            if p.suffix not in _FILE_EXTENSIONS:
-                continue
-            if not p.is_file():
-                continue
-            rel = p.relative_to(_MP_ROOT)
-            key = str(rel)
-            if key in seen:
-                continue
-            seen.add(key)
-            files.append({
-                "path": key,
-                "size": p.stat().st_size,
-                "sha256": _sha256_file(p),
-            })
+        device_path = _device_path(remote_path)
+        entry = _file_entry(device_path, local_path)
+        files.append({
+            "path": device_path,
+            "size": entry["size"],
+            "sha256": entry["sha256"],
+        })
 
     partitions = {}
     for name, bin_path in _PARTITION_BINS.items():
@@ -78,6 +117,20 @@ def _build_manifest():
         }
 
     return {"files": files, "partitions": partitions}
+
+
+def _read_device_file(rel):
+    """Return the served bytes for one manifest path, or None if unknown."""
+    for remote_path, local_path in _lfs_files():
+        if _device_path(remote_path) != rel:
+            continue
+        if not local_path.is_file():
+            return None
+        entry = _file_entry(rel, local_path)
+        if entry["gz"] is not None:
+            return entry["gz"]
+        return local_path.read_bytes()
+    return None
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -106,16 +159,14 @@ class _Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/files/"):
             rel = path[len("/files/"):]
-            file_path = _MP_ROOT / rel
             try:
-                file_path = file_path.resolve()
-                # Ensure the resolved path is still under _MP_ROOT.
-                file_path.relative_to(_MP_ROOT)
-                with open(file_path, "rb") as f:
-                    body = f.read()
-                self._send(200, "application/octet-stream", body)
-            except (FileNotFoundError, ValueError):
+                body = _read_device_file(rel)
+            except OSError:
+                body = None
+            if body is None:
                 self._send(404, "text/plain", b"not found")
+            else:
+                self._send(200, "application/octet-stream", body)
             return
 
         if path.startswith("/partitions/"):
