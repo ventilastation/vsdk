@@ -51,8 +51,8 @@ from palette entry 0 after Doom's own Gamma Boost has been applied.
   (63 - max(r, g)) / 63)`.
 - When either red or green exceeds 63, send the palette colour unchanged:
   `(r, g, b)`. This includes strong damage and acid/radiation effects.
-- The servo independently receives `damagecount` normalized from `0..100` to
-  `0..255`.
+- The servo independently receives player health normalized from `0..100` to
+  `0..255`; Doom health above 100 holds the healthy endpoint.
 
 The blend intentionally happens before gamma correction, so the 63 threshold
 and the game-state relationship remain in Doom palette space.
