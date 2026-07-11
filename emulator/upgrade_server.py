@@ -1,6 +1,6 @@
 """HTTP server that serves the OTA manifest and file/partition payloads.
 
-Listens on port 8000 in a daemon thread. The device calls GET /manifest to
+Listens on port 5653 in a daemon thread. The device calls GET /manifest to
 discover what's available, then fetches individual files or partition binaries.
 Triggered from the emulator UI (U key) which sends "ota_start <url>" to the
 device via the existing comms channel.
@@ -183,7 +183,7 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, "text/plain", b"unknown endpoint")
 
 
-def start(port=8000):
+def start(port=5653):
     """Start the upgrade HTTP server on the given port (default 8000)."""
     server = HTTPServer(("", port), _Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)

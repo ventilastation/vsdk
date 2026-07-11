@@ -1,7 +1,7 @@
 """Three-tier OTA update client for Ventilastation.
 
 Called from the comms/director layer when the emulator sends:
-    ota_start http://<emulator-ip>:8000
+    ota_start http://<emulator-ip>:5653
 
 Tiers run in order:
   1. LFS file sync     — the full LittleFS content (code, ROMs, game assets);
@@ -394,7 +394,7 @@ def _wifi_disconnect():
 def run(base_url, send_fn):
     """Run the full 3-tier OTA update.
 
-    base_url  — e.g. "http://192.168.1.5:8000"
+    base_url  — e.g. "http://192.168.1.5:5653"
     send_fn   — callable that sends a bytes line back over the comms channel
     """
     global _comms_send

@@ -127,7 +127,7 @@ mid-command from blocking the state machine indefinitely.
 Wire examples:
 
 ```
-ota_start http://192.168.100.187:8000\n
+ota_start http://192.168.100.187:5653\n
 wifi_config HomeNetwork 6d7950617373776f7264\n
 reset\n
 ```
