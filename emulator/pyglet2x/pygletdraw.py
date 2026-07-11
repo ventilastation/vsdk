@@ -309,40 +309,46 @@ def draw_workbench_controls():
 
 
 def draw_base_preview():
-    """Draw the optional physical-base state without exposing servo angles."""
+    """Draw a compact Super Ventilagon-inspired base state preview."""
     state = comms.base_control
-    width, height = 152, 94
+    width, height = 194, 126
     x, y = window.width - width - 14, 14
-    background = shapes.Rectangle(x, y, width, height, color=(12, 16, 23))
-    background.opacity = 220
-    background.draw()
-    pyglet.text.Label("BASE", font_name="Arial", font_size=9, x=x + 9, y=y + height - 16,
-                      color=(190, 205, 218, 255)).draw()
+    shapes.Rectangle(x, y, width, height, color=(3, 4, 6)).draw()
+    shapes.Rectangle(x + 4, y + 4, width - 8, height - 8, color=(13, 16, 22)).draw()
 
     red, green, blue = state.led_rgb
-    for index in range(16):
-        led = shapes.Circle(x + 11 + index * 8.6, y + height - 32, 3,
-                            color=(red, green, blue))
-        led.opacity = 255 if state.rgb != (0, 0, 0) else 55
-        led.draw()
+    pyglet.text.Label("SUPER VENTILAGON", font_name="Courier New", font_size=10,
+                      bold=True, x=x + 12, y=y + height - 18,
+                      color=(max(70, red), max(110, green), max(160, blue), 255)).draw()
 
-    # Generic 0..255 motion arc: it intentionally has no degree annotation.
-    center_x, center_y = x + 47, y + 31
-    shapes.Arc(center_x, center_y, 20, segments=20, angle=180, start_angle=0,
-               color=(100, 113, 128), thickness=2).draw()
+    # The 16 WS2812s are hidden behind the dial: their current strip color
+    # lights its frame rather than appearing as individual dots.
+    center_x, center_y = x + 57, y + 45
+    shapes.Circle(center_x, center_y, 40, color=(1, 2, 4)).draw()
+    shapes.Circle(center_x, center_y, 36, color=(red, green, blue)).draw()
+    shapes.Circle(center_x, center_y, 31, color=(max(3, red // 8), max(5, green // 8), max(9, blue // 8))).draw()
+    shapes.Arc(center_x, center_y, 32, segments=28, angle=180, start_angle=0,
+               color=(1, 2, 4), thickness=4).draw()
+    pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, bold=True,
+                      x=center_x, y=center_y + 15, anchor_x="center",
+                      color=(max(70, red), max(110, green), max(160, blue), 255)).draw()
+    pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, bold=True,
+                      x=center_x, y=center_y + 6, anchor_x="center",
+                      color=(max(70, red), max(110, green), max(160, blue), 255)).draw()
     # Preview orientation: 0 = left, midpoint = top, 255 = right.
     angle = math.radians(180 - 180 * state.servo_position / 255)
-    needle_x = center_x + math.cos(angle) * 17
-    needle_y = center_y + math.sin(angle) * 17
-    shapes.Line(center_x, center_y, needle_x, needle_y, thickness=3, color=(235, 202, 83)).draw()
-    shapes.Circle(center_x, center_y, 3, color=(235, 202, 83)).draw()
+    needle_x = center_x + math.cos(angle) * 25
+    needle_y = center_y + math.sin(angle) * 25
+    shapes.Line(center_x, center_y, needle_x, needle_y, thickness=3, color=(0, 0, 0)).draw()
+    shapes.Circle(center_x, center_y, 4, color=(0, 0, 0)).draw()
 
     now_ms = int(time.monotonic() * 1000)
     for index, mask in enumerate((1, 2)):
         lit = state.button_lit(mask, now_ms)
-        button = shapes.Circle(x + 104 + index * 26, y + 31, 9,
-                               color=(255, 224, 145) if lit else (54, 60, 69))
-        button.draw()
+        button_x = x + 130 + index * 37
+        shapes.Circle(button_x, y + 39, 15, color=(20, 22, 25)).draw()
+        shapes.Circle(button_x, y + 39, 12, color=(235, 235, 230)).draw()
+        shapes.Circle(button_x, y + 39, 5, color=(230, 24, 20) if lit else (52, 12, 12)).draw()
 
 def display_draw():
     window.clear()

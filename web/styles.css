@@ -209,27 +209,30 @@ textarea {
   right: 16px;
   bottom: 16px;
   z-index: 3;
-  width: 126px;
-  min-height: 78px;
+  width: 162px;
+  min-height: 112px;
   display: grid;
-  grid-template-columns: 1fr 42px;
-  grid-template-rows: 16px 18px 34px;
+  grid-template-columns: 94px 1fr;
+  grid-template-rows: 15px 12px 72px;
   gap: 3px 8px;
-  padding: 7px 9px;
-  border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 12px;
-  background: rgba(5, 8, 12, .82);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, .32);
+  padding: 8px 9px;
+  border: 4px solid #030405;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #121821, #07090d 62%);
+  box-shadow: 0 9px 24px rgba(0, 0, 0, .48), inset 0 0 0 1px rgba(119, 176, 231, .14);
   pointer-events: none;
 }
 
-.base-preview-title { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #c5d2df; }
-.base-preview-strip { grid-column: 1 / -1; background: repeating-linear-gradient(90deg, #252c34 0 5px, transparent 5px 8px); border-radius: 999px; height: 8px; align-self: center; box-shadow: 0 0 8px rgba(0,0,0,.4); }
-.base-preview-servo { grid-column: 1; position: relative; width: 36px; height: 19px; align-self: end; border: 2px solid #697682; border-bottom: 0; border-radius: 36px 36px 0 0; }
-.base-preview-servo i { position: absolute; left: 17px; top: 16px; width: 16px; height: 3px; background: #ebca53; transform-origin: 0 50%; transform: rotate(180deg); border-radius: 3px; }
-.base-preview-buttons { grid-column: 2; display: flex; align-items: center; justify-content: space-between; }
-.base-preview-buttons i { width: 13px; height: 13px; border-radius: 50%; background: #363d46; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
-.base-preview-buttons i.is-lit { background: #ffe091; box-shadow: 0 0 10px rgba(255, 224, 145, .9); }
+.base-preview-title { grid-column: 1 / -1; font: 700 10px/1 "Courier New", monospace; text-transform: uppercase; letter-spacing: .06em; color: #6fb9ff; text-shadow: 0 0 8px rgba(71, 157, 255, .7); }
+.base-preview-strip { grid-column: 1 / -1; height: 5px; align-self: center; border-radius: 999px; opacity: .82; box-shadow: 0 0 10px rgba(0,0,0,.65); }
+.base-preview-dial { grid-column: 1; grid-row: 3; position: relative; width: 76px; height: 76px; margin-top: -2px; border: 7px solid #010204; border-radius: 50%; background: radial-gradient(circle at 50% 62%, var(--base-dial-color, #163f7d), #07101f 72%); box-shadow: inset 0 0 22px var(--base-dial-glow, rgba(90, 179, 255, .66)), 0 0 0 1px #202a35; }
+.base-preview-dial-copy { position: absolute; top: 13px; left: 0; width: 100%; font: 700 8px/1.15 "Courier New", monospace; letter-spacing: -.04em; text-align: center; color: #a9dcff; text-shadow: 0 0 7px var(--base-dial-text-glow, #2b8bdf); }
+.base-preview-servo { position: absolute; left: 31px; top: 35px; width: 30px; height: 3px; transform-origin: 0 50%; transform: rotate(180deg); border-radius: 3px; background: #020304; box-shadow: 0 1px 1px rgba(120,190,255,.35); }
+.base-preview-servo i { position: absolute; left: -4px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: #010204; }
+.base-preview-buttons { grid-column: 2; grid-row: 3; display: flex; align-items: center; justify-content: space-between; padding-top: 24px; }
+.base-preview-buttons i { position: relative; width: 27px; height: 27px; border-radius: 50%; background: #eeeeea; box-shadow: 0 0 0 3px #121417, inset 0 -2px 3px rgba(0,0,0,.35); }
+.base-preview-buttons b { position: absolute; left: 9px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: #3d0707; box-shadow: inset 0 0 3px #000; }
+.base-preview-buttons b.is-lit { background: #ee241c; box-shadow: 0 0 9px #f63129, inset 0 0 3px #fff1e7; }
 
 .mobile-controls {
   display: none;

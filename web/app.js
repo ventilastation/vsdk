@@ -156,6 +156,7 @@ class BrowserHostApp {
       enableRendererProfiling: document.querySelector("#enable-renderer-profiling"),
       webglResolutionScale: document.querySelector("#webgl-resolution-scale"),
       basePreviewStrip: document.querySelector("#base-preview-strip"),
+      basePreviewDial: document.querySelector("#base-preview-dial"),
       basePreviewServo: document.querySelector("#base-preview-servo i"),
       basePreviewButton1: document.querySelector("#base-preview-button-1"),
       basePreviewButton2: document.querySelector("#base-preview-button-2"),
@@ -300,6 +301,11 @@ class BrowserHostApp {
     if (this.elements.basePreviewStrip) {
       this.elements.basePreviewStrip.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
       this.elements.basePreviewStrip.style.boxShadow = `0 0 11px rgba(${red}, ${green}, ${blue}, .8)`;
+    }
+    if (this.elements.basePreviewDial) {
+      this.elements.basePreviewDial.style.setProperty("--base-dial-color", `rgb(${Math.max(3, Math.floor(red / 2))}, ${Math.max(5, Math.floor(green / 2))}, ${Math.max(9, Math.floor(blue / 2))})`);
+      this.elements.basePreviewDial.style.setProperty("--base-dial-glow", `rgba(${red}, ${green}, ${blue}, .72)`);
+      this.elements.basePreviewDial.style.setProperty("--base-dial-text-glow", `rgb(${red}, ${green}, ${blue})`);
     }
     if (this.elements.basePreviewServo) {
       // Preview orientation: 0 = left, midpoint = top, 255 = right.
