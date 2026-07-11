@@ -64,6 +64,11 @@ def flash_image(args, image_path):
         "--after",
         "hard_reset",
         "write_flash",
+        # patch the bootloader header: the built image may carry a smaller
+        # flash size, and the 16MB board fails to boot with it (same flag as
+        # deploy_micropython_fs.py)
+        "--flash_size",
+        "16MB",
         "0x0",
         str(image_path),
     ]
