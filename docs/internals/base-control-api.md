@@ -41,14 +41,35 @@ Arduino.
 
 ## Voom mapping
 
-Voom uses the local player's `damagecount` and `armorpoints`:
+Voom uses entry 0 of the active Doom palette and the local player's armor.
+Let `armor_blue = clamp(armorpoints, 0, 200) * 255 / 200`; read `(r, g, b)`
+from palette entry 0 after Doom's own Gamma Boost has been applied.
 
-- while `damagecount > 0`, the base strip uses entry 0 (black) of the active
-  Doom damage palette; this preserves the palette-derived red rather than
-  synthesizing a fixed red;
-- otherwise the strip is blue at `clamp(armorpoints, 0, 200) / 200` brightness;
-- damage red overrides shield blue because the strip is uniformly one colour;
-- the servo receives `damagecount` normalized from `0..100` to `0..255`.
+- `(0, 0, 0)` means the player is okay: send `(0, 0, armor_blue)`.
+- Otherwise, when `max(r, g) <= 63`, preserve the weak red/green palette
+  colour and blend it with armor: `blue = min(255, b + armor_blue *
+  (63 - max(r, g)) / 63)`.
+- When either red or green exceeds 63, send the palette colour unchanged:
+  `(r, g, b)`. This includes strong damage and acid/radiation effects.
+- The servo independently receives `damagecount` normalized from `0..100` to
+  `0..255`.
+
+The blend intentionally happens before gamma correction, so the 63 threshold
+and the game-state relationship remain in Doom palette space.
+
+## Base strip gamma
+
+The Arduino applies one 256-entry, 2.2 gamma lookup table to each final RGB
+channel before writing the NeoPixels. The desktop and web previews apply the
+same curve. This compensates for Doom palette values targeting a gamma-corrected
+monitor while the strip receives near-linear PWM values.
+
+The POV renderer is related but cannot be copied directly: its
+`intensidades[54][256]` lookup has a distinct response for every radial LED,
+combining gamma with physical LED-position compensation. The base's identical
+strip LEDs use one common curve. Future measured calibration may replace the
+2.2 table and add per-channel gains, but that remains Arduino-local and does
+not change the public byte API.
 
 ## Emulator preview
 

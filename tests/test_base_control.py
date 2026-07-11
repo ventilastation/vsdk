@@ -5,7 +5,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "emulator"))
 
-from base_control import BaseControlState
+from base_control import BaseControlState, gamma_correct
 
 
 class BaseControlTests(unittest.TestCase):
@@ -13,6 +13,7 @@ class BaseControlTests(unittest.TestCase):
         state = BaseControlState()
         self.assertEqual(state.apply([b"leds", b"1", b"2", b"3"]), "base leds 1 2 3\n")
         self.assertEqual(state.rgb, (1, 2, 3))
+        self.assertEqual(state.led_rgb, tuple(gamma_correct(value) for value in (1, 2, 3)))
         self.assertEqual(state.apply([b"servo", b"255"]), "base servo 255\n")
         self.assertEqual(state.servo_position, 255)
         self.assertEqual(state.apply([b"buttons", b"3", b"20"]), "base buttons 3 100\n")
@@ -25,6 +26,11 @@ class BaseControlTests(unittest.TestCase):
         self.assertIsNone(state.apply([b"leds", b"-1", b"0", b"0"]))
         self.assertIsNone(state.apply([b"buttons", b"4", b"0"]))
         self.assertEqual((state.rgb, state.servo_position, state.button_mask), ((0, 0, 0), 0, 0))
+
+    def test_gamma_curve_is_dark_at_midpoint_and_exact_at_endpoints(self):
+        self.assertEqual(gamma_correct(0), 0)
+        self.assertEqual(gamma_correct(255), 255)
+        self.assertEqual(gamma_correct(128), 56)
 
 
 if __name__ == "__main__":

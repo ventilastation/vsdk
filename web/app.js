@@ -296,7 +296,7 @@ class BrowserHostApp {
   }
 
   renderBasePreview() {
-    const [red, green, blue] = this.baseControl.rgb;
+    const [red, green, blue] = this.baseControl.rgb.map((value) => Math.round(255 * (value / 255) ** 2.2));
     if (this.elements.basePreviewStrip) {
       this.elements.basePreviewStrip.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
       this.elements.basePreviewStrip.style.boxShadow = `0 0 11px rgba(${red}, ${green}, ${blue}, .8)`;

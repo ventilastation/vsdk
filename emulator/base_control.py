@@ -7,6 +7,11 @@ MIN_BLINK_MS = 100
 MAX_BLINK_MS = 10000
 
 
+def gamma_correct(value):
+    """The base strip's 2.2 output transfer curve, matching the Arduino LUT."""
+    return int(255 * (int(value) / 255) ** 2.2 + 0.5)
+
+
 class BaseControlState:
     """Normalized state accepted by previews and the Arduino forwarder.
 
@@ -62,3 +67,7 @@ class BaseControlState:
         if not self.button_blink_ms:
             return True
         return (int(now_ms) % self.button_blink_ms) < (self.button_blink_ms // 2)
+
+    @property
+    def led_rgb(self):
+        return tuple(gamma_correct(value) for value in self.rgb)

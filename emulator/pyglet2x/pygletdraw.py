@@ -319,7 +319,7 @@ def draw_base_preview():
     pyglet.text.Label("BASE", font_name="Arial", font_size=9, x=x + 9, y=y + height - 16,
                       color=(190, 205, 218, 255)).draw()
 
-    red, green, blue = state.rgb
+    red, green, blue = state.led_rgb
     for index in range(16):
         led = shapes.Circle(x + 11 + index * 8.6, y + height - 32, 3,
                             color=(red, green, blue))
