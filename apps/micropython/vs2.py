@@ -26,19 +26,24 @@ TRANSPARENT = 255
 
 PAYLOAD_MAGIC = b"VS2\0"
 PAYLOAD_VERSION = 1
+PAYLOAD_VERSION_TILEMAPS = 2
 PAYLOAD_HEADER_SIZE = 16
 PAYLOAD_LAYER_SIZE = 8
 PAYLOAD_SPRITE_SIZE = 24
+PAYLOAD_TILEMAP_SIZE = 32
 
 FLAG_VISIBLE = 0x01
 FLAG_FLIP_X = 0x02
 FLAG_FLIP_Y = 0x04
 NO_LAYER = 255
+EMPTY_TILE = 255
 
 _live_sprites = []
+_live_tilemaps = []
 _active_scene = None
 _next_sprite_order = 0
 _scratch_sprites = []
+_scratch_tilemaps = []
 
 
 def _vs2_backend():
@@ -122,10 +127,20 @@ def _register_sprite(sprite):
         _live_sprites.append(sprite)
 
 
+def _register_tilemap(tilemap):
+    global _next_sprite_order
+    if tilemap not in _live_tilemaps:
+        tilemap._vs2_order = _next_sprite_order
+        _next_sprite_order += 1
+        _live_tilemaps.append(tilemap)
+
+
 def reset_runtime_state():
     global _active_scene, _next_sprite_order
     del _live_sprites[:]
     del _scratch_sprites[:]
+    del _live_tilemaps[:]
+    del _scratch_tilemaps[:]
     _active_scene = None
     _next_sprite_order = 0
 
@@ -143,9 +158,23 @@ def _remove_scene_sprites(scene):
     del _live_sprites[write:]
 
 
+def _remove_scene_tilemaps(scene):
+    write = 0
+    for read in range(len(_live_tilemaps)):
+        tilemap = _live_tilemaps[read]
+        if getattr(tilemap, "_scene", None) is scene:
+            tilemap._scene = None
+            continue
+        if write != read:
+            _live_tilemaps[write] = tilemap
+        write += 1
+    del _live_tilemaps[write:]
+
+
 def _clear_scene_objects(scene):
     """Drop the Python ownership links for one scene's drawables."""
     _remove_scene_sprites(scene)
+    _remove_scene_tilemaps(scene)
     for layer in scene.layers:
         layer.clear()
         layer.scene = None
@@ -160,6 +189,15 @@ def _collect_scene_sprites(scene, sprites):
             continue
         sprites.append(sprite)
     return sprites
+
+
+def _collect_scene_tilemaps(scene, tilemaps):
+    del tilemaps[:]
+    for tilemap in _live_tilemaps:
+        if scene is not None and getattr(tilemap, "_scene", None) is not scene:
+            continue
+        tilemaps.append(tilemap)
+    return tilemaps
 
 
 def _layer_index(layers, layer):
@@ -186,25 +224,31 @@ def export_scene_payload(scene=None):
         layers = getattr(scene, "layers", ())
 
     sprites = _collect_scene_sprites(scene, _scratch_sprites)
+    tilemaps = _collect_scene_tilemaps(scene, _scratch_tilemaps)
+    frames_size = 0
+    for tilemap in tilemaps:
+        frames_size += tilemap.columns * tilemap.rows
     payload = _payload_buffer(
         scene,
         PAYLOAD_HEADER_SIZE
         + len(layers) * PAYLOAD_LAYER_SIZE
         + len(sprites) * PAYLOAD_SPRITE_SIZE
+        + len(tilemaps) * PAYLOAD_TILEMAP_SIZE
+        + frames_size
     )
     struct.pack_into(
         "<4sBBBBHHHH",
         payload,
         0,
         PAYLOAD_MAGIC,
-        PAYLOAD_VERSION,
+        PAYLOAD_VERSION_TILEMAPS if tilemaps else PAYLOAD_VERSION,
         len(layers),
         len(sprites),
-        0,
+        len(tilemaps),
         PAYLOAD_HEADER_SIZE,
         PAYLOAD_LAYER_SIZE,
         PAYLOAD_SPRITE_SIZE,
-        0,
+        PAYLOAD_TILEMAP_SIZE if tilemaps else 0,
     )
     offset = PAYLOAD_HEADER_SIZE
     for index, layer in enumerate(layers):
@@ -242,6 +286,39 @@ def export_scene_payload(scene=None):
             _fixed_8_8(sprite.y),
         )
         offset += PAYLOAD_SPRITE_SIZE
+    frames_offset = offset + len(tilemaps) * PAYLOAD_TILEMAP_SIZE
+    for tilemap in tilemaps:
+        layer = tilemap.layer
+        index = _layer_index(layers, layer) if layer is not None else NO_LAYER
+        if index != NO_LAYER:
+            mode = layer.mode
+        else:
+            mode = tilemap.mode
+        viewport_x, viewport_y, viewport_w, viewport_h = tilemap.viewport
+        struct.pack_into(
+            "<BBBBHHHHHHHHiiI",
+            payload,
+            offset,
+            index,
+            _strip_number(tilemap),
+            FLAG_VISIBLE if tilemap.visible else 0,
+            _render_coord(mode, 0, 2),
+            tilemap.columns,
+            tilemap.rows,
+            tilemap.tile_width,
+            tilemap.tile_height,
+            viewport_x,
+            viewport_y,
+            viewport_w,
+            viewport_h,
+            _fixed_8_8(tilemap.x),
+            _fixed_8_8(tilemap.y),
+            frames_offset,
+        )
+        offset += PAYLOAD_TILEMAP_SIZE
+        cells = tilemap.columns * tilemap.rows
+        payload[frames_offset:frames_offset + cells] = tilemap.frames
+        frames_offset += cells
     return payload
 
 
@@ -305,6 +382,7 @@ class Layer:
         self._mode = mode
         self._visible = visible
         self.sprites = []
+        self.tilemaps = []
         backend = _vs2_backend()
         if backend is not None:
             self._layer = backend.Layer(mode=mode, visible=visible)
@@ -319,24 +397,31 @@ class Layer:
         if self._layer is not None:
             self._layer.set_visible(self._visible)
 
-    def add(self, sprite):
-        if sprite not in self.sprites:
-            self.sprites.append(sprite)
-        sprite.layer = self
+    def add(self, drawable):
+        if isinstance(drawable, Tilemap):
+            if drawable not in self.tilemaps:
+                self.tilemaps.append(drawable)
+        elif drawable not in self.sprites:
+            self.sprites.append(drawable)
+        drawable.layer = self
         if self.scene is not None:
-            sprite._scene = self.scene
-        sprite.mode = self.mode
-        return sprite
+            drawable._scene = self.scene
+        drawable.mode = self.mode
+        return drawable
 
-    def remove(self, sprite):
-        if sprite in self.sprites:
-            self.sprites.remove(sprite)
-        if sprite.layer is self:
-            sprite.layer = None
+    def remove(self, drawable):
+        if drawable in self.sprites:
+            self.sprites.remove(drawable)
+        if drawable in self.tilemaps:
+            self.tilemaps.remove(drawable)
+        if drawable.layer is self:
+            drawable.layer = None
 
     def clear(self):
         while self.sprites:
             self.remove(self.sprites[-1])
+        while self.tilemaps:
+            self.remove(self.tilemaps[-1])
 
     @property
     def mode(self):
@@ -348,6 +433,8 @@ class Layer:
         self._sync_mode()
         for sprite in self.sprites:
             sprite.mode = value
+        for tilemap in self.tilemaps:
+            tilemap.mode = value
 
     @property
     def visible(self):
@@ -572,6 +659,190 @@ class Sprite:
 
     def collision(self, sprites):
         return self.collides_with(sprites)
+
+
+class Tilemap:
+    """A grid of tiles rendered from a caller-owned byte buffer of frame ids.
+
+    The supplied ``frames`` buffer is retained, never copied: mutate cells with
+    plain indexed writes (``frames[index] = tile``). ``columns``, ``rows``,
+    ``tile_width`` and ``tile_height`` are fixed after creation, and resizing
+    or replacing the buffer while the tilemap is active is unsupported.
+    ``viewport`` is a pixel rectangle of the map drawn at the on-screen origin
+    (x, y); changing its position pans the map under a fixed window. Frame id
+    255 (EMPTY_TILE) leaves a cell empty.
+    """
+
+    def __init__(
+        self,
+        strip,
+        frames,
+        columns,
+        rows,
+        tile_width,
+        tile_height,
+        x=0,
+        y=0,
+        viewport=None,
+        layer=None,
+        visible=True,
+    ):
+        _claim()
+        columns = int(columns)
+        rows = int(rows)
+        tile_width = int(tile_width)
+        tile_height = int(tile_height)
+        if columns <= 0 or rows <= 0 or tile_width <= 0 or tile_height <= 0:
+            raise ValueError("tilemap dimensions must be positive")
+        if columns * tile_width > 0xFFFF or rows * tile_height > 0xFFFF:
+            raise ValueError("tilemap pixel size too large")
+        if len(frames) != columns * rows:
+            raise ValueError("frames length must equal columns * rows")
+        self.frames = frames
+        self.columns = columns
+        self.rows = rows
+        self.tile_width = tile_width
+        self.tile_height = tile_height
+        self._strip = _resolve_strip(strip)
+        self._x = x
+        self._y = y
+        self._mode = TUNNEL
+        self._visible = bool(visible)
+        if viewport is None:
+            viewport = (0, 0, columns * tile_width, rows * tile_height)
+        self._viewport = _check_viewport(viewport)
+        self._layer = None
+        backend = _vs2_backend()
+        if backend is not None and hasattr(backend, "Tilemap"):
+            self._tilemap = backend.Tilemap(
+                strip=self._strip,
+                frames=frames,
+                columns=columns,
+                rows=rows,
+                tile_width=tile_width,
+                tile_height=tile_height,
+            )
+        else:
+            self._tilemap = None
+        self._scene = _active_scene
+        _register_tilemap(self)
+        if layer is not None:
+            layer.add(self)
+        self._sync_all()
+
+    def _sync_all(self):
+        self._sync_mode()
+        self._sync_position()
+        self._sync_layer()
+        self._sync_flags()
+        self._sync_viewport()
+
+    def _sync_position(self):
+        if self._tilemap is not None:
+            self._tilemap.set_x_fixed(_fixed_8_8(self._x))
+            self._tilemap.set_y_fixed(_fixed_8_8(self._y))
+
+    def _sync_mode(self):
+        if self._tilemap is not None:
+            self._tilemap.set_perspective(_render_coord(self._mode, 0, 2))
+
+    def _sync_flags(self):
+        if self._tilemap is not None:
+            self._tilemap.set_flags(FLAG_VISIBLE if self._visible else 0)
+
+    def _sync_layer(self):
+        if self._tilemap is not None:
+            layer = self._layer
+            self._tilemap.set_layer(layer._layer if layer is not None else None)
+
+    def _sync_viewport(self):
+        if self._tilemap is not None:
+            viewport_x, viewport_y, viewport_w, viewport_h = self._viewport
+            self._tilemap.set_viewport(
+                viewport_x, viewport_y, viewport_w, viewport_h
+            )
+
+    @property
+    def x(self):
+        return self._x
+
+    @x.setter
+    def x(self, value):
+        self._x = value
+        self._sync_position()
+
+    @property
+    def y(self):
+        return self._y
+
+    @y.setter
+    def y(self, value):
+        self._y = value
+        self._sync_position()
+
+    @property
+    def strip(self):
+        return self._strip
+
+    @property
+    def viewport(self):
+        return self._viewport
+
+    @viewport.setter
+    def viewport(self, value):
+        self._viewport = _check_viewport(value)
+        self._sync_viewport()
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, value):
+        self._mode = value
+        self._sync_mode()
+
+    @property
+    def visible(self):
+        return self._visible
+
+    @visible.setter
+    def visible(self, value):
+        self._visible = bool(value)
+        self._sync_flags()
+
+    @property
+    def layer(self):
+        return self._layer
+
+    @layer.setter
+    def layer(self, value):
+        self._layer = value
+        self._sync_layer()
+
+    def hide(self):
+        self.visible = False
+
+    def show(self):
+        self.visible = True
+
+
+def _check_viewport(value):
+    viewport_x, viewport_y, viewport_w, viewport_h = value
+    viewport_x = int(viewport_x)
+    viewport_y = int(viewport_y)
+    viewport_w = int(viewport_w)
+    viewport_h = int(viewport_h)
+    if viewport_x < 0 or viewport_y < 0 or viewport_w <= 0 or viewport_h <= 0:
+        raise ValueError("invalid viewport")
+    if (
+        viewport_x > 0xFFFF
+        or viewport_y > 0xFFFF
+        or viewport_w > 0xFFFF
+        or viewport_h > 0xFFFF
+    ):
+        raise ValueError("invalid viewport")
+    return (viewport_x, viewport_y, viewport_w, viewport_h)
 
 
 def _intersects(x1, w1, x2, w2):

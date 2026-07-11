@@ -26,7 +26,7 @@ except Exception as _me:
 # OTA boot mode: if /ota_request exists, run OTA before the GPU task starts.
 # The GPU task and WiFi both use the SPI bus (PSRAM); running them concurrently
 # causes a core crash. OTA runs here, in isolation, before ensure_runtime().
-# To trigger: write "http://HOST:8000" to /ota_request and reset the board.
+# To trigger: write "http://HOST:5653" to /ota_request and reset the board.
 # director.py does this automatically when it receives an ota_start command.
 def _check_ota_boot():
     try:

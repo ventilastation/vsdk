@@ -1379,6 +1379,13 @@
     "games/alecu/vixeous/sounds/shoot.mp3",
     "apps/micropython/vsdk_board.py",
     "apps/micropython/ventilastation/board_config.py",
-    "apps/micropython/roms/alecu.torta50.rom"
+    "apps/micropython/roms/alecu.torta50.rom",
+    "games/alecu/mapdemo/code/mapdemo.py",
+    "games/alecu/mapdemo/meta.json",
+    "apps/micropython/roms/alecu.mapdemo.rom",
+    "games/alecu/mapdemo/images/__images__.yaml",
+    "games/alecu/mapdemo/images/ship.png",
+    "games/alecu/mapdemo/images/terrain.png",
+    "games/alecu/mapdemo/menu.png"
   ]
 }

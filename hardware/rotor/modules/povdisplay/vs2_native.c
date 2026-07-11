@@ -21,18 +21,30 @@ typedef struct {
     vs2_sprite_t sprite;
 } vs2_sprite_obj_t;
 
+typedef struct {
+    mp_obj_base_t base;
+    uint8_t slot;
+    vs2_tilemap_t tilemap;
+    /* keeps the frame buffer's owner alive for the GC */
+    mp_obj_t frames_obj;
+} vs2_tilemap_obj_t;
+
 const mp_obj_type_t vs2_layer_type;
 const mp_obj_type_t vs2_sprite_type;
+const mp_obj_type_t vs2_tilemap_type;
 
 static const vs2_layer_t* vs2_layer_records[VS2_MAX_LAYERS];
 static const vs2_sprite_t* vs2_sprite_records[VS2_MAX_SPRITES];
+static const vs2_tilemap_t* vs2_tilemap_records[VS2_MAX_TILEMAPS];
 
 bool vs2_render_active = false;
 vs2_scene_t vs2_active_scene = {
     .layer_count = 0,
     .sprite_count = 0,
+    .tilemap_count = 0,
     .layers = vs2_layer_records,
     .sprites = vs2_sprite_records,
+    .tilemaps = vs2_tilemap_records,
 };
 
 static uint8_t alloc_layer_slot(const vs2_layer_t* layer) {
@@ -63,6 +75,20 @@ static uint8_t alloc_sprite_slot(const vs2_sprite_t* sprite) {
     return 0;
 }
 
+static uint8_t alloc_tilemap_slot(const vs2_tilemap_t* tilemap) {
+    for (uint8_t slot = 0; slot < VS2_MAX_TILEMAPS; slot++) {
+        if (vs2_tilemap_records[slot] == NULL) {
+            vs2_tilemap_records[slot] = tilemap;
+            if (slot >= vs2_active_scene.tilemap_count) {
+                vs2_active_scene.tilemap_count = slot + 1;
+            }
+            return slot;
+        }
+    }
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("too many vs2 tilemaps"));
+    return 0;
+}
+
 static vs2_sprite_obj_t* to_vs2_sprite(mp_obj_t obj) {
     if (!mp_obj_is_type(obj, &vs2_sprite_type)) {
         mp_raise_TypeError(MP_ERROR_TEXT("expected vs2 Sprite"));
@@ -81,8 +107,10 @@ static mp_obj_t vs2_reset_scene(void) {
     vs2_render_active = false;
     memset(vs2_layer_records, 0, sizeof(vs2_layer_records));
     memset(vs2_sprite_records, 0, sizeof(vs2_sprite_records));
+    memset(vs2_tilemap_records, 0, sizeof(vs2_tilemap_records));
     vs2_active_scene.layer_count = 0;
     vs2_active_scene.sprite_count = 0;
+    vs2_active_scene.tilemap_count = 0;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(vs2_reset_scene_obj, vs2_reset_scene);
@@ -308,10 +336,138 @@ MP_DEFINE_CONST_OBJ_TYPE(
     locals_dict, &vs2_sprite_locals_dict
 );
 
+static void vs2_tilemap_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
+    vs2_tilemap_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_printf(print, "<vs2.Tilemap slot=%d strip=%d %dx%d>",
+        self->slot, self->tilemap.image_strip, self->tilemap.columns, self->tilemap.rows);
+}
+
+static mp_obj_t vs2_tilemap_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
+    enum { ARG_strip, ARG_frames, ARG_columns, ARG_rows, ARG_tile_width, ARG_tile_height };
+    static const mp_arg_t allowed_args[] = {
+        { MP_QSTR_strip, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_frames, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
+        { MP_QSTR_columns, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_rows, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_tile_width, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_tile_height, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+    };
+
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    mp_int_t columns = args[ARG_columns].u_int;
+    mp_int_t rows = args[ARG_rows].u_int;
+    mp_int_t tile_width = args[ARG_tile_width].u_int;
+    mp_int_t tile_height = args[ARG_tile_height].u_int;
+    if (columns <= 0 || rows <= 0 || tile_width <= 0 || tile_height <= 0 ||
+        columns * tile_width > 0xFFFF || rows * tile_height > 0xFFFF) {
+        mp_raise_ValueError(MP_ERROR_TEXT("bad tilemap dimensions"));
+    }
+
+    mp_buffer_info_t bufinfo;
+    mp_get_buffer_raise(args[ARG_frames].u_obj, &bufinfo, MP_BUFFER_READ);
+    if ((mp_int_t)bufinfo.len != columns * rows) {
+        mp_raise_ValueError(MP_ERROR_TEXT("frames length must equal columns * rows"));
+    }
+
+    vs2_tilemap_obj_t *self = m_new_obj(vs2_tilemap_obj_t);
+    self->base.type = type;
+    self->frames_obj = args[ARG_frames].u_obj;
+    self->tilemap.layer = VS2_NO_LAYER;
+    self->tilemap.image_strip = args[ARG_strip].u_int;
+    self->tilemap.flags = 0;
+    self->tilemap.mode = 1;
+    self->tilemap.columns = columns;
+    self->tilemap.rows = rows;
+    self->tilemap.tile_width = tile_width;
+    self->tilemap.tile_height = tile_height;
+    self->tilemap.viewport_x = 0;
+    self->tilemap.viewport_y = 0;
+    self->tilemap.viewport_w = columns * tile_width;
+    self->tilemap.viewport_h = rows * tile_height;
+    self->tilemap.x = 0;
+    self->tilemap.y = 0;
+    self->tilemap.frames = (const uint8_t*)bufinfo.buf;
+    self->tilemap.frames_len = bufinfo.len;
+    self->slot = alloc_tilemap_slot(&self->tilemap);
+    return MP_OBJ_FROM_PTR(self);
+}
+
+static mp_obj_t vs2_tilemap_set_viewport(size_t n_args, const mp_obj_t *args) {
+    vs2_tilemap_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+    self->tilemap.viewport_x = mp_obj_get_int(args[1]);
+    self->tilemap.viewport_y = mp_obj_get_int(args[2]);
+    self->tilemap.viewport_w = mp_obj_get_int(args[3]);
+    self->tilemap.viewport_h = mp_obj_get_int(args[4]);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(vs2_tilemap_set_viewport_obj, 5, 5, vs2_tilemap_set_viewport);
+
+static mp_obj_t vs2_tilemap_set_x_fixed(mp_obj_t self_in, mp_obj_t value_in) {
+    vs2_tilemap_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    self->tilemap.x = mp_obj_get_int(value_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_tilemap_set_x_fixed_obj, vs2_tilemap_set_x_fixed);
+
+static mp_obj_t vs2_tilemap_set_y_fixed(mp_obj_t self_in, mp_obj_t value_in) {
+    vs2_tilemap_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    self->tilemap.y = mp_obj_get_int(value_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_tilemap_set_y_fixed_obj, vs2_tilemap_set_y_fixed);
+
+static mp_obj_t vs2_tilemap_set_perspective(mp_obj_t self_in, mp_obj_t value_in) {
+    vs2_tilemap_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    self->tilemap.mode = mp_obj_get_int(value_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_tilemap_set_perspective_obj, vs2_tilemap_set_perspective);
+
+static mp_obj_t vs2_tilemap_set_flags(mp_obj_t self_in, mp_obj_t flags_in) {
+    vs2_tilemap_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    self->tilemap.flags = mp_obj_get_int(flags_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_tilemap_set_flags_obj, vs2_tilemap_set_flags);
+
+static mp_obj_t vs2_tilemap_set_layer(mp_obj_t self_in, mp_obj_t layer_in) {
+    vs2_tilemap_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    if (layer_in == mp_const_none) {
+        self->tilemap.layer = VS2_NO_LAYER;
+    } else {
+        vs2_layer_obj_t *layer = to_vs2_layer(layer_in);
+        self->tilemap.layer = layer->slot;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_tilemap_set_layer_obj, vs2_tilemap_set_layer);
+
+static const mp_rom_map_elem_t vs2_tilemap_locals_dict_table[] = {
+    { MP_ROM_QSTR(MP_QSTR_set_viewport), MP_ROM_PTR(&vs2_tilemap_set_viewport_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_x_fixed), MP_ROM_PTR(&vs2_tilemap_set_x_fixed_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_y_fixed), MP_ROM_PTR(&vs2_tilemap_set_y_fixed_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_perspective), MP_ROM_PTR(&vs2_tilemap_set_perspective_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_flags), MP_ROM_PTR(&vs2_tilemap_set_flags_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_layer), MP_ROM_PTR(&vs2_tilemap_set_layer_obj) },
+};
+static MP_DEFINE_CONST_DICT(vs2_tilemap_locals_dict, vs2_tilemap_locals_dict_table);
+
+MP_DEFINE_CONST_OBJ_TYPE(
+    vs2_tilemap_type,
+    MP_QSTR_Tilemap,
+    MP_TYPE_FLAG_NONE,
+    print, vs2_tilemap_print,
+    make_new, vs2_tilemap_make_new,
+    locals_dict, &vs2_tilemap_locals_dict
+);
+
 static const mp_rom_map_elem_t vs2_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_vshw_vs2) },
     { MP_ROM_QSTR(MP_QSTR_Layer), MP_ROM_PTR(&vs2_layer_type) },
     { MP_ROM_QSTR(MP_QSTR_Sprite), MP_ROM_PTR(&vs2_sprite_type) },
+    { MP_ROM_QSTR(MP_QSTR_Tilemap), MP_ROM_PTR(&vs2_tilemap_type) },
     { MP_ROM_QSTR(MP_QSTR_reset_scene), MP_ROM_PTR(&vs2_reset_scene_obj) },
     { MP_ROM_QSTR(MP_QSTR_reset_sprites), MP_ROM_PTR(&vs2_reset_scene_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_active), MP_ROM_PTR(&vs2_set_active_obj) },

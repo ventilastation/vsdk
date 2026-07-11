@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const {
   COLUMNS,
   PIXELS,
+  DEEPSPACE,
   computeLedFramePixels,
   computeLedFramePixelsFromRgb,
   decodeVs2SceneBuffer,
@@ -44,22 +45,32 @@ function blankFrame(overrides = {}) {
   };
 }
 
-function makeVs2ScenePayload({ layers, sprites }) {
+function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
   const headerSize = 16;
   const layerSize = 8;
   const spriteSize = 24;
-  const payload = new Uint8Array(headerSize + layers.length * layerSize + sprites.length * spriteSize);
+  const tilemapSize = tilemaps.length ? 32 : 0;
+  const framesBytes = tilemaps.reduce((total, tilemap) => total + tilemap.frames.length, 0);
+  const payload = new Uint8Array(
+    headerSize
+    + layers.length * layerSize
+    + sprites.length * spriteSize
+    + tilemaps.length * 32
+    + framesBytes
+  );
   const view = new DataView(payload.buffer);
   payload[0] = "V".charCodeAt(0);
   payload[1] = "S".charCodeAt(0);
   payload[2] = "2".charCodeAt(0);
   payload[3] = 0;
-  payload[4] = 1;
+  payload[4] = tilemaps.length ? 2 : 1;
   payload[5] = layers.length;
   payload[6] = sprites.length;
+  payload[7] = tilemaps.length;
   view.setUint16(8, headerSize, true);
   view.setUint16(10, layerSize, true);
   view.setUint16(12, spriteSize, true);
+  view.setUint16(14, tilemapSize, true);
 
   let offset = headerSize;
   for (let index = 0; index < layers.length; index += 1) {
@@ -79,7 +90,77 @@ function makeVs2ScenePayload({ layers, sprites }) {
     view.setInt32(offset + 14, Math.trunc((sprite.y || 0) * 256), true);
     offset += spriteSize;
   }
+  let framesOffset = offset + tilemaps.length * 32;
+  for (const tilemap of tilemaps) {
+    payload[offset] = tilemap.layer ?? 255;
+    payload[offset + 1] = tilemap.image_strip;
+    payload[offset + 2] = tilemap.flags ?? 1;
+    payload[offset + 3] = tilemap.mode ?? 1;
+    view.setUint16(offset + 4, tilemap.columns, true);
+    view.setUint16(offset + 6, tilemap.rows, true);
+    view.setUint16(offset + 8, tilemap.tile_width, true);
+    view.setUint16(offset + 10, tilemap.tile_height, true);
+    view.setUint16(offset + 12, tilemap.viewport[0], true);
+    view.setUint16(offset + 14, tilemap.viewport[1], true);
+    view.setUint16(offset + 16, tilemap.viewport[2], true);
+    view.setUint16(offset + 18, tilemap.viewport[3], true);
+    view.setInt32(offset + 20, Math.trunc((tilemap.x || 0) * 256), true);
+    view.setInt32(offset + 24, Math.trunc((tilemap.y || 0) * 256), true);
+    view.setUint32(offset + 28, framesOffset, true);
+    offset += 32;
+    payload.set(Uint8Array.from(tilemap.frames), framesOffset);
+    framesOffset += tilemap.frames.length;
+  }
   return payload;
+}
+
+// Mirrors make_tile_strip() in tests/test_emulator_vs2_render.py: 4x4 tiles,
+// 3 frames, stored column-mirrored like real strips. Frame 0: screen column 0
+// is palette index 1, the rest 2. Frame 1: solid 3. Frame 2: solid 4 with the
+// tile's screen pixel (0, 0) transparent.
+function makeTileStripAsset() {
+  const frame0 = new Array(16).fill(0);
+  for (let dx = 0; dx < 4; dx += 1) {
+    for (let dy = 0; dy < 4; dy += 1) {
+      frame0[(3 - dx) * 4 + dy] = dx === 0 ? 1 : 2;
+    }
+  }
+  const frame1 = new Array(16).fill(3);
+  const frame2 = new Array(16).fill(4);
+  frame2[3 * 4 + 0] = 255;
+  return makeAsset({ width: 4, height: 4, frames: 3, data: [...frame0, ...frame1, ...frame2] });
+}
+
+// 2x2 map: top row = frame 0 | frame 1, bottom row = frame 2 | empty cell
+const TILEMAP_FRAMES = [0, 1, 2, 255];
+
+function defaultTilemap(overrides = {}) {
+  return {
+    image_strip: 9,
+    frames: TILEMAP_FRAMES,
+    columns: 2,
+    rows: 2,
+    tile_width: 4,
+    tile_height: 4,
+    viewport: [0, 0, 8, 8],
+    mode: 2,
+    x: 10,
+    y: 40,
+    ...overrides,
+  };
+}
+
+function renderTilemapScene(scene, extraAssets = []) {
+  const palette = createPalette({
+    1: [10, 0, 0],
+    2: [20, 0, 0],
+    3: [30, 0, 0],
+    4: [40, 0, 0],
+  });
+  const assets = new Map([[9, makeTileStripAsset()], ...extraAssets]);
+  const decoded = decodeVs2SceneBuffer(makeVs2ScenePayload(scene));
+  const frame = blankFrame({ sprites: decoded.sprites, tilemaps: decoded.tilemaps });
+  return { decoded, pixels: computeLedFramePixels(frame, assets, palette) };
 }
 
 function runTests() {
@@ -282,6 +363,113 @@ function runTests() {
     assert.deepEqual(getLedColor(pixels, 0, 53), [20, 0, 0, 255], "VS2 x/y=-0.25 should floor and clip vertically");
     assert.deepEqual(getLedColor(pixels, 1, 53), [0, 0, 0, 255], "VS2 fractional X should occupy only its wrapped sprite columns");
     assert.deepEqual(getLedColor(pixels, 255, 53), [40, 0, 0, 255], "VS2 negative X should wrap around the circular display");
+  }
+
+  // VS2 tilemaps (payload v2). HUD mode at y=40: dest rows 40..47 -> leds 13..6.
+  {
+    const { decoded, pixels } = renderTilemapScene({ layers: [], sprites: [], tilemaps: [defaultTilemap()] });
+    assert.equal(decoded.version, 2);
+    assert.equal(decoded.tilemaps.length, 1);
+    assert.deepEqual(decoded.tilemaps[0].viewport, [0, 0, 8, 8]);
+    assert.deepEqual(Array.from(decoded.tilemaps[0].frames), TILEMAP_FRAMES);
+
+    // top-left tile is frame 0: screen column 0 shows index 1 -> red 10
+    for (let n = 0; n < 4; n += 1) {
+      assert.deepEqual(getLedColor(pixels, 10, 13 - n), [10, 0, 0, 255], `tilemap frame 0 led ${13 - n}`);
+    }
+    // bottom-left tile is frame 2: pixel (0, 0) transparent, rest 40
+    assert.deepEqual(getLedColor(pixels, 10, 9), [0, 0, 0, 255], "tilemap transparent pixel");
+    assert.deepEqual(getLedColor(pixels, 10, 8), [40, 0, 0, 255], "tilemap frame 2");
+    // tile screen column 1 of frame 0 shows index 2 -> 20 (mirroring check)
+    assert.deepEqual(getLedColor(pixels, 11, 13), [20, 0, 0, 255], "tilemap unmirrored column");
+    // second map column: top tile frame 1 -> 30, bottom cell 255 is empty
+    assert.deepEqual(getLedColor(pixels, 14, 13), [30, 0, 0, 255], "tilemap frame 1");
+    assert.deepEqual(getLedColor(pixels, 14, 9), [0, 0, 0, 255], "tilemap empty cell");
+    // beyond the map width nothing renders
+    assert.deepEqual(getLedColor(pixels, 18, 13), [0, 0, 0, 255], "tilemap width limit");
+  }
+
+  {
+    const { pixels } = renderTilemapScene({
+      layers: [], sprites: [], tilemaps: [defaultTilemap({ viewport: [4, 0, 4, 8] })],
+    });
+    // panning the viewport shows the second map column at the origin
+    assert.deepEqual(getLedColor(pixels, 10, 13), [30, 0, 0, 255], "tilemap viewport pans horizontally");
+    assert.deepEqual(getLedColor(pixels, 14, 13), [0, 0, 0, 255], "tilemap viewport window width");
+  }
+
+  {
+    const { pixels } = renderTilemapScene({
+      layers: [], sprites: [], tilemaps: [defaultTilemap({ viewport: [0, 2, 8, 4] })],
+    });
+    assert.deepEqual(getLedColor(pixels, 10, 13), [10, 0, 0, 255], "tilemap viewport pans vertically");
+    assert.deepEqual(getLedColor(pixels, 10, 11), [0, 0, 0, 255], "tilemap vertical pan transparent pixel");
+    assert.deepEqual(getLedColor(pixels, 10, 10), [40, 0, 0, 255], "tilemap vertical pan frame 2");
+    assert.deepEqual(getLedColor(pixels, 10, 9), [0, 0, 0, 255], "tilemap viewport window height");
+  }
+
+  {
+    const { pixels } = renderTilemapScene({
+      layers: [], sprites: [], tilemaps: [defaultTilemap({ viewport: [6, 0, 8, 8] })],
+    });
+    assert.deepEqual(getLedColor(pixels, 10, 13), [30, 0, 0, 255], "tilemap viewport clamps to map edge");
+    assert.deepEqual(getLedColor(pixels, 12, 13), [0, 0, 0, 255], "tilemap clamped viewport width");
+  }
+
+  {
+    const { pixels } = renderTilemapScene({
+      layers: [], sprites: [], tilemaps: [defaultTilemap({ x: 254 })],
+    });
+    assert.deepEqual(getLedColor(pixels, 254, 13), [10, 0, 0, 255], "tilemap at wrap origin");
+    assert.deepEqual(getLedColor(pixels, 0, 13), [20, 0, 0, 255], "tilemap wraps around column zero");
+  }
+
+  {
+    const { pixels } = renderTilemapScene({
+      layers: [],
+      sprites: [{ layer: 255, image_strip: 8, frame: 0, mode: 2, flags: 1, x: 10, y: 40 }],
+      tilemaps: [defaultTilemap()],
+    }, [[8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })]]);
+    // the sprite pixel (data index 3 -> red 30) covers the tile's 10
+    assert.deepEqual(getLedColor(pixels, 10, 13), [30, 0, 0, 255], "tilemap draws behind sprites");
+    assert.deepEqual(getLedColor(pixels, 10, 11), [10, 0, 0, 255], "tilemap shows below the sprite");
+  }
+
+  {
+    const { decoded, pixels } = renderTilemapScene({
+      layers: [{ mode: 2, visible: false }], sprites: [], tilemaps: [defaultTilemap({ layer: 0 })],
+    });
+    assert.equal(decoded.tilemaps.length, 0, "hidden layer drops the tilemap at decode");
+    assert.deepEqual(getLedColor(pixels, 10, 13), [0, 0, 0, 255], "tilemap on hidden layer");
+  }
+
+  {
+    const { pixels } = renderTilemapScene({
+      layers: [], sprites: [], tilemaps: [defaultTilemap({ mode: 1 })],
+    });
+    assert.deepEqual(getLedColor(pixels, 10, DEEPSPACE[40]), [10, 0, 0, 255], "tilemap TUNNEL projection uses deepspace");
+  }
+
+  {
+    const { pixels } = renderTilemapScene({
+      layers: [], sprites: [], tilemaps: [defaultTilemap({ mode: 0 })],
+    });
+    assert.deepEqual(getLedColor(pixels, 10, 13), [0, 0, 0, 255], "FULLSCREEN tilemap is skipped");
+  }
+
+  {
+    const { pixels } = renderTilemapScene({
+      layers: [], sprites: [], tilemaps: [
+        defaultTilemap({ tile_width: 8, tile_height: 8, viewport: [0, 0, 16, 16] }),
+      ],
+    });
+    assert.deepEqual(getLedColor(pixels, 10, 13), [0, 0, 0, 255], "mismatched tile dims are skipped");
+  }
+
+  {
+    const decoded = decodeVs2SceneBuffer(makeVs2ScenePayload({ layers: [], sprites: [] }));
+    assert.equal(decoded.version, 1);
+    assert.deepEqual(decoded.tilemaps, [], "v1 payloads decode with no tilemaps");
   }
 
   // Raw polar framebuffer path (Super Ventilagon / Voom "frame_rgb").

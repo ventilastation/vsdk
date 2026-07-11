@@ -15,6 +15,7 @@
 #define VS2_FLAG_FLIP_Y 0x04
 #define VS2_MODE_FULLSCREEN 0
 #define VS2_NO_LAYER 255
+#define VS2_EMPTY_TILE 255
 
 const uint8_t TRANSPARENT = 0xFF;
 uint8_t deepspace[ROWS];
@@ -173,26 +174,88 @@ static void finish_colorbuf(uint32_t* colorbuf, uint32_t* led_buffer) {
   }
 }
 
-static bool vs2_layer_visible(const vs2_scene_t* scene, const vs2_sprite_t* sprite) {
-  if (sprite->layer == VS2_NO_LAYER || sprite->layer >= scene->layer_count || scene->layers == NULL) {
+static bool vs2_slot_visible(const vs2_scene_t* scene, uint8_t layer_id) {
+  if (layer_id == VS2_NO_LAYER || layer_id >= scene->layer_count || scene->layers == NULL) {
     return true;
   }
-  const vs2_layer_t* layer = scene->layers[sprite->layer];
+  const vs2_layer_t* layer = scene->layers[layer_id];
   if (layer == NULL) {
     return true;
   }
   return (layer->flags & VS2_FLAG_VISIBLE) != 0;
 }
 
-static uint8_t vs2_sprite_mode(const vs2_scene_t* scene, const vs2_sprite_t* sprite) {
-  if (sprite->layer == VS2_NO_LAYER || sprite->layer >= scene->layer_count || scene->layers == NULL) {
-    return sprite->mode;
+static uint8_t vs2_slot_mode(const vs2_scene_t* scene, uint8_t layer_id, uint8_t fallback_mode) {
+  if (layer_id == VS2_NO_LAYER || layer_id >= scene->layer_count || scene->layers == NULL) {
+    return fallback_mode;
   }
-  const vs2_layer_t* layer = scene->layers[sprite->layer];
+  const vs2_layer_t* layer = scene->layers[layer_id];
   if (layer == NULL) {
-    return sprite->mode;
+    return fallback_mode;
   }
   return layer->mode;
+}
+
+static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t* scene, const vs2_tilemap_t* t) {
+  if ((t->flags & VS2_FLAG_VISIBLE) == 0 || !vs2_slot_visible(scene, t->layer)) {
+    return;
+  }
+  // FULLSCREEN tilemaps are unsupported; only TUNNEL and HUD render.
+  uint8_t mode = vs2_slot_mode(scene, t->layer, t->mode);
+  if (mode == VS2_MODE_FULLSCREEN) {
+    return;
+  }
+  if (t->image_strip >= NUM_IMAGES || t->frames == NULL) {
+    return;
+  }
+  const ImageStrip* is = image_stripes[t->image_strip];
+  if ((uintptr_t)is < 1000) {
+    return;
+  }
+  int tile_width = t->tile_width;
+  int tile_height = t->tile_height;
+  int strip_width = is->frame_width;
+  if (strip_width == 255) strip_width++;
+  if (strip_width != tile_width || is->frame_height != tile_height) {
+    return;
+  }
+  int total_frames = is->total_frames ? is->total_frames : 1;
+  int map_w = t->columns * tile_width;
+  int map_h = t->rows * tile_height;
+  int viewport_x = t->viewport_x;
+  int viewport_y = t->viewport_y;
+  if (viewport_x >= map_w || viewport_y >= map_h) {
+    return;
+  }
+  int viewport_w = MIN(t->viewport_w, map_w - viewport_x);
+  int viewport_h = MIN(t->viewport_h, map_h - viewport_y);
+
+  int delta = wrap_column_delta(column - fixed_floor_to_int(t->x));
+  if (delta >= viewport_w) {
+    return;
+  }
+  int sx = viewport_x + delta;
+  int tile_col = sx / tile_width;
+  // strip data columns are stored mirrored, same as sprites
+  int source_column = tile_width - 1 - (sx % tile_width);
+
+  uint32_t* current_palette = palette_pal + 256 * is->palette;
+  int y0 = fixed_floor_to_int(t->y);
+  int desde = MAX(y0, 0);
+  int hasta = MIN(y0 + viewport_h, ROWS);
+  for (int y = desde; y < hasta; y++) {
+    int sy = viewport_y + (y - y0);
+    uint8_t frame = t->frames[(sy / tile_height) * t->columns + tile_col];
+    if (frame == VS2_EMPTY_TILE) {
+      continue;
+    }
+    frame %= total_frames;
+    uint8_t color = is->data[source_column * tile_height + frame * tile_width * tile_height + (sy % tile_height)];
+    if (color != TRANSPARENT) {
+      int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
+      set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
+    }
+  }
 }
 
 void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
@@ -208,7 +271,23 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
     }
   }
 
-  if (scene == NULL || scene->sprites == NULL) {
+  if (scene == NULL) {
+    finish_colorbuf(colorbuf, led_buffer);
+    return;
+  }
+
+  // first slice: all tilemaps draw behind all sprites
+  if (scene->tilemaps != NULL) {
+    for (int n=scene->tilemap_count - 1; n>=0; n--) {
+      const vs2_tilemap_t* t = scene->tilemaps[n];
+      if (t == NULL) {
+        continue;
+      }
+      render_vs2_tilemap(column, colorbuf, scene, t);
+    }
+  }
+
+  if (scene->sprites == NULL) {
     finish_colorbuf(colorbuf, led_buffer);
     return;
   }
@@ -218,7 +297,7 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
     if (s == NULL) {
       continue;
     }
-    if ((s->flags & VS2_FLAG_VISIBLE) == 0 || !vs2_layer_visible(scene, s)) {
+    if ((s->flags & VS2_FLAG_VISIBLE) == 0 || !vs2_slot_visible(scene, s->layer)) {
       continue;
     }
     if (s->image_strip >= NUM_IMAGES) {
@@ -245,7 +324,7 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
     uint8_t height = is->frame_height;
     uint8_t total_frames = is->total_frames ? is->total_frames : 1;
     uint8_t frame = s->frame % total_frames;
-    uint8_t mode = vs2_sprite_mode(scene, s);
+    uint8_t mode = vs2_slot_mode(scene, s->layer, s->mode);
     int sprite_y = fixed_floor_to_int(s->y);
     int base = visible_column * height + (frame * width * height);
 
@@ -289,41 +368,13 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
 void render(int column, uint32_t* led_buffer) {
   uint32_t colorbuf[PIXELS];
 
-
-  inline void set_pixel(uint8_t n, uint32_t color) {
-    if (n < PIXELS) {
-      colorbuf[n] = color;
-    }
-  }
-
-  inline void finish_nogamma() {
-    for (int n=0; n<PIXELS; n++) {
-      uint32_t color = colorbuf[n];
-      led_buffer[n] = 0xff |
-        intensidades[n][(color & 0xff000000) >> 24] << 24 |
-        intensidades[n][(color & 0x00ff0000) >> 16] << 16 |
-        intensidades[n][(color & 0x0000ff00) >>  8] <<  8;
-    }
-  }
-
-  inline void finish_with_gamma() {
-    for (int n=0; n<PIXELS; n++) {
-      uint32_t color = colorbuf[n];
-      int alt_n = intensidades_por_led[n];
-      led_buffer[n] = (brillos[n] & 0x1f) | 0xe0 |
-        intensidades[alt_n][(color & 0xff000000) >> 24] << 24 |
-        intensidades[alt_n][(color & 0x00ff0000) >> 16] << 16 |
-        intensidades[alt_n][(color & 0x0000ff00) >>  8] <<  8;
-    }
-  }
-
   column = column % COLUMNS;
   for (int y=0; y<PIXELS; y++) {
     colorbuf[y] = 0x000000ff;
   }
   for (int f=0; f<STARS; f++) {
     if (starfield[f].x == column) {
-      set_pixel(deepspace[starfield[f].y], 0x808080ff);
+      set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
     }
   }
 
@@ -363,7 +414,7 @@ void render(int column, uint32_t* led_buffer) {
             } else {
               px_y = PIXELS - 1 - y;
             }
-            set_pixel(px_y, current_palette[color]);
+            set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
           }
         }
       } else {
@@ -375,17 +426,12 @@ void render(int column, uint32_t* led_buffer) {
           }
           uint8_t color = is->data[base + height - 1 - src];
           if (color != TRANSPARENT) {
-            set_pixel(led, current_palette[color]);
+            set_colorbuf_pixel(colorbuf, led, current_palette[color]);
           }
         }
       }
     }
   }
 
-  if (gamma_mode == 0) {
-    finish_nogamma();
-  } else {
-    finish_with_gamma();
-  }
-
+  finish_colorbuf(colorbuf, led_buffer);
 }

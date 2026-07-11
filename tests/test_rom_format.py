@@ -98,7 +98,11 @@ def test_menu_rom_builder_parity():
         env = dict(os.environ)
         out = Path(tmp) / "menu.rom"
         # The JS CLI writes into apps/micropython/roms; run it and restore.
+        # Restore the mtime too: a fresher menu.rom would make the Python
+        # generator's staleness check skip a needed rebuild after a new
+        # game's menu.png is added.
         original = py_rom.read_bytes()
+        original_stat = py_rom.stat()
         try:
             subprocess.run(
                 ["node", "tools/generate_roms_js.cjs", "system/menu/images"],
@@ -107,6 +111,7 @@ def test_menu_rom_builder_parity():
             out.write_bytes(py_rom.read_bytes())
         finally:
             py_rom.write_bytes(original)
+            os.utime(py_rom, (original_stat.st_atime, original_stat.st_mtime))
 
         py_strips, py_palettes = parse_rom(original)
         js_strips, js_palettes = parse_rom(out.read_bytes())

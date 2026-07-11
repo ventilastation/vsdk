@@ -68,7 +68,7 @@ line-based command channel that carries sprites/sound — from the base, the
 workbench UART bridge, or the desktop emulator):
 
 ```
-ota_start http://<host-ip>:8000
+ota_start http://<host-ip>:5653
 ```
 
 The desktop emulator sends this when you press **U** in the pyglet window

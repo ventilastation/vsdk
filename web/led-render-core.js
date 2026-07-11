@@ -8,8 +8,10 @@
   const COLUMNS = 256;
   const PIXELS = 54;
   const TRANSPARENT_INDEX = 255;
+  const EMPTY_TILE = 255;
   const VS2_MAGIC = "VS2\0";
   const VS2_VERSION = 1;
+  const VS2_VERSION_TILEMAPS = 2;
   const VS2_FLAG_VISIBLE = 0x01;
   const VS2_FLAG_FLIP_X = 0x02;
   const VS2_FLAG_FLIP_Y = 0x04;
@@ -59,26 +61,28 @@
 
   function decodeVs2SceneBuffer(buffer) {
     if (!(buffer instanceof Uint8Array) || buffer.length < 16) {
-      return { version: 0, layers: [], sprites: [] };
+      return { version: 0, layers: [], sprites: [], tilemaps: [] };
     }
     if (readAscii(buffer, 0, 4) !== VS2_MAGIC) {
-      return { version: 0, layers: [], sprites: [] };
+      return { version: 0, layers: [], sprites: [], tilemaps: [] };
     }
     const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
     const version = buffer[4];
-    if (version !== VS2_VERSION) {
-      return { version, layers: [], sprites: [] };
+    if (version !== VS2_VERSION && version !== VS2_VERSION_TILEMAPS) {
+      return { version, layers: [], sprites: [], tilemaps: [] };
     }
     const layerCount = buffer[5];
     const spriteCount = buffer[6];
+    const tilemapCount = version >= VS2_VERSION_TILEMAPS ? buffer[7] : 0;
     const headerSize = view.getUint16(8, true);
     const layerSize = view.getUint16(10, true);
     const spriteSize = view.getUint16(12, true);
+    const tilemapSize = version >= VS2_VERSION_TILEMAPS ? view.getUint16(14, true) : 0;
     const layers = [];
     let offset = headerSize;
     for (let index = 0; index < layerCount; index += 1) {
       if (offset + layerSize > buffer.length) {
-        return { version, layers: [], sprites: [] };
+        return { version, layers: [], sprites: [], tilemaps: [] };
       }
       layers.push({
         id: buffer[offset],
@@ -89,9 +93,10 @@
     }
 
     const sprites = [];
+    const tilemaps = [];
     for (let slot = 0; slot < spriteCount; slot += 1) {
       if (offset + spriteSize > buffer.length) {
-        return { version, layers, sprites };
+        return { version, layers, sprites, tilemaps };
       }
       const layerId = buffer[offset];
       const strip = buffer[offset + 1];
@@ -130,7 +135,59 @@
         },
       });
     }
-    return { version, layers, sprites };
+
+    for (let slot = 0; slot < tilemapCount; slot += 1) {
+      if (offset + tilemapSize > buffer.length) {
+        return { version, layers, sprites, tilemaps };
+      }
+      const layerId = buffer[offset];
+      const strip = buffer[offset + 1];
+      const flags = buffer[offset + 2];
+      let mode = buffer[offset + 3];
+      const mapColumns = view.getUint16(offset + 4, true);
+      const mapRows = view.getUint16(offset + 6, true);
+      const tileWidth = view.getUint16(offset + 8, true);
+      const tileHeight = view.getUint16(offset + 10, true);
+      const viewport = [
+        view.getUint16(offset + 12, true),
+        view.getUint16(offset + 14, true),
+        view.getUint16(offset + 16, true),
+        view.getUint16(offset + 18, true),
+      ];
+      const x = view.getInt32(offset + 20, true) / 256;
+      const y = view.getInt32(offset + 24, true) / 256;
+      const framesOffset = view.getUint32(offset + 28, true);
+      const layer = layers[layerId] || null;
+      offset += tilemapSize;
+      const cells = mapColumns * mapRows;
+      if (framesOffset + cells > buffer.length) {
+        continue;
+      }
+      if (!(flags & VS2_FLAG_VISIBLE)) {
+        continue;
+      }
+      if (layer && !layer.visible) {
+        continue;
+      }
+      if (layer) {
+        mode = layer.mode;
+      }
+      tilemaps.push({
+        slot,
+        x,
+        y,
+        image_strip: strip,
+        // copy the frame ids: the transport buffer is reused between frames
+        frames: buffer.slice(framesOffset, framesOffset + cells),
+        columns: mapColumns,
+        rows: mapRows,
+        tile_width: tileWidth,
+        tile_height: tileHeight,
+        viewport,
+        perspective: mode,
+      });
+    }
+    return { version, layers, sprites, tilemaps };
   }
 
   function getVisibleColumn(spriteX, spriteWidth, renderColumn) {
@@ -228,6 +285,69 @@
     }
   }
 
+  function drawTilemapColumn(pixels, tilemap, assetIndex, palette, column, renderColumn) {
+    // FULLSCREEN tilemaps are unsupported; only TUNNEL (1) and HUD (2) render.
+    const perspective = tilemap.perspective;
+    if (!perspective) {
+      return;
+    }
+    const asset = assetIndex.get(tilemap.image_strip);
+    if (!asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength) {
+      return;
+    }
+    const width = asset.width === 255 ? 256 : asset.width;
+    const height = asset.height || 0;
+    const tileWidth = tilemap.tile_width;
+    const tileHeight = tilemap.tile_height;
+    if (width !== tileWidth || height !== tileHeight) {
+      return;
+    }
+    const totalFrames = Math.max(asset.frames || 1, 1);
+    const mapColumns = tilemap.columns;
+    const mapWidth = mapColumns * tileWidth;
+    const mapHeight = tilemap.rows * tileHeight;
+    let [viewportX, viewportY, viewportW, viewportH] = tilemap.viewport;
+    if (viewportX >= mapWidth || viewportY >= mapHeight) {
+      return;
+    }
+    viewportW = Math.min(viewportW, mapWidth - viewportX);
+    viewportH = Math.min(viewportH, mapHeight - viewportY);
+
+    const x0 = Math.floor(tilemap.x || 0);
+    const delta = positiveMod(renderColumn - x0, COLUMNS);
+    if (delta >= viewportW) {
+      return;
+    }
+    const sx = viewportX + delta;
+    const tileCol = Math.floor(sx / tileWidth);
+    // strip data columns are stored mirrored, same as sprites
+    const sourceColumn = tileWidth - 1 - (sx % tileWidth);
+
+    const frames = tilemap.frames;
+    const paletteIndex = asset.palette || 0;
+    const y0 = Math.floor(tilemap.y || 0);
+    const desde = Math.max(y0, 0);
+    const hasta = Math.min(y0 + viewportH, ROWS);
+    for (let y = desde; y < hasta; y += 1) {
+      const sy = viewportY + (y - y0);
+      let frameId = frames[Math.floor(sy / tileHeight) * mapColumns + tileCol];
+      if (frameId === EMPTY_TILE) {
+        continue;
+      }
+      frameId %= totalFrames;
+      const colorIndex = asset.data[
+        sourceColumn * tileHeight + frameId * tileWidth * tileHeight + (sy % tileHeight)
+      ];
+      if (colorIndex === TRANSPARENT_INDEX) {
+        continue;
+      }
+      const led = perspective === 1 ? DEEPSPACE[y] : PIXELS - 1 - y;
+      if (led < PIXELS) {
+        setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);
+      }
+    }
+  }
+
   function computeLedFramePixels(frame, assetIndex, palette) {
     const pixels = new Uint8Array(COLUMNS * PIXELS * 4);
     for (let index = 3; index < pixels.length; index += 4) {
@@ -242,9 +362,17 @@
     }
 
     const sprites = [...frame.sprites].sort((left, right) => (right.slot || 0) - (left.slot || 0));
+    // first slice: all tilemaps draw behind all sprites
+    const tilemaps = Array.isArray(frame?.tilemaps)
+      ? [...frame.tilemaps].sort((left, right) => (right.slot || 0) - (left.slot || 0))
+      : [];
 
     for (let column = 0; column < COLUMNS; column += 1) {
       const renderColumn = positiveMod(column + columnOffset, COLUMNS);
+
+      for (const tilemap of tilemaps) {
+        drawTilemapColumn(pixels, tilemap, assetIndex, palette, column, renderColumn);
+      }
 
       for (const sprite of sprites) {
         const asset = assetIndex.get(sprite.image_strip);

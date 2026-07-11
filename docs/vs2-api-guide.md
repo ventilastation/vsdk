@@ -113,10 +113,10 @@ buffer should be reused while the number of layers and sprites is stable. The
 web bridge sends high-frequency data by pointer and length where available, as
 described in [Why Pointer Posting Matters](internals/web-emulator-architecture.md#why-pointer-posting-matters).
 
-## Planned Tilemaps (#111)
+## Tilemaps
 
-Tilemaps are planned as a single drawable backed by a caller-owned byte buffer,
-not as one `Sprite` object per cell. The intended API is:
+A tilemap is a single drawable backed by a caller-owned byte buffer of tile
+frame ids, not one `Sprite` object per cell:
 
 ```python
 from vs2 import Tilemap
@@ -127,16 +127,33 @@ world.add(Tilemap(
     columns=4, rows=4,
     tile_width=8, tile_height=8,
     x=96, y=32,
-    crop=(0, 0, 4, 4),
+    viewport=(0, 0, 32, 32),
 ))
 ```
 
 The supplied fixed-size buffer is retained and shared with the native
 renderer. Updating `terrain[index]` changes a cell without allocating a new
 tilemap or copying the map. Resizing or replacing the buffer while the
-tilemap is active is unsupported. `crop` is measured in tile cells and limits
-which cells are rendered. This API is planned, not available in the current
-runtime; see [the internal #111 plan](internals/vs2-api-plan.md#tilemap-plan-111).
+tilemap is active is unsupported, and `len(frames)` must equal
+`columns * rows`. A frame id of 255 (`vs2.EMPTY_TILE`) leaves that cell
+empty; transparent pixels in tile frames follow the usual sprite
+transparency rules.
+
+`viewport=(x, y, width, height)` is a pixel rectangle of the map's own
+pixel space with camera semantics: the pixels inside the rectangle are drawn
+starting at the tilemap's on-screen origin `(x, y)`. Assigning a new tuple
+to `tilemap.viewport` pans the map under a fixed on-screen window, so
+smooth scrolling is just `viewport = (vx, vy + 1, vw, vh)` per step. The
+default viewport is the complete map, and a viewport that reaches past the
+map's pixel edge is clamped, never an error.
+
+Tilemaps take their mode and visibility from their layer like sprites do,
+but two first-slice limits apply: all tilemaps draw behind all sprites
+(per-layer draw-order interleaving is a follow-up), and `FULLSCREEN` mode
+is unsupported — a tilemap on a `FULLSCREEN` layer renders nothing. Tile
+frame dimensions must match the tileset strip's frame size, and games can
+create at most 8 tilemaps per scene. See `games/alecu/mapdemo` for a small
+working example.
 
 ## Collisions
 

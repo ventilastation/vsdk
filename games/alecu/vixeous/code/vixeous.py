@@ -1,14 +1,9 @@
 from urandom import randrange, seed
 import utime
 
-from ventilastation.director import director, stripes
-from ventilastation.scene import Scene
-from ventilastation.sprites import Sprite
+from ventilastation.director import director
+from vs2 import HUD, TUNNEL, Scene, Sprite, Tilemap
 
-
-FULLSCREEN = 0
-TUNNEL = 1
-HUD = 2
 
 COLUMNS = 256
 PLAYER_START_Y = 22
@@ -24,7 +19,9 @@ TERRAIN_TILE_W = 32
 TERRAIN_TILE_H = 16
 TERRAIN_NEAR_Y = 0
 TERRAIN_SCROLL_TICKS = 3
-TERRAIN_SPRITES = TERRAIN_COLS * TERRAIN_ROWS
+# one extra buffer row scrolls in from the far edge
+TERRAIN_BUFFER_ROWS = TERRAIN_ROWS + 1
+TERRAIN_VIEW_H = TERRAIN_ROWS * TERRAIN_TILE_H
 
 MAX_SHOTS = 4
 MAX_BOMBS = 3
@@ -112,7 +109,9 @@ def terrain_is_pad(col, row):
 
 
 def terrain_theta_for(col, row, area):
-    return (col * TERRAIN_TILE_W + row * 5 + area * 13) % COLUMNS
+    # the terrain tilemap draws rigid columns, so world theta only depends on
+    # the column (the old per-row skew is gone; the river meanders via frames)
+    return (col * TERRAIN_TILE_W + area * 13) % COLUMNS
 
 
 def is_targetable_terrain(col, row, area):
@@ -120,53 +119,39 @@ def is_targetable_terrain(col, row, area):
 
 
 class ScoreBoard:
-    def __init__(self):
-        self.score_digits = []
-        for n in range(5):
-            s = Sprite()
-            s.set_strip(stripes["digits.png"])
-            s.set_perspective(HUD)
-            s.set_x(TOP_SCORE_X + n * 5)
-            s.set_y(1)
-            s.set_frame(0)
-            self.score_digits.append(s)
-
-        self.life_icons = []
-        for n in range(3):
-            s = Sprite()
-            s.set_strip(stripes["digits.png"])
-            s.set_perspective(HUD)
-            s.set_x(TOP_LIVES_X + n * 6)
-            s.set_y(1)
-            s.set_frame(11)
-            self.life_icons.append(s)
+    def __init__(self, hud):
+        self.score_digits = [
+            hud.add(Sprite("digits.png", x=TOP_SCORE_X + n * 5, y=1, frame=0))
+            for n in range(5)
+        ]
+        self.life_icons = [
+            hud.add(Sprite("digits.png", x=TOP_LIVES_X + n * 6, y=1, frame=11))
+            for n in range(3)
+        ]
 
     def set_score(self, value):
         text = "%05d" % clamp(value, 0, 99999)
         for n, digit in enumerate(text):
-            self.score_digits[n].set_frame(ord(digit) - 48)
+            self.score_digits[n].frame = ord(digit) - 48
 
     def set_lives(self, lives):
         for n, icon in enumerate(self.life_icons):
-            icon.set_frame(11 if n < lives else 10)
+            icon.frame = 11 if n < lives else 10
 
 
 class PooledSprite:
-    def __init__(self, strip_name, perspective=TUNNEL):
-        self.sprite = Sprite()
-        self.sprite.set_strip(stripes[strip_name])
-        self.sprite.set_perspective(perspective)
+    def __init__(self, strip_name, layer):
+        self.sprite = layer.add(Sprite(strip_name))
         self.active = False
-        self.disable()
 
     def disable(self):
         self.active = False
-        self.sprite.disable()
+        self.sprite.hide()
 
 
 class Shot(PooledSprite):
-    def __init__(self):
-        PooledSprite.__init__(self, "shots.png", TUNNEL)
+    def __init__(self, layer):
+        PooledSprite.__init__(self, "shots.png", layer)
         self.theta = 0
         self.y = 0
 
@@ -174,7 +159,7 @@ class Shot(PooledSprite):
         self.theta = theta % COLUMNS
         self.y = y + 12
         self.active = True
-        self.sprite.set_frame(0)
+        self.sprite.frame = 0
         director.sound_play("alecu.vixeous/shoot")
 
     def step(self, camera_theta):
@@ -184,13 +169,13 @@ class Shot(PooledSprite):
         if self.y > 184:
             self.disable()
             return
-        self.sprite.set_x(screen_x(self.theta, camera_theta, self.sprite.width()))
-        self.sprite.set_y(self.y)
+        self.sprite.x = screen_x(self.theta, camera_theta, self.sprite.width)
+        self.sprite.y = self.y
 
 
 class Bomb(PooledSprite):
-    def __init__(self):
-        PooledSprite.__init__(self, "shots.png", TUNNEL)
+    def __init__(self, layer):
+        PooledSprite.__init__(self, "shots.png", layer)
         self.theta = 0
         self.y = 0
 
@@ -198,20 +183,22 @@ class Bomb(PooledSprite):
         self.theta = theta % COLUMNS
         self.y = y + 6
         self.active = True
-        self.sprite.set_frame(1)
+        self.sprite.frame = 1
         director.sound_play("alecu.vixeous/bomb")
 
     def step(self, camera_theta):
         if not self.active:
             return
         self.y += BOMB_SPEED
-        self.sprite.set_x(screen_x(self.theta, camera_theta, self.sprite.width()))
-        self.sprite.set_y(self.y)
+        self.sprite.x = screen_x(self.theta, camera_theta, self.sprite.width)
+        self.sprite.y = self.y
 
 
 class Explosion(PooledSprite):
-    def __init__(self):
-        PooledSprite.__init__(self, "explosion.png", TUNNEL)
+    def __init__(self, layer):
+        PooledSprite.__init__(self, "explosion.png", layer)
+        self.theta = 0
+        self.y = 0
         self.frame_tick = 0
 
     def burst(self, theta, y, camera_theta, start_frame=0):
@@ -219,9 +206,9 @@ class Explosion(PooledSprite):
         self.y = y
         self.frame_tick = start_frame * 3
         self.active = True
-        self.sprite.set_x(screen_x(self.theta, camera_theta, self.sprite.width()))
-        self.sprite.set_y(self.y)
-        self.sprite.set_frame(start_frame)
+        self.sprite.x = screen_x(self.theta, camera_theta, self.sprite.width)
+        self.sprite.y = self.y
+        self.sprite.frame = start_frame
 
     def step(self, camera_theta):
         if not self.active:
@@ -231,13 +218,13 @@ class Explosion(PooledSprite):
         if frame >= 6:
             self.disable()
             return
-        self.sprite.set_x(screen_x(self.theta, camera_theta, self.sprite.width()))
-        self.sprite.set_frame(frame)
+        self.sprite.x = screen_x(self.theta, camera_theta, self.sprite.width)
+        self.sprite.frame = frame
 
 
 class Enemy(PooledSprite):
-    def __init__(self):
-        PooledSprite.__init__(self, "enemy.png", TUNNEL)
+    def __init__(self, layer):
+        PooledSprite.__init__(self, "enemy.png", layer)
         self.theta = 0
         self.y = 0
         self.kind = 0
@@ -251,7 +238,7 @@ class Enemy(PooledSprite):
         self.phase = randrange(64)
         self.hp = 1 + (1 if kind == 2 else 0)
         self.active = True
-        self.sprite.set_frame(kind * 2)
+        self.sprite.frame = kind * 2
 
     def step(self, camera_theta):
         if not self.active:
@@ -263,14 +250,14 @@ class Enemy(PooledSprite):
         if self.y < 8:
             self.disable()
             return
-        self.sprite.set_x(screen_x(self.theta, camera_theta, self.sprite.width()))
-        self.sprite.set_y(self.y)
-        self.sprite.set_frame(self.kind * 2 + ((self.phase // 8) & 1))
+        self.sprite.x = screen_x(self.theta, camera_theta, self.sprite.width)
+        self.sprite.y = self.y
+        self.sprite.frame = self.kind * 2 + ((self.phase // 8) & 1)
 
 
 class GroundTarget(PooledSprite):
-    def __init__(self):
-        PooledSprite.__init__(self, "targets.png", TUNNEL)
+    def __init__(self, layer):
+        PooledSprite.__init__(self, "targets.png", layer)
         self.theta = 0
         self.y = 0
         self.kind = 0
@@ -280,7 +267,7 @@ class GroundTarget(PooledSprite):
         self.y = y
         self.kind = kind
         self.active = True
-        self.sprite.set_frame(kind)
+        self.sprite.frame = kind
 
     def step(self, camera_theta, dy):
         if not self.active:
@@ -289,21 +276,18 @@ class GroundTarget(PooledSprite):
         if self.y < 5:
             self.disable()
             return
-        self.sprite.set_x(screen_x(self.theta, camera_theta, self.sprite.width()))
-        self.sprite.set_y(self.y)
+        self.sprite.x = screen_x(self.theta, camera_theta, self.sprite.width)
+        self.sprite.y = self.y
 
 
 class Boss:
-    def __init__(self):
-        self.sprite = Sprite()
-        self.sprite.set_strip(stripes["boss.png"])
-        self.sprite.set_perspective(TUNNEL)
+    def __init__(self, layer):
+        self.sprite = layer.add(Sprite("boss.png"))
         self.active = False
         self.theta = 0
         self.y = 150
         self.hp = 0
         self.phase = 0
-        self.sprite.disable()
 
     def spawn(self, camera_theta):
         self.active = True
@@ -311,12 +295,12 @@ class Boss:
         self.y = 150
         self.hp = 18
         self.phase = 0
-        self.sprite.set_frame(0)
+        self.sprite.frame = 0
         director.sound_play("alecu.vixeous/boss")
 
     def disable(self):
         self.active = False
-        self.sprite.disable()
+        self.sprite.hide()
 
     def step(self, camera_theta):
         if not self.active:
@@ -325,33 +309,9 @@ class Boss:
         self.theta = (self.theta + (2 if self.phase < 96 else -2)) % COLUMNS
         if self.y > 116:
             self.y -= 1
-        self.sprite.set_x(screen_x(self.theta, camera_theta, self.sprite.width()))
-        self.sprite.set_y(self.y)
-        self.sprite.set_frame((self.phase // 8) & 1)
-
-
-class TerrainTile:
-    def __init__(self, col, row):
-        self.sprite = Sprite()
-        self.sprite.set_strip(stripes["terrain.png"])
-        self.sprite.set_perspective(TUNNEL)
-        self.col = col
-        self.world_row = row
-        self.y = TERRAIN_NEAR_Y + row * TERRAIN_TILE_H
-        self.sprite.set_frame(0)
-
-    def terrain_frame(self, area):
-        return terrain_frame_for(self.col, self.world_row, area)
-
-    def step(self, camera_theta, area, dy):
-        self.y -= dy
-        if self.y < TERRAIN_NEAR_Y - TERRAIN_TILE_H:
-            self.y += TERRAIN_ROWS * TERRAIN_TILE_H
-            self.world_row += TERRAIN_ROWS
-        theta = terrain_theta_for(self.col, self.world_row, area)
-        self.sprite.set_x(screen_x(theta, camera_theta, TERRAIN_TILE_W))
-        self.sprite.set_y(self.y)
-        self.sprite.set_frame(self.terrain_frame(area))
+        self.sprite.x = screen_x(self.theta, camera_theta, self.sprite.width)
+        self.sprite.y = self.y
+        self.sprite.frame = (self.phase // 8) & 1
 
 
 class Vixeous(Scene):
@@ -382,49 +342,72 @@ class Vixeous(Scene):
         self.boss_started = False
         self.boss_defeated = False
 
-        self.scoreboard = ScoreBoard()
+        self.world = self.layer("world", mode=TUNNEL)
+        self.hud = self.layer("hud", mode=HUD)
+
+        self.scoreboard = ScoreBoard(self.hud)
         self.scoreboard.set_score(self.score)
         self.scoreboard.set_lives(self.lives)
 
-        self.message = Sprite()
-        self.message.set_strip(stripes["messages.png"])
-        self.message.set_perspective(HUD)
-        self.message.set_x(centered_x(0, self.message.width()))
-        self.message.set_y(12)
-        self.message.set_frame(0)
+        self.message = self.hud.add(Sprite("messages.png", y=12, frame=0))
+        self.message.x = centered_x(0, self.message.width)
 
-        self.reticle = Sprite()
-        self.reticle.set_strip(stripes["reticle.png"])
-        self.reticle.set_perspective(TUNNEL)
-        self.reticle.set_x(centered_x(0, self.reticle.width()))
-        self.reticle.set_y(self.aim_y())
-        self.reticle.set_frame(0)
+        self.reticle = self.world.add(Sprite("reticle.png", frame=0))
+        self.reticle.x = centered_x(0, self.reticle.width)
+        self.reticle.y = self.aim_y()
 
-        self.player = Sprite()
-        self.player.set_strip(stripes["ship.png"])
-        self.player.set_perspective(TUNNEL)
-        self.player.set_x(centered_x(0, self.player.width()))
-        self.player.set_y(self.player_y)
-        self.player.set_frame(0)
+        self.player = self.world.add(Sprite("ship.png", frame=0))
+        self.player.x = centered_x(0, self.player.width)
+        self.player.y = self.player_y
 
-        self.shots = [Shot() for _ in range(MAX_SHOTS)]
-        self.bombs = [Bomb() for _ in range(MAX_BOMBS)]
-        self.explosions = [Explosion() for _ in range(MAX_EXPLOSIONS)]
-        self.enemies = [Enemy() for _ in range(MAX_ENEMIES)]
-        self.targets = [GroundTarget() for _ in range(MAX_TARGETS)]
-        self.boss = Boss()
+        self.shots = [Shot(self.world) for _ in range(MAX_SHOTS)]
+        self.bombs = [Bomb(self.world) for _ in range(MAX_BOMBS)]
+        self.explosions = [Explosion(self.world) for _ in range(MAX_EXPLOSIONS)]
+        self.enemies = [Enemy(self.world) for _ in range(MAX_ENEMIES)]
+        self.targets = [GroundTarget(self.world) for _ in range(MAX_TARGETS)]
+        self.boss = Boss(self.world)
 
-        self.terrain = [
-            TerrainTile(col, row)
-            for row in range(TERRAIN_ROWS)
-            for col in range(TERRAIN_COLS)
-        ]
+        # the whole terrain is one tilemap: 8 columns of 32px tiles wrap the
+        # full circle, and one extra buffer row scrolls in from the far edge
+        self.terrain_data = bytearray(TERRAIN_COLS * TERRAIN_BUFFER_ROWS)
+        self.terrain_base_row = None
+        self.terrain_area = None
+        self.terrain = self.world.add(Tilemap(
+            "terrain.png", self.terrain_data,
+            columns=TERRAIN_COLS, rows=TERRAIN_BUFFER_ROWS,
+            tile_width=TERRAIN_TILE_W, tile_height=TERRAIN_TILE_H,
+            x=0, y=TERRAIN_NEAR_Y,
+            viewport=(0, 0, COLUMNS, TERRAIN_VIEW_H),
+        ))
+        self.update_terrain()
 
         self.call_later(1200, self.start_playing)
 
+    def update_terrain(self):
+        # screen row of world row w stays w*16 - depth, like the old sprite
+        # grid: the viewport pans by depth%16 and the cell buffer is
+        # regenerated whenever a whole tile row has scrolled past
+        base_row = self.depth // TERRAIN_TILE_H
+        if base_row != self.terrain_base_row or self.area != self.terrain_area:
+            self.terrain_base_row = base_row
+            self.terrain_area = self.area
+            for row in range(TERRAIN_BUFFER_ROWS):
+                world_row = base_row + row
+                offset = row * TERRAIN_COLS
+                for col in range(TERRAIN_COLS):
+                    self.terrain_data[offset + col] = terrain_frame_for(
+                        col, world_row, self.area
+                    )
+        self.terrain.x = (
+            self.area * 13 - self.camera_theta - TERRAIN_TILE_W // 2
+        ) % COLUMNS
+        self.terrain.viewport = (
+            0, self.depth % TERRAIN_TILE_H, COLUMNS, TERRAIN_VIEW_H,
+        )
+
     def start_playing(self):
         if self.state == STATE_READY:
-            self.message.disable()
+            self.message.hide()
             self.state = STATE_PLAYING
 
     def first_free(self, pool):
@@ -552,8 +535,8 @@ class Vixeous(Scene):
 
     def game_over(self):
         self.state = STATE_GAME_OVER
-        self.message.set_frame(2)
-        self.message.set_y(12)
+        self.message.frame = 2
+        self.message.y = 12
         director.music_play("alecu.vixeous/gameover")
         self.call_later(3500, self.finished)
 
@@ -561,14 +544,14 @@ class Vixeous(Scene):
         self.state = STATE_AREA_CLEAR
         self.area += 1
         self.boss_defeated = True
-        self.message.set_frame(1)
-        self.message.set_y(12)
+        self.message.frame = 1
+        self.message.y = 12
         director.sound_play("alecu.vixeous/area")
         self.call_later(2500, self.resume_next_area)
 
     def resume_next_area(self):
         if self.state == STATE_AREA_CLEAR:
-            self.message.disable()
+            self.message.hide()
             self.next_wave = 35
             self.next_target_row = (self.depth // TERRAIN_TILE_H) + 4
             self.state = STATE_PLAYING
@@ -642,11 +625,11 @@ class Vixeous(Scene):
         if self.invulnerable:
             self.invulnerable -= 1
             if self.invulnerable & 2:
-                self.player.disable()
+                self.player.hide()
                 return
-        self.player.set_x(centered_x(self.player_offset, self.player.width()))
-        self.player.set_y(self.player_y)
-        self.player.set_frame((self.frame // 5) % 4)
+        self.player.x = centered_x(self.player_offset, self.player.width)
+        self.player.y = self.player_y
+        self.player.frame = (self.frame // 5) % 4
 
     def step(self):
         self.frame = (self.frame + 1) % 10000
@@ -668,12 +651,11 @@ class Vixeous(Scene):
 
         aim_y = self.aim_y()
         reticle_frame = 1 if any(b.active and b.y >= aim_y - 12 for b in self.bombs) else 0
-        self.reticle.set_frame(reticle_frame + (self.area % 2))
-        self.reticle.set_x(centered_x(self.player_offset, self.reticle.width()))
-        self.reticle.set_y(aim_y)
+        self.reticle.frame = reticle_frame + (self.area % 2)
+        self.reticle.x = centered_x(self.player_offset, self.reticle.width)
+        self.reticle.y = aim_y
 
-        for tile in self.terrain:
-            tile.step(self.camera_theta, self.area, dy)
+        self.update_terrain()
 
         for target in self.targets:
             target.step(self.camera_theta, dy)

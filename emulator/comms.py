@@ -318,7 +318,7 @@ def start():
     threads plus the OTA upgrade server. Call once, after config.configure()."""
     global display_conn, workbench_conn
 
-    upgrade_server.start(port=8000)
+    upgrade_server.start(port=5653)
 
     if platform.system() == "Windows":
         display_conn = ConnWinNamedPipe()
@@ -380,7 +380,7 @@ def trigger_ota():
     """
     try:
         local_ip = _ota_server_ip()
-        url = f"http://{local_ip}:8000"
+        url = f"http://{local_ip}:5653"
         send_command(f"ota_start {url}")
         print(f"comms: sent ota_start (server at {url})")
     except Exception as e:

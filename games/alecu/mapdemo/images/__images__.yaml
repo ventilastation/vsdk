@@ -1,0 +1,6 @@
+palettegroups:
+  world:
+    - strip: terrain.png
+      frames: 6
+    - strip: ship.png
+      frames: 1
