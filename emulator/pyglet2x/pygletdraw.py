@@ -326,10 +326,10 @@ def draw_base_preview():
     shapes.Rectangle(dial_x + 6, dial_y + 7, dial_w - 12, dial_h - 14,
                      color=(red, green, blue)).draw()
     center_x, center_y = dial_x + dial_w / 2, dial_y + 24
-    pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, bold=True,
+    pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, weight="bold",
                       x=center_x, y=dial_y + 37, anchor_x="center",
                       color=(0, 0, 0, 255)).draw()
-    pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, bold=True,
+    pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, weight="bold",
                       x=center_x, y=dial_y + 29, anchor_x="center",
                       color=(0, 0, 0, 255)).draw()
     # Preview orientation: 0 = left, midpoint = top, 255 = right.
