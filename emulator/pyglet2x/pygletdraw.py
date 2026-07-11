@@ -333,7 +333,7 @@ def draw_base_preview():
     angle = math.radians(205 + 130 * state.servo_position / 255)
     needle_x = center_x + math.cos(angle) * 17
     needle_y = center_y + math.sin(angle) * 17
-    shapes.Line(center_x, center_y, needle_x, needle_y, width=3, color=(235, 202, 83)).draw()
+    shapes.Line(center_x, center_y, needle_x, needle_y, thickness=3, color=(235, 202, 83)).draw()
     shapes.Circle(center_x, center_y, 3, color=(235, 202, 83)).draw()
 
     now_ms = int(time.monotonic() * 1000)
