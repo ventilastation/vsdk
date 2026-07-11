@@ -317,24 +317,21 @@ def draw_base_preview():
     shapes.Rectangle(x + 4, y + 4, width - 8, height - 8, color=(13, 16, 22)).draw()
 
     red, green, blue = state.led_rgb
-    pyglet.text.Label("SUPER VENTILAGON", font_name="Courier New", font_size=10,
-                      bold=True, x=x + 12, y=y + height - 18,
-                      color=(max(70, red), max(110, green), max(160, blue), 255)).draw()
 
-    # The 16 WS2812s are hidden behind the dial: their current strip color
-    # lights its frame rather than appearing as individual dots.
-    center_x, center_y = x + 57, y + 45
-    shapes.Circle(center_x, center_y, 40, color=(1, 2, 4)).draw()
-    shapes.Circle(center_x, center_y, 36, color=(red, green, blue)).draw()
-    shapes.Circle(center_x, center_y, 31, color=(max(3, red // 8), max(5, green // 8), max(9, blue // 8))).draw()
-    shapes.Arc(center_x, center_y, 32, segments=28, angle=180, start_angle=0,
-               color=(1, 2, 4), thickness=4).draw()
+    # The 16 WS2812s are hidden behind a rectangular, black-bezel instrument
+    # panel. Their current strip color lights its face rather than appearing
+    # as individual dots.
+    dial_x, dial_y, dial_w, dial_h = x + 12, y + 37, 100, 60
+    shapes.Rectangle(dial_x, dial_y, dial_w, dial_h, color=(1, 2, 4)).draw()
+    shapes.Rectangle(dial_x + 6, dial_y + 7, dial_w - 12, dial_h - 14,
+                     color=(red, green, blue)).draw()
+    center_x, center_y = dial_x + dial_w / 2, dial_y + 24
     pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, bold=True,
-                      x=center_x, y=center_y + 15, anchor_x="center",
-                      color=(max(70, red), max(110, green), max(160, blue), 255)).draw()
+                      x=center_x, y=dial_y + 37, anchor_x="center",
+                      color=(0, 0, 0, 255)).draw()
     pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, bold=True,
-                      x=center_x, y=center_y + 6, anchor_x="center",
-                      color=(max(70, red), max(110, green), max(160, blue), 255)).draw()
+                      x=center_x, y=dial_y + 29, anchor_x="center",
+                      color=(0, 0, 0, 255)).draw()
     # Preview orientation: 0 = left, midpoint = top, 255 = right.
     angle = math.radians(180 - 180 * state.servo_position / 255)
     needle_x = center_x + math.cos(angle) * 25

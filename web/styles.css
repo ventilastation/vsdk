@@ -210,10 +210,10 @@ textarea {
   bottom: 16px;
   z-index: 3;
   width: 162px;
-  min-height: 112px;
+  min-height: 92px;
   display: grid;
   grid-template-columns: 94px 1fr;
-  grid-template-rows: 15px 12px 72px;
+  grid-template-rows: 8px 72px;
   gap: 3px 8px;
   padding: 8px 9px;
   border: 4px solid #030405;
@@ -223,13 +223,12 @@ textarea {
   pointer-events: none;
 }
 
-.base-preview-title { grid-column: 1 / -1; font: 700 10px/1 "Courier New", monospace; text-transform: uppercase; letter-spacing: .06em; color: #6fb9ff; text-shadow: 0 0 8px rgba(71, 157, 255, .7); }
-.base-preview-strip { grid-column: 1 / -1; height: 5px; align-self: center; border-radius: 999px; opacity: .82; box-shadow: 0 0 10px rgba(0,0,0,.65); }
-.base-preview-dial { grid-column: 1; grid-row: 3; position: relative; width: 76px; height: 76px; margin-top: -2px; border: 7px solid #010204; border-radius: 50%; background: radial-gradient(circle at 50% 62%, var(--base-dial-color, #163f7d), #07101f 72%); box-shadow: inset 0 0 22px var(--base-dial-glow, rgba(90, 179, 255, .66)), 0 0 0 1px #202a35; }
-.base-preview-dial-copy { position: absolute; top: 13px; left: 0; width: 100%; font: 700 8px/1.15 "Courier New", monospace; letter-spacing: -.04em; text-align: center; color: #a9dcff; text-shadow: 0 0 7px var(--base-dial-text-glow, #2b8bdf); }
-.base-preview-servo { position: absolute; left: 31px; top: 35px; width: 30px; height: 3px; transform-origin: 0 50%; transform: rotate(180deg); border-radius: 3px; background: #020304; box-shadow: 0 1px 1px rgba(120,190,255,.35); }
+.base-preview-strip { grid-column: 1 / -1; grid-row: 1; height: 5px; align-self: center; border-radius: 999px; opacity: .82; box-shadow: 0 0 10px rgba(0,0,0,.65); }
+.base-preview-dial { grid-column: 1; grid-row: 2; position: relative; width: 94px; height: 60px; margin-top: 2px; border: 8px solid #010204; border-radius: 12px; background: var(--base-dial-color, #05070a); box-shadow: inset 0 0 18px var(--base-dial-glow, rgba(0, 0, 0, 0)), 0 0 0 1px #202a35; }
+.base-preview-dial-copy { position: absolute; top: 10px; left: 0; width: 100%; font: 700 9px/1.08 "Courier New", monospace; letter-spacing: -.06em; text-align: center; color: #010204; text-shadow: 0 1px rgba(255,255,255,.18); }
+.base-preview-servo { position: absolute; left: 39px; top: 34px; width: 30px; height: 3px; transform-origin: 0 50%; transform: rotate(180deg); border-radius: 3px; background: #020304; box-shadow: none; }
 .base-preview-servo i { position: absolute; left: -4px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: #010204; }
-.base-preview-buttons { grid-column: 2; grid-row: 3; display: flex; align-items: center; justify-content: space-between; padding-top: 24px; }
+.base-preview-buttons { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: space-between; padding-top: 15px; }
 .base-preview-buttons i { position: relative; width: 27px; height: 27px; border-radius: 50%; background: #eeeeea; box-shadow: 0 0 0 3px #121417, inset 0 -2px 3px rgba(0,0,0,.35); }
 .base-preview-buttons b { position: absolute; left: 9px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: #3d0707; box-shadow: inset 0 0 3px #000; }
 .base-preview-buttons b.is-lit { background: #ee241c; box-shadow: 0 0 9px #f63129, inset 0 0 3px #fff1e7; }

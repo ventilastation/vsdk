@@ -303,7 +303,7 @@ class BrowserHostApp {
       this.elements.basePreviewStrip.style.boxShadow = `0 0 11px rgba(${red}, ${green}, ${blue}, .8)`;
     }
     if (this.elements.basePreviewDial) {
-      this.elements.basePreviewDial.style.setProperty("--base-dial-color", `rgb(${Math.max(3, Math.floor(red / 2))}, ${Math.max(5, Math.floor(green / 2))}, ${Math.max(9, Math.floor(blue / 2))})`);
+      this.elements.basePreviewDial.style.setProperty("--base-dial-color", `rgb(${red}, ${green}, ${blue})`);
       this.elements.basePreviewDial.style.setProperty("--base-dial-glow", `rgba(${red}, ${green}, ${blue}, .72)`);
       this.elements.basePreviewDial.style.setProperty("--base-dial-text-glow", `rgb(${red}, ${green}, ${blue})`);
     }
