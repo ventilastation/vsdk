@@ -266,6 +266,7 @@ class BrowserHostApp {
     }
 
     frame.sprites = decodedSprites || [];
+    frame.tilemaps = decodedVs2Scene ? decodedVs2Scene.tilemaps : [];
     frame.vs2Scene = decodedVs2Scene;
     frame.assets = [];
     frame.events = remainingEvents;

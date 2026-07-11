@@ -20,6 +20,7 @@ led_count = PIXELS
 starfield = [(random.randrange(COLUMNS), random.randrange(ROWS)) for n in range(STARS)]
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 vs2_scene_sprites = None
+vs2_scene_tilemaps = None
 all_strips = {}
 qpalette = []
 upalette = []
@@ -38,23 +39,33 @@ def clear_voom_frame():
     _voom_frame_rgb = None
 
 def clear_vs2_scene():
-    global vs2_scene_sprites
+    global vs2_scene_sprites, vs2_scene_tilemaps
     vs2_scene_sprites = None
+    vs2_scene_tilemaps = None
 
 def set_vs2_scene(data):
-    global vs2_scene_sprites
-    vs2_scene_sprites = decode_vs2_scene(data)
+    global vs2_scene_sprites, vs2_scene_tilemaps
+    scene = decode_vs2_scene(data)
+    if scene is None:
+        vs2_scene_sprites = None
+        vs2_scene_tilemaps = None
+    else:
+        vs2_scene_sprites = scene["sprites"]
+        vs2_scene_tilemaps = scene["tilemaps"]
 
 def decode_vs2_scene(data):
     if len(data) < 16 or data[0:4] != b"VS2\0":
         return None
-    version, layer_count, sprite_count, _flags, header_size, layer_size, sprite_size, _reserved = unpack_from(
+    version, layer_count, sprite_count, tilemap_count, header_size, layer_size, sprite_size, tilemap_size = unpack_from(
         "<BBBBHHHH",
         data,
         4,
     )
-    if version != 1:
+    if version not in (1, 2):
         return None
+    if version < 2:
+        tilemap_count = 0
+        tilemap_size = 0
 
     layers = []
     offset = header_size
@@ -96,7 +107,42 @@ def decode_vs2_scene(data):
             "flip_x": bool(flags & 0x02),
             "flip_y": bool(flags & 0x04),
         })
-    return decoded
+
+    tilemaps = []
+    for slot in range(tilemap_count):
+        if offset + tilemap_size > len(data):
+            return None
+        (
+            layer_id, image, flags, mode,
+            map_columns, map_rows, tile_width, tile_height,
+            viewport_x, viewport_y, viewport_w, viewport_h,
+            x_fixed, y_fixed, frames_offset,
+        ) = unpack_from("<BBBBHHHHHHHHiiI", data, offset)
+        layer = layers[layer_id] if layer_id < len(layers) else None
+        offset += tilemap_size
+        cells = map_columns * map_rows
+        if frames_offset + cells > len(data):
+            return None
+        if not flags & 0x01:
+            continue
+        if layer is not None and not layer["visible"]:
+            continue
+        if layer is not None:
+            mode = layer["mode"]
+        tilemaps.append({
+            "slot": slot,
+            "x": x_fixed / 256.0,
+            "y": y_fixed / 256.0,
+            "image": image,
+            "frames": bytes(data[frames_offset:frames_offset + cells]),
+            "columns": map_columns,
+            "rows": map_rows,
+            "tile_width": tile_width,
+            "tile_height": tile_height,
+            "viewport": (viewport_x, viewport_y, viewport_w, viewport_h),
+            "perspective": mode,
+        })
+    return {"sprites": decoded, "tilemaps": tilemaps}
 
 def change_colors(colors):
     # byteswap all longs
@@ -153,6 +199,60 @@ def set_pixel(pixels, led, color):
     if 0 <= led < led_count:
         pixels[led] = color
 
+def render_tilemap(pixels, column, tilemap):
+    # FULLSCREEN tilemaps are unsupported; only TUNNEL (1) and HUD (2) render.
+    perspective = tilemap["perspective"]
+    if perspective == 0:
+        return
+    strip = all_strips.get(tilemap["image"])
+    if not strip:
+        return
+    w, h, total_frames, pal = unpack("BBBB", strip[0:4])
+    if w == 255: w = 256 # special case for the planet backdrops
+    tile_w = tilemap["tile_width"]
+    tile_h = tilemap["tile_height"]
+    if w != tile_w or h != tile_h:
+        return
+    total_frames = total_frames or 1
+    pal_base = 256 * pal
+    pixeldata = memoryview(strip)[4:]
+
+    map_columns = tilemap["columns"]
+    map_w = map_columns * tile_w
+    map_h = tilemap["rows"] * tile_h
+    viewport_x, viewport_y, viewport_w, viewport_h = tilemap["viewport"]
+    if viewport_x >= map_w or viewport_y >= map_h:
+        return
+    viewport_w = min(viewport_w, map_w - viewport_x)
+    viewport_h = min(viewport_h, map_h - viewport_y)
+
+    x0 = _floor_coord(tilemap["x"])
+    delta = (column - x0) % COLUMNS
+    if delta >= viewport_w:
+        return
+    sx = viewport_x + delta
+    tile_col = sx // tile_w
+    # strip data columns are stored mirrored, same as sprites
+    source_column = tile_w - 1 - (sx % tile_w)
+
+    frames = tilemap["frames"]
+    y0 = _floor_coord(tilemap["y"])
+    for dest_y in range(max(y0, 0), min(y0 + viewport_h, ROWS)):
+        sy = viewport_y + (dest_y - y0)
+        frame = frames[(sy // tile_h) * map_columns + tile_col]
+        if frame == 255:
+            continue
+        frame %= total_frames
+        index = pixeldata[source_column * tile_h + frame * tile_w * tile_h + (sy % tile_h)]
+        if index != TRANSPARENT_INDEX:
+            color = upalette[index + pal_base]
+            if perspective == 1:
+                led = deepspace[dest_y]
+            else:
+                led = led_count - 1 - dest_y
+            set_pixel(pixels, led, color)
+
+
 def step_starfield():
     for (n, (x, y)) in enumerate(starfield):
         y -= 1
@@ -188,6 +288,10 @@ def render(column):
 
     scene_sprites = vs2_scene_sprites
     use_vs2_renderer = scene_sprites is not None
+    if use_vs2_renderer and vs2_scene_tilemaps:
+        # first slice: all tilemaps draw behind all sprites
+        for tilemap in sorted(vs2_scene_tilemaps, key=lambda t: t["slot"], reverse=True):
+            render_tilemap(pixels, column, tilemap)
     if scene_sprites is None:
         # sprite 0 is drawn on top of all the others
         scene_sprites = []

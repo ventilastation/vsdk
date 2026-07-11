@@ -8,6 +8,8 @@ Runs, from the repo root:
   2. the CPython test scripts
   3. the MicroPython test scripts (skipped with a warning if no
      `micropython` unix binary is on PATH)
+  4. the native renderer host tests (skipped with a warning if no C
+     compiler is on PATH)
 
 Exits non-zero on the first category that fails.
 """
@@ -16,6 +18,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -34,6 +37,8 @@ CPYTHON_TESTS = [
     "tests/test_vs2_api.py",
     "tests/test_tutorial_vs2.py",
     "tests/test_emulator_vs2_render.py",
+    "tests/test_mapdemo_vs2.py",
+    "tests/test_vixeous_vs2.py",
 ]
 
 MICROPYTHON_TESTS = [
@@ -90,10 +95,42 @@ def run_scripts(interpreter, scripts, label):
     return ok
 
 
+NATIVE_TEST_SOURCES = [
+    "hardware/rotor/modules/povdisplay/gpu.c",
+    "tests/native/test_render_vs2.c",
+]
+
+
+def run_native_tests():
+    compiler = shutil.which("cc") or shutil.which("gcc") or shutil.which("clang")
+    if not compiler:
+        print("SKIP native renderer tests (no C compiler on PATH)")
+        return True
+    with tempfile.TemporaryDirectory() as tmpdir:
+        binary = pathlib.Path(tmpdir) / "test_render_vs2"
+        compile_cmd = [
+            compiler, "-std=c11", "-Wall",
+            "-I", "tests/native/stubs",
+            "-I", "hardware/rotor/modules/povdisplay",
+            "-o", str(binary),
+        ] + NATIVE_TEST_SOURCES + ["-lm"]
+        print(f"--- {compiler} tests/native/test_render_vs2.c")
+        result = subprocess.run(compile_cmd, cwd=ROOT)
+        if result.returncode != 0:
+            print("FAIL native renderer tests (compile)")
+            return False
+        result = subprocess.run([str(binary)], cwd=ROOT)
+        if result.returncode != 0:
+            print("FAIL native renderer tests")
+            return False
+    return True
+
+
 def main():
     ok = check_mpy_compile()
     ok = run_scripts(sys.executable, CPYTHON_TESTS, "CPython") and ok
     ok = run_scripts("micropython", MICROPYTHON_TESTS, "MicroPython") and ok
+    ok = run_native_tests() and ok
     print("ALL PASS" if ok else "FAILURES")
     sys.exit(0 if ok else 1)
 

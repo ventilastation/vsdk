@@ -127,7 +127,7 @@ scene-owned object that references a tileset image strip and a fixed-size byte
 buffer of tile frame ids. It must not expand into one Python or C sprite per
 cell; that would multiply object count and defeat the shared-memory design.
 
-### Proposed API
+### API
 
 The public shape is intentionally small and close to the existing `Layer` and
 `Sprite` API:
@@ -150,14 +150,14 @@ class MyGame(Scene):
             columns=4, rows=4,
             tile_width=8, tile_height=8,
             x=96, y=32,
-            crop=(0, 0, 4, 4),
+            viewport=(0, 0, 32, 32),
         ))
 
     def step(self):
         self.map_data[5] = 3
 ```
 
-The initial contract is:
+The contract is:
 
 - `frames` is a buffer-protocol object containing one unsigned-byte frame id
   per cell in row-major order. The API retains the supplied object; it never
@@ -168,14 +168,24 @@ The initial contract is:
   native pointer.
 - `x` and `y` are signed 8.8 fixed-point origin coordinates, with the same
   circular X wrapping and signed Y behavior as sprites.
-- `crop=(column, row, width, height)` is a rectangle in tile-cell coordinates.
-  Only cells inside the rectangle are visited by the renderer; the tilemap
-  origin remains in world coordinates. The default is the complete map.
+- `viewport=(x, y, width, height)` is a pixel rectangle of the map's own
+  pixel space with camera semantics: the pixels inside the rectangle are
+  drawn starting at the tilemap's on-screen origin. The viewport is mutable
+  at runtime — assigning a new tuple pans the map under a fixed on-screen
+  window, which is the intended scrolling mechanism. The default is the
+  complete map. Renderers clamp a viewport that reaches past the map's pixel
+  bounds; panning past the edge simply shows less.
 - A tile frame id selects a frame from the supplied image strip. Frame ids are
-  not transformed into separate sprite objects, and a missing/transparent
-  frame follows the existing sprite transparency rules.
-- The tilemap inherits its layer's mode and visibility. It is drawn in the
-  layer's ordered drawable sequence, so sprites can appear before or after it.
+  not transformed into separate sprite objects. Frame id 255 (`EMPTY_TILE`)
+  leaves the cell empty, and transparent pixels follow the existing sprite
+  transparency rules. Other ids wrap modulo the strip's frame count.
+- The tilemap inherits its layer's mode and visibility. First-slice draw
+  order: all tilemaps render behind all sprites; drawing a tilemap between
+  sprites of the same layer (true per-layer drawable order) is a follow-up.
+- `FULLSCREEN` mode is unsupported in the first slice: renderers skip
+  tilemaps whose effective mode is `FULLSCREEN`. Renderers also skip a
+  tilemap whose `tile_width`/`tile_height` do not match the tileset strip's
+  frame dimensions, which keeps strip reads in bounds.
 - Optional text backing remains a follow-up within #111: a second fixed-size
   byte buffer can provide glyph/frame ids using the same cell geometry, but it
   must not complicate the first native path.
@@ -197,52 +207,60 @@ the buffer's size or replacing the buffer requires creating a new tilemap.
 
 ### Payload and renderer work
 
-The existing `VS2\0` version-1 payload remains valid for sprite-only scenes.
-Tilemap scenes will use a version-2 payload with a tilemap record table and a
-packed frame-buffer section. The record will carry the layer id, strip id,
-fixed-point origin, dimensions, crop rectangle, and offset/length into the
-frame section. Desktop and web decoders must continue accepting version 1.
-The host payload is a reused transport view only; hardware renders from the
-live native record and buffer.
+The existing `VS2\0` version-1 payload remains valid for sprite-only scenes
+and stays byte-identical. Tilemap scenes use a version-2 payload with a
+tilemap record table and a packed frame-buffer section. Desktop and web
+decoders accept versions 1 and 2. The host payload is a reused transport view
+only; hardware renders from the live native record and buffer. The exporter
+copies each tilemap's frame bytes into the frame section on every export —
+detecting "no cells changed" would need a dirty flag or a byte compare that
+costs about the same as the copy — but the payload bytearray itself is still
+reused in place while the scene's shape is stable.
 
-Implementation order:
+Version-2 header (16 bytes, `<4sBBBBHHHH`): the byte at offset 7 (zero in v1)
+is `tilemap_count`, and the reserved `H` at offset 14 is `tilemap_size` (32).
+Section order: header, layer records, sprite records, tilemap records, frame
+section. Tilemap record (32 bytes, `<BBBBHHHHHHHHiiI`):
 
-1. Add `Tilemap` and drawable ownership to `vs2.py`, preserving existing
-   `Layer.add(Sprite(...))` behavior and adding no per-cell objects.
-2. Add the native `vs2_tilemap_t` record and MicroPython type. Validate the
-   buffer once, retain the Python owner through the wrapper, and expose direct
-   indexed mutation without a copy.
-3. Extend payload export/decode to version 2. Reuse the scene payload buffer
-   while shape and map size are stable; only rewrite the frame section when
-   map contents or transport state changes.
-4. Add the hardware tilemap renderer in `gpu.c`. Clip to the crop rectangle
-   before walking cells, use the existing column wrapping and projection
-   helpers, and preserve layer order and transparency.
-5. Add matching desktop and web renderer paths. Keep the same frame indexing,
-   crop, X wrapping, Y clipping, flip/projection conventions, and draw order.
-6. Add a small tilemap fixture to the VS2 tutorial or a dedicated test scene,
-   then verify desktop, web, and ESP32 output before considering #111 complete.
+```
+0  layer (255 = unlayered)     1  strip id
+2  flags (0x01 visible)        3  mode
+4  columns (H)                 6  rows (H)
+8  tile_width (H)              10 tile_height (H)
+12 viewport_x (H)              14 viewport_y (H)
+16 viewport_w (H)              18 viewport_h (H)
+20 x fixed 8.8 (i)             24 y fixed 8.8 (i)
+28 frames offset from payload start (I); run length = columns * rows
+```
 
 ### Tests and acceptance criteria
 
-The feature is complete when the following are covered:
+Coverage delivered with the first slice:
 
-- Python tests prove the exact supplied frame buffer is retained, indexed
-  writes are visible to the native record, invalid dimensions are rejected,
-  and scene exit releases tilemap/layer ownership.
-- Payload tests cover version-1 compatibility, version-2 decode, map data,
-  crop bounds, signed fractional origins, and stable-buffer reuse.
-- Renderer parity tests draw a multi-frame 2x2 map, mutate one cell, exercise
-  crop edges, wrap the map across X=0/255, and compare layer order on desktop
-  and web.
-- Hardware build tests compile the native module and exercise the same fixture
-  on the board without allocating a scene copy or one object per tile.
-- Web memory checks show no per-frame growth while a static tilemap is idle;
-  map updates reuse the existing transport allocation.
+- Python tests (`tests/test_vs2_api.py`) prove the exact supplied frame
+  buffer is retained, indexed writes are visible to the native record and to
+  re-exported payloads without reallocating, invalid dimensions are rejected,
+  scene exit releases tilemap/layer ownership, and sprite-only scenes still
+  export byte-identical version-1 payloads.
+- Renderer parity fixtures are hand-mirrored across the desktop
+  (`tests/test_emulator_vs2_render.py`), web (`web/render-parity-test.js`),
+  and hardware-host (`tests/native/test_render_vs2.c`) suites: a multi-frame
+  2x2 map with an asymmetric tile (mirroring check), cell mutation, viewport
+  panning on both axes, viewport clamping at the map edge, X wrap across
+  0/255, empty cells, transparency, tilemap-behind-sprite order, hidden
+  layers, layer-mode override, TUNNEL vs HUD projection, and FULLSCREEN
+  skip.
+- `tests/native/` compiles `gpu.c` for the host with stub headers and runs
+  the mirrored fixtures against the real `render_vs2()`, so the hardware
+  renderer is exercised without a board; the firmware build then only has to
+  compile.
+- `games/alecu/mapdemo` is the on-device fixture: joystick pans the map
+  (x origin and viewport), one button mutates a cell in place.
 
-The non-goals for the first #111 slice are scrolling cameras, animated tile
-metadata, collision maps, atlas packing, and text rendering. Those can build
-on the fixed frame-buffer and crop contracts later.
+The non-goals for the first #111 slice are per-layer drawable interleaving,
+FULLSCREEN tilemaps, tilemap flip flags, animated tile metadata, collision
+maps, atlas packing, and text rendering. Those can build on the fixed
+frame-buffer and viewport contracts later.
 
 ## Renderer Work
 

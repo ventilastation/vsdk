@@ -427,6 +427,208 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertIs(scene.layers[0].sprites[0], scene.sprite)
         self.assertNotIn(old_sprite, vs2._live_sprites)
 
+    def test_tilemap_validates_dimensions_and_buffer(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        frames = bytearray(16)
+        with self.assertRaises(ValueError):
+            vs2.Tilemap(7, frames, columns=0, rows=4, tile_width=8, tile_height=8)
+        with self.assertRaises(ValueError):
+            vs2.Tilemap(7, frames, columns=4, rows=4, tile_width=0, tile_height=8)
+        with self.assertRaises(ValueError):
+            vs2.Tilemap(7, bytearray(15), columns=4, rows=4, tile_width=8, tile_height=8)
+        with self.assertRaises(ValueError):
+            vs2.Tilemap(
+                7, frames, columns=4, rows=4, tile_width=8, tile_height=8,
+                viewport=(0, 0, 0, 8),
+            )
+        with self.assertRaises(ValueError):
+            vs2.Tilemap(
+                7, frames, columns=4, rows=4, tile_width=8, tile_height=8,
+                viewport=(-1, 0, 8, 8),
+            )
+
+    def test_tilemap_retains_frame_buffer_and_defaults_viewport(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        frames = bytearray(range(16))
+        tilemap = vs2.Tilemap(7, frames, columns=4, rows=4, tile_width=8, tile_height=16)
+        self.assertIs(tilemap.frames, frames)
+        self.assertEqual(tilemap.viewport, (0, 0, 32, 64))
+        tilemap.viewport = (8, 4, 16, 16)
+        self.assertEqual(tilemap.viewport, (8, 4, 16, 16))
+
+    def test_tilemap_native_backend_receives_live_records(self):
+        class NativeLayer:
+            def __init__(self, mode=1, visible=True):
+                self.mode = mode
+                self.visible = visible
+
+            def set_mode(self, mode):
+                self.mode = mode
+
+            def set_visible(self, visible):
+                self.visible = visible
+
+        class NativeTilemap:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+                self.x_fixed = None
+                self.y_fixed = None
+                self.viewport = None
+                self.flags = None
+                self.layer = None
+                self.mode = None
+
+            def set_x_fixed(self, value):
+                self.x_fixed = value
+
+            def set_y_fixed(self, value):
+                self.y_fixed = value
+
+            def set_viewport(self, x, y, w, h):
+                self.viewport = (x, y, w, h)
+
+            def set_flags(self, value):
+                self.flags = value
+
+            def set_layer(self, value):
+                self.layer = value
+
+            def set_perspective(self, value):
+                self.mode = value
+
+        class NativeVs2:
+            Layer = NativeLayer
+            Tilemap = NativeTilemap
+
+            def reset_scene(self):
+                pass
+
+            def set_active(self, active):
+                pass
+
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        director.platform.vs2 = NativeVs2()
+
+        scene = vs2.Scene()
+        scene.on_enter()
+        layer = scene.layer("world", mode=vs2.HUD)
+        frames = bytearray(16)
+        tilemap = layer.add(vs2.Tilemap(
+            7, frames, columns=4, rows=4, tile_width=8, tile_height=8,
+            x=-0.25, y=12.5,
+        ))
+
+        native = tilemap._tilemap
+        self.assertIs(native.kwargs["frames"], frames)
+        self.assertEqual(native.kwargs["strip"], 7)
+        self.assertEqual(native.kwargs["columns"], 4)
+        self.assertEqual(native.kwargs["rows"], 4)
+        self.assertEqual(native.kwargs["tile_width"], 8)
+        self.assertEqual(native.kwargs["tile_height"], 8)
+        self.assertEqual(native.x_fixed, -64)
+        self.assertEqual(native.y_fixed, 3200)
+        self.assertEqual(native.viewport, (0, 0, 32, 32))
+        self.assertEqual(native.flags & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
+        self.assertIs(native.layer, layer._layer)
+        self.assertEqual(native.mode, vs2.HUD)
+
+        tilemap.viewport = (4, 0, 16, 32)
+        self.assertEqual(native.viewport, (4, 0, 16, 32))
+        tilemap.visible = False
+        self.assertFalse(native.flags & vs2.FLAG_VISIBLE)
+
+        scene.on_exit()
+
+    def test_tilemap_scene_payload_is_version_2_with_frame_section(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        layer = scene.layer("world", mode=vs2.HUD)
+        sprite = layer.add(vs2.Sprite(7, x=1, y=2, frame=0))
+        frames = bytearray([0, 1, 1, 0, 1, 2, 2, 1, 1, 2, 2, 1, 0, 1, 1, 0])
+        tilemap = layer.add(vs2.Tilemap(
+            9, frames, columns=4, rows=4, tile_width=8, tile_height=8,
+            x=96, y=32.5, viewport=(8, 4, 16, 20),
+        ))
+
+        payload = vs2.export_scene_payload(scene)
+        self.assertEqual(payload[0:4], b"VS2\0")
+        self.assertEqual(payload[4], 2)
+        self.assertEqual(payload[5], 1)
+        self.assertEqual(payload[6], 1)
+        self.assertEqual(payload[7], 1)
+        header_size, layer_size, sprite_size = struct.unpack_from("<HHH", payload, 8)
+        tilemap_size = struct.unpack_from("<H", payload, 14)[0]
+        self.assertEqual(tilemap_size, 32)
+
+        record_offset = header_size + layer_size + sprite_size
+        fields = struct.unpack_from("<BBBBHHHHHHHHiiI", payload, record_offset)
+        self.assertEqual(fields[0], 0)
+        self.assertEqual(fields[1], 9)
+        self.assertEqual(fields[2] & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
+        self.assertEqual(fields[3], vs2.HUD)
+        self.assertEqual(fields[4:8], (4, 4, 8, 8))
+        self.assertEqual(fields[8:12], (8, 4, 16, 20))
+        self.assertEqual(fields[12], 96 * 256)
+        self.assertEqual(fields[13], int(32.5 * 256))
+        frames_offset = fields[14]
+        self.assertEqual(frames_offset, record_offset + tilemap_size)
+        self.assertEqual(payload[frames_offset:frames_offset + 16], frames)
+        self.assertEqual(len(payload), frames_offset + 16)
+        self.assertIs(sprite.layer, layer)
+        self.assertIs(tilemap.layer, layer)
+
+        frames[5] = 3
+        updated = vs2.export_scene_payload(scene)
+        self.assertIs(updated, payload)
+        self.assertEqual(updated[frames_offset + 5], 3)
+
+    def test_sprite_only_payload_stays_version_1(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        vs2.Sprite(7, x=1, y=2, frame=0)
+
+        payload = vs2.export_scene_payload(scene)
+        self.assertEqual(payload[4], 1)
+        self.assertEqual(payload[7], 0)
+        self.assertEqual(struct.unpack_from("<H", payload, 14)[0], 0)
+
+    def test_scene_exit_releases_tilemaps(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        scene = vs2.Scene()
+        scene._vs_api_slug = "games.test_vs2"
+        scene._vs_declared_api = "vs2"
+        director.push(scene)
+        layer = scene.layer("world")
+        tilemap = layer.add(vs2.Tilemap(
+            7, bytearray(16), columns=4, rows=4, tile_width=8, tile_height=8,
+        ))
+        self.assertIn(tilemap, vs2._live_tilemaps)
+
+        director.pop()
+
+        self.assertEqual(layer.tilemaps, [])
+        self.assertIsNone(tilemap.layer)
+        self.assertIsNone(tilemap._scene)
+        self.assertNotIn(tilemap, vs2._live_tilemaps)
+
     def test_stable_scene_payload_is_mutated_in_place(self):
         api_guard.begin_app("games.test_vs2", "vs2")
         import vs2
