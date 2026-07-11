@@ -5,7 +5,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "emulator"))
 
-from base_control import BaseControlState, gamma_correct
+from base_control import BaseControlState, DIAL_MINIMUM, gamma_correct
 
 
 class BaseControlTests(unittest.TestCase):
@@ -31,6 +31,12 @@ class BaseControlTests(unittest.TestCase):
         self.assertEqual(gamma_correct(0), 0)
         self.assertEqual(gamma_correct(255), 255)
         self.assertEqual(gamma_correct(128), 56)
+
+    def test_dial_floor_keeps_black_commands_visible(self):
+        state = BaseControlState()
+        self.assertEqual(state.dial_rgb, (DIAL_MINIMUM,) * 3)
+        state.apply([b"leds", b"255", b"0", b"0"])
+        self.assertEqual(state.dial_rgb, (255, DIAL_MINIMUM, DIAL_MINIMUM))
 
 
 if __name__ == "__main__":

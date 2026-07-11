@@ -5,6 +5,7 @@ BUTTON_LED_2 = 0x02
 BUTTON_LED_ALL = BUTTON_LED_1 | BUTTON_LED_2
 MIN_BLINK_MS = 100
 MAX_BLINK_MS = 10000
+DIAL_MINIMUM = 34
 
 
 def gamma_correct(value):
@@ -71,3 +72,9 @@ class BaseControlState:
     @property
     def led_rgb(self):
         return tuple(gamma_correct(value) for value in self.rgb)
+
+    @property
+    def dial_rgb(self):
+        """Keep the recessed instrument panel visible at a dark-gray floor."""
+        return tuple(DIAL_MINIMUM + (value * (255 - DIAL_MINIMUM) + 127) // 255
+                     for value in self.led_rgb)

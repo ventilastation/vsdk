@@ -298,18 +298,19 @@ class BrowserHostApp {
 
   renderBasePreview() {
     const [red, green, blue] = this.baseControl.rgb.map((value) => Math.round(255 * (value / 255) ** 2.2));
+    const dialRgb = [red, green, blue].map((value) => Math.round(34 + value * 221 / 255));
     if (this.elements.basePreviewStrip) {
       this.elements.basePreviewStrip.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
       this.elements.basePreviewStrip.style.boxShadow = `0 0 11px rgba(${red}, ${green}, ${blue}, .8)`;
     }
     if (this.elements.basePreviewDial) {
-      this.elements.basePreviewDial.style.setProperty("--base-dial-color", `rgb(${red}, ${green}, ${blue})`);
-      this.elements.basePreviewDial.style.setProperty("--base-dial-glow", `rgba(${red}, ${green}, ${blue}, .72)`);
-      this.elements.basePreviewDial.style.setProperty("--base-dial-text-glow", `rgb(${red}, ${green}, ${blue})`);
+      this.elements.basePreviewDial.style.setProperty("--base-dial-color", `rgb(${dialRgb.join(", ")})`);
+      this.elements.basePreviewDial.style.setProperty("--base-dial-glow", `rgba(${dialRgb.join(", ")}, .72)`);
+      this.elements.basePreviewDial.style.setProperty("--base-dial-text-glow", `rgb(${dialRgb.join(", ")})`);
     }
     if (this.elements.basePreviewServo) {
       // Preview orientation: 0 = left, midpoint = top, 255 = right.
-      this.elements.basePreviewServo.style.transform = `rotate(${180 + (this.baseControl.servo * 180 / 255)}deg)`;
+      this.elements.basePreviewServo.style.transform = `rotate(${220 + (this.baseControl.servo * 100 / 255)}deg)`;
     }
     const phase = !this.baseControl.blinkMs || (Date.now() % this.baseControl.blinkMs) < this.baseControl.blinkMs / 2;
     this.elements.basePreviewButton1?.classList.toggle("is-lit", Boolean(this.baseControl.mask & 1) && phase);

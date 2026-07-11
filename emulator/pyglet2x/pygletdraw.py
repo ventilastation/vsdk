@@ -316,26 +316,30 @@ def draw_base_preview():
     shapes.Rectangle(x, y, width, height, color=(3, 4, 6)).draw()
     shapes.Rectangle(x + 4, y + 4, width - 8, height - 8, color=(13, 16, 22)).draw()
 
-    red, green, blue = state.led_rgb
+    red, green, blue = state.dial_rgb
 
     # The 16 WS2812s are hidden behind a rectangular, black-bezel instrument
     # panel. Their current strip color lights its face rather than appearing
     # as individual dots.
-    dial_x, dial_y, dial_w, dial_h = x + 12, y + 37, 100, 60
+    dial_x, dial_y, dial_w, dial_h = x + 12, y + 34, 100, 64
     shapes.Rectangle(dial_x, dial_y, dial_w, dial_h, color=(1, 2, 4)).draw()
-    shapes.Rectangle(dial_x + 6, dial_y + 7, dial_w - 12, dial_h - 14,
+    # The illuminated display occupies the upper part; the lower third is
+    # the black control panel where the real needle pivots.
+    shapes.Rectangle(dial_x + 6, dial_y + 22, dial_w - 12, dial_h - 29,
                      color=(red, green, blue)).draw()
-    center_x, center_y = dial_x + dial_w / 2, dial_y + 24
+    # The real pivot sits below the rectangular panel. A 100-degree sweep
+    # reproduces its constrained mechanical travel: left-up, top, right-up.
+    center_x, center_y = dial_x + dial_w / 2, dial_y + 11
     pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, weight="bold",
-                      x=center_x, y=dial_y + 37, anchor_x="center",
+                      x=center_x, y=dial_y + 45, anchor_x="center",
                       color=(0, 0, 0, 255)).draw()
     pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, weight="bold",
-                      x=center_x, y=dial_y + 29, anchor_x="center",
+                      x=center_x, y=dial_y + 37, anchor_x="center",
                       color=(0, 0, 0, 255)).draw()
-    # Preview orientation: 0 = left, midpoint = top, 255 = right.
-    angle = math.radians(180 - 180 * state.servo_position / 255)
-    needle_x = center_x + math.cos(angle) * 25
-    needle_y = center_y + math.sin(angle) * 25
+    # Preview orientation: 0 = left-up, midpoint = top, 255 = right-up.
+    angle = math.radians(140 - 100 * state.servo_position / 255)
+    needle_x = center_x + math.cos(angle) * 40
+    needle_y = center_y + math.sin(angle) * 40
     shapes.Line(center_x, center_y, needle_x, needle_y, thickness=3, color=(0, 0, 0)).draw()
     shapes.Circle(center_x, center_y, 4, color=(0, 0, 0)).draw()
 
