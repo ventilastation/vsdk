@@ -98,4 +98,8 @@ history of this file for the record.
   - Upgrades triggered from the base should upload the binary apps.
 
 
-- tiles look bad on the desktop emulator. Some frames they look ok, but often some frames the tiles look partially missing, like a block of less than a hundred successive columns have not been rendered, or were missing at the time of rendering. This happens randomly throught the emulator, but never happens thru the crossing from column 255 to 0.
+- vs2 tiles look bad on the desktop emulator. Some frames they look ok, but often some frames the tiles look partially missing, like a block of less than a hundred successive columns have not been rendered, or were missing at the time of rendering. This happens randomly throught the emulator, but never happens thru the crossing from column 255 to 0.
+
+- when exiting native apps, the menu should restart with that game selected.
+
+- [done] the base emulator should have dark gray background, white/red buttons, black needle, and "Super Ventilagon" in black, matching the original.
