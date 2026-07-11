@@ -75,9 +75,17 @@ SERIAL_LOCK := $(shell if command -v lockf >/dev/null 2>&1; then echo lockf $(SE
 IDF_SHELL ?= bash -lc
 idf-env = $(IDF_SHELL) 'source "$(1)/export.sh" >/dev/null && $(2)'
 
+# The port drops and re-enumerates for a couple of seconds after every
+# flash's hard reset, so a target that runs right after another one (e.g.
+# inside flash-all) must wait for the port to come back before opening it.
+# The serial lock alone can't help: it serializes access but the previous
+# holder exits while the board is still re-enumerating.
+WAIT_FOR_PORT := $(abspath tools/wait_for_port.py)
+wait-port = python3 "$(WAIT_FOR_PORT)" --port "$(PORT)"
+
 # Build/flash one Retro-Go app ($(1) = app name, e.g. prboom-go).
 rg-build = $(call idf-env,$(RETRO_GO_IDF_PATH),cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation build $(1))
-rg-flash = $(SERIAL_LOCK) $(call idf-env,$(RETRO_GO_IDF_PATH),cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash $(1))
+rg-flash = $(SERIAL_LOCK) $(call idf-env,$(RETRO_GO_IDF_PATH),$(wait-port) && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash $(1))
 
 # Targets that talk to a board need PORT (auto-selected above); targets that
 # provision WiFi also need credentials. Checked at parse time so the failure
@@ -113,7 +121,7 @@ vsdk:
 # (ota_2) slot. On first boot, comms.py migrates from factory to ota_2
 # automatically.
 flash-vsdk: vsdk
-	$(SERIAL_LOCK) python3 ./hardware/rotor/flash_vsdk_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VSDK_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_vsdk_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VSDK_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"'
 
 voom:
 	$(call rg-build,prboom-go)
@@ -158,7 +166,7 @@ build-fs:
 	python3 hardware/rotor/build_micropython_fs.py
 
 deploy-fs:
-	$(SERIAL_LOCK) python3 hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)"
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)"'
 
 # --- Main-board wiring configuration ---
 # The physical wiring is stored in NVS namespace "vs_board", shared by
@@ -178,12 +186,12 @@ SERIAL_RX ?= 6
 SERIAL_BAUD ?= 115200
 
 configure-board:
-	$(SERIAL_LOCK) python3 ./tools/provision_board.py --port "$(PORT)" \
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./tools/provision_board.py --port "$(PORT)" \
 		--hall-gpio "$(HALL_GPIO)" --irdiode-gpio "$(IRDIODE_GPIO)" \
 		--led-spi-host "$(LED_SPI_HOST)" --led-clk "$(LED_CLK)" \
 		--led-mosi "$(LED_MOSI)" --led-cs "$(LED_CS)" --led-freq "$(LED_FREQ)" \
 		--serial-uart "$(SERIAL_UART)" --serial-tx "$(SERIAL_TX)" \
-		--serial-rx "$(SERIAL_RX)" --serial-baud "$(SERIAL_BAUD)"
+		--serial-rx "$(SERIAL_RX)" --serial-baud "$(SERIAL_BAUD)"'
 
 # The legacy boards use the original LED/UART wiring. The European Edition
 # differs only in the Hall sensor pin.
@@ -203,10 +211,10 @@ WIFI_PASS ?=
 BOARD_IP ?=
 
 wifi-provision:
-	$(SERIAL_LOCK) python3 ./tools/provision_wifi.py \
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./tools/provision_wifi.py \
 		--port "$(PORT)" \
 		--wifi-ssid "$(WIFI_SSID)" \
-		--wifi-password "$(WIFI_PASS)"
+		--wifi-password "$(WIFI_PASS)"'
 
 # --- Hardware workbench (second ESP32-S3 board that exercises a real DUT) ---
 # See docs/internals/workbench.md for the full design.
