@@ -15,6 +15,7 @@ import config
 import struct
 import socket
 import threading
+from base_control import BaseControlState
 from povrender import all_strips, set_palettes, spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
 from povrender import set_voom_frame_rgb, clear_voom_frame
@@ -158,6 +159,7 @@ display_conn = None
 workbench_conn = None
 
 last_time_seen = 0
+base_control = BaseControlState()
 
 def waitconnect(conn, label):
     while looping:
@@ -208,6 +210,13 @@ def dispatch_command(conn, command, args):
 
     elif command == b"arduino":
         arduino_send(b" ".join(args))
+
+    elif command == b"base":
+        line = base_control.apply(args)
+        if line is None:
+            print("comms: ignored malformed base command", args)
+        else:
+            arduino_send(line.encode("ascii"))
 
     elif command == b"music":
         # "music <track> [loop]" — the optional loop flag repeats the track.
@@ -458,4 +467,6 @@ def _arduino_init():
 def arduino_send(command):
     if _arduino is None:
         return
-    _arduino.write(_arduino_commands.get(command, b" "))
+    # New base commands are complete canonical lines. The one-byte map stays
+    # only for the Super Ventilagon timer compatibility period.
+    _arduino.write(_arduino_commands.get(command, command if command.startswith(b"base ") else b" "))

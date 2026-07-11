@@ -32,6 +32,9 @@ shape and the rules that keep biting.
 - **[host-protocol.md](host-protocol.md)** — the line-based command
   protocol the runtime sends to whichever host plays audio and (in
   emulation) draws frames.
+- **[base-control-api.md](base-control-api.md)** — reusable base RGB, servo,
+  and button-light control; includes the Voom feedback design and safe
+  normalized-servo contract.
 
 ## Subsystems
 

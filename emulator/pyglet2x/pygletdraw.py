@@ -1,5 +1,6 @@
 import math
 import random
+import time
 import traceback
 
 import pyglet
@@ -306,6 +307,50 @@ def on_mouse_release(x, y, button, modifiers):
 def draw_workbench_controls():
     controls_batch.draw()
 
+
+def draw_base_preview():
+    """Draw a compact Super Ventilagon-inspired base state preview."""
+    state = comms.base_control
+    width, height = 194, 126
+    x, y = window.width - width - 14, 14
+    shapes.Rectangle(x, y, width, height, color=(3, 4, 6)).draw()
+    shapes.Rectangle(x + 4, y + 4, width - 8, height - 8, color=(13, 16, 22)).draw()
+
+    red, green, blue = state.dial_rgb
+
+    # The 16 WS2812s are hidden behind a rectangular, black-bezel instrument
+    # panel. Their current strip color lights its face rather than appearing
+    # as individual dots.
+    dial_x, dial_y, dial_w, dial_h = x + 12, y + 34, 100, 64
+    shapes.Rectangle(dial_x, dial_y, dial_w, dial_h, color=(1, 2, 4)).draw()
+    # The illuminated display occupies the upper part; the lower third is
+    # the black control panel where the real needle pivots.
+    shapes.Rectangle(dial_x + 6, dial_y + 22, dial_w - 12, dial_h - 29,
+                     color=(red, green, blue)).draw()
+    # The real pivot sits below the rectangular panel. A 100-degree sweep
+    # reproduces its constrained mechanical travel: left-up, top, right-up.
+    center_x, center_y = dial_x + dial_w / 2, dial_y + 11
+    pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, weight="bold",
+                      x=center_x, y=dial_y + 45, anchor_x="center",
+                      color=(0, 0, 0, 255)).draw()
+    pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, weight="bold",
+                      x=center_x, y=dial_y + 37, anchor_x="center",
+                      color=(0, 0, 0, 255)).draw()
+    # Preview orientation: 0 = left-up, midpoint = top, 255 = right-up.
+    angle = math.radians(140 - 100 * state.servo_position / 255)
+    needle_x = center_x + math.cos(angle) * 40
+    needle_y = center_y + math.sin(angle) * 40
+    shapes.Line(center_x, center_y, needle_x, needle_y, thickness=3, color=(0, 0, 0)).draw()
+    shapes.Circle(center_x, center_y, 4, color=(0, 0, 0)).draw()
+
+    now_ms = int(time.monotonic() * 1000)
+    for index, mask in enumerate((1, 2)):
+        lit = state.button_lit(mask, now_ms)
+        button_x = x + 130 + index * 37
+        shapes.Circle(button_x, y + 39, 15, color=(20, 22, 25)).draw()
+        shapes.Circle(button_x, y + 39, 12, color=(235, 235, 230)).draw()
+        shapes.Circle(button_x, y + 39, 5, color=(230, 24, 20) if lit else (52, 12, 12)).draw()
+
 def display_draw():
     window.clear()
     fps_display.draw()
@@ -333,3 +378,4 @@ def display_draw():
         window.projection = orig_projection
 
     draw_workbench_controls()
+    draw_base_preview()

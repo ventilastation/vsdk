@@ -86,6 +86,7 @@ class BrowserHostApp {
     this.renderProfileSamples = [];
     this.fullscreenRenderProfileSamples = [];
     this.lastFullscreenRenderProfile = null;
+    this.baseControl = { rgb: [0, 0, 0], servo: 0, mask: 0, blinkMs: 0 };
     this.lastCanvasClientSize = null;
     this.lastAppliedCanvasClientSize = null;
     this.canvasDisplaySize = { width: 0, height: 0 };
@@ -154,6 +155,11 @@ class BrowserHostApp {
       invertGamepadY: document.querySelector("#invert-gamepad-y"),
       enableRendererProfiling: document.querySelector("#enable-renderer-profiling"),
       webglResolutionScale: document.querySelector("#webgl-resolution-scale"),
+      basePreviewStrip: document.querySelector("#base-preview-strip"),
+      basePreviewDial: document.querySelector("#base-preview-dial"),
+      basePreviewServo: document.querySelector("#base-preview-servo i"),
+      basePreviewButton1: document.querySelector("#base-preview-button-1"),
+      basePreviewButton2: document.querySelector("#base-preview-button-2"),
       traceFlagControls: Array.from(document.querySelectorAll("[data-trace-flag]")),
     };
     this.copyStatusTimer = null;
@@ -230,6 +236,10 @@ class BrowserHostApp {
         this.audio.playNotes(folder, notes);
         continue;
       }
+      if (event.command === "base") {
+        this.applyBaseControl(event.args || []);
+        continue;
+      }
       if (event.command === "palette" && event.data instanceof Uint8Array) {
         this.palette = event.data;
         this.paletteLoadedBytes = event.data.length;
@@ -270,6 +280,42 @@ class BrowserHostApp {
     frame.vs2Scene = decodedVs2Scene;
     frame.assets = [];
     frame.events = remainingEvents;
+  }
+
+  applyBaseControl(args) {
+    const values = args.map((value) => Number(value));
+    if (args[0] === "leds" && values.length === 4 && values.slice(1).every((value) => Number.isInteger(value) && value >= 0 && value <= 255)) {
+      this.baseControl.rgb = values.slice(1);
+    } else if (args[0] === "servo" && values.length === 2 && Number.isInteger(values[1]) && values[1] >= 0 && values[1] <= 255) {
+      this.baseControl.servo = values[1];
+    } else if (args[0] === "buttons" && values.length === 3 && Number.isInteger(values[1]) && values[1] >= 0 && values[1] <= 3 && Number.isInteger(values[2]) && values[2] >= 0 && values[2] <= 10000) {
+      this.baseControl.mask = values[1];
+      this.baseControl.blinkMs = values[2] ? Math.max(100, values[2]) : 0;
+    } else {
+      return;
+    }
+    this.renderBasePreview();
+  }
+
+  renderBasePreview() {
+    const [red, green, blue] = this.baseControl.rgb.map((value) => Math.round(255 * (value / 255) ** 2.2));
+    const dialRgb = [red, green, blue].map((value) => Math.round(34 + value * 221 / 255));
+    if (this.elements.basePreviewStrip) {
+      this.elements.basePreviewStrip.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
+      this.elements.basePreviewStrip.style.boxShadow = `0 0 11px rgba(${red}, ${green}, ${blue}, .8)`;
+    }
+    if (this.elements.basePreviewDial) {
+      this.elements.basePreviewDial.style.setProperty("--base-dial-color", `rgb(${dialRgb.join(", ")})`);
+      this.elements.basePreviewDial.style.setProperty("--base-dial-glow", `rgba(${dialRgb.join(", ")}, .72)`);
+      this.elements.basePreviewDial.style.setProperty("--base-dial-text-glow", `rgb(${dialRgb.join(", ")})`);
+    }
+    if (this.elements.basePreviewServo) {
+      // Preview orientation: 0 = left, midpoint = top, 255 = right.
+      this.elements.basePreviewServo.style.transform = `rotate(${220 + (this.baseControl.servo * 100 / 255)}deg)`;
+    }
+    const phase = !this.baseControl.blinkMs || (Date.now() % this.baseControl.blinkMs) < this.baseControl.blinkMs / 2;
+    this.elements.basePreviewButton1?.classList.toggle("is-lit", Boolean(this.baseControl.mask & 1) && phase);
+    this.elements.basePreviewButton2?.classList.toggle("is-lit", Boolean(this.baseControl.mask & 2) && phase);
   }
 
   refreshCanvasDisplayMetrics() {
@@ -1618,6 +1664,7 @@ class BrowserHostApp {
     } else if (!Array.isArray(frame.sprites)) {
       frame.sprites = [];
     }
+    this.renderBasePreview();
     if (
       frame.palette instanceof Uint8Array &&
       (

@@ -79,7 +79,27 @@ history of this file for the record.
 
 - [ongoing] Let's plan a new vsdk branch, call it "vsdk-api-v2" and branch it from main. I want to build a new API for ventilastation games, but for now keep the existing API in parallel. Games should be able to import from one API or the other, not both. There are some requests for this new API in the issue tracker at [https://github.com/ventilastation/vsdk/issues](https://github.com/ventilastation/vsdk/issues) , issues #89, #90, #91, #92, #93, #95, #96, #97, #98, #109, #110, #111, #112. All of this work might need a separate render function in gpu.c and a different memory structure for sprites, and new renderers in both emulators. We can create a copy of Vyruss and port it to this new API, but please change the menu icon so we can tell them apart.
 - API shape refinement: deciding what VS2 should expose for layers, sprite groups, transforms, text/HUD, fullscreen sprites, and whether we want helper abstractions above the raw shared sprite memory.
+- tiles as text labels
+- freely mix tiles with sprites
+- improve the stripes["..."] API.
+
 
 - [HIGH] The json manifests are a disgrace. They should not live in the repository, and should only be generated if at all needed.
 
-- sounds and music: be able to specify a base, so later commands dont need to specify it. Ej: setSoundFolder("/alecu/vyruss"), and later playSound("mondongo.mp3") or playSound("/other/mondongo2.mp3")
+- sounds and music: be able to specify a base folder, so later commands dont need to specify it. Ej: setSoundFolder("/alecu/vyruss"), and later playSound("mondongo.mp3") or playSound("/other/mondongo2.mp3")
+
+- add more buttons and second joystick to input payload, so prboom can use SELECT and START buttons
+
+- only one SMS audio channel seems to be working. The drums work, but the melody is nowhere to be heard.
+
+- streamline the first install and upgrade processes:
+  - First install should be to flash a minimal "factory recover" micropython partition and an NVS partition, and then configure that NVS partition with the uart, hall and led spis GPIOs. On boot, this partition should display the ventilastation logo and keep requesting a "factory upgrade" from the base. 
+  - Any seriously failed upgrade should go back to that factory recover partition.
+  - Upgrades triggered from the base should upload the binary apps.
+
+
+- vs2 tiles look bad on the desktop emulator. Some frames they look ok, but often some frames the tiles look partially missing, like a block of less than a hundred successive columns have not been rendered, or were missing at the time of rendering. This happens randomly throught the emulator, but never happens thru the crossing from column 255 to 0.
+
+- when exiting native apps, the menu should restart with that game selected.
+
+- [done] the base emulator should have dark gray background, white/red buttons, black needle, and "Super Ventilagon" in black, matching the original.

@@ -204,6 +204,36 @@ textarea {
   border: none;
 }
 
+.base-preview {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 3;
+  width: 162px;
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 94px 1fr;
+  grid-template-rows: 8px 72px;
+  gap: 3px 8px;
+  padding: 8px 9px;
+  border: 4px solid #030405;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #121821, #07090d 62%);
+  box-shadow: 0 9px 24px rgba(0, 0, 0, .48), inset 0 0 0 1px rgba(119, 176, 231, .14);
+  pointer-events: none;
+}
+
+.base-preview-strip { grid-column: 1 / -1; grid-row: 1; height: 5px; align-self: center; border-radius: 999px; opacity: .82; box-shadow: 0 0 10px rgba(0,0,0,.65); }
+.base-preview-dial { grid-column: 1; grid-row: 2; position: relative; box-sizing: border-box; isolation: isolate; width: 94px; height: 60px; margin-top: 2px; border: 8px solid #010204; border-radius: 12px; background: #010204; box-shadow: 0 0 0 1px #202a35; }
+.base-preview-dial::before { position: absolute; z-index: 0; top: 7px; right: 7px; left: 7px; height: 34px; border-radius: 4px; background: var(--base-dial-color, #222222); box-shadow: inset 0 0 18px var(--base-dial-glow, rgba(0, 0, 0, 0)); content: ""; }
+.base-preview-dial-copy { position: absolute; z-index: 1; top: 12px; left: 0; width: 100%; font: 700 9px/1.08 "Courier New", monospace; letter-spacing: -.06em; text-align: center; color: #010204; text-shadow: 0 1px rgba(255,255,255,.18); }
+.base-preview-servo { position: absolute; z-index: 2; left: 42px; top: 49px; width: 38px; height: 3px; transform-origin: 0 50%; transform: rotate(220deg); border-radius: 3px; background: #020304; box-shadow: none; }
+.base-preview-servo i { position: absolute; left: -4px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: #010204; }
+.base-preview-buttons { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: space-between; padding-top: 15px; }
+.base-preview-buttons i { position: relative; width: 27px; height: 27px; border-radius: 50%; background: #eeeeea; box-shadow: 0 0 0 3px #121417, inset 0 -2px 3px rgba(0,0,0,.35); }
+.base-preview-buttons b { position: absolute; left: 9px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: #3d0707; box-shadow: inset 0 0 3px #000; }
+.base-preview-buttons b.is-lit { background: #ee241c; box-shadow: 0 0 9px #f63129, inset 0 0 3px #fff1e7; }
+
 .mobile-controls {
   display: none;
 }

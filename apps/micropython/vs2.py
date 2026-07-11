@@ -38,6 +38,89 @@ FLAG_FLIP_Y = 0x04
 NO_LAYER = 255
 EMPTY_TILE = 255
 
+
+class _BaseLeds:
+    def __init__(self, owner):
+        self.owner = owner
+
+    def set_all(self, red, green, blue):
+        self.owner._set_leds(red, green, blue)
+
+    def off(self):
+        self.set_all(0, 0, 0)
+
+
+class _BaseServo:
+    def __init__(self, owner):
+        self.owner = owner
+
+    def set(self, position):
+        self.owner._set_servo(position)
+
+
+class _BaseButtons:
+    def __init__(self, owner):
+        self.owner = owner
+
+    def set(self, mask, blink_ms=0):
+        self.owner._set_buttons(mask, blink_ms)
+
+    def off(self):
+        self.set(0)
+
+
+class _BaseControl:
+    """VS2 control surface for optional base hardware.
+
+    The servo is intentionally a normalized byte; Arduino calibration remains
+    private to the hardware firmware.
+    """
+    BUTTON_LED_1 = 0x01
+    BUTTON_LED_2 = 0x02
+    BUTTON_LED_ALL = 0x03
+
+    def __init__(self):
+        self.leds = _BaseLeds(self)
+        self.servo = _BaseServo(self)
+        self.buttons = _BaseButtons(self)
+        self._led_state = None
+        self._servo_state = None
+        self._button_state = None
+
+    @staticmethod
+    def _integer(value, minimum, maximum, name):
+        if not isinstance(value, int) or value < minimum or value > maximum:
+            raise ValueError("%s must be in %d..%d" % (name, minimum, maximum))
+        return value
+
+    @staticmethod
+    def _send(line):
+        get_platform().comms.send(line.encode("ascii"))
+
+    def _set_leds(self, red, green, blue):
+        state = (self._integer(red, 0, 255, "red"),
+                 self._integer(green, 0, 255, "green"),
+                 self._integer(blue, 0, 255, "blue"))
+        if state != self._led_state:
+            self._send("base leds %d %d %d" % state)
+            self._led_state = state
+
+    def _set_servo(self, position):
+        state = self._integer(position, 0, 255, "position")
+        if state != self._servo_state:
+            self._send("base servo %d" % state)
+            self._servo_state = state
+
+    def _set_buttons(self, mask, blink_ms):
+        state = (self._integer(mask, 0, self.BUTTON_LED_ALL, "mask"),
+                 self._integer(blink_ms, 0, 10000, "blink_ms"))
+        if state != self._button_state:
+            self._send("base buttons %d %d" % state)
+            self._button_state = state
+
+
+base = _BaseControl()
+
 _live_sprites = []
 _live_tilemaps = []
 _active_scene = None
@@ -143,6 +226,9 @@ def reset_runtime_state():
     del _scratch_tilemaps[:]
     _active_scene = None
     _next_sprite_order = 0
+    base._led_state = None
+    base._servo_state = None
+    base._button_state = None
 
 
 def _remove_scene_sprites(scene):
