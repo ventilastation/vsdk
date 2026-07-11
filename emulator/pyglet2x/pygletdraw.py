@@ -328,9 +328,10 @@ def draw_base_preview():
 
     # Generic 0..255 motion arc: it intentionally has no degree annotation.
     center_x, center_y = x + 47, y + 31
-    shapes.Arc(center_x, center_y, 20, segments=20, angle=130, start_angle=205,
+    shapes.Arc(center_x, center_y, 20, segments=20, angle=180, start_angle=0,
                color=(100, 113, 128), thickness=2).draw()
-    angle = math.radians(205 + 130 * state.servo_position / 255)
+    # Preview orientation: 0 = left, midpoint = top, 255 = right.
+    angle = math.radians(180 - 180 * state.servo_position / 255)
     needle_x = center_x + math.cos(angle) * 17
     needle_y = center_y + math.sin(angle) * 17
     shapes.Line(center_x, center_y, needle_x, needle_y, thickness=3, color=(235, 202, 83)).draw()

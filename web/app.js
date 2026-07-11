@@ -302,7 +302,8 @@ class BrowserHostApp {
       this.elements.basePreviewStrip.style.boxShadow = `0 0 11px rgba(${red}, ${green}, ${blue}, .8)`;
     }
     if (this.elements.basePreviewServo) {
-      this.elements.basePreviewServo.style.transform = `rotate(${-135 + (this.baseControl.servo * 270 / 255)}deg)`;
+      // Preview orientation: 0 = left, midpoint = top, 255 = right.
+      this.elements.basePreviewServo.style.transform = `rotate(${180 + (this.baseControl.servo * 180 / 255)}deg)`;
     }
     const phase = !this.baseControl.blinkMs || (Date.now() % this.baseControl.blinkMs) < this.baseControl.blinkMs / 2;
     this.elements.basePreviewButton1?.classList.toggle("is-lit", Boolean(this.baseControl.mask & 1) && phase);
