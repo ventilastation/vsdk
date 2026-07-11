@@ -79,6 +79,9 @@ visible; `0x02` and `0x04` are `flip_x` and `flip_y`.
 | `ota_progress <stage> <detail> <pct>` | — | OTA status updates ([ota.md](ota.md)) |
 | `ota_done <status>` / `ota_error <msg...>` | — | OTA completion / failure |
 | `arduino <cmd>` | — | legacy Super Ventilagon base relay control (start/stop/reset/attract) |
+| `base leds <r> <g> <b>` | — | Set every base RGB-strip LED. Channels are decimal bytes. |
+| `base servo <position>` | — | Set normalized servo position (`0..255`). The Arduino alone maps this to its safe mechanical range. |
+| `base buttons <mask> <blink_ms>` | — | Set button LED mask (`0..3`) and full blink period (`0` for steady, otherwise `100..10000` ms). |
 
 ## Transports
 

@@ -42,6 +42,24 @@ class Vs2ApiTests(unittest.TestCase):
         reset_runtime()
         api_guard.reset()
 
+    def test_base_control_uses_normalized_commands_and_deduplicates(self):
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+
+        vs2.base.leds.set_all(1, 2, 3)
+        vs2.base.leds.set_all(1, 2, 3)
+        vs2.base.servo.set(128)
+        vs2.base.buttons.set(vs2.base.BUTTON_LED_ALL, 250)
+        self.assertEqual(director.platform.comms.sent, [
+            (b"base leds 1 2 3", b""),
+            (b"base servo 128", b""),
+            (b"base buttons 3 250", b""),
+        ])
+        with self.assertRaises(ValueError):
+            vs2.base.servo.set(256)
+        with self.assertRaises(ValueError):
+            vs2.base.buttons.set(4)
+
     def test_sprite_attributes_sync_to_backend(self):
         api_guard.begin_app("games.test_vs2", "vs2")
         import vs2

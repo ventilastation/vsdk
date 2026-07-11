@@ -1,5 +1,6 @@
 import math
 import random
+import time
 import traceback
 
 import pyglet
@@ -306,6 +307,42 @@ def on_mouse_release(x, y, button, modifiers):
 def draw_workbench_controls():
     controls_batch.draw()
 
+
+def draw_base_preview():
+    """Draw the optional physical-base state without exposing servo angles."""
+    state = comms.base_control
+    width, height = 152, 94
+    x, y = window.width - width - 14, 14
+    background = shapes.Rectangle(x, y, width, height, color=(12, 16, 23))
+    background.opacity = 220
+    background.draw()
+    pyglet.text.Label("BASE", font_name="Arial", font_size=9, x=x + 9, y=y + height - 16,
+                      color=(190, 205, 218, 255)).draw()
+
+    red, green, blue = state.rgb
+    for index in range(16):
+        led = shapes.Circle(x + 11 + index * 8.6, y + height - 32, 3,
+                            color=(red, green, blue))
+        led.opacity = 255 if state.rgb != (0, 0, 0) else 55
+        led.draw()
+
+    # Generic 0..255 motion arc: it intentionally has no degree annotation.
+    center_x, center_y = x + 47, y + 31
+    shapes.Arc(center_x, center_y, 20, math.radians(205), math.radians(130),
+               color=(100, 113, 128), thickness=2).draw()
+    angle = math.radians(205 - 255 * state.servo_position / 255)
+    needle_x = center_x + math.cos(angle) * 17
+    needle_y = center_y + math.sin(angle) * 17
+    shapes.Line(center_x, center_y, needle_x, needle_y, width=3, color=(235, 202, 83)).draw()
+    shapes.Circle(center_x, center_y, 3, color=(235, 202, 83)).draw()
+
+    now_ms = int(time.monotonic() * 1000)
+    for index, mask in enumerate((1, 2)):
+        lit = state.button_lit(mask, now_ms)
+        button = shapes.Circle(x + 104 + index * 26, y + 31, 9,
+                               color=(255, 224, 145) if lit else (54, 60, 69))
+        button.draw()
+
 def display_draw():
     window.clear()
     fps_display.draw()
@@ -333,3 +370,4 @@ def display_draw():
         window.projection = orig_projection
 
     draw_workbench_controls()
+    draw_base_preview()
