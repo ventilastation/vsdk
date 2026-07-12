@@ -1,5 +1,13 @@
 # WiFi OTA Upgrade Plan
 
+> **Superseded.** This was an early, never-implemented proposal (an A/B
+> `micropython_a`/`micropython_b` partition scheme, referencing code that no
+> longer exists) written before the OTA system was actually built. The real,
+> live implementation — a single `micropython` (ota_2) partition, a
+> permanent `factory` recovery environment, and a tier-3 hand-off instead of
+> an A/B pair — is documented in `docs/internals/ota.md`. Kept here as
+> design history, not as current guidance.
+
 This document describes a safe WiFi upgrade path for the rotor firmware, the
 LittleFS/VFS content partition, and native binary app partitions.
 
@@ -26,7 +34,7 @@ Useful existing pieces:
   - simple `HEAD` / `PUT` file protocol
 - `in-progress/sync-server.py`
   - matching host-side prototype server
-- `hardware/rotor/partitions-voom.csv`
+- `hardware/rotor/partitions-ventilastation.csv`
   - current rotor partition layout
 - `hardware/rotor/build_micropython_fs.py`
   - authoritative list of files packed into the VFS image

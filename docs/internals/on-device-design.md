@@ -7,21 +7,26 @@ retro-go apps share configuration, and how each is launched. Companion to
 ## 1. Flash layout (16 MB)
 
 The board runs **two firmwares**: MicroPython (the Ventilastation menu + Python
-games) in the `factory` partition, and several **native retro-go apps**, each in
-its own OTA app partition. They share one LittleFS data partition (`vfs`).
+games), normally running from the `micropython` partition, and several
+**native retro-go apps**, each in its own OTA app partition. They share one
+LittleFS data partition (`vfs`). `factory` holds the same MicroPython image
+but serves as the board's permanent recovery environment (see
+`docs/internals/ota.md`), not a normal boot target — it's reached on a fresh
+board, after a bad OTA update fails to confirm itself, or during a
+firmware-update hand-off.
 
-Defined in `hardware/rotor/partitions-voom.csv`:
+Defined in `hardware/rotor/partitions-ventilastation.csv`:
 
 | Partition  | Type        | Offset    | Size      | Holds |
 |------------|-------------|-----------|-----------|-------|
 | nvs        | data/nvs    | 0x9000    | 0x4000    | shared config (see §2) |
 | otadata    | data/ota    | 0xd000    | 0x2000    | which OTA app boots |
 | phy_init   | data/phy    | 0xf000    | 0x1000    | RF cal |
-| factory    | app/factory | 0x10000   | 0x260000  | **MicroPython** |
-| prboom-go  | app/ota_0   | 0x270000  | 0x180000  | Voom (Doom) |
-| retro-core | app/ota_1   | 0x3F0000  | 0x100000  | **NES, Master System, Game Gear, …** |
-| gwenesis   | app/ota_2   | 0x4F0000  | 0x100000  | Mega Drive (too slow on the S3 — off the menu) |
-| vfs        | data/fat\*  | 0x5F0000  | 0xA10000  | LittleFS: code, sprite ROMs, game ROMs |
+| factory    | app/factory | 0x10000   | 0x200000  | **MicroPython** (permanent recovery environment) |
+| prboom-go  | app/ota_0   | 0x210000  | 0x180000  | Voom (Doom) |
+| retro-core | app/ota_1   | 0x390000  | 0x100000  | **NES, Master System, Game Gear, …** |
+| micropython| app/ota_2   | 0x490000  | 0x200000  | **MicroPython** (normal boot target, OTA-updatable) |
+| vfs        | data/fat\*  | 0x690000  | 0x970000  | LittleFS: code, sprite ROMs, game ROMs |
 
 \* labelled `fat` historically; the content is LittleFS, mounted at `/` by
 MicroPython and at `/vfs` by retro-go (`RG_STORAGE_ROOT`).
