@@ -268,6 +268,7 @@ class RecoveryTests(unittest.TestCase):
         import vsdk_recovery as recovery
         import updater
 
+        recovery._BOOT_GRACE_MS = 0  # skip the real boot grace period in tests
         def _boom(url, send_fn):
             raise RuntimeError("network stack exploded")
         original_run = updater.run
@@ -277,6 +278,21 @@ class RecoveryTests(unittest.TestCase):
                 recovery.run()
         finally:
             updater.run = original_run
+
+    def test_boot_grace_period_feeds_wdt_and_is_skippable(self):
+        machine, _esp32, _display, _sprites = _install_fakes()
+        import vsdk_recovery as recovery
+
+        wdt = machine.WDT(timeout_ms=30000)
+        recovery._BOOT_GRACE_MS = 1000
+        recovery._boot_grace_period(wdt)
+
+        self.assertGreaterEqual(wdt.feed_count, 2)
+
+        recovery._BOOT_GRACE_MS = 0
+        wdt2 = machine.WDT(timeout_ms=30000)
+        recovery._boot_grace_period(wdt2)
+        self.assertEqual(wdt2.feed_count, 0)
 
 
 class LogoStripTests(unittest.TestCase):

@@ -156,10 +156,34 @@ def _attempt(sprite, wdt):
     return outcome["ok"]
 
 
+_BOOT_GRACE_MS = 8000
+
+
+def _boot_grace_period(wdt):
+    """Guaranteed-idle window before the first network attempt.
+
+    Once the retry loop below is under way, WiFi connect / mDNS resolution
+    are blocking calls that don't yield to a Ctrl-C interrupt (confirmed on
+    hardware: a raw Ctrl-C sent mid-attempt can go unanswered for well over
+    a minute, spanning several full backoff cycles), so external tools
+    (bench flashing scripts, a human dropping to the REPL) need a window
+    whose timing is predictable from the outside, not buried somewhere
+    inside an ongoing retry cycle. This is that window: pure sleep, no
+    network calls, right after boot -- the interrupt-during-idle-sleep path
+    is confirmed reliable, it's just a question of knowing when to expect it.
+    """
+    waited = 0
+    while waited < _BOOT_GRACE_MS:
+        _feed(wdt)
+        utime.sleep_ms(min(500, _BOOT_GRACE_MS - waited))
+        waited += 500
+
+
 def run():
     try:
         sprite = _make_sprite()
         wdt = _arm_wdt()
+        _boot_grace_period(wdt)
 
         attempt = 0
         while True:
