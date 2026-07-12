@@ -7,6 +7,7 @@ makes it safe to answer ``povcal get`` during early boot and on desktop.
 """
 
 import struct
+import sys
 
 
 MAGIC = b"PCAL"
@@ -139,6 +140,10 @@ def load():
             _profile = build_default()
     else:
         _profile = build_default()
+        # A committed default lets a native Retro-Go app launched after the
+        # menu use the same colour pipeline on a newly provisioned board.
+        if sys.platform == "esp32":
+            _write_nvs(_profile)
     _loaded = True
     return _profile
 

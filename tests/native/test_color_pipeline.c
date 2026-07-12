@@ -75,6 +75,10 @@ int main(void) {
     uint8_t profile[COLOR_PIPELINE_PROFILE_BYTES];
     build_default_profile(profile);
 
+    uint8_t generated[COLOR_PIPELINE_PROFILE_BYTES];
+    CHECK(color_pipeline_build_default(generated, sizeof(generated), 0), "build default profile");
+    CHECK(memcmp(profile, generated, sizeof(profile)) == 0, "C and fixture defaults match");
+
     CHECK(color_pipeline_apply(profile, sizeof(profile)), "accept canonical default profile");
     CHECK(color_pipeline_is_active(), "pipeline becomes active");
     CHECK(color_pipeline_encode_rgb(53, 255, 255, 255) == 0xffffffff,

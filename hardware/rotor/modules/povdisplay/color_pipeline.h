@@ -12,6 +12,10 @@
 // GPU task always reads a complete LUT.
 bool color_pipeline_apply(const uint8_t *profile, size_t length);
 
+// Create the canonical factory PCAL v1 profile. Native apps use this for
+// `povcal factory` even when NVS has not yet been provisioned.
+bool color_pipeline_build_default(uint8_t *profile, size_t length, uint32_t generation);
+
 // False until a valid profile has been applied. The legacy renderer remains a
 // safe fallback during early boot and for invalid profiles.
 bool color_pipeline_is_active(void);

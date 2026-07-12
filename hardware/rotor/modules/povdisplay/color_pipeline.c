@@ -33,6 +33,21 @@ static uint16_t read_u16(const uint8_t *data) {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
 }
 
+static void write_u16(uint8_t *data, uint16_t value) {
+    data[0] = value & 0xff;
+    data[1] = value >> 8;
+}
+
+static void write_u32(uint8_t *data, uint32_t value) {
+    for (int i = 0; i < 4; i++) {
+        data[i] = (value >> (8 * i)) & 0xff;
+    }
+}
+
+static uint16_t evenly_spaced_q15(int index, int count) {
+    return (uint16_t)((2 * index * COLOR_Q15_ONE + (count - 1)) / (2 * (count - 1)));
+}
+
 static bool monotonic_q15(const uint16_t *values, size_t count) {
     uint16_t previous = 0;
     for (size_t i = 0; i < count; i++) {
@@ -88,6 +103,50 @@ static uint16_t desired_light(const color_pipeline_state_t *state, uint8_t led, 
     value *= state->radial_lut[led];
     value /= 1000ULL * 1000ULL * 1024ULL * COLOR_Q15_ONE;
     return value > COLOR_Q15_ONE ? COLOR_Q15_ONE : (uint16_t)value;
+}
+
+bool color_pipeline_build_default(uint8_t *profile, size_t length, uint32_t generation) {
+    if (profile == NULL || length != COLOR_PIPELINE_PROFILE_BYTES) {
+        return false;
+    }
+    memset(profile, 0, length);
+    memcpy(profile, "PCAL", 4);
+    profile[4] = COLOR_PROFILE_VERSION;
+    write_u16(profile + 6, COLOR_PIPELINE_PROFILE_BYTES);
+    write_u32(profile + 8, generation);
+
+    size_t offset = COLOR_PROFILE_HEADER_BYTES;
+    profile[offset++] = 0; // sRGB
+    write_u16(profile + offset, 2200); offset += 2;
+    write_u16(profile + offset, 1000); offset += 2;
+    for (int channel = 0; channel < 3; channel++) {
+        write_u16(profile + offset, 1000);
+        offset += 2;
+    }
+    write_u16(profile + offset, 1000); offset += 2;
+    profile[offset++] = 1;
+    profile[offset++] = 31;
+    for (int row = 0; row < 3; row++) {
+        for (int column = 0; column < 3; column++) {
+            write_u16(profile + offset, row == column ? 4096 : 0);
+            offset += 2;
+        }
+    }
+    for (int led = 0; led < COLOR_PIPELINE_LEDS; led++) {
+        write_u16(profile + offset, 1024);
+        offset += 2;
+    }
+    for (int level = 0; level < 32; level++) {
+        write_u16(profile + offset, evenly_spaced_q15(level, 32));
+        offset += 2;
+    }
+    for (int channel = 0; channel < 3; channel++) {
+        for (int knot = 0; knot < COLOR_PROFILE_PWM_KNOTS; knot++) {
+            write_u16(profile + offset, evenly_spaced_q15(knot, COLOR_PROFILE_PWM_KNOTS));
+            offset += 2;
+        }
+    }
+    return offset == length;
 }
 
 bool color_pipeline_apply(const uint8_t *profile, size_t length) {
