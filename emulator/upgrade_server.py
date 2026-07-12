@@ -10,14 +10,26 @@ device paths and gzip transform as the USB-flashed image — by reusing
 hardware/rotor/build_micropython_fs.py's iter_copy_jobs(). The device skips
 files whose SHA256 already matches, so a typical dev-loop sync transfers
 only the files that changed since the last OTA.
+
+Can also run standalone (not just imported by the desktop emulator), serving
+a fixed pre-built bundle instead of computing the manifest live from dev
+build-output paths -- for a production base that doesn't have the
+ESP-IDF/Retro-Go toolchain installed:
+
+    python3 emulator/upgrade_server.py --bundle <dir> [--port 5653]
+
+See tools/package_release.py for assembling that bundle directory.
 """
 
+import argparse
 import gzip
 import hashlib
 import importlib.util
 import json
 import pathlib
+import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 _VSDK_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -37,6 +49,11 @@ _PARTITION_BINS = {
         "/build-VENTILASTATION-SPIRAM_OCT/micropython.bin"
     ),
 }
+
+# Set by start(bundle_dir=...): switches every request from computing the
+# manifest/files/partitions live off dev build-output paths to serving a
+# fixed pre-built layout instead (see tools/package_release.py).
+_BUNDLE_DIR = None
 
 # Per-device-path cache keyed on (mtime_ns, size) of the source file, so
 # repeated /manifest requests don't re-hash (and re-gzip) unchanged files.
@@ -133,6 +150,29 @@ def _read_device_file(rel):
     return None
 
 
+def _get_manifest():
+    if _BUNDLE_DIR is not None:
+        return json.loads((_BUNDLE_DIR / "manifest.json").read_text())
+    return _build_manifest()
+
+
+def _get_device_file(rel):
+    if _BUNDLE_DIR is not None:
+        path = _BUNDLE_DIR / "files" / rel
+        return path.read_bytes() if path.is_file() else None
+    return _read_device_file(rel)
+
+
+def _get_partition(name):
+    if _BUNDLE_DIR is not None:
+        path = _BUNDLE_DIR / "partitions" / name
+        return path.read_bytes() if path.is_file() else None
+    bin_path = _PARTITION_BINS.get(name)
+    if bin_path and bin_path.is_file():
+        return bin_path.read_bytes()
+    return None
+
+
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"upgrade_server: {fmt % args}")
@@ -149,7 +189,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         if path == "/manifest":
             try:
-                manifest = _build_manifest()
+                manifest = _get_manifest()
                 body = json.dumps(manifest).encode()
                 self._send(200, "application/json", body)
             except Exception as e:
@@ -160,7 +200,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/files/"):
             rel = path[len("/files/"):]
             try:
-                body = _read_device_file(rel)
+                body = _get_device_file(rel)
             except OSError:
                 body = None
             if body is None:
@@ -171,10 +211,8 @@ class _Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/partitions/"):
             name = path[len("/partitions/"):]
-            bin_path = _PARTITION_BINS.get(name)
-            if bin_path and bin_path.is_file():
-                with open(bin_path, "rb") as f:
-                    body = f.read()
+            body = _get_partition(name)
+            if body is not None:
                 self._send(200, "application/octet-stream", body)
             else:
                 self._send(404, "text/plain", b"partition binary not found")
@@ -183,10 +221,48 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, "text/plain", b"unknown endpoint")
 
 
-def start(port=5653):
-    """Start the upgrade HTTP server on the given port (default 8000)."""
+def start(port=5653, bundle_dir=None):
+    """Start the upgrade HTTP server on the given port (default 8000).
+
+    bundle_dir, if given, serves a fixed pre-built layout from that directory
+    (manifest.json + files/ + partitions/, see tools/package_release.py)
+    instead of computing everything live from dev build-output paths.
+    """
+    global _BUNDLE_DIR
+    _BUNDLE_DIR = pathlib.Path(bundle_dir).resolve() if bundle_dir else None
     server = HTTPServer(("", port), _Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
-    print(f"upgrade_server: listening on port {port}")
+    if _BUNDLE_DIR is not None:
+        print(f"upgrade_server: listening on port {port}, serving bundle {_BUNDLE_DIR}")
+    else:
+        print(f"upgrade_server: listening on port {port}")
     return server
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Standalone OTA upgrade server")
+    parser.add_argument("--port", type=int, default=5653)
+    parser.add_argument(
+        "--bundle", type=pathlib.Path, default=None,
+        help="Serve a fixed pre-built bundle (see tools/package_release.py) "
+             "instead of live dev build-output paths",
+    )
+    args = parser.parse_args()
+
+    if args.bundle is not None:
+        manifest_path = args.bundle / "manifest.json"
+        if not manifest_path.is_file():
+            print(f"upgrade_server: no manifest.json in {args.bundle}", file=sys.stderr)
+            raise SystemExit(1)
+
+    start(port=args.port, bundle_dir=args.bundle)
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()
