@@ -1,6 +1,6 @@
 // Speaks the same wire protocol vsdk/apps/micropython/ventilastation/comms.py
-// uses on real hardware: a line command ("frame_rgb\n") followed directly by
-// the binary payload, over a plain TCP socket. See
+// uses on real hardware: a line command ("frame_apa102\n") followed directly
+// by the binary payload, over a plain TCP socket. See
 // vsdk/emulator/comms.py receive_loop() for the client side that consumes
 // this.
 //
@@ -12,7 +12,7 @@
 // (WB_MDNS_HOSTNAME + ".local") so the emulator doesn't need to know its
 // DHCP-assigned IP.
 //
-// Besides pushing frame_rgb, the accepted connection also accepts simple
+// Besides pushing frame_apa102, the accepted connection also accepts simple
 // line commands from the client:
 //   "reset\n"    -> pulse the DUT's reset line
 //   "rpm <n>\n"  -> change the simulated hall RPM
@@ -231,7 +231,7 @@ static void telemetry_task(void *arg) {
             poll_client_commands(client_sock, cmd_buf, &cmd_len);
 
             led_capture_snapshot(s_frame_buf);
-            if (send(client_sock, "frame_rgb\n", 10, 0) < 0 ||
+            if (send(client_sock, "frame_apa102\n", sizeof("frame_apa102\n") - 1, 0) < 0 ||
                 send(client_sock, s_frame_buf, sizeof(s_frame_buf), 0) < 0) {
                 break;
             }

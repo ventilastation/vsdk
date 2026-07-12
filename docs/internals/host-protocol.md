@@ -32,7 +32,8 @@ are logged and ignored — hosts must tolerate commands they don't handle.
 | `vs2_scene <nbytes>` | `<nbytes>` | v2 scene/layer payload; currently decoded by the desktop and web emulators into the sprite renderer shape |
 | `imagestrip <slot> <nbytes>` | `<nbytes>` | one image strip: 4-byte header (w, h, frames, palette) + pixels, same encoding as a ROM strip entry |
 | `palette <n> <version>` | `n × 1024` bytes | palette block, `n` palettes of 256 × 4-byte entries ([rom-format.md](rom-format.md)) |
-| `frame_rgb` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED); sent by the workbench's LED-bus capture and by full-frame renderers such as the Ventilagon port |
+| `frame_rgb` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED); used by full-frame renderers such as the Ventilagon port |
+| `frame_apa102` | 256 × 54 × 4 bytes | raw spatial APA102 POV frame. Every cell is the unmodified LED datum `[0xe0 \| GB, B, G, R]`; the desktop emulator decodes its light output. Sent by workbench LED-bus capture. |
 
 `vs2_scene` is intentionally separate from the legacy 500-byte `sprites`
 command. The first payload version has this little-endian layout:
@@ -87,7 +88,7 @@ visible; `0x02` and `0x04` are `flip_x` and `flip_y`.
 
 - **Desktop emulator, local simulation**: TCP to the MicroPython process
   (port 5005); named pipe on Windows.
-- **Desktop emulator, hardware mode**: `frame_rgb` over TCP from the
+- **Desktop emulator, hardware mode**: `frame_apa102` over TCP from the
   workbench's LED-bus capture; audio/system commands over the workbench's
   USB serial bridge. The dispatcher is shared, so every command is
   understood on either link.

@@ -18,7 +18,7 @@ import threading
 from base_control import BaseControlState
 from povrender import all_strips, set_palettes, spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
-from povrender import set_voom_frame_rgb, clear_voom_frame
+from povrender import set_voom_frame_rgb, set_voom_frame_apa102, clear_voom_frame
 from audio import playsound, playmusic, playnotes
 from emu_audio import emu_audio
 import upgrade_server
@@ -186,6 +186,13 @@ def dispatch_command(conn, command, args):
     if command == b"frame_rgb":
         data = conn.read(256 * 54 * 3)
         set_voom_frame_rgb(data)
+
+    elif command == b"frame_apa102":
+        # Raw workbench capture: each spatial LED entry is the original
+        # APA102 [GB, B, G, R] datum. Its global brightness must survive to
+        # the preview decoder; do not reduce this to RGB bytes here.
+        data = conn.read(256 * 54 * 4)
+        set_voom_frame_apa102(data)
 
     elif command == b"sprites":
         clear_voom_frame()

@@ -13,7 +13,8 @@
 //   [54 x 4-byte LED frame]   arm 0 (mirror column, LED order reversed)
 //   [54 x 4-byte LED frame]   arm 1 (current column, direct order)
 //   [8-byte end frame]
-// where each LED frame is [brightness, B, G, R] (brightness is dropped).
+// where each LED frame is [brightness, B, G, R]. The reassembled telemetry
+// retains all four bytes verbatim.
 //
 // Real POV firmware (hardware/rotor/modules/povdisplay) only re-sends a
 // burst when an LED's colour actually changes, relying on the physical LEDs
@@ -94,19 +95,20 @@ static uint8_t s_frame[2][WB_FRAME_BYTES];
 static volatile uint8_t s_write_buf;
 
 // One row (all WB_NUM_LEDS pixels, R,G,B each) -- contiguous, same layout as
-// a column's slice of s_frame, so it can be memcpy'd straight in.
-typedef uint8_t led_row_t[WB_NUM_LEDS][3];
+// a column's slice of s_frame, so it can be memcpy'd straight in. Each entry
+// is the raw APA102 LED frame [0xe0 | GB, B, G, R].
+typedef uint8_t led_row_t[WB_NUM_LEDS][WB_APA102_LED_FRAME_BYTES];
 
 static inline void write_row(uint32_t column, const led_row_t row) {
-    memcpy(s_frame[s_write_buf] + column * WB_NUM_LEDS * 3, row, sizeof(led_row_t));
+    memcpy(s_frame[s_write_buf] + column * WB_NUM_LEDS * WB_APA102_LED_FRAME_BYTES,
+           row, sizeof(led_row_t));
 }
 
 // Each 4-byte LED frame on the wire is [brightness(0xe0|b5), B, G, R].
-// Pass the colour bytes through as-is; intensity correction is deferred.
-static inline void put_pixel(uint8_t *out, const uint8_t *w) {
-    out[0] = w[3]; // R
-    out[1] = w[2]; // G
-    out[2] = w[1]; // B
+// The workbench must preserve the complete datum. LED-light decoding belongs
+// to the emulator, which has the board's calibrated colour profile.
+static inline void copy_apa102_frame(uint8_t *out, const uint8_t *wire) {
+    memcpy(out, wire, WB_APA102_LED_FRAME_BYTES);
 }
 
 // Buffer layout from povdisplay.c init_buffers(): dma_pixels0 = dma_buffer+1
@@ -119,8 +121,8 @@ static void extract_arm_rows(const uint8_t *buf, led_row_t arm0_row, led_row_t a
     const uint8_t *arm1 = buf + START_FRAME_BYTES + (WB_NUM_LEDS - 1) * 4;
 
     for (int n = 0; n < WB_NUM_LEDS; n++) {
-        put_pixel(arm0_row[WB_NUM_LEDS - 1 - n], arm0 + n * 4);
-        put_pixel(arm1_row[n], arm1 + n * 4);
+        copy_apa102_frame(arm0_row[WB_NUM_LEDS - 1 - n], arm0 + n * 4);
+        copy_apa102_frame(arm1_row[n], arm1 + n * 4);
     }
 }
 
@@ -312,7 +314,7 @@ void led_capture_begin(void) {
 
     // Both on core 1: putting decode_task on core 0 alongside lwIP/WiFi
     // (priority 18/23) worked fine while telemetry_task was idle, but with
-    // the emulator actually connected and streaming a ~41KB frame every
+    // the emulator actually connected and streaming a ~55KB frame every
     // WB_TELEMETRY_FRAME_INTERVAL_MS, that's real sustained higher-priority
     // network activity that starved decode_task (priority 10) long enough to
     // overflow the queue. Core 1 has nothing on it that outranks either

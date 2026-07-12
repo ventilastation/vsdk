@@ -45,7 +45,7 @@ Firmware for the workbench itself lives in
                     |  python emu.py --remote                   |
                     |  ------------------------------------      |
                     |  display_conn (Wi-Fi, TCP :5005):           |
-                    |    <- "frame_rgb\n" + 41472 bytes            |
+                    |    <- "frame_apa102\n" + 55296 bytes         |
                     |    -> "reset\n" / "rpm <n>\n"                 |
                     |    (RPM slider + reset button in the UI)       |
                     |  workbench_conn (USB serial):                   |
@@ -132,7 +132,7 @@ the octal-PSRAM pins used on `N16R8`-style modules (35-37); swap them in
 4. Whenever a PC on the same Wi-Fi network runs the desktop emulator in
    hardware mode (`cd vsdk && python emulator/emu.py --remote`), it resolves
    `ventilastation-workbench.local` over mDNS and opens a TCP connection to
-   port 5005. From then on the workbench streams `frame_rgb` frames it has
+   port 5005. From then on the workbench streams `frame_apa102` frames it has
    reconstructed from the spied LED bus, and accepts `reset`/`rpm <n>`
    commands from the emulator's RPM slider and reset button (see
    [RPM and reset control](#rpm-and-reset-control)).
@@ -173,7 +173,9 @@ Each burst the master sends is a 444-byte buffer built by
 = 444 bytes total (with the 54-LED bar used today)
 ```
 
-each LED frame being `[brightness, B, G, R]` (brightness dropped on decode).
+each LED frame being `[brightness, B, G, R]`. The workbench retains all four
+bytes verbatim after the required arm/column reassembly; it never drops the
+global-brightness byte or reorders colour components.
 `gpu_step()` sends one such burst at 20 MHz per column change (up to 256 per
 revolution), so CS pulses low once per column.
 
@@ -189,11 +191,11 @@ decoded into the frame buffer. Verified end-to-end on hardware at 600 RPM:
 ## Column tracking and frame reassembly
 
 The pyglet emulator (`vsdk/emulator/comms.py` `dispatch_command()`) expects a
-`frame_rgb` command over the TCP link followed by exactly
-`256 * 54 * 3 = 41472` raw bytes: 256 angular columns, 54 LEDs each, plain
-`R, G, B` (see `vsdk/apps/micropython/ventilastation/ventilagon_emu.py`
-`render_frame()` for the reference layout the real firmware also uses when
-it pushes `frame_rgb` telemetry itself).
+`frame_apa102` command over the TCP link followed by exactly
+`256 * 54 * 4 = 55296` raw bytes: 256 angular columns, 54 LEDs each, with
+each four-byte cell copied from the LED bus as `[0xe0 | GB, B, G, R]`.
+`frame_rgb` remains a separate three-byte format for software full-frame
+renderers; it is not used for workbench capture.
 
 Since the workbench is also the thing generating the hall pulses, it
 already knows the current rotation phase precisely — no need to infer it
@@ -219,18 +221,19 @@ writes:
 
 - arm 0's 54 LEDs (order reversed, per `dma_pixels0[n] = draw_buffer0[53-n]`
   in the real firmware) into the mirror column of the frame buffer,
-- arm 1's 54 LEDs (direct order) into the current column,
+- arm 1's 54 LEDs (direct order) into the current column.
 
-dropping each LED's brightness byte and keeping `R, G, B`. There is a
-roughly one-burst pipeline delay versus the DUT's true state (the real
-firmware sends the *previous* column's buffer while it computes the next
-one) — negligible for a visualization tool.
+Each destination retains its complete `[GB, B, G, R]` datum; the desktop
+emulator converts it to a preview colour. There is a roughly one-burst
+pipeline delay versus the DUT's true state (the real firmware sends the
+*previous* column's buffer while it computes the next one) — negligible for a
+visualization tool.
 
-The assembled 256×54×3 buffer is snapshotted under a mutex and sent as one
-`frame_rgb` message roughly every 33 ms (`WB_TELEMETRY_FRAME_INTERVAL_MS`)
-to whichever client is currently connected. Only `frame_rgb` is
-implemented; the workbench doesn't emit `sprites`/`palette`/`sound`/etc.
-telemetry, since none of that is observable from the LED bus alone.
+The assembled 256×54×4 buffer is snapshotted from the capture double buffer
+and sent as one `frame_apa102` message roughly every 33 ms
+(`WB_TELEMETRY_FRAME_INTERVAL_MS`) to whichever client is currently connected.
+The workbench doesn't emit `sprites`/`palette`/`sound`/etc. telemetry, since
+none of that is observable from the LED bus alone.
 
 ## Wi-Fi provisioning and mDNS discovery
 
@@ -286,7 +289,7 @@ the mDNS traffic for that process — no error, it just never resolves.
 
 ## RPM and reset control
 
-Once connected, the same TCP link that streams `frame_rgb` also accepts
+Once connected, the same TCP link that streams `frame_apa102` also accepts
 simple line commands from the client (`telemetry.c`'s
 `poll_client_commands()`/`handle_client_line()`):
 
@@ -309,7 +312,7 @@ the Wi-Fi connection — harmless no-ops if the workbench isn't connected.
 Against a real workbench (`python emu.py --remote` or `--no-display`) it
 instead opens two:
 
-- `display_conn` (Wi-Fi, TCP `:5005`) — `frame_rgb` in, `reset`/`rpm` out.
+- `display_conn` (Wi-Fi, TCP `:5005`) — `frame_apa102` in, `reset`/`rpm` out.
   Everything covered above.
 - `workbench_conn` (USB serial, via the workbench's UART bridge) — button
   state out, sound/music/notes/etc. requests in. This is exactly the
@@ -419,7 +422,7 @@ pinned by `dependencies.lock`; `idf.py build` fetches it into
   [LED bus capture](#led-bus-capture-chip-select)). Verified on hardware.
 - `column_offset` is assumed to be 0, so the reconstructed image may be
   rotated relative to a given DUT's own calibrated display.
-- Only `frame_rgb` telemetry is reproduced; no sprite/palette telemetry
+- Only `frame_apa102` telemetry is reproduced; no sprite/palette telemetry
   over Wi-Fi (audio telemetry is covered separately, over serial — see
   [Pyglet emulator transport split](#pyglet-emulator-transport-split)).
 - Single Wi-Fi client at a time.
