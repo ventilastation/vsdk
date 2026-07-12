@@ -22,6 +22,12 @@ enum {
 // GPU task always reads a complete LUT.
 bool color_pipeline_apply(const uint8_t *profile, size_t length);
 
+// Temporarily choose the calibrated encoder or the legacy intensity tables.
+// Applying a profile always re-enables the calibrated path; this switch exists
+// for like-for-like on-device performance measurements and is not persisted.
+bool color_pipeline_set_enabled(bool enabled);
+bool color_pipeline_is_enabled(void);
+
 // Create the canonical factory PCAL v1 profile. Native apps use this for
 // `povcal factory` even when NVS has not yet been provisioned.
 bool color_pipeline_build_default(uint8_t *profile, size_t length, uint32_t generation);

@@ -81,6 +81,10 @@ int main(void) {
 
     CHECK(color_pipeline_apply(profile, sizeof(profile)), "accept canonical default profile");
     CHECK(color_pipeline_is_active(), "pipeline becomes active");
+    CHECK(color_pipeline_set_enabled(false), "temporarily select legacy encoder");
+    CHECK(!color_pipeline_is_active(), "disabled pipeline takes the legacy path");
+    CHECK(color_pipeline_set_enabled(true), "restore calibrated encoder");
+    CHECK(color_pipeline_is_active(), "calibrated pipeline can be restored");
     CHECK(color_pipeline_encode_rgb(53, 255, 255, 255) == 0xffffffff,
           "outer full white uses APA102 full-scale frame");
     CHECK(color_pipeline_encode_rgb(53, 0, 0, 0) == 0x000000e0,

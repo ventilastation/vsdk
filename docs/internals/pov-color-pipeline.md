@@ -122,6 +122,43 @@ are produced but before APA102 values are calculated. This makes a measurement
 pattern identical in MicroPython and native games, without altering the saved
 profile. Use `povcal test off` before returning to normal content.
 
+## Render-performance comparison
+
+`povperf` profiles the ESP32-S3 GPU task only when explicitly enabled. It
+times one physical angular update: queueing the previous APA102 DMA buffer,
+rendering both arms, waiting for DMA only when rendering did not hide its
+transfer time, and copying both finished arm buffers. It does not print from
+the render task or persist any setting.
+
+Run the same steady rotor speed and the same scene twice:
+
+```text
+povperf mode legacy
+povperf start
+# let at least several complete rotations pass
+povperf status
+povperf stop
+
+povperf mode calibrated
+povperf start
+# same duration and scene
+povperf status
+povperf stop
+```
+
+Use a busy VS2 scene such as `vixeous` or `mapdemo`; `povperf_state` records
+whether VS2 was active and its current layer, sprite, and tilemap slot counts.
+`povperf_timing` reports mean and maximum total/render/DMA-wait/copy time in
+microseconds. `deadline_us` is the measured revolution period divided by 256;
+an update is an overrun when `max_total_us` exceeds that budget. `skipped` is
+the number of angular updates the GPU task observed it had passed before it
+could render, so `complete=1`, zero overruns, and zero skipped updates are the
+evidence that every scheduled column was prepared in time. `worst_slack_us`
+is the minimum `deadline_us - total_us`; it should remain comfortably positive.
+
+The profiler is for the MicroPython GPU/VS2 renderer. Native Retro-Go has its
+own display loop and is not represented by these counters.
+
 ## Workbench and emulator
 
 The workbench reassembles the two physical arms into a spatial image, but does

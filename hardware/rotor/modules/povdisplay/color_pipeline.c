@@ -28,6 +28,7 @@ typedef struct {
 static color_pipeline_state_t states[2];
 static volatile uint8_t active_index;
 static volatile bool active;
+static volatile bool enabled = true;
 static volatile uint8_t test_pattern;
 static volatile uint8_t test_level = 255;
 
@@ -220,11 +221,25 @@ bool color_pipeline_apply(const uint8_t *profile, size_t length) {
 
     __atomic_store_n(&active_index, inactive_index, __ATOMIC_RELEASE);
     __atomic_store_n(&active, true, __ATOMIC_RELEASE);
+    __atomic_store_n(&enabled, true, __ATOMIC_RELEASE);
     return true;
 }
 
+bool color_pipeline_set_enabled(bool value) {
+    if (value && !__atomic_load_n(&active, __ATOMIC_ACQUIRE)) {
+        return false;
+    }
+    __atomic_store_n(&enabled, value, __ATOMIC_RELEASE);
+    return true;
+}
+
+bool color_pipeline_is_enabled(void) {
+    return __atomic_load_n(&enabled, __ATOMIC_ACQUIRE);
+}
+
 bool color_pipeline_is_active(void) {
-    return __atomic_load_n(&active, __ATOMIC_ACQUIRE);
+    return __atomic_load_n(&active, __ATOMIC_ACQUIRE)
+        && __atomic_load_n(&enabled, __ATOMIC_ACQUIRE);
 }
 
 bool color_pipeline_set_test_pattern(uint8_t pattern, uint8_t level) {
