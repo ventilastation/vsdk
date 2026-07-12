@@ -42,6 +42,9 @@ shape and the rules that keep biting.
   `vs2` game API, compatibility guard, v2 memory model, and renderer phases.
 - **[workbench.md](workbench.md)** — the second ESP32-S3 that exercises a
   real board: LED-bus capture, hall simulation, UART bridge, telemetry.
+- **[pov-color-pipeline.md](pov-color-pipeline.md)** — calibrated game-RGB
+  conversion, shared APA102 encoder, NVS profile format, and calibration
+  protocol for MicroPython, Retro-Go, the workbench, and the desktop preview.
 - **[emulator-audio.md](emulator-audio.md)** — streaming console
   sound-chip register writes to the host synth (`emulator/chipsynth`).
 - **[ota.md](ota.md)** — the three-tier OTA update system.

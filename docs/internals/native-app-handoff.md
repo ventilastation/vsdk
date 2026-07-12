@@ -189,7 +189,9 @@ The flow is:
 2. `I_FinishUpdate()` copies that framebuffer into `vs_data`.
 3. `vs_setup_projection_table()` precomputes a 256 x 54 polar lookup table.
 4. `project_angle()` samples the framebuffer for one rotation angle and converts palette entries
-   into LED colors using `brillos` and `intensidades_por_led`.
+   through the shared calibrated `color_pipeline` when `voom_pov`/`color_v1`
+   is valid; it falls back to the legacy `brillos`/`intensidades_por_led`
+   tables only if no valid profile is available.
 5. `gpu_step()` uses hall-sensor timing to stream two projected columns over SPI.
 
 There is also a debug helper in `../voom/hex2png.py` that turns logged

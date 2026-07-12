@@ -1,0 +1,167 @@
+# POV colour pipeline and calibration
+
+Ventilastation converts game RGB into APA102 LED values through one calibrated
+pipeline shared by MicroPython and native Retro-Go games. This replaces the
+old fixed intensity tables when a valid profile is active, while retaining
+those tables as a boot-time fallback for an invalid or missing profile.
+
+## Signal path
+
+```text
+game RGB code
+  -> source-transfer decode (sRGB or configured power gamma)
+  -> linear target light
+  -> master, white balance, radial, and per-LED adjustments
+  -> APA102 global-brightness + RGB PWM solver
+  -> [0xe0 | GB, B, G, R] LED frame
+  -> workbench capture (four bytes preserved verbatim)
+  -> desktop emulator profile decoder
+  -> monitor sRGB preview
+```
+
+For a fixed angular column, an outer LED covers a longer arc than an inner
+one. The profile's radial term compensates the corresponding lower light per
+display area. The initial model uses `(led + 1) / 54` as radius and applies
+`radius ^ radial_exponent`; a per-LED gain then corrects the remaining strip,
+optical, and supply variation.
+
+Rotation speed is a timing-health concern, not a normal brightness multiplier:
+at a fixed angular resolution, a slower turn also gives each angular sample
+proportionally more illumination time.
+
+## Profile format and NVS
+
+The canonical profile is the 319-byte little-endian `PCAL` v1 payload stored
+in NVS as `voom_pov` / `color_v1`. `col_offset` remains a separate i32 key.
+It is understood by the MicroPython renderer, Retro-Go POV driver, and desktop
+emulator.
+
+| Offset | Size | Field |
+|---:|---:|---|
+| 0 | 4 | magic `PCAL` |
+| 4 | 1 | schema version (`1`) |
+| 5 | 1 | flags, currently zero |
+| 6 | 2 | total payload length (`319`) |
+| 8 | 4 | monotonically increasing generation |
+| 12 | 15 | source transfer/gamma, master, white balance, radial exponent, GB floor/ceiling |
+| 27 | 18 | LED-to-preview 3×3 matrix, signed Q12 |
+| 45 | 108 | 54 LED gain trims, Q10 |
+| 153 | 64 | 32 APA102 global-brightness response values, Q15 |
+| 217 | 102 | three 17-knot PWM response curves, Q15 |
+
+The profile persists calibration *parameters and measured response knots*, not
+render LUTs. C builds source-decode, radial, and inverse PWM tables when a new
+profile is applied. Two preallocated pipeline states are used: the inactive
+state is built completely, then an atomic index swap makes it visible to the
+render task. Thus a `povcal set` takes effect on the next rendered column
+without a reboot or partial LUT.
+
+The current profile supports source transfer, master brightness, RGB white
+balance, radial exponent, per-LED gain, and APA102 global-brightness bounds.
+The response curves and preview matrix are already part of the stable payload;
+host-side curve-editing UI is the next calibration-tool addition.
+
+## APA102 encoding
+
+An APA102 has three 8-bit channel PWMs and a shared 5-bit global-brightness
+control. For every LED the encoder computes the desired linear light for R,
+G, and B, selects the smallest permitted global level that can represent the
+brightest channel, and inverts the calibrated channel response curves for the
+three PWM values. This preserves colour ratios and makes the shared global
+control useful at low levels.
+
+The encoded 32-bit value is laid out in memory exactly as the LED bus expects:
+
+```text
+[0xe0 | global_brightness, blue_pwm, green_pwm, red_pwm]
+```
+
+## Calibration commands
+
+Commands use the existing host-to-board newline stream. A successful command
+replies with the full canonical profile:
+
+```text
+povcal_state <schema> <generation> <nbytes>\n<payload>
+```
+
+Errors reply with `povcal_error <generation> <code>`.
+
+```text
+povcal get
+povcal set source_eotf srgb
+povcal set source_eotf power 2200
+povcal set master 700
+povcal set white 1000 960 900
+povcal set radial_exponent 1000
+povcal set led_gain 17 1025
+povcal set gb_floor 2
+povcal set gb_ceiling 31
+povcal commit
+povcal revert
+povcal factory
+```
+
+`set` updates RAM and the active renderer only. `commit` persists the profile,
+so repeatedly dragging a calibration control does not wear NVS. `revert`
+reloads the committed NVS blob. `factory` creates the canonical default in RAM
+and can itself be committed.
+
+MicroPython handles these commands through `color_calibration.py`. Native
+Retro-Go handles the same commands in `vs_host_bridge.c`, so a running console
+game updates immediately instead of waiting for a return to the menu.
+
+## Workbench and emulator
+
+The workbench reassembles the two physical arms into a spatial image, but does
+not interpret LED values. It streams:
+
+```text
+frame_apa102\n
+256 × 54 × 4 bytes, column-major [GB, B, G, R] values
+```
+
+This differs from the legacy `frame_rgb` full-frame format, which has only
+three RGB bytes and remains available for synthetic renderers. The workbench
+must preserve every captured APA102 LED datum byte; it may only reverse arm 0,
+place the arms in their correct angular columns, and carry a row forward over
+columns for which the rotor sent no SPI update.
+
+When the emulator connects to the workbench UART bridge, it sends `povcal get`.
+It validates the reply and uses the profile's APA102 response curves and
+LED-to-preview matrix to decode raw capture into relative linear LED light,
+then encodes monitor RGB as sRGB. It does not apply source gamma, radial gain,
+or white balance a second time: those are already embodied in captured APA102
+values.
+
+A desktop monitor is not a calibrated substitute for the LEDs' absolute
+luminance or gamut. The preview is intended to preserve the calibrated
+relative light and chromaticity. Its future view-exposure control must remain
+display-only and never change board calibration.
+
+## Verification
+
+`python3 tests/run_tests.py` covers:
+
+- binary profile parsing, profile generation, and emulator preview decoding;
+- MicroPython `povcal` command lifecycle and persistence boundary;
+- native C profile validation, atomic active state, radial/global-brightness
+  quantization, and APA102 frame packing;
+- raw four-byte APA102 desktop preview input;
+- existing VS2 renderer parity tests with the pipeline inactive.
+
+The Retro-Go component includes the same C implementation through a tiny
+wrapper, rather than copying the encoder. The normal host test suite compiles
+that wrapper; a full Retro-Go firmware build and real rotor measurement remain
+required before considering a profile production-calibrated.
+
+## Remaining calibration work
+
+1. Add an interactive desktop calibration panel whose sliders are initialized
+   from `povcal_state` and whose edits use the commands above.
+2. Add controlled test patterns (gray ramps, primaries, radial bands, and
+   current-limit white) for photodiode/colorimeter measurement.
+3. Expose response-knot and preview-matrix editing/import in that tool.
+4. Add the same profile-aware decoder to the web emulator.
+5. Build and exercise MicroPython and Retro-Go images on a real rotor, then
+   tune the factory/default profile from measured data.
