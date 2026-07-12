@@ -2,8 +2,8 @@
 """Write WiFi credentials to the main board's NVS (namespace "devel_wifi").
 
 The board only brings WiFi up when an OTA upgrade is requested over the
-serial host link (see ventilastation/updater.py); these credentials tell it
-which network to join for that. NVS survives firmware and filesystem
+serial host link (see apps/micropython/updater.py); these credentials tell
+it which network to join for that. NVS survives firmware and filesystem
 reflashes, so this only needs to run once per board.
 
 Usage (or `make wifi-provision PORT=... WIFI_SSID=... WIFI_PASS=...`):

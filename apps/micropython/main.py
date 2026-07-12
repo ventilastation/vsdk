@@ -1,6 +1,18 @@
 import io
 import sys
 
+# The rotor's USB REPL is separate from its base-station UART.  Mirror Python
+# stdout to the host protocol as early as possible so startup diagnostics show
+# in the desktop emulator when it is connected to the real board.
+if sys.platform == "esp32":
+    try:
+        from ventilastation.serialcomms import install_stdout
+        install_stdout()
+    except Exception:
+        # If the board UART cannot be configured yet, retain MicroPython's
+        # normal console rather than preventing boot.
+        pass
+
 # Confirm this OTA image is healthy. Must happen at boot before any crash risk.
 try:
     import esp32
@@ -42,7 +54,10 @@ def _check_ota_boot():
     except OSError:
         pass
     print("main: OTA boot mode — url:", _url)
-    from ventilastation import updater
+    # updater.py is frozen at the top level (not under ventilastation/):
+    # recovery needs it too, and it must work even when vfs has no
+    # ventilastation package at all. See vsdk_recovery.py.
+    import updater
     updater.run(_url, lambda msg: None)
     print("main: OTA done, rebooting")
     import machine
