@@ -28,6 +28,8 @@ typedef struct {
 static color_pipeline_state_t states[2];
 static volatile uint8_t active_index;
 static volatile bool active;
+static volatile uint8_t test_pattern;
+static volatile uint8_t test_level = 255;
 
 static uint16_t read_u16(const uint8_t *data) {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
@@ -225,10 +227,56 @@ bool color_pipeline_is_active(void) {
     return __atomic_load_n(&active, __ATOMIC_ACQUIRE);
 }
 
+bool color_pipeline_set_test_pattern(uint8_t pattern, uint8_t level) {
+    if (pattern > COLOR_TEST_RADIAL) {
+        return false;
+    }
+    __atomic_store_n(&test_level, level, __ATOMIC_RELEASE);
+    __atomic_store_n(&test_pattern, pattern, __ATOMIC_RELEASE);
+    return true;
+}
+
+static void apply_test_pattern(uint8_t led, uint8_t *red, uint8_t *green, uint8_t *blue) {
+    uint8_t pattern = __atomic_load_n(&test_pattern, __ATOMIC_ACQUIRE);
+    uint8_t level = __atomic_load_n(&test_level, __ATOMIC_ACQUIRE);
+    switch (pattern) {
+        case COLOR_TEST_GRAY:
+        case COLOR_TEST_WHITE:
+            *red = level;
+            *green = level;
+            *blue = level;
+            break;
+        case COLOR_TEST_RED:
+            *red = level;
+            *green = 0;
+            *blue = 0;
+            break;
+        case COLOR_TEST_GREEN:
+            *red = 0;
+            *green = level;
+            *blue = 0;
+            break;
+        case COLOR_TEST_BLUE:
+            *red = 0;
+            *green = 0;
+            *blue = level;
+            break;
+        case COLOR_TEST_RADIAL:
+            level = (uint16_t)level * led / (COLOR_PIPELINE_LEDS - 1);
+            *red = level;
+            *green = level;
+            *blue = level;
+            break;
+        default:
+            break;
+    }
+}
+
 uint32_t color_pipeline_encode_rgb(uint8_t led, uint8_t red, uint8_t green, uint8_t blue) {
     if (led >= COLOR_PIPELINE_LEDS || !color_pipeline_is_active()) {
         return 0;
     }
+    apply_test_pattern(led, &red, &green, &blue);
     const color_pipeline_state_t *state = &states[__atomic_load_n(&active_index, __ATOMIC_ACQUIRE)];
     uint8_t source[3] = { red, green, blue };
     uint16_t target[3];

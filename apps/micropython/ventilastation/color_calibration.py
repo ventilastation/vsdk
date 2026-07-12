@@ -43,6 +43,16 @@ _OFF_GB_FLOOR = _OFF_RADIAL_EXPONENT + 2
 _OFF_GB_CEILING = _OFF_GB_FLOOR + 1
 _OFF_LED_TRIMS = HEADER_SIZE + CONTROLS_SIZE + MATRIX_SIZE
 
+_TEST_PATTERNS = {
+    "off": 0,
+    "gray": 1,
+    "red": 2,
+    "green": 3,
+    "blue": 4,
+    "white": 5,
+    "radial": 6,
+}
+
 
 def _linear_knots(count):
     denominator = 2 * (count - 1)
@@ -253,6 +263,21 @@ def _send_error(send, code):
     send(b"povcal_error %d %s" % (generation, code))
 
 
+def _set_test_pattern(parts, display):
+    if not parts:
+        raise ValueError("missing test pattern")
+    pattern = _TEST_PATTERNS.get(parts[0])
+    if pattern is None:
+        raise ValueError("unknown test pattern")
+    if len(parts) > 2:
+        raise ValueError("too many test pattern values")
+    level = _integer(parts[1], "test level", 0, 255) if len(parts) == 2 else 255
+    setter = getattr(display, "set_color_test_pattern", None)
+    if setter is None:
+        raise ValueError("display has no colour test pattern support")
+    setter(pattern, level)
+
+
 def handle_command(parts, send, display=None):
     """Handle the interactive ``povcal`` protocol.
 
@@ -269,6 +294,8 @@ def handle_command(parts, send, display=None):
         command = parts[0]
         if command == "set":
             _set_active(_set_values(parts), display)
+        elif command == "test":
+            _set_test_pattern(parts[1:], display)
         elif command == "commit":
             if not _write_nvs(active_profile()):
                 _send_error(send, b"nvs_write_failed")

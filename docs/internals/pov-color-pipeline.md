@@ -99,6 +99,9 @@ povcal set radial_exponent 1000
 povcal set led_gain 17 1025
 povcal set gb_floor 2
 povcal set gb_ceiling 31
+povcal test gray 96
+povcal test radial 200
+povcal test off
 povcal commit
 povcal revert
 povcal factory
@@ -112,6 +115,12 @@ and can itself be committed.
 MicroPython handles these commands through `color_calibration.py`. Native
 Retro-Go handles the same commands in `vs_host_bridge.c`, so a running console
 game updates immediately instead of waiting for a return to the menu.
+
+`povcal test` is deliberately RAM-only. It substitutes a gray, primary, white,
+or centre-to-edge radial stimulus inside the shared encoder, after game pixels
+are produced but before APA102 values are calculated. This makes a measurement
+pattern identical in MicroPython and native games, without altering the saved
+profile. Use `povcal test off` before returning to normal content.
 
 ## Workbench and emulator
 
@@ -159,8 +168,8 @@ required before considering a profile production-calibrated.
 
 ## Remaining calibration work
 
-1. Add controlled test patterns (gray ramps, primaries, radial bands, and
-   current-limit white) for photodiode/colorimeter measurement.
+1. Use the controlled gray, primary, white, and radial patterns with a
+   photodiode/colorimeter to measure the installed rotor.
 2. Expose response-knot and preview-matrix editing/import in the desktop tool.
 3. Add the same profile-aware decoder to the web emulator.
 4. Build and exercise MicroPython and Retro-Go images on a real rotor, then

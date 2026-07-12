@@ -125,6 +125,7 @@ mid-command from blocking the state machine indefinitely.
 | `wifi_config` | `<ssid> <password-hex>` | Write Wi-Fi credentials to NVS. Password is hex-encoded to avoid spaces and non-ASCII. |
 | `povcal get` | — | Return the active versioned POV colour profile as `povcal_state <schema> <generation> <nbytes>` plus its binary payload. |
 | `povcal set` | calibration setting and values | Apply one validated setting immediately, rebuild the active LED LUT, and return `povcal_state`. Supported keys: `source_eotf`, `master`, `white`, `radial_exponent`, `led_gain`, `gb_floor`, `gb_ceiling`. |
+| `povcal test` | `<off\|gray\|red\|green\|blue\|white\|radial> [level]` | Enable a RAM-only on-rotor calibration pattern. `level` is `0..255`, default 255. It never changes NVS. |
 | `povcal commit` / `revert` / `factory` | — | Persist the active profile, restore NVS, or restore the factory profile. Each successful command returns `povcal_state`. |
 
 Wire examples:
@@ -134,6 +135,7 @@ ota_start http://192.168.100.187:5653\n
 wifi_config HomeNetwork 6d7950617373776f7264\n
 povcal get\n
 povcal set master 700\n
+povcal test radial 200\n
 povcal commit\n
 reset\n
 ```

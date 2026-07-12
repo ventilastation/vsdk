@@ -91,6 +91,13 @@ int main(void) {
     CHECK((inner_red >> 24) > 0 && ((inner_red >> 16) & 0xff) == 0
           && ((inner_red >> 8) & 0xff) == 0, "red channel remains isolated");
 
+    CHECK(color_pipeline_set_test_pattern(COLOR_TEST_BLUE, 255), "enable blue test pattern");
+    uint32_t test_blue = color_pipeline_encode_rgb(53, 255, 0, 0);
+    CHECK((test_blue & 0x1f) == 31 && ((test_blue >> 8) & 0xff) == 255
+          && ((test_blue >> 16) & 0xff) == 0 && (test_blue >> 24) == 0,
+          "test pattern overrides game RGB inside encoder");
+    CHECK(color_pipeline_set_test_pattern(COLOR_TEST_OFF, 255), "disable test pattern");
+
     profile[0] = 'X';
     CHECK(!color_pipeline_apply(profile, sizeof(profile)), "reject invalid profile magic");
     CHECK(color_pipeline_encode_rgb(53, 255, 255, 255) == 0xffffffff,

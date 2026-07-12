@@ -277,6 +277,19 @@ static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_color_profile_obj, povdisplay_se
 
 // ------------------------------
 
+static mp_obj_t povdisplay_set_color_test_pattern(size_t n_args, const mp_obj_t *args) {
+    int pattern = mp_obj_get_int(args[0]);
+    int level = n_args > 1 ? mp_obj_get_int(args[1]) : 255;
+    if (pattern < 0 || level < 0 || level > 255
+        || !color_pipeline_set_test_pattern(pattern, level)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("invalid POV colour test pattern"));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_set_color_test_pattern_obj, 1, 2, povdisplay_set_color_test_pattern);
+
+// ------------------------------
+
 static mp_obj_t povdisplay_set_column_offset(mp_obj_t offset) {
     column_offset = mp_obj_get_int(offset) % COLUMNS;
     return mp_const_none;
@@ -318,6 +331,7 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_palettes), (mp_obj_t)&povdisplay_set_palettes_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_gamma_mode), (mp_obj_t)&povdisplay_set_gamma_mode_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_profile), (mp_obj_t)&povdisplay_set_color_profile_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_test_pattern), (mp_obj_t)&povdisplay_set_color_test_pattern_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_column_offset), (mp_obj_t)&povdisplay_set_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_column_offset), (mp_obj_t)&povdisplay_get_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },

@@ -25,6 +25,10 @@ def set_color_profile(profile):
     return _display().set_color_profile(profile)
 
 
+def set_color_test_pattern(pattern, level=255):
+    return _display().set_color_test_pattern(pattern, level)
+
+
 def set_column_offset(offset):
     return _display().set_column_offset(offset)
 

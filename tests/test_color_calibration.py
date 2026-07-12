@@ -74,6 +74,24 @@ class ColorCalibrationTests(unittest.TestCase):
         self.assertEqual(saved, [color_calibration.active_profile()])
         self.assertTrue(sent[0][0].startswith(b"povcal_state"))
 
+    def test_test_pattern_is_ram_only(self):
+        sent = []
+
+        class Display:
+            def __init__(self):
+                self.pattern = None
+
+            def set_color_test_pattern(self, pattern, level):
+                self.pattern = (pattern, level)
+
+        display = Display()
+        profile_before = color_calibration.active_profile()
+        self.assertTrue(color_calibration.handle_command(
+            ["test", "radial", "200"], lambda *args: sent.append(args), display))
+        self.assertEqual(display.pattern, (6, 200))
+        self.assertEqual(color_calibration.active_profile(), profile_before)
+        self.assertTrue(sent[0][0].startswith(b"povcal_state"))
+
 
 if __name__ == "__main__":
     unittest.main()
