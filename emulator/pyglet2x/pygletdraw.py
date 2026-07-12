@@ -251,6 +251,49 @@ ota_label = pyglet.text.Label("UPGRADE", font_name="Arial", font_size=11,
                                anchor_x="center", anchor_y="center",
                                color=(255, 255, 255, 255), batch=controls_batch)
 
+# Board colour calibration controls. Their values always originate from an
+# acknowledged ``povcal_state`` profile; dragging sends an edit but the board
+# response remains authoritative and snaps the controls to the active value.
+_cal_x, _cal_y, _cal_w, _cal_h = 20, 70, 200, 5
+_cal_handle_radius = 7
+_cal_generation_seen = None
+_cal_dragging = None
+_cal_master_max = 4000
+_cal_radial_max = 4000
+_cal_last_sent = {"master": None, "radial_exponent": None}
+
+cal_master_track = shapes.Rectangle(_cal_x, _cal_y, _cal_w, _cal_h,
+                                    color=(70, 70, 70), batch=controls_batch)
+cal_radial_track = shapes.Rectangle(_cal_x, _cal_y + 32, _cal_w, _cal_h,
+                                    color=(70, 70, 70), batch=controls_batch)
+cal_master_handle = shapes.Circle(_cal_x, _cal_y + _cal_h / 2, _cal_handle_radius,
+                                  color=(100, 190, 255), batch=controls_batch)
+cal_radial_handle = shapes.Circle(_cal_x, _cal_y + 32 + _cal_h / 2, _cal_handle_radius,
+                                  color=(160, 220, 110), batch=controls_batch)
+cal_master_label = pyglet.text.Label("Master: waiting", font_name="Arial", font_size=10,
+                                     x=_cal_x, y=_cal_y + 10,
+                                     color=(210, 210, 210, 255), batch=controls_batch)
+cal_radial_label = pyglet.text.Label("Radial: waiting", font_name="Arial", font_size=10,
+                                     x=_cal_x, y=_cal_y + 42,
+                                     color=(210, 210, 210, 255), batch=controls_batch)
+cal_status_label = pyglet.text.Label("POV CAL: waiting for board profile", font_name="Arial", font_size=10,
+                                     x=_cal_x, y=_cal_y + 60,
+                                     color=(150, 180, 210, 255), batch=controls_batch)
+
+_cal_commit_x, _cal_revert_x, _cal_factory_x = 240, 310, 390
+_cal_button_y, _cal_button_w, _cal_button_h = 70, 62, 22
+cal_commit_button = shapes.Rectangle(_cal_commit_x, _cal_button_y, _cal_button_w, _cal_button_h,
+                                     color=(42, 100, 66), batch=controls_batch)
+cal_revert_button = shapes.Rectangle(_cal_revert_x, _cal_button_y, _cal_button_w, _cal_button_h,
+                                     color=(80, 70, 38), batch=controls_batch)
+cal_factory_button = shapes.Rectangle(_cal_factory_x, _cal_button_y, _cal_button_w, _cal_button_h,
+                                      color=(80, 46, 46), batch=controls_batch)
+for text, x in (("SAVE", _cal_commit_x), ("REVERT", _cal_revert_x), ("FACTORY", _cal_factory_x)):
+    pyglet.text.Label(text, font_name="Arial", font_size=9,
+                      x=x + _cal_button_w / 2, y=_cal_button_y + _cal_button_h / 2,
+                      anchor_x="center", anchor_y="center",
+                      color=(255, 255, 255, 255), batch=controls_batch)
+
 
 def _set_rpm(rpm):
     global _current_rpm, _last_sent_rpm
@@ -261,6 +304,40 @@ def _set_rpm(rpm):
     if rpm != _last_sent_rpm:
         comms.send_workbench(f"rpm {rpm}".encode())
         _last_sent_rpm = rpm
+
+
+def _cal_value_to_x(value, maximum):
+    return _cal_x + max(0.0, min(1.0, value / maximum)) * _cal_w
+
+
+def _cal_x_to_value(x, maximum):
+    return round(max(0.0, min(1.0, (x - _cal_x) / _cal_w)) * maximum)
+
+
+def _sync_calibration_controls():
+    global _cal_generation_seen
+    state = comms.povcal_state
+    cal_status_label.text = state.status_text()
+    if not state.ready or state.generation == _cal_generation_seen:
+        return
+    profile = state.profile
+    _cal_generation_seen = profile.generation
+    cal_master_handle.x = _cal_value_to_x(profile.master_milli, _cal_master_max)
+    cal_radial_handle.x = _cal_value_to_x(profile.radial_exponent_milli, _cal_radial_max)
+    cal_master_label.text = "Master: %d" % profile.master_milli
+    cal_radial_label.text = "Radial: %d" % profile.radial_exponent_milli
+
+
+def _set_calibration_value(name, value):
+    if name == "master":
+        cal_master_handle.x = _cal_value_to_x(value, _cal_master_max)
+        cal_master_label.text = "Master: %d (applying)" % value
+    else:
+        cal_radial_handle.x = _cal_value_to_x(value, _cal_radial_max)
+        cal_radial_label.text = "Radial: %d (applying)" % value
+    if _cal_last_sent[name] != value:
+        _cal_last_sent[name] = value
+        comms.send_povcal("set %s %d" % (name, value))
 
 
 def _point_in_rect(x, y, rx, ry, rw, rh):
@@ -277,7 +354,7 @@ def _unflash_ota_button(dt=None):
 
 @window.event
 def on_mouse_press(x, y, button, modifiers):
-    global _dragging_slider
+    global _dragging_slider, _cal_dragging
     if _point_in_rect(x, y, _slider_x - _handle_radius, _slider_y - _handle_radius,
                        _slider_w + 2 * _handle_radius, _slider_h + 2 * _handle_radius):
         _dragging_slider = True
@@ -290,21 +367,41 @@ def on_mouse_press(x, y, button, modifiers):
         comms.trigger_ota()
         ota_button.color = (80, 140, 220)
         pyglet.clock.schedule_once(_unflash_ota_button, 0.2)
+    elif _point_in_rect(x, y, _cal_x - _cal_handle_radius, _cal_y - _cal_handle_radius,
+                       _cal_w + 2 * _cal_handle_radius, _cal_h + 2 * _cal_handle_radius):
+        _cal_dragging = "master"
+        _set_calibration_value("master", _cal_x_to_value(x, _cal_master_max))
+    elif _point_in_rect(x, y, _cal_x - _cal_handle_radius, _cal_y + 32 - _cal_handle_radius,
+                       _cal_w + 2 * _cal_handle_radius, _cal_h + 2 * _cal_handle_radius):
+        _cal_dragging = "radial_exponent"
+        _set_calibration_value("radial_exponent", _cal_x_to_value(x, _cal_radial_max))
+    elif _point_in_rect(x, y, _cal_commit_x, _cal_button_y, _cal_button_w, _cal_button_h):
+        comms.send_povcal("commit")
+    elif _point_in_rect(x, y, _cal_revert_x, _cal_button_y, _cal_button_w, _cal_button_h):
+        comms.send_povcal("revert")
+    elif _point_in_rect(x, y, _cal_factory_x, _cal_button_y, _cal_button_w, _cal_button_h):
+        comms.send_povcal("factory")
 
 
 @window.event
 def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
     if _dragging_slider:
         _set_rpm(_x_to_rpm(x))
+    elif _cal_dragging == "master":
+        _set_calibration_value("master", _cal_x_to_value(x, _cal_master_max))
+    elif _cal_dragging == "radial_exponent":
+        _set_calibration_value("radial_exponent", _cal_x_to_value(x, _cal_radial_max))
 
 
 @window.event
 def on_mouse_release(x, y, button, modifiers):
-    global _dragging_slider
+    global _dragging_slider, _cal_dragging
     _dragging_slider = False
+    _cal_dragging = None
 
 
 def draw_workbench_controls():
+    _sync_calibration_controls()
     controls_batch.draw()
 
 

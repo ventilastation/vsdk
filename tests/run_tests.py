@@ -39,6 +39,7 @@ CPYTHON_TESTS = [
     "tests/test_apa102_preview.py",
     "tests/test_color_profile.py",
     "tests/test_color_calibration.py",
+    "tests/test_povcal_state.py",
     "tests/test_tutorial_vs2.py",
     "tests/test_emulator_vs2_render.py",
     "tests/test_mapdemo_vs2.py",

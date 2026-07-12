@@ -16,6 +16,7 @@ import struct
 import socket
 import threading
 from base_control import BaseControlState
+from povcal_state import PovCalibrationState
 from povrender import all_strips, set_palettes, spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
 from povrender import (
@@ -165,6 +166,7 @@ workbench_conn = None
 
 last_time_seen = 0
 base_control = BaseControlState()
+povcal_state = PovCalibrationState()
 
 def waitconnect(conn, label):
     while looping:
@@ -207,9 +209,18 @@ def dispatch_command(conn, command, args):
         payload = conn.read(length)
         try:
             profile = set_apa102_profile_payload(payload, schema_version, generation)
+            povcal_state.apply(profile)
             print("comms: POV colour profile generation %d loaded" % profile.generation)
         except ValueError as error:
+            povcal_state.reject(error)
             print("comms: rejected POV colour profile:", error)
+
+    elif command == b"povcal_error":
+        generation = args[0].decode() if args else "?"
+        code = b" ".join(args[1:]).decode() if len(args) > 1 else "unknown"
+        message = "board error #%s: %s" % (generation, code)
+        povcal_state.reject(message)
+        print("comms: POV colour calibration", message)
 
     elif command == b"sprites":
         clear_voom_frame()
@@ -417,6 +428,11 @@ def send_joystick(joy1: int, joy2: int = 0, extra: int = 0):
 def send_command(cmd: str):
     """Send a text command frame in-band on the existing connection."""
     send((cmd + '\n').encode('ascii'))
+
+
+def send_povcal(command: str):
+    """Send one calibration command to the connected board/base transport."""
+    send_command("povcal " + command)
 
 def trigger_ota():
     """Send ota_start in-band on the existing connection.

@@ -58,8 +58,10 @@ without a reboot or partial LUT.
 
 The current profile supports source transfer, master brightness, RGB white
 balance, radial exponent, per-LED gain, and APA102 global-brightness bounds.
-The response curves and preview matrix are already part of the stable payload;
-host-side curve-editing UI is the next calibration-tool addition.
+The desktop workbench panel initializes its master/radial sliders from the
+acknowledged profile and provides Save/Revert/Factory controls. The response
+curves and preview matrix are already part of the stable payload; curve and
+matrix editing are the next calibration-tool addition.
 
 ## APA102 encoding
 
@@ -157,11 +159,9 @@ required before considering a profile production-calibrated.
 
 ## Remaining calibration work
 
-1. Add an interactive desktop calibration panel whose sliders are initialized
-   from `povcal_state` and whose edits use the commands above.
-2. Add controlled test patterns (gray ramps, primaries, radial bands, and
+1. Add controlled test patterns (gray ramps, primaries, radial bands, and
    current-limit white) for photodiode/colorimeter measurement.
-3. Expose response-knot and preview-matrix editing/import in that tool.
-4. Add the same profile-aware decoder to the web emulator.
-5. Build and exercise MicroPython and Retro-Go images on a real rotor, then
+2. Expose response-knot and preview-matrix editing/import in the desktop tool.
+3. Add the same profile-aware decoder to the web emulator.
+4. Build and exercise MicroPython and Retro-Go images on a real rotor, then
    tune the factory/default profile from measured data.
