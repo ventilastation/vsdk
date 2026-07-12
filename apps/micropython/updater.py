@@ -79,6 +79,7 @@ def _http_get_json(url):
     host, port, path = _parse_url(url)
     s = socket.socket()
     try:
+        s.settimeout(15)
         s.connect(socket.getaddrinfo(host, port)[0][-1])
         s.send(("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n" % (path, host)).encode())
         # Skip HTTP headers.
@@ -116,6 +117,7 @@ def _http_stream(url, callback, total_size):
     host, port, path = _parse_url(url)
     s = socket.socket()
     try:
+        s.settimeout(15)
         s.connect(socket.getaddrinfo(host, port)[0][-1])
         s.send(("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n" % (path, host)).encode())
         sf = s.makefile("rb")
@@ -257,17 +259,30 @@ def _update_partitions(base_url, partitions):
         url = base_url + entry["url"]
         nvs_key = _NVS_KEYS.get(name)
 
-        # Can't erase the partition we're currently executing from.
-        if name == running:
-            print("updater: skipping", name, "(currently running — use USB flash)")
-            continue
-
         # Skip if we already have this exact binary.
         if nvs_key:
             stored_sha = _nvs_get(nvs_key)
             if stored_sha == expected_sha:
                 print("updater: partition %s up to date" % name)
                 continue
+
+        # Can't erase the partition we're currently executing from -- hand
+        # off to factory instead of skipping forever. factory is the
+        # permanent recovery environment (see apps/micropython/main.py); its
+        # own OTA pass re-fetches the manifest and reaches this same branch
+        # with running != name, where it's safe to erase+write+verify the
+        # real update below. A missing/absent stored hash (first-ever OTA
+        # after a factory-only flash) is treated the same as "differs".
+        if name == running:
+            print("updater: %s needs updating but is currently running — handing off to factory" % name)
+            factory_parts = esp32.Partition.find(esp32.Partition.TYPE_APP, label="factory")
+            if not factory_parts:
+                print("updater: factory partition not found, cannot hand off")
+                continue
+            _send("ota_progress micropython handoff 100\n")
+            import machine
+            factory_parts[0].set_boot()
+            machine.reset()
 
         _progress("partition", name, 0)
         print("updater: flashing partition", name, "(%d bytes)" % size)

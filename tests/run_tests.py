@@ -46,6 +46,7 @@ CPYTHON_TESTS = [
     "tests/test_mapdemo_vs2.py",
     "tests/test_vixeous_vs2.py",
     "tests/test_recovery.py",
+    "tests/test_updater.py",
 ]
 
 MICROPYTHON_TESTS = [
