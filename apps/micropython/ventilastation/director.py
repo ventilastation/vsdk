@@ -122,7 +122,11 @@ class Director:
         if not parts:
             return
         cmd = parts[0]
-        if cmd == "ota_start":
+        if cmd == "povcal":
+            from ventilastation import color_calibration
+            if not color_calibration.handle_command(parts[1:], self.platform.comms.send):
+                print("director: unsupported povcal command:", cmd_line)
+        elif cmd == "ota_start":
             base_url = parts[1] if len(parts) > 1 else ""
             if not base_url:
                 print("director: ota_start missing URL")

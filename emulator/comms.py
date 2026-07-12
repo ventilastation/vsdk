@@ -18,7 +18,12 @@ import threading
 from base_control import BaseControlState
 from povrender import all_strips, set_palettes, spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
-from povrender import set_voom_frame_rgb, set_voom_frame_apa102, clear_voom_frame
+from povrender import (
+    set_voom_frame_rgb,
+    set_voom_frame_apa102,
+    set_apa102_profile_payload,
+    clear_voom_frame,
+)
 from audio import playsound, playmusic, playnotes
 from emu_audio import emu_audio
 import upgrade_server
@@ -194,6 +199,18 @@ def dispatch_command(conn, command, args):
         data = conn.read(256 * 54 * 4)
         set_voom_frame_apa102(data)
 
+    elif command == b"povcal_state":
+        if len(args) != 3:
+            print("comms: malformed povcal_state", args)
+            return
+        schema_version, generation, length = (int(arg) for arg in args)
+        payload = conn.read(length)
+        try:
+            profile = set_apa102_profile_payload(payload, schema_version, generation)
+            print("comms: POV colour profile generation %d loaded" % profile.generation)
+        except ValueError as error:
+            print("comms: rejected POV colour profile:", error)
+
     elif command == b"sprites":
         clear_voom_frame()
         clear_vs2_scene()
@@ -305,8 +322,23 @@ def dispatch_command(conn, command, args):
         print(command, *args)
 
 
-def _receive_loop(conn, label):
+def _request_povcal_profile(conn, label):
+    if conn is not workbench_conn:
+        return
+    try:
+        conn.send(b"povcal get\n")
+        print("comms: requested POV colour profile")
+    except (socket.error, OSError) as err:
+        print("comms: POV colour profile request failed:", err)
+
+
+def _connect(conn, label):
     waitconnect(conn, label)
+    _request_povcal_profile(conn, label)
+
+
+def _receive_loop(conn, label):
+    _connect(conn, label)
     while looping:
         try:
             l = conn.readline()
@@ -321,12 +353,12 @@ def _receive_loop(conn, label):
 
         except socket.error as err:
             print(f"comms: {label}: {err}")
-            waitconnect(conn, label)
+            _connect(conn, label)
 
         except Exception:
             print(traceback.format_exc())
             conn.close()
-            waitconnect(conn, label)
+            _connect(conn, label)
 
 
 def start():

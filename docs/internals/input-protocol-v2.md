@@ -123,12 +123,14 @@ mid-command from blocking the state machine indefinitely.
 | `reset` | — | Reboot the main board |
 | `ota_start` | `<url>` | Start OTA from `http://host:port` |
 | `wifi_config` | `<ssid> <password-hex>` | Write Wi-Fi credentials to NVS. Password is hex-encoded to avoid spaces and non-ASCII. |
+| `povcal get` | — | Return the active versioned POV colour profile as `povcal_state <schema> <generation> <nbytes>` plus its binary payload. |
 
 Wire examples:
 
 ```
 ota_start http://192.168.100.187:5653\n
 wifi_config HomeNetwork 6d7950617373776f7264\n
+povcal get\n
 reset\n
 ```
 

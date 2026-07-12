@@ -41,6 +41,11 @@ class Platform:
 
     def initialize(self, settings_module):
         settings_module.load()
+        # Load the board colour profile before the first rendered scene. The
+        # native LUT consumer is added separately; loading it here already
+        # lets the desktop emulator query the exact active profile over UART.
+        from ventilastation import color_calibration
+        color_calibration.load()
         self.display.init(self.pixels, *self.hw_config)
         self.display.set_gamma_mode(1)
         self.display.set_column_offset(settings_module.get("pov_column_offset", 0))

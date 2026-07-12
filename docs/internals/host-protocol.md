@@ -77,6 +77,7 @@ visible; `0x02` and `0x04` are `flip_x` and `flip_y`.
 |---|---|---|
 | `traceback <nbytes>` | `<nbytes>` | UTF-8 Python traceback from the board; hosts display it prominently |
 | `debug` | 512 bytes | 32 × (int64 timestamp, int64 turn duration) rotation log; hosts derive RPM/FPS |
+| `povcal_state <schema> <generation> <nbytes>` | `<nbytes>` | canonical active POV colour-profile payload. The desktop emulator validates this binary record before decoding `frame_apa102` capture. |
 | `ota_progress <stage> <detail> <pct>` | — | OTA status updates ([ota.md](ota.md)) |
 | `ota_done <status>` / `ota_error <msg...>` | — | OTA completion / failure |
 | `arduino <cmd>` | — | legacy Super Ventilagon base relay control (start/stop/reset/attract) |

@@ -11,6 +11,7 @@ from struct import pack, unpack, unpack_from
 
 from deepspace import deepspace, PIXELS
 from apa102 import decode_preview_rgb
+from color_profile import ColorProfile, DEFAULT_PROFILE
 
 ROWS = 256
 COLUMNS = 256
@@ -31,6 +32,7 @@ upalette = []
 # Ventilagon port). 256 columns × led_count × 3 bytes (R, G, B per LED).
 _voom_frame_rgb = None
 _voom_frame_apa102 = None
+_apa102_profile = DEFAULT_PROFILE
 
 def set_voom_frame_rgb(data):
     global _voom_frame_rgb, _voom_frame_apa102
@@ -51,6 +53,16 @@ def set_voom_frame_apa102(data):
     global _voom_frame_rgb, _voom_frame_apa102
     _voom_frame_apa102 = bytes(data)
     _voom_frame_rgb = None
+
+def set_apa102_profile_payload(payload, schema_version=None, generation=None):
+    """Install the board's acknowledged calibration profile for raw preview."""
+    profile = ColorProfile.from_bytes(payload, schema_version, generation)
+    global _apa102_profile
+    _apa102_profile = profile
+    return profile
+
+def get_apa102_profile():
+    return _apa102_profile
 
 def clear_voom_frame():
     global _voom_frame_rgb, _voom_frame_apa102
@@ -292,7 +304,7 @@ def render(column):
         for i in range(led_count):
             base = offset + i * 4
             gb, b, g, r = _voom_frame_apa102[base:base + 4]
-            preview_r, preview_g, preview_b = decode_preview_rgb(gb, b, g, r)
+            preview_r, preview_g, preview_b = decode_preview_rgb(gb, b, g, r, _apa102_profile)
             pixels.append(0xFF000000 | (preview_b << 16) | (preview_g << 8) | preview_r)
         return pixels
 
