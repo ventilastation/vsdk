@@ -47,9 +47,10 @@ def generate_partition_table(idf_path, partition_csv, output_path):
 
 def flash_images(args, bootloader_path, partition_table_path, micropython_path):
     # Always flash micropython to both the factory slot (0x10000) and the
-    # updatable micropython slot (ota_2, 0x4F0000).  On first boot from factory,
-    # main.py detects it's running on factory and automatically switches to ota_2.
-    MICROPYTHON_OTA2_OFFSET = "0x4F0000"
+    # updatable micropython slot (ota_2, 0x490000).  On first boot from
+    # factory, main.py detects it's running on factory and runs recovery,
+    # which hands off to ota_2 once it's ready.
+    MICROPYTHON_OTA2_OFFSET = "0x490000"
     command = [
         "python3",
         "-m",
@@ -99,7 +100,7 @@ def main():
     parser.add_argument(
         "--partition-csv",
         type=pathlib.Path,
-        default=vsdk_root / "hardware/rotor/partitions-voom.csv",
+        default=vsdk_root / "hardware/rotor/partitions-ventilastation.csv",
     )
     parser.add_argument(
         "--board",
@@ -132,7 +133,7 @@ def main():
     )
     bootloader_path = micropython_build_dir / "bootloader/bootloader.bin"
     micropython_path = micropython_build_dir / "micropython.bin"
-    partition_table_path = args.output_dir / "partition-table-voom.bin"
+    partition_table_path = args.output_dir / "partition-table-ventilastation.bin"
 
     ensure_file(bootloader_path, "MicroPython bootloader")
     ensure_file(micropython_path, "MicroPython application")

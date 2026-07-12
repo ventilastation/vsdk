@@ -159,7 +159,7 @@ def main():
     parser.add_argument(
         "--partition-csv",
         type=pathlib.Path,
-        default=vsdk_root / "hardware/rotor/partitions-voom.csv",
+        default=vsdk_root / "hardware/rotor/partitions-ventilastation.csv",
     )
     parser.add_argument(
         "--output-dir",
@@ -186,7 +186,7 @@ def main():
     micropython_bootloader = micropython_build_dir / "bootloader/bootloader.bin"
     micropython_bin = micropython_build_dir / "micropython.bin"
     prboom_bin = args.prboom_bin or (args.retro_go_root / "prboom-go/build/prboom-go.bin")
-    partition_bin = args.output_dir / "partition-table-voom.bin"
+    partition_bin = args.output_dir / "partition-table-ventilastation.bin"
     image_bin = args.output_dir / "vsdk-voom-esp32s3.bin"
     legacy_vfs_bin = args.output_dir / "vfs.bin"
 
