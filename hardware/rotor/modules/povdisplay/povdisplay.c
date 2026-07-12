@@ -391,7 +391,7 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_set_color_test_pattern_obj
 
 static mp_obj_t povdisplay_set_color_pipeline_enabled(mp_obj_t enabled) {
     if (!color_pipeline_set_enabled(mp_obj_is_true(enabled))) {
-        mp_raise_RuntimeError(MP_ERROR_TEXT("POV colour profile unavailable"));
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("POV colour profile unavailable"));
     }
     return mp_const_none;
 }
