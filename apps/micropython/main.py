@@ -25,12 +25,15 @@ def _running_partition_label():
 if _running_partition_label() == "factory":
     # factory is the permanent recovery environment, not a write-once image
     # that migrates to ota_2 on first boot and is never touched again.
-    # Reached here for any of: a fresh board (ota_2 never written), a
-    # bootloader rollback after a bad ota_2 update that never confirmed
-    # itself (see the mark_app_valid_cancel_rollback() call below), or a
-    # deliberate hand-off from a running ota_2 image that needs to update
-    # its own partition (updater.py can never overwrite the partition it's
-    # currently executing from -- see updater._update_partitions()).
+    # Reached here for any of: a fresh board that boot.py just bootstrapped
+    # a stub main.py for (see boot.py's docstring -- that stub also hits
+    # this same branch, since a fresh board's RUNNING partition is
+    # "factory"), a bootloader rollback after a bad ota_2 update that never
+    # confirmed itself (see the mark_app_valid_cancel_rollback() call
+    # below), or a deliberate hand-off from a running ota_2 image that
+    # needs to update its own partition (updater.py can never overwrite the
+    # partition it's currently executing from -- see
+    # updater._update_partitions()).
     # vsdk_recovery is frozen at the top level so this works even with vfs
     # completely empty; see vsdk_recovery.py's docstring for why it and
     # everything it needs avoid the ventilastation package and vs2.

@@ -1,12 +1,13 @@
 """Recovery: the permanent fallback environment running from `factory`.
 
-Reached two ways, both ending up here:
-  - the frozen fallback in the vendored MicroPython `main.c`, when vfs has no
-    `main.py` at all (a fresh board, or a corrupted/deleted file) -- see
-    `vsdk_recovery_entry.py`;
-  - the real vfs-resident `main.py`, when it finds itself running from the
-    `factory` partition (bootloader rollback after a bad `micropython`/ota_2
-    update, or a deliberate hand-off -- see `updater._update_partitions()`).
+Called from `main.py`'s own top-of-file check, whenever the board is
+running from the `factory` partition -- a fresh board (where `boot.py`,
+frozen and picked up automatically by the vendored, unmodified MicroPython
+`main.c`, bootstrapped a minimal stub `main.py` since vfs had none at all --
+see boot.py's own docstring for why that hand-off happens through a real
+main.py rather than boot.py calling this directly), a bootloader rollback
+after a bad `micropython`/ota_2 update that never confirmed itself, or a
+deliberate hand-off (see `updater._update_partitions()`).
 
 Recovery's job: show that the board is alive, reconnect to WiFi, and keep
 retrying the normal three-tier OTA update (`updater.py`) until it succeeds --

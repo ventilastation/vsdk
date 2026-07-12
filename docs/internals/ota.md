@@ -67,16 +67,29 @@ loop, never USB. `make flash-vsdk` still writes both `factory` and
 `micropython` over USB, but it's a bench-dev convenience now, not the
 bring-up procedure.
 
-On any boot where `main.py` finds itself running from `factory`, or where no
-`main.py` exists on `vfs` at all (a fresh board — the vendored `main.c` falls
-back to a frozen entry point in that case), it runs
+The vendored MicroPython source tree is unmodified for this: `apps/micropython/boot.py`,
+a frozen module, is picked up automatically by the stock
+`pyexec_file_if_exists("boot.py")` call in `main.c`. Its only job is to
+guarantee some `main.py` exists — if `vfs` has none at all (a fresh board),
+it writes a minimal bootstrap stub (`import vsdk_recovery; vsdk_recovery.run()`)
+and returns immediately. It deliberately does **not** call recovery
+directly: `main.c`'s `mp_usbd_init()` (which activates the USB CDC device
+the REPL/Ctrl-C need) only runs *after* `boot.py` returns, so a long-running
+call there would starve it forever — confirmed on hardware as a real,
+if brief, regression during development. The actual factory-vs-normal
+decision lives in `main.py` itself (the stub, or the real one), exactly
+where it ran before this redesign: whenever the board is running from
+`factory` — a fresh board via the stub, a bootloader rollback, or a
+deliberate hand-off — `main.py`'s own top-of-file check runs
 `apps/micropython/vsdk_recovery.py`: shows the boot logo, connects WiFi from
 `devel_wifi`, and loops calling the same three-tier updater used for
 in-place OTA (below) against `http://ventilastation-base.local:5653` — the
 base is discovered via mDNS, not a hardcoded IP, so no NVS URL provisioning
-is needed for that step. `vsdk_recovery.py`/`updater.py`/`vsdk_logo_strip.py`
-are frozen at the top level (not nested under the `ventilastation` package)
-specifically so they work even with `vfs` completely empty.
+is needed for that step. `boot.py`/`vsdk_recovery.py`/`updater.py`/
+`vsdk_logo_strip.py` are frozen at the top level (not nested under the
+`ventilastation` package) specifically so they work even with `vfs`
+completely empty. Once recovery succeeds, tier-1 OTA file sync overwrites
+the bootstrap stub with the real, field-updatable `main.py`.
 
 Rollback: `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` is set for the
 MicroPython build. A freshly OTA'd `micropython` image boots in the
@@ -268,7 +281,7 @@ the bootloader rolls back to `factory`.
 |---|---|
 | `apps/micropython/updater.py` | Three-tier OTA client (also the only WiFi user on the board); tier-3 hand-off to `factory` |
 | `apps/micropython/vsdk_recovery.py` | Permanent recovery environment: logo, WiFi, retry loop calling `updater.py` against the mDNS-discovered base |
-| `apps/micropython/vsdk_recovery_entry.py` | Tiny frozen entry point `main.c` falls back to when `vfs` has no `main.py` |
+| `apps/micropython/boot.py` | Frozen; picked up by stock (unmodified) `main.c`. Guarantees `main.py` exists (writes a bootstrap stub if not); the factory-vs-normal decision itself lives in `main.py` |
 | `apps/micropython/vsdk_logo_strip.py` | Hand-authored logo `ImageStrip`, frozen alongside recovery |
 | `apps/micropython/main.py` | WDT + deferred rollback confirm, factory→recovery branch, `/ota_request` boot mode |
 | `apps/micropython/ventilastation/director.py` | `ota_start` dispatch → `/ota_request` + reset |

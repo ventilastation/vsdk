@@ -4,17 +4,18 @@ module("vsdk_board.py")
 # Recovery must work with no vfs content at all (a fresh board only has
 # factory + NVS), so it and everything it needs are frozen into the
 # firmware rather than living on the LittleFS filesystem like the rest of
-# ventilastation/, vs2.py, and main.py. All three are flat top-level
-# modules, not nested under ventilastation/: a frozen submodule nested
-# inside an also-vfs-resident package is NOT reliably reachable once vfs
-# has its own copy of that package (see vsdk_recovery.py's docstring for
-# why, confirmed on hardware). vsdk_recovery_entry.py is kept separate from
-# vsdk_recovery.py specifically so its name never collides with "main.py"
-# -- freezing that name would permanently shadow the real, vfs-resident,
-# OTA-updatable main.py. updater.py has no ventilastation.* dependencies of
-# its own and is genuinely bootstrap-critical, so it moved here too instead
-# of staying vfs-only.
-freeze(".", "vsdk_recovery_entry.py")
+# ventilastation/, vs2.py, and main.py. All are flat top-level modules, not
+# nested under ventilastation/: a frozen submodule nested inside an
+# also-vfs-resident package is NOT reliably reachable once vfs has its own
+# copy of that package (see vsdk_recovery.py's docstring for why, confirmed
+# on hardware). boot.py only bootstraps a stub main.py when vfs has none at
+# all -- it deliberately does NOT call vsdk_recovery.run() itself, since
+# main.c's mp_usbd_init() (which activates the USB CDC device the REPL
+# needs for Ctrl-C to work at all) only runs after boot.py returns; see
+# boot.py's own docstring. updater.py has no ventilastation.* dependencies
+# of its own and is genuinely bootstrap-critical, so it moved here too
+# instead of staying vfs-only.
+freeze(".", "boot.py")
 freeze(".", "vsdk_recovery.py")
 freeze(".", "vsdk_logo_strip.py")
 freeze(".", "updater.py")
