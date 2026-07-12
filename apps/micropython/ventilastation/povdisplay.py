@@ -21,6 +21,10 @@ def set_gamma_mode(mode):
     return _display().set_gamma_mode(mode)
 
 
+def set_color_profile(profile):
+    return _display().set_color_profile(profile)
+
+
 def set_column_offset(offset):
     return _display().set_column_offset(offset)
 

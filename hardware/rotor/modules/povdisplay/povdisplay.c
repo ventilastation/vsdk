@@ -15,6 +15,7 @@
 
 #include "minispi.h"
 #include "gpu.h"
+#include "color_pipeline.h"
 #include "ventilagon/ventilagon.h"
 
 // Wiring is provided by the NVS-backed MicroPython board configuration at init.
@@ -264,6 +265,18 @@ static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_gamma_mode_obj, povdisplay_set_g
 
 // ------------------------------
 
+static mp_obj_t povdisplay_set_color_profile(mp_obj_t profile) {
+    mp_buffer_info_t buffer;
+    mp_get_buffer_raise(profile, &buffer, MP_BUFFER_READ);
+    if (!color_pipeline_apply(buffer.buf, buffer.len)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("invalid POV colour profile"));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_color_profile_obj, povdisplay_set_color_profile);
+
+// ------------------------------
+
 static mp_obj_t povdisplay_set_column_offset(mp_obj_t offset) {
     column_offset = mp_obj_get_int(offset) % COLUMNS;
     return mp_const_none;
@@ -304,6 +317,7 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_palettes), (mp_obj_t)&povdisplay_set_palettes_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_gamma_mode), (mp_obj_t)&povdisplay_set_gamma_mode_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_profile), (mp_obj_t)&povdisplay_set_color_profile_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_column_offset), (mp_obj_t)&povdisplay_set_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_column_offset), (mp_obj_t)&povdisplay_get_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },

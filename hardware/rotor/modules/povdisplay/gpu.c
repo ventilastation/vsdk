@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <esp_system.h>
 #include "gpu.h"
+#include "color_pipeline.h"
 
 // static const char* TAG = "GPU";
 // #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
@@ -154,6 +155,18 @@ static void set_colorbuf_pixel(uint32_t* colorbuf, int n, uint32_t color) {
 }
 
 static void finish_colorbuf(uint32_t* colorbuf, uint32_t* led_buffer) {
+  if (color_pipeline_is_active()) {
+    for (int n=0; n<PIXELS; n++) {
+      uint32_t color = colorbuf[n];
+      led_buffer[n] = color_pipeline_encode_rgb(
+        n,
+        (color & 0xff000000) >> 24,
+        (color & 0x00ff0000) >> 16,
+        (color & 0x0000ff00) >> 8
+      );
+    }
+    return;
+  }
   if (gamma_mode == 0) {
     for (int n=0; n<PIXELS; n++) {
       uint32_t color = colorbuf[n];

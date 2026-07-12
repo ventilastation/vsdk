@@ -47,6 +47,7 @@ class Platform:
         from ventilastation import color_calibration
         color_calibration.load()
         self.display.init(self.pixels, *self.hw_config)
+        color_calibration.apply_to_display(self.display)
         self.display.set_gamma_mode(1)
         self.display.set_column_offset(settings_module.get("pov_column_offset", 0))
 

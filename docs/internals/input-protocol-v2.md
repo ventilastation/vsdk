@@ -124,6 +124,8 @@ mid-command from blocking the state machine indefinitely.
 | `ota_start` | `<url>` | Start OTA from `http://host:port` |
 | `wifi_config` | `<ssid> <password-hex>` | Write Wi-Fi credentials to NVS. Password is hex-encoded to avoid spaces and non-ASCII. |
 | `povcal get` | — | Return the active versioned POV colour profile as `povcal_state <schema> <generation> <nbytes>` plus its binary payload. |
+| `povcal set` | calibration setting and values | Apply one validated setting immediately, rebuild the active LED LUT, and return `povcal_state`. Supported keys: `source_eotf`, `master`, `white`, `radial_exponent`, `led_gain`, `gb_floor`, `gb_ceiling`. |
+| `povcal commit` / `revert` / `factory` | — | Persist the active profile, restore NVS, or restore the factory profile. Each successful command returns `povcal_state`. |
 
 Wire examples:
 
@@ -131,6 +133,8 @@ Wire examples:
 ota_start http://192.168.100.187:5653\n
 wifi_config HomeNetwork 6d7950617373776f7264\n
 povcal get\n
+povcal set master 700\n
+povcal commit\n
 reset\n
 ```
 

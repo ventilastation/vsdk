@@ -35,7 +35,44 @@ class ColorCalibrationTests(unittest.TestCase):
         self.assertEqual(ColorProfile.from_bytes(payload).generation, 0)
 
     def test_unknown_command_is_not_acknowledged(self):
-        self.assertFalse(color_calibration.handle_command(["set", "master", "500"], lambda *args: None))
+        sent = []
+        self.assertTrue(color_calibration.handle_command(
+            ["set", "not_a_setting", "500"], lambda *args: sent.append(args)))
+        self.assertTrue(sent[0][0].startswith(b"povcal_error"))
+
+    def test_set_applies_profile_then_returns_the_new_generation(self):
+        sent = []
+
+        class Display:
+            def __init__(self):
+                self.applied = []
+
+            def set_color_profile(self, payload):
+                self.applied.append(payload)
+
+        display = Display()
+        self.assertTrue(color_calibration.handle_command(
+            ["set", "master", "700"],
+            lambda *args: sent.append(args),
+            display,
+        ))
+        self.assertEqual(len(display.applied), 1)
+        profile = ColorProfile.from_bytes(sent[0][1])
+        self.assertEqual(profile.master_milli, 700)
+        self.assertEqual(profile.generation, 1)
+
+    def test_commit_writes_the_active_profile(self):
+        saved = []
+        original_write = color_calibration._write_nvs
+        color_calibration._write_nvs = lambda payload: saved.append(payload) or True
+        try:
+            sent = []
+            self.assertTrue(color_calibration.handle_command(
+                ["commit"], lambda *args: sent.append(args)))
+        finally:
+            color_calibration._write_nvs = original_write
+        self.assertEqual(saved, [color_calibration.active_profile()])
+        self.assertTrue(sent[0][0].startswith(b"povcal_state"))
 
 
 if __name__ == "__main__":
