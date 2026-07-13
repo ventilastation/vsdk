@@ -72,6 +72,10 @@ def macos_port_macs() -> dict[str, str]:
         output = subprocess.check_output(
             ["ioreg", "-p", "IOService", "-l", "-w", "0"],
             text=True,
+            # ioreg can include arbitrary USB descriptor bytes that are not
+            # valid UTF-8.  We only inspect its ASCII property names and
+            # device paths, so preserve those while replacing malformed data.
+            errors="replace",
             stderr=subprocess.DEVNULL,
         )
     except (OSError, subprocess.CalledProcessError):
