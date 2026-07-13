@@ -116,3 +116,12 @@ Also, the non-recovery main.py could be renamed vs_main.py if needed.
 - let's get rid of old targets if they no longer make sense. Eg: flash-vsdk, flash-voom, flash-retro-core, flash-all, deploy-fs
 
 - drop frame_rgb from the workbench.
+
+- streamline our retro-go changes to support ventilastation. Let's keep the master branch exactly as it is on the parent repository, and create a branch called ventilastation that will track all the changes we've made to support this hardware.
+
+- upgrade needs to be more verbose.
+- recovery sometimes is wrongly automatically triggered after using doom or retro-core.
+
+- upgrade logo is not visible, only the starfield
+- workspace display connection is flaky
+- 
