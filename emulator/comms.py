@@ -17,6 +17,7 @@ import socket
 import threading
 from base_control import BaseControlState
 from povcal_state import PovCalibrationState
+from povperf_controls import start_capture, stop_capture
 from povrender import all_strips, set_palettes, spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
 from povrender import (
@@ -440,6 +441,26 @@ def send_command(cmd: str):
 def send_povcal(command: str):
     """Send one calibration command to the connected board/base transport."""
     send_command("povcal " + command)
+
+
+def start_povperf_capture(encoder: str):
+    """Start a fresh on-device POV timing capture for ``encoder``.
+
+    Selecting an encoder clears the board's timing window, so keeping the two
+    commands together prevents a UI click from accidentally mixing legacy and
+    calibrated samples.
+    """
+    start_capture(encoder, send_command)
+
+
+def stop_povperf_capture():
+    """End the on-device POV timing capture.
+
+    The board responds to ``povperf stop`` with its final state and timing
+    lines, which the emulator's regular command receiver prints to stdout.
+    """
+    stop_capture(send_command)
+
 
 def trigger_ota():
     """Send ota_start in-band on the existing connection.

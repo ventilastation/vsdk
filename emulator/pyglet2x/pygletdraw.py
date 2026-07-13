@@ -297,6 +297,27 @@ for text, x in (("SAVE", _cal_commit_x), ("REVERT", _cal_revert_x), ("FACTORY", 
                         color=(255, 255, 255, 255), batch=controls_batch)
     )
 
+# POV render timing controls. A capture start picks one encoder before
+# enabling measurement; STOP prints the board's final ``povperf`` report in
+# the emulator console.
+_perf_legacy_x, _perf_stop_x, _perf_calibrated_x = 240, 330, 405
+_perf_button_y, _perf_button_h = 102, 22
+_perf_legacy_w, _perf_stop_w, _perf_calibrated_w = 85, 70, 100
+perf_legacy_button = shapes.Rectangle(_perf_legacy_x, _perf_button_y, _perf_legacy_w, _perf_button_h,
+                                      color=(92, 66, 26), batch=controls_batch)
+perf_stop_button = shapes.Rectangle(_perf_stop_x, _perf_button_y, _perf_stop_w, _perf_button_h,
+                                    color=(105, 45, 45), batch=controls_batch)
+perf_calibrated_button = shapes.Rectangle(_perf_calibrated_x, _perf_button_y, _perf_calibrated_w, _perf_button_h,
+                                          color=(37, 74, 112), batch=controls_batch)
+for text, x, width in (("LEGACY START", _perf_legacy_x, _perf_legacy_w),
+                       ("STOP / PRINT", _perf_stop_x, _perf_stop_w),
+                       ("CAL. START", _perf_calibrated_x, _perf_calibrated_w)):
+    other_labels.append(pyglet.text.Label(text, font_name="Arial", font_size=8,
+                        x=x + width / 2, y=_perf_button_y + _perf_button_h / 2,
+                        anchor_x="center", anchor_y="center",
+                        color=(255, 255, 255, 255), batch=controls_batch)
+    )
+
 def _set_rpm(rpm):
     global _current_rpm, _last_sent_rpm
     rpm = max(RPM_MIN, min(RPM_MAX, round(rpm)))
@@ -383,6 +404,13 @@ def on_mouse_press(x, y, button, modifiers):
         comms.send_povcal("revert")
     elif _point_in_rect(x, y, _cal_factory_x, _cal_button_y, _cal_button_w, _cal_button_h):
         comms.send_povcal("factory")
+    elif _point_in_rect(x, y, _perf_legacy_x, _perf_button_y, _perf_legacy_w, _perf_button_h):
+        comms.start_povperf_capture("legacy")
+    elif _point_in_rect(x, y, _perf_stop_x, _perf_button_y, _perf_stop_w, _perf_button_h):
+        comms.stop_povperf_capture()
+    elif _point_in_rect(x, y, _perf_calibrated_x, _perf_button_y,
+                       _perf_calibrated_w, _perf_button_h):
+        comms.start_povperf_capture("calibrated")
 
 
 @window.event
