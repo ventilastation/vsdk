@@ -288,12 +288,14 @@ cal_revert_button = shapes.Rectangle(_cal_revert_x, _cal_button_y, _cal_button_w
                                      color=(80, 70, 38), batch=controls_batch)
 cal_factory_button = shapes.Rectangle(_cal_factory_x, _cal_button_y, _cal_button_w, _cal_button_h,
                                       color=(80, 46, 46), batch=controls_batch)
-for text, x in (("SAVE", _cal_commit_x), ("REVERT", _cal_revert_x), ("FACTORY", _cal_factory_x)):
-    pyglet.text.Label(text, font_name="Arial", font_size=9,
-                      x=x + _cal_button_w / 2, y=_cal_button_y + _cal_button_h / 2,
-                      anchor_x="center", anchor_y="center",
-                      color=(255, 255, 255, 255), batch=controls_batch)
 
+other_labels = []
+for text, x in (("SAVE", _cal_commit_x), ("REVERT", _cal_revert_x), ("FACTORY", _cal_factory_x)):
+    other_labels.append(pyglet.text.Label(text, font_name="Arial", font_size=9,
+                        x=x + _cal_button_w / 2, y=_cal_button_y + _cal_button_h / 2,
+                        anchor_x="center", anchor_y="center",
+                        color=(255, 255, 255, 255), batch=controls_batch)
+    )
 
 def _set_rpm(rpm):
     global _current_rpm, _last_sent_rpm
