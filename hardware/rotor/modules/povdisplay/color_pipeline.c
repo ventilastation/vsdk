@@ -23,8 +23,7 @@
 #define COLOR_RGB_PREFERRED_MIN_PWM 32
 #define COLOR_LIGHT_LUT_SHIFT 5
 #define COLOR_LIGHT_LUT_COUNT ((COLOR_Q15_ONE >> COLOR_LIGHT_LUT_SHIFT) + 2)
-#define COLOR_TARGET_LUT_COUNT (COLOR_PIPELINE_LEDS * 3 * 256)
-#define COLOR_PWM_LUT_COUNT (3 * 32 * COLOR_LIGHT_LUT_COUNT)
+#define COLOR_DARK_PWM_LUT_COUNT (3 * 31 * COLOR_LIGHT_LUT_COUNT)
 
 typedef struct {
     uint16_t source_lut[256];
@@ -36,11 +35,15 @@ typedef struct {
     uint16_t pwm_response[3][COLOR_PROFILE_PWM_KNOTS];
     uint8_t gb_floor;
     uint8_t gb_ceiling;
-    // These generated LUTs live in PSRAM on hardware. Keeping two complete
-    // sets lets profile updates remain atomic for the GPU task.
-    uint16_t *target_lut;
-    uint8_t *brightness_lut;
-    uint8_t *pwm_lut;
+    // The render task reads these on every LED. Keep the hot path in internal
+    // RAM: scales replace the old 83 KiB PSRAM target table, and the normal
+    // (ceiling global-brightness) PWM table covers ordinary colours.
+    uint32_t target_scale_q10[COLOR_PIPELINE_LEDS][3];
+    uint8_t brightness_lut[3][COLOR_LIGHT_LUT_COUNT];
+    uint8_t ceiling_pwm_lut[3][COLOR_LIGHT_LUT_COUNT];
+    // Only dim values use APA102 global-brightness modulation. Their larger
+    // inverse-PWM table remains in PSRAM, outside the common render path.
+    uint8_t *dark_pwm_lut;
 } color_pipeline_state_t;
 
 static color_pipeline_state_t states[2];
@@ -74,28 +77,18 @@ static void *color_lut_alloc(size_t bytes) {
 }
 
 static bool ensure_luts(color_pipeline_state_t *state) {
-    if (state->target_lut == NULL) {
-        state->target_lut = color_lut_alloc(COLOR_TARGET_LUT_COUNT * sizeof(*state->target_lut));
+    if (state->dark_pwm_lut == NULL) {
+        state->dark_pwm_lut = color_lut_alloc(COLOR_DARK_PWM_LUT_COUNT * sizeof(*state->dark_pwm_lut));
     }
-    if (state->brightness_lut == NULL) {
-        state->brightness_lut = color_lut_alloc(3 * COLOR_LIGHT_LUT_COUNT * sizeof(*state->brightness_lut));
-    }
-    if (state->pwm_lut == NULL) {
-        state->pwm_lut = color_lut_alloc(COLOR_PWM_LUT_COUNT * sizeof(*state->pwm_lut));
-    }
-    return state->target_lut != NULL && state->brightness_lut != NULL && state->pwm_lut != NULL;
+    return state->dark_pwm_lut != NULL;
 }
 
-static size_t target_lut_index(uint8_t led, uint8_t channel, uint8_t source) {
-    return ((size_t)led * 3 * 256) + ((size_t)channel * 256) + source;
-}
-
-static size_t brightness_lut_index(uint8_t channel, uint16_t light) {
-    return (size_t)channel * COLOR_LIGHT_LUT_COUNT + light;
-}
-
-static size_t pwm_lut_index(uint8_t channel, uint8_t brightness, uint16_t light) {
-    return (((size_t)channel * 32 + brightness) * COLOR_LIGHT_LUT_COUNT) + light;
+static size_t dark_pwm_lut_index(const color_pipeline_state_t *state,
+        uint8_t channel, uint8_t brightness, uint16_t light) {
+    // Omit the common ceiling slice: it has a small internal-RAM table.
+    uint8_t packed_brightness = brightness < state->gb_ceiling
+        ? brightness : brightness - 1;
+    return (((size_t)channel * 31 + packed_brightness) * COLOR_LIGHT_LUT_COUNT) + light;
 }
 
 static uint16_t light_lut_index(uint16_t target) {
@@ -154,13 +147,20 @@ static uint16_t invert_pwm(const uint16_t *curve, uint16_t target) {
     return 255;
 }
 
-static uint16_t desired_light(const color_pipeline_state_t *state, uint8_t led, uint8_t channel, uint8_t source) {
-    uint64_t value = state->source_lut[source];
-    value *= state->master_milli;
-    value *= state->white_balance[channel];
-    value *= state->led_trims[led];
-    value *= state->radial_lut[led];
-    value /= 1000ULL * 1000ULL * 1024ULL * COLOR_Q15_ONE;
+static uint32_t target_scale_q10(const color_pipeline_state_t *state,
+        uint8_t led, uint8_t channel) {
+    // desired_light() is linear in the decoded source light. Store its
+    // profile/LED multiplier in Q10 so the render task uses a single 32-bit
+    // multiply and shift rather than a PSRAM table read. The largest allowed
+    // profile multiplier is 64, so source_q15 * scale_q10 stays in uint32.
+    uint64_t value = (uint64_t)state->master_milli * state->white_balance[channel]
+        * state->led_trims[led] * state->radial_lut[led];
+    uint64_t divisor = 1000ULL * 1000ULL * COLOR_Q15_ONE;
+    return (uint32_t)((value + divisor / 2) / divisor);
+}
+
+static uint16_t scaled_target(uint16_t source, uint32_t scale_q10) {
+    uint32_t value = ((uint32_t)source * scale_q10 + (1U << 9)) >> 10;
     return value > COLOR_Q15_ONE ? COLOR_Q15_ONE : (uint16_t)value;
 }
 
@@ -186,18 +186,14 @@ static uint8_t choose_brightness(const color_pipeline_state_t *state,
 static void build_render_luts(color_pipeline_state_t *state) {
     for (int led = 0; led < COLOR_PIPELINE_LEDS; led++) {
         for (int channel = 0; channel < 3; channel++) {
-            for (int source = 0; source < 256; source++) {
-                state->target_lut[target_lut_index(led, channel, source)] =
-                    desired_light(state, led, channel, source);
-            }
+            state->target_scale_q10[led][channel] = target_scale_q10(state, led, channel);
         }
     }
     for (int channel = 0; channel < 3; channel++) {
         for (uint16_t light = 0; light < COLOR_LIGHT_LUT_COUNT; light++) {
             uint16_t target = light == COLOR_LIGHT_LUT_COUNT - 1
                 ? COLOR_Q15_ONE : light << COLOR_LIGHT_LUT_SHIFT;
-            state->brightness_lut[brightness_lut_index(channel, light)] =
-                choose_brightness(state, channel, target);
+            state->brightness_lut[channel][light] = choose_brightness(state, channel, target);
         }
         for (int brightness = 0; brightness < 32; brightness++) {
             uint16_t global = state->global_response[brightness];
@@ -207,8 +203,13 @@ static void build_render_luts(color_pipeline_state_t *state) {
                 uint32_t normalized = global == 0 ? 0
                     : ((uint32_t)target * COLOR_Q15_ONE + global / 2) / global;
                 if (normalized > COLOR_Q15_ONE) normalized = COLOR_Q15_ONE;
-                state->pwm_lut[pwm_lut_index(channel, brightness, light)] =
-                    invert_pwm(state->pwm_response[channel], normalized);
+                uint8_t pwm = invert_pwm(state->pwm_response[channel], normalized);
+                if (brightness == state->gb_ceiling) {
+                    state->ceiling_pwm_lut[channel][light] = pwm;
+                } else {
+                    state->dark_pwm_lut[dark_pwm_lut_index(
+                        state, channel, brightness, light)] = pwm;
+                }
             }
         }
     }
@@ -294,13 +295,9 @@ bool color_pipeline_apply(const uint8_t *profile, size_t length) {
     if (!ensure_luts(state)) {
         return false;
     }
-    uint16_t *target_lut = state->target_lut;
-    uint8_t *brightness_lut = state->brightness_lut;
-    uint8_t *pwm_lut = state->pwm_lut;
+    uint8_t *dark_pwm_lut = state->dark_pwm_lut;
     memset(state, 0, sizeof(*state));
-    state->target_lut = target_lut;
-    state->brightness_lut = brightness_lut;
-    state->pwm_lut = pwm_lut;
+    state->dark_pwm_lut = dark_pwm_lut;
     state->master_milli = master_milli;
     state->gb_floor = gb_floor;
     state->gb_ceiling = gb_ceiling;
@@ -367,9 +364,8 @@ bool color_pipeline_set_test_pattern(uint8_t pattern, uint8_t level) {
     return true;
 }
 
-static void apply_test_pattern(uint8_t led, uint8_t *red, uint8_t *green, uint8_t *blue) {
-    uint8_t pattern = __atomic_load_n(&test_pattern, __ATOMIC_ACQUIRE);
-    uint8_t level = __atomic_load_n(&test_level, __ATOMIC_ACQUIRE);
+static void apply_test_pattern(uint8_t pattern, uint8_t level, uint8_t led,
+        uint8_t *red, uint8_t *green, uint8_t *blue) {
     switch (pattern) {
         case COLOR_TEST_GRAY:
         case COLOR_TEST_WHITE:
@@ -407,25 +403,34 @@ uint32_t color_pipeline_encode_rgb(uint8_t led, uint8_t red, uint8_t green, uint
     if (led >= COLOR_PIPELINE_LEDS || !color_pipeline_is_active()) {
         return 0;
     }
-    apply_test_pattern(led, &red, &green, &blue);
+    uint8_t pattern = __atomic_load_n(&test_pattern, __ATOMIC_ACQUIRE);
+    if (pattern == COLOR_TEST_OFF && (red | green | blue) == 0) {
+        return 0x000000e0;
+    }
+    if (pattern != COLOR_TEST_OFF) {
+        apply_test_pattern(pattern, __atomic_load_n(&test_level, __ATOMIC_ACQUIRE),
+                           led, &red, &green, &blue);
+    }
     const color_pipeline_state_t *state = &states[__atomic_load_n(&active_index, __ATOMIC_ACQUIRE)];
     uint8_t source[3] = { red, green, blue };
     uint16_t target[3];
     uint16_t maximum = 0;
     uint8_t peak_channel = 0;
     for (int channel = 0; channel < 3; channel++) {
-        target[channel] = state->target_lut[target_lut_index(led, channel, source[channel])];
+        target[channel] = scaled_target(state->source_lut[source[channel]],
+                                        state->target_scale_q10[led][channel]);
         if (target[channel] > maximum) maximum = target[channel];
         if (target[channel] >= target[peak_channel]) peak_channel = channel;
     }
     if (maximum == 0) return 0x000000e0;
 
-    uint8_t brightness = state->brightness_lut[
-        brightness_lut_index(peak_channel, light_lut_index(maximum))];
+    uint8_t brightness = state->brightness_lut[peak_channel][light_lut_index(maximum)];
     uint8_t pwm[3];
     for (int channel = 0; channel < 3; channel++) {
-        pwm[channel] = state->pwm_lut[pwm_lut_index(
-            channel, brightness, light_lut_index(target[channel]))];
+        uint16_t light = light_lut_index(target[channel]);
+        pwm[channel] = brightness == state->gb_ceiling
+            ? state->ceiling_pwm_lut[channel][light]
+            : state->dark_pwm_lut[dark_pwm_lut_index(state, channel, brightness, light)];
     }
     return (uint32_t)(0xe0 | brightness)
         | ((uint32_t)pwm[2] << 8)
