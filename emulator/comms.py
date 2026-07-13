@@ -65,6 +65,11 @@ class ConnSerial(ConnectionBase):
             raise socket.error("no serial port found (pass --serial-port /dev/tty... explicitly)")
         self.sock = self.sockfile = serial.Serial(port, 115200)
 
+    def send(self, b):
+        """Forward control bytes through the workbench USB/UART bridge."""
+        if self.sockfile:
+            self.sockfile.write(b)
+
     @staticmethod
     def _autodetect():
         # Cross-platform: match common USB-serial naming across macOS
