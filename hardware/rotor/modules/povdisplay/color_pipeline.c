@@ -12,6 +12,9 @@
 #define COLOR_PROFILE_PWM_KNOTS 17
 #define COLOR_PROFILE_PWM_BYTES (3 * COLOR_PROFILE_PWM_KNOTS * 2)
 #define COLOR_Q15_ONE 32767U
+// APA102 global brightness is a low-frequency PWM. Keep the RGB channels at
+// useful code values before introducing that additional modulation source.
+#define COLOR_RGB_PREFERRED_MIN_PWM 32
 
 typedef struct {
     uint16_t source_lut[256];
@@ -296,15 +299,29 @@ uint32_t color_pipeline_encode_rgb(uint8_t led, uint8_t red, uint8_t green, uint
     uint8_t source[3] = { red, green, blue };
     uint16_t target[3];
     uint16_t maximum = 0;
+    uint8_t peak_channel = 0;
     for (int channel = 0; channel < 3; channel++) {
         target[channel] = desired_light(state, led, channel, source[channel]);
         if (target[channel] > maximum) maximum = target[channel];
+        if (target[channel] >= target[peak_channel]) peak_channel = channel;
     }
     if (maximum == 0) return 0x000000e0;
 
+    // Start at the highest global-brightness setting. This leaves normal
+    // dimming to the 8-bit RGB PWM channels instead of the APA102's ~582 Hz
+    // global PWM. Only lower GB when the brightest channel would otherwise
+    // have too few RGB code values to represent a dark tone smoothly.
     uint8_t brightness = state->gb_ceiling;
-    for (uint8_t level = state->gb_floor; level <= state->gb_ceiling; level++) {
-        if (state->global_response[level] >= maximum) {
+    for (int level = state->gb_ceiling; level >= state->gb_floor; level--) {
+        uint16_t global = state->global_response[level];
+        if (global == 0 || global < maximum) {
+            continue;
+        }
+        brightness = level; // lowest usable fallback if all RGB values are small
+        uint32_t normalized = ((uint32_t)maximum * COLOR_Q15_ONE + global / 2) / global;
+        if (normalized > COLOR_Q15_ONE) normalized = COLOR_Q15_ONE;
+        if (invert_pwm(state->pwm_response[peak_channel], normalized)
+                >= COLOR_RGB_PREFERRED_MIN_PWM) {
             brightness = level;
             break;
         }

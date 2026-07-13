@@ -90,8 +90,17 @@ int main(void) {
     CHECK(color_pipeline_encode_rgb(53, 0, 0, 0) == 0x000000e0,
           "black turns all PWM and global brightness off");
 
+    uint32_t outer_mid_red = color_pipeline_encode_rgb(53, 128, 0, 0);
+    CHECK((outer_mid_red & 0x1f) == 31 && (outer_mid_red >> 24) >= 32,
+          "ordinary dimming keeps APA102 global brightness high and uses RGB PWM");
+
+    uint32_t outer_dark_red = color_pipeline_encode_rgb(53, 64, 0, 0);
+    CHECK((outer_dark_red & 0x1f) < 31 && (outer_dark_red >> 24) >= 32,
+          "very dark tones lower global brightness only after preserving RGB resolution");
+
     uint32_t inner_red = color_pipeline_encode_rgb(0, 255, 0, 0);
-    CHECK((inner_red & 0x1f) == 1, "inner LED chooses the lowest viable global brightness");
+    CHECK((inner_red & 0x1f) < 31 && (inner_red >> 24) >= 32,
+          "inner LED uses global brightness for a dark radial target");
     CHECK((inner_red >> 24) > 0 && ((inner_red >> 16) & 0xff) == 0
           && ((inner_red >> 8) & 0xff) == 0, "red channel remains isolated");
 

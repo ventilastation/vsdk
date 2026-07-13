@@ -66,11 +66,12 @@ matrix editing are the next calibration-tool addition.
 ## APA102 encoding
 
 An APA102 has three 8-bit channel PWMs and a shared 5-bit global-brightness
-control. For every LED the encoder computes the desired linear light for R,
-G, and B, selects the smallest permitted global level that can represent the
-brightest channel, and inverts the calibrated channel response curves for the
-three PWM values. This preserves colour ratios and makes the shared global
-control useful at low levels.
+control. Its global-brightness PWM is about 582 Hz, which can produce visible
+blinking on a spinning rotor. For every LED the encoder therefore starts at
+the highest permitted global level and uses RGB PWM for normal dimming. It
+lowers global brightness only when the brightest channel would otherwise fall
+below RGB code 32, retaining useful channel resolution for very dark tones.
+The calibrated inverse response curves still determine the three PWM values.
 
 The encoded 32-bit value is laid out in memory exactly as the LED bus expects:
 
