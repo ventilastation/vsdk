@@ -55,6 +55,7 @@ class BundleServerSpecialCharsTests(unittest.TestCase):
     def tearDown(self):
         self.server.shutdown()
         self.server.server_close()
+        upgrade_server._unregister_mdns()
         self.tmp.cleanup()
 
     def _fetch(self, url):
@@ -113,6 +114,41 @@ class BundleServerSpecialCharsTests(unittest.TestCase):
         status, body = self._fetch(url)
         self.assertEqual(status, 200)
         self.assertEqual(body, b"asterix bytes")
+
+
+class MdnsAdvertisementTests(unittest.TestCase):
+    """upgrade_server.start() advertises ventilastation-base.local over mDNS
+    so the desktop dev loop works without any manual dns-sd/avahi-publish
+    step -- a production base gets this for free from Avahi once its OS
+    hostname is set, but a dev machine's own Bonjour name is whatever its
+    computer name already is."""
+
+    def tearDown(self):
+        upgrade_server._unregister_mdns()
+
+    def test_missing_zeroconf_warns_and_does_not_crash(self):
+        original = upgrade_server.Zeroconf
+        upgrade_server.Zeroconf = None
+        try:
+            upgrade_server._register_mdns(5653)  # must not raise
+            self.assertIsNone(upgrade_server._mdns_zc)
+        finally:
+            upgrade_server.Zeroconf = original
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("zeroconf") is not None,
+        "zeroconf not installed in this interpreter",
+    )
+    def test_registers_and_unregisters_a_real_service(self):
+        upgrade_server._register_mdns(5653)
+        try:
+            self.assertIsNotNone(upgrade_server._mdns_zc)
+            self.assertEqual(upgrade_server._mdns_info.port, 5653)
+            self.assertEqual(upgrade_server._mdns_info.server, "ventilastation-base.local.")
+        finally:
+            upgrade_server._unregister_mdns()
+        self.assertIsNone(upgrade_server._mdns_zc)
+        self.assertIsNone(upgrade_server._mdns_info)
 
 
 if __name__ == "__main__":

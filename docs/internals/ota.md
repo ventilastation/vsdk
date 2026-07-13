@@ -120,7 +120,7 @@ The desktop emulator sends this when you press **U** in the pyglet window
 workbench connection it uses that connection's local interface; with a direct
 serial board connection it discovers the host's default LAN/Wi-Fi address, so
 the serial control link and Wi-Fi OTA server work together. Its
-`upgrade_server` (below) is already listening on port 8000.
+`upgrade_server` (below) is already listening on port 5653.
 
 On a computer with several active networks, specify the address reachable by
 the board explicitly:
@@ -165,7 +165,7 @@ as `ota_error <message>`.
 
 ## Emulator HTTP upgrade server
 
-`emulator/upgrade_server.py` runs on port 8000 in a daemon thread, started
+`emulator/upgrade_server.py` runs on port 5653 in a daemon thread, started
 by `emulator/comms.py` alongside the display connection. It can also run
 standalone (`python3 emulator/upgrade_server.py --bundle <dir> --port 5653`),
 serving a fixed pre-built layout instead of computing everything live from
@@ -174,6 +174,19 @@ ESP-IDF/Retro-Go toolchain installed. Build that bundle directory with
 `tools/package_release.py --output <dir>` (reuses this same module's
 manifest/file-read logic, so the bundle always matches a live dev-loop OTA
 exactly).
+
+`start()` also advertises `ventilastation-base.local` over mDNS itself
+(via the `zeroconf` package, in `requirements.txt`), restricted to this
+machine's actual LAN interface — registering on every interface (the
+`zeroconf` default) causes some clients to intermittently pick an
+unreachable duplicate. This matters specifically for the desktop dev loop:
+a production Raspberry Pi base gets `<hostname>.local` for free from Avahi
+once its OS hostname is set to `ventilastation-base`, but a dev machine's
+own Bonjour name is whatever its computer name already is, so without this
+the emulator would bind the port fine but never actually be reachable at
+that hostname. If `zeroconf` isn't installed, `start()` logs a warning and
+continues without advertising (the server still works for anything that
+reaches it by IP directly).
 
 ```
 GET /manifest           → JSON manifest (see format below)

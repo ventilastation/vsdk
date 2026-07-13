@@ -5,6 +5,14 @@ discover what's available, then fetches individual files or partition binaries.
 Triggered from the emulator UI (U key) which sends "ota_start <url>" to the
 device via the existing comms channel.
 
+Also advertises itself as "ventilastation-base.local" over mDNS (via the
+"zeroconf" package) so the device can find it without any NVS-stored IP.
+This matters for the desktop dev loop specifically: a production base (a
+Raspberry Pi) gets this for free from Avahi once its OS hostname is set to
+"ventilastation-base" -- but a dev machine's own Bonjour name is whatever
+its computer name already is, so without this the emulator would bind the
+port fine but never actually be reachable at that hostname.
+
 The file manifest covers the complete LittleFS content — the same file set,
 device paths and gzip transform as the USB-flashed image — by reusing
 hardware/rotor/build_micropython_fs.py's iter_copy_jobs(). The device skips
@@ -22,16 +30,26 @@ See tools/package_release.py for assembling that bundle directory.
 """
 
 import argparse
+import atexit
 import gzip
 import hashlib
 import importlib.util
 import json
 import pathlib
+import socket
 import sys
 import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+try:
+    from zeroconf import Zeroconf, ServiceInfo
+except ImportError:
+    Zeroconf = None
+    ServiceInfo = None
+
+_MDNS_HOSTNAME = "ventilastation-base"
 
 _VSDK_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -227,6 +245,64 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, "text/plain", b"unknown endpoint")
 
 
+_mdns_zc = None
+_mdns_info = None
+
+
+def _lan_ip():
+    """Best-effort LAN IP for this machine. Doesn't actually send anything --
+    UDP connect() just makes the OS pick the outbound route/interface."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def _register_mdns(port):
+    global _mdns_zc, _mdns_info
+    if Zeroconf is None:
+        print(
+            "upgrade_server: 'zeroconf' package not installed -- skipping mDNS "
+            f"advertisement. The device won't find this server at "
+            f"{_MDNS_HOSTNAME}.local without it (pip install zeroconf, or "
+            "register the hostname manually, e.g. with dns-sd -P on macOS)."
+        )
+        return
+    ip = _lan_ip()
+    # Restrict to just this interface: registering on InterfaceChoice.All
+    # (the default) advertises the same hostname/address from every
+    # interface, and some clients (confirmed: curl without -4) pick an
+    # unreachable duplicate and fail intermittently instead of using the
+    # one that actually routes.
+    _mdns_zc = Zeroconf(interfaces=[ip])
+    _mdns_info = ServiceInfo(
+        "_http._tcp.local.",
+        f"{_MDNS_HOSTNAME}._http._tcp.local.",
+        port=port,
+        server=f"{_MDNS_HOSTNAME}.local.",
+        parsed_addresses=[ip],
+    )
+    _mdns_zc.register_service(_mdns_info)
+    atexit.register(_unregister_mdns)
+    print(f"upgrade_server: advertising {_MDNS_HOSTNAME}.local ({ip}) via mDNS")
+
+
+def _unregister_mdns():
+    global _mdns_zc, _mdns_info
+    if _mdns_zc is not None:
+        try:
+            _mdns_zc.unregister_service(_mdns_info)
+            _mdns_zc.close()
+        except Exception:
+            pass
+        _mdns_zc = None
+        _mdns_info = None
+
+
 def start(port=5653, bundle_dir=None):
     """Start the upgrade HTTP server on the given port (default 8000).
 
@@ -243,6 +319,7 @@ def start(port=5653, bundle_dir=None):
         print(f"upgrade_server: listening on port {port}, serving bundle {_BUNDLE_DIR}")
     else:
         print(f"upgrade_server: listening on port {port}")
+    _register_mdns(port)
     return server
 
 
