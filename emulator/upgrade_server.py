@@ -30,6 +30,7 @@ import pathlib
 import sys
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 _VSDK_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -185,7 +186,12 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        path = self.path.rstrip("/")
+        # File paths can contain spaces, parens, commas, etc. (many ROM
+        # filenames); the device percent-encodes them when building the
+        # request (see updater.py's _url_quote -- a raw space in the request
+        # line breaks this server's own request-line parsing). Decode back
+        # to the raw path before matching against manifest entries.
+        path = urllib.parse.unquote(self.path.rstrip("/"))
 
         if path == "/manifest":
             try:

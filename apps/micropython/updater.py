@@ -33,6 +33,26 @@ try:
 except ImportError:
     import socket
 
+# Manifest file paths are raw (unescaped) filesystem paths and can contain
+# spaces, parens, commas, etc. (e.g. many console ROM filenames). An HTTP
+# request line is whitespace-delimited, so a literal space in the path
+# breaks the server's own request parsing ("Bad request syntax"). No
+# urllib on this build, so a minimal RFC 3986 percent-encoder: keep '/' as
+# a literal separator, escape everything outside the unreserved set.
+_URL_SAFE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~/"
+
+
+def _url_quote(path):
+    out = []
+    for ch in path:
+        if ch in _URL_SAFE:
+            out.append(ch)
+        else:
+            for b in ch.encode("utf-8"):
+                out.append("%%%02X" % b)
+    return "".join(out)
+
+
 # Persistent state: NVS namespace "vsdk_ota" tracks SHA256 of each partition
 # so unchanged binaries are skipped without downloading.
 _NVS_NS = "vsdk_ota"
@@ -204,7 +224,7 @@ def _sync_lfs_files(base_url, files):
 
         _progress("file", rel_path.replace("/", "_"), i * 100 // total)
         tmp_path = local_path + ".tmp"
-        file_url = base_url + "/files/" + rel_path
+        file_url = base_url + "/files/" + _url_quote(rel_path)
         sha = hashlib.sha256()
 
         try:

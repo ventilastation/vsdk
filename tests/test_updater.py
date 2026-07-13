@@ -152,5 +152,44 @@ class UpdaterTier3Tests(unittest.TestCase):
         self.assertEqual(machine.reset_calls, [])
 
 
+class UrlQuoteTests(unittest.TestCase):
+    def setUp(self):
+        sys.modules.pop("updater", None)
+
+    def test_leaves_safe_characters_alone(self):
+        import updater
+        self.assertEqual(
+            updater._url_quote("roms/sms/plain_name-1.0.zip"),
+            "roms/sms/plain_name-1.0.zip",
+        )
+
+    def test_encodes_space_and_parens_and_comma(self):
+        import updater
+        # The exact filenames from the reported bug.
+        self.assertEqual(
+            updater._url_quote("roms/sms/After Burner (World).zip"),
+            "roms/sms/After%20Burner%20%28World%29.zip",
+        )
+        self.assertEqual(
+            updater._url_quote("roms/sms/Asterix (Europe) (En,Fr) (Rev 1).zip"),
+            "roms/sms/Asterix%20%28Europe%29%20%28En%2CFr%29%20%28Rev%201%29.zip",
+        )
+
+    def test_round_trips_through_stdlib_unquote(self):
+        import updater
+        import urllib.parse
+        for name in [
+            "After Burner (World).zip",
+            "Asterix (Europe) (En,Fr) (Rev 1).zip",
+            "plain.zip",
+            "unicode_café.zip",
+        ]:
+            quoted = updater._url_quote(name)
+            self.assertEqual(urllib.parse.unquote(quoted), name)
+            # And critically: no raw space survives, so an HTTP request line
+            # built from this path won't confuse whitespace-based parsing.
+            self.assertNotIn(" ", quoted)
+
+
 if __name__ == "__main__":
     unittest.main()

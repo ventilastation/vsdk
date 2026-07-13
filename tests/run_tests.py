@@ -47,6 +47,7 @@ CPYTHON_TESTS = [
     "tests/test_vixeous_vs2.py",
     "tests/test_recovery.py",
     "tests/test_updater.py",
+    "tests/test_upgrade_server.py",
     "tests/test_boot.py",
 ]
 
