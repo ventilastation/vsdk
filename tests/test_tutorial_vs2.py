@@ -82,7 +82,7 @@ class TutorialVs2Tests(unittest.TestCase):
         self.assertEqual(api_guard.claimed_api("system.tutorial_vs2"), "vs2")
         self.assertEqual(self.text_value(scene.coordinates), "X=-8.00 Y=16.00")
 
-        self.step_buttons(director.JOY_LEFT | director.JOY_UP)
+        self.step_buttons(director.JOY_RIGHT | director.JOY_DOWN)
         sprite = scene.active()["sprite"]
 
         self.assertEqual(scene.active()["xq"], -33)
@@ -96,7 +96,7 @@ class TutorialVs2Tests(unittest.TestCase):
         self.release_buttons()
 
         for _ in range(9):
-            self.step_buttons(director.JOY_RIGHT)
+            self.step_buttons(director.JOY_LEFT)
 
         self.assertEqual(scene.active()["xq"], -23)
         self.assertEqual(sprite.x, -5.75)

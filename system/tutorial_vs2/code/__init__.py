@@ -43,7 +43,7 @@ class TutorialVs2(Scene):
 
         self.entries = [
             {
-                "name": "SHIP",
+                "name": "BICHOS",
                 "sprite": Sprite("galaga.png", x=-8, y=16, frame=6, mode=TUNNEL),
                 "xq": -32,
                 "yq": 64,
@@ -64,7 +64,7 @@ class TutorialVs2(Scene):
                 "frames": 1,
             },
             {
-                "name": "DOOM",
+                "name": "VOOM",
                 "sprite": Sprite("doom.png", x=0, y=255, frame=0, mode=FULLSCREEN),
                 "xq": 0,
                 "yq": 1020,
@@ -181,13 +181,13 @@ class TutorialVs2(Scene):
         x_direction = 0
         y_direction = 0
         if director.is_pressed(director.JOY_LEFT):
-            x_direction -= 1
-        if director.is_pressed(director.JOY_RIGHT):
             x_direction += 1
+        if director.is_pressed(director.JOY_RIGHT):
+            x_direction -= 1
         if director.is_pressed(director.JOY_UP):
-            y_direction -= 1
-        if director.is_pressed(director.JOY_DOWN):
             y_direction += 1
+        if director.is_pressed(director.JOY_DOWN):
+            y_direction -= 1
         dx = self.axis_delta("x", x_direction)
         dy = self.axis_delta("y", y_direction)
         self.move_active(dx, dy)
