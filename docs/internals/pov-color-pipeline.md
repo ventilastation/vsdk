@@ -73,6 +73,15 @@ lowers global brightness only when the brightest channel would otherwise fall
 below RGB code 32, retaining useful channel resolution for very dark tones.
 The calibrated inverse response curves still determine the three PWM values.
 
+The real-time encoder does not perform this model's multiplications, divisions,
+or curve searches per LED. Applying a profile builds two PSRAM-resident LUT
+sets (active and inactive): per-LED/channel/source linear-light values, a
+global-brightness choice table, and channel-PWM tables. Swapping the completed
+inactive set remains atomic. The GPU path then performs three target-table
+loads, selects the brightest channel, and reads the brightness/PWM entries.
+The two sets use about 360 KiB of PSRAM and are rebuilt only after a valid
+`povcal set`, `revert`, or `factory` update.
+
 The encoded 32-bit value is laid out in memory exactly as the LED bus expects:
 
 ```text

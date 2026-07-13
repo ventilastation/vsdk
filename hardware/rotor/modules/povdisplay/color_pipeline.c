@@ -3,6 +3,12 @@
 #include <math.h>
 #include <string.h>
 
+#ifdef ESP_PLATFORM
+#include "esp_heap_caps.h"
+#else
+#include <stdlib.h>
+#endif
+
 #define COLOR_PROFILE_VERSION 1
 #define COLOR_PROFILE_HEADER_BYTES 12
 #define COLOR_PROFILE_CONTROLS_BYTES 15
@@ -15,6 +21,10 @@
 // APA102 global brightness is a low-frequency PWM. Keep the RGB channels at
 // useful code values before introducing that additional modulation source.
 #define COLOR_RGB_PREFERRED_MIN_PWM 32
+#define COLOR_LIGHT_LUT_SHIFT 5
+#define COLOR_LIGHT_LUT_COUNT ((COLOR_Q15_ONE >> COLOR_LIGHT_LUT_SHIFT) + 2)
+#define COLOR_TARGET_LUT_COUNT (COLOR_PIPELINE_LEDS * 3 * 256)
+#define COLOR_PWM_LUT_COUNT (3 * 32 * COLOR_LIGHT_LUT_COUNT)
 
 typedef struct {
     uint16_t source_lut[256];
@@ -26,6 +36,11 @@ typedef struct {
     uint16_t pwm_response[3][COLOR_PROFILE_PWM_KNOTS];
     uint8_t gb_floor;
     uint8_t gb_ceiling;
+    // These generated LUTs live in PSRAM on hardware. Keeping two complete
+    // sets lets profile updates remain atomic for the GPU task.
+    uint16_t *target_lut;
+    uint8_t *brightness_lut;
+    uint8_t *pwm_lut;
 } color_pipeline_state_t;
 
 static color_pipeline_state_t states[2];
@@ -48,6 +63,44 @@ static void write_u32(uint8_t *data, uint32_t value) {
     for (int i = 0; i < 4; i++) {
         data[i] = (value >> (8 * i)) & 0xff;
     }
+}
+
+static void *color_lut_alloc(size_t bytes) {
+#ifdef ESP_PLATFORM
+    return heap_caps_calloc(1, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    return calloc(1, bytes);
+#endif
+}
+
+static bool ensure_luts(color_pipeline_state_t *state) {
+    if (state->target_lut == NULL) {
+        state->target_lut = color_lut_alloc(COLOR_TARGET_LUT_COUNT * sizeof(*state->target_lut));
+    }
+    if (state->brightness_lut == NULL) {
+        state->brightness_lut = color_lut_alloc(3 * COLOR_LIGHT_LUT_COUNT * sizeof(*state->brightness_lut));
+    }
+    if (state->pwm_lut == NULL) {
+        state->pwm_lut = color_lut_alloc(COLOR_PWM_LUT_COUNT * sizeof(*state->pwm_lut));
+    }
+    return state->target_lut != NULL && state->brightness_lut != NULL && state->pwm_lut != NULL;
+}
+
+static size_t target_lut_index(uint8_t led, uint8_t channel, uint8_t source) {
+    return ((size_t)led * 3 * 256) + ((size_t)channel * 256) + source;
+}
+
+static size_t brightness_lut_index(uint8_t channel, uint16_t light) {
+    return (size_t)channel * COLOR_LIGHT_LUT_COUNT + light;
+}
+
+static size_t pwm_lut_index(uint8_t channel, uint8_t brightness, uint16_t light) {
+    return (((size_t)channel * 32 + brightness) * COLOR_LIGHT_LUT_COUNT) + light;
+}
+
+static uint16_t light_lut_index(uint16_t target) {
+    // Round up so every nonzero source value remains a nonzero LUT entry.
+    return (target + ((1 << COLOR_LIGHT_LUT_SHIFT) - 1)) >> COLOR_LIGHT_LUT_SHIFT;
 }
 
 static uint16_t evenly_spaced_q15(int index, int count) {
@@ -109,6 +162,56 @@ static uint16_t desired_light(const color_pipeline_state_t *state, uint8_t led, 
     value *= state->radial_lut[led];
     value /= 1000ULL * 1000ULL * 1024ULL * COLOR_Q15_ONE;
     return value > COLOR_Q15_ONE ? COLOR_Q15_ONE : (uint16_t)value;
+}
+
+static uint8_t choose_brightness(const color_pipeline_state_t *state,
+        uint8_t peak_channel, uint16_t maximum) {
+    uint8_t brightness = state->gb_ceiling;
+    for (int level = state->gb_ceiling; level >= state->gb_floor; level--) {
+        uint16_t global = state->global_response[level];
+        if (global == 0 || global < maximum) {
+            continue;
+        }
+        brightness = level; // lowest usable fallback if all RGB values are small
+        uint32_t normalized = ((uint32_t)maximum * COLOR_Q15_ONE + global / 2) / global;
+        if (normalized > COLOR_Q15_ONE) normalized = COLOR_Q15_ONE;
+        if (invert_pwm(state->pwm_response[peak_channel], normalized)
+                >= COLOR_RGB_PREFERRED_MIN_PWM) {
+            break;
+        }
+    }
+    return brightness;
+}
+
+static void build_render_luts(color_pipeline_state_t *state) {
+    for (int led = 0; led < COLOR_PIPELINE_LEDS; led++) {
+        for (int channel = 0; channel < 3; channel++) {
+            for (int source = 0; source < 256; source++) {
+                state->target_lut[target_lut_index(led, channel, source)] =
+                    desired_light(state, led, channel, source);
+            }
+        }
+    }
+    for (int channel = 0; channel < 3; channel++) {
+        for (uint16_t light = 0; light < COLOR_LIGHT_LUT_COUNT; light++) {
+            uint16_t target = light == COLOR_LIGHT_LUT_COUNT - 1
+                ? COLOR_Q15_ONE : light << COLOR_LIGHT_LUT_SHIFT;
+            state->brightness_lut[brightness_lut_index(channel, light)] =
+                choose_brightness(state, channel, target);
+        }
+        for (int brightness = 0; brightness < 32; brightness++) {
+            uint16_t global = state->global_response[brightness];
+            for (uint16_t light = 0; light < COLOR_LIGHT_LUT_COUNT; light++) {
+                uint16_t target = light == COLOR_LIGHT_LUT_COUNT - 1
+                    ? COLOR_Q15_ONE : light << COLOR_LIGHT_LUT_SHIFT;
+                uint32_t normalized = global == 0 ? 0
+                    : ((uint32_t)target * COLOR_Q15_ONE + global / 2) / global;
+                if (normalized > COLOR_Q15_ONE) normalized = COLOR_Q15_ONE;
+                state->pwm_lut[pwm_lut_index(channel, brightness, light)] =
+                    invert_pwm(state->pwm_response[channel], normalized);
+            }
+        }
+    }
 }
 
 bool color_pipeline_build_default(uint8_t *profile, size_t length, uint32_t generation) {
@@ -188,7 +291,16 @@ bool color_pipeline_apply(const uint8_t *profile, size_t length) {
 
     uint8_t inactive_index = 1 - __atomic_load_n(&active_index, __ATOMIC_ACQUIRE);
     color_pipeline_state_t *state = &states[inactive_index];
+    if (!ensure_luts(state)) {
+        return false;
+    }
+    uint16_t *target_lut = state->target_lut;
+    uint8_t *brightness_lut = state->brightness_lut;
+    uint8_t *pwm_lut = state->pwm_lut;
     memset(state, 0, sizeof(*state));
+    state->target_lut = target_lut;
+    state->brightness_lut = brightness_lut;
+    state->pwm_lut = pwm_lut;
     state->master_milli = master_milli;
     state->gb_floor = gb_floor;
     state->gb_ceiling = gb_ceiling;
@@ -221,6 +333,7 @@ bool color_pipeline_apply(const uint8_t *profile, size_t length) {
             ? srgb_decode(value)
             : power_decode(value, source_gamma_milli);
     }
+    build_render_luts(state);
 
     __atomic_store_n(&active_index, inactive_index, __ATOMIC_RELEASE);
     __atomic_store_n(&active, true, __ATOMIC_RELEASE);
@@ -301,38 +414,18 @@ uint32_t color_pipeline_encode_rgb(uint8_t led, uint8_t red, uint8_t green, uint
     uint16_t maximum = 0;
     uint8_t peak_channel = 0;
     for (int channel = 0; channel < 3; channel++) {
-        target[channel] = desired_light(state, led, channel, source[channel]);
+        target[channel] = state->target_lut[target_lut_index(led, channel, source[channel])];
         if (target[channel] > maximum) maximum = target[channel];
         if (target[channel] >= target[peak_channel]) peak_channel = channel;
     }
     if (maximum == 0) return 0x000000e0;
 
-    // Start at the highest global-brightness setting. This leaves normal
-    // dimming to the 8-bit RGB PWM channels instead of the APA102's ~582 Hz
-    // global PWM. Only lower GB when the brightest channel would otherwise
-    // have too few RGB code values to represent a dark tone smoothly.
-    uint8_t brightness = state->gb_ceiling;
-    for (int level = state->gb_ceiling; level >= state->gb_floor; level--) {
-        uint16_t global = state->global_response[level];
-        if (global == 0 || global < maximum) {
-            continue;
-        }
-        brightness = level; // lowest usable fallback if all RGB values are small
-        uint32_t normalized = ((uint32_t)maximum * COLOR_Q15_ONE + global / 2) / global;
-        if (normalized > COLOR_Q15_ONE) normalized = COLOR_Q15_ONE;
-        if (invert_pwm(state->pwm_response[peak_channel], normalized)
-                >= COLOR_RGB_PREFERRED_MIN_PWM) {
-            brightness = level;
-            break;
-        }
-    }
-    uint16_t global = state->global_response[brightness];
-    if (global == 0) return 0x000000e0;
+    uint8_t brightness = state->brightness_lut[
+        brightness_lut_index(peak_channel, light_lut_index(maximum))];
     uint8_t pwm[3];
     for (int channel = 0; channel < 3; channel++) {
-        uint32_t normalized = ((uint32_t)target[channel] * COLOR_Q15_ONE + global / 2) / global;
-        if (normalized > COLOR_Q15_ONE) normalized = COLOR_Q15_ONE;
-        pwm[channel] = invert_pwm(state->pwm_response[channel], normalized);
+        pwm[channel] = state->pwm_lut[pwm_lut_index(
+            channel, brightness, light_lut_index(target[channel]))];
     }
     return (uint32_t)(0xe0 | brightness)
         | ((uint32_t)pwm[2] << 8)
