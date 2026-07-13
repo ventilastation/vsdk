@@ -1,6 +1,8 @@
 import machine
+import sys
 from ventilastation import board_config
 from ventilastation.input_parser import InputParser
+from ventilastation.uart_logging import InfoWriter
 
 uart = machine.UART(
     board_config.get("serial_uart"),
@@ -34,3 +36,8 @@ def send(line, data=b""):
     uart.write("\n")
     if data:
         uart.write(data)
+
+
+def install_stdout():
+    """Send hardware Python ``print`` output to the desktop host over UART."""
+    sys.stdout = InfoWriter(send)

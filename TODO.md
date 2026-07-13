@@ -92,14 +92,27 @@ history of this file for the record.
 
 - only one SMS audio channel seems to be working. The drums work, but the melody is nowhere to be heard.
 
-- streamline the first install and upgrade processes:
+
+- when exiting native apps, the menu should restart with that game selected.
+
+- [done] the base emulator should have dark gray background, white/red buttons, black needle, and "Super Ventilagon" in black, matching the original.
+
+
+- [ongoing] streamline the first install and upgrade processes:
   - First install should be to flash a minimal "factory recover" micropython partition and an NVS partition, and then configure that NVS partition with the uart, hall and led spis GPIOs. On boot, this partition should display the ventilastation logo and keep requesting a "factory upgrade" from the base. 
   - Any seriously failed upgrade should go back to that factory recover partition.
   - Upgrades triggered from the base should upload the binary apps.
 
 
-- vs2 tiles look bad on the desktop emulator. Some frames they look ok, but often some frames the tiles look partially missing, like a block of less than a hundred successive columns have not been rendered, or were missing at the time of rendering. This happens randomly throught the emulator, but never happens thru the crossing from column 255 to 0.
+- [ongoing] vs2 tiles look bad on the desktop emulator. Some frames they look ok, but often some frames the tiles look partially missing, like a block of less than a hundred successive columns have not been rendered, or were missing at the time of rendering. This happens randomly throught the emulator, but never happens thru the crossing from column 255 to 0.
 
-- when exiting native apps, the menu should restart with that game selected.
+- I don't want local changes to the Micropython source tree. Move the main.py logic elsewhere. Check if it makes sense to use a frozen boot.py or _boot.py as main.c mentions. Revert that last commit to the micropython source tree that modifies main.c
+Also, the non-recovery main.py could be renamed vs_main.py if needed.
 
-- [done] the base emulator should have dark gray background, white/red buttons, black needle, and "Super Ventilagon" in black, matching the original.
+- use the same esp version for retro-core and prboom, as the one used for micropython
+
+- recovery should accept serial commands. ota_start, wifi_config, reset. Perhaps we can add one more command to set LED and HALL gpios.
+
+- let's get rid of old targets if they no longer make sense. Eg: flash-vsdk, flash-voom, flash-retro-core, flash-all, deploy-fs
+
+- drop frame_rgb from the workbench.

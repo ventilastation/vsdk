@@ -274,6 +274,13 @@ def dispatch_command(conn, command, args):
         print(tb.decode("utf-8"))
         print("-------------------------------------")
 
+    elif command == b"info":
+        # Hardware Python stdout is carried as a length-delimited payload so
+        # spaces and UTF-8 text cannot be mistaken for protocol arguments.
+        length = int(args[0]) if args else 0
+        message = conn.read(length).decode("utf-8", "replace")
+        print(message)
+
     elif command == b"debug":
         length = 32 * 16
         data = conn.read(length)
