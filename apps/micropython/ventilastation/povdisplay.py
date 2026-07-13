@@ -21,6 +21,30 @@ def set_gamma_mode(mode):
     return _display().set_gamma_mode(mode)
 
 
+def set_color_profile(profile):
+    return _display().set_color_profile(profile)
+
+
+def set_color_test_pattern(pattern, level=255):
+    return _display().set_color_test_pattern(pattern, level)
+
+
+def set_color_pipeline_enabled(enabled):
+    return _display().set_color_pipeline_enabled(enabled)
+
+
+def set_performance_profiling(enabled):
+    return _display().set_performance_profiling(enabled)
+
+
+def reset_performance_stats():
+    return _display().reset_performance_stats()
+
+
+def get_performance_stats():
+    return _display().get_performance_stats()
+
+
 def set_column_offset(offset):
     return _display().set_column_offset(offset)
 

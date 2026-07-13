@@ -8,6 +8,7 @@
 
 
 #include "driver/gpio.h"
+#include "esp_timer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +16,7 @@
 
 #include "minispi.h"
 #include "gpu.h"
+#include "color_pipeline.h"
 #include "ventilagon/ventilagon.h"
 
 // Wiring is provided by the NVS-backed MicroPython board configuration at init.
@@ -31,6 +33,82 @@ uint32_t led_freq;
 
 #define DEBUG_ROTATION 0
 #define PROFILE_GPU_STEP 0
+
+// This profiler is deliberately opt-in. It measures the real GPU task's
+// overlapped queue/render/wait/copy sequence without printf traffic on that
+// task. A control command reads the accumulated snapshot from the other core.
+typedef struct {
+    uint32_t samples;
+    uint32_t skipped_updates;
+    uint32_t deadline_misses;
+    uint32_t deadline_us;
+    uint64_t total_us;
+    uint64_t render_us;
+    uint64_t spi_wait_us;
+    uint64_t copy_us;
+    uint32_t max_total_us;
+    uint32_t max_render_us;
+    uint32_t max_arm_render_us;
+    uint32_t max_spi_wait_us;
+    uint32_t max_copy_us;
+    int32_t worst_slack_us;
+    bool have_column;
+    uint8_t last_column;
+} pov_performance_t;
+
+static portMUX_TYPE performance_lock = portMUX_INITIALIZER_UNLOCKED;
+static volatile bool performance_enabled;
+static pov_performance_t performance;
+
+static uint32_t elapsed_us(int64_t start, int64_t end) {
+    return end <= start ? 0 : (uint32_t)(end - start);
+}
+
+static bool performance_is_enabled(void) {
+    return __atomic_load_n(&performance_enabled, __ATOMIC_ACQUIRE);
+}
+
+static void performance_reset(void) {
+    portENTER_CRITICAL(&performance_lock);
+    memset(&performance, 0, sizeof(performance));
+    performance.worst_slack_us = INT32_MAX;
+    portEXIT_CRITICAL(&performance_lock);
+}
+
+static void performance_record(uint8_t column, uint32_t deadline_us,
+        uint32_t total_us, uint32_t render_us, uint32_t arm0_render_us,
+        uint32_t arm1_render_us, uint32_t spi_wait_us, uint32_t copy_us) {
+    if (!performance_is_enabled()) {
+        return;
+    }
+    int32_t slack_us = deadline_us > (uint32_t)INT32_MAX
+        ? INT32_MAX : (int32_t)deadline_us - (int32_t)total_us;
+    portENTER_CRITICAL(&performance_lock);
+    if (performance.have_column) {
+        uint8_t delta = (column - performance.last_column) & 0xff;
+        if (delta > 1) {
+            performance.skipped_updates += delta - 1;
+        }
+    } else {
+        performance.have_column = true;
+    }
+    performance.last_column = column;
+    performance.samples++;
+    performance.deadline_us = deadline_us;
+    performance.total_us += total_us;
+    performance.render_us += render_us;
+    performance.spi_wait_us += spi_wait_us;
+    performance.copy_us += copy_us;
+    if (total_us > performance.max_total_us) performance.max_total_us = total_us;
+    if (render_us > performance.max_render_us) performance.max_render_us = render_us;
+    if (arm0_render_us > performance.max_arm_render_us) performance.max_arm_render_us = arm0_render_us;
+    if (arm1_render_us > performance.max_arm_render_us) performance.max_arm_render_us = arm1_render_us;
+    if (spi_wait_us > performance.max_spi_wait_us) performance.max_spi_wait_us = spi_wait_us;
+    if (copy_us > performance.max_copy_us) performance.max_copy_us = copy_us;
+    if (total_us > deadline_us) performance.deadline_misses++;
+    if (slack_us < performance.worst_slack_us) performance.worst_slack_us = slack_us;
+    portEXIT_CRITICAL(&performance_lock);
+}
 
 #if DEBUG_ROTATION
 #define DEBUG_BUFFER_SIZE 32
@@ -147,24 +225,46 @@ void gpu_step() {
     int64_t now = esp_timer_get_time();
     uint32_t column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
     if (column != last_column) {
+        bool measuring = performance_is_enabled();
+        int64_t measurement_start = measuring ? esp_timer_get_time() : 0;
+        uint32_t column_deadline_us = last_turn_duration > 0
+            ? (uint32_t)(last_turn_duration / COLUMNS) : 0;
 #if (PROFILE_GPU_STEP)
         int64_t t_start = esp_timer_get_time();
 #endif
         spi_write_HSPI();
+        int64_t render_start = measuring ? esp_timer_get_time() : 0;
+        int64_t arm0_render_end;
+        int64_t render_end;
         if (vs2_render_active) {
             render_vs2((column + COLUMNS/2) % COLUMNS, draw_buffer0, &vs2_active_scene);
+            arm0_render_end = measuring ? esp_timer_get_time() : 0;
             render_vs2(column, draw_buffer1, &vs2_active_scene);
         } else {
             render((column + COLUMNS/2) % COLUMNS, draw_buffer0);
+            arm0_render_end = measuring ? esp_timer_get_time() : 0;
             render(column, draw_buffer1);
         }
+        render_end = measuring ? esp_timer_get_time() : 0;
 
         // need to wait for spi to finish before overwriting the buffers, because the DMA is reading from them
         spiWaitComplete();
+        int64_t wait_end = measuring ? esp_timer_get_time() : 0;
 
         for(int n=0; n<54; n++) {
             dma_pixels0[n] = draw_buffer0[53-n];
             dma_pixels1[n] = draw_buffer1[n];
+        }
+        if (measuring) {
+            int64_t copy_end = esp_timer_get_time();
+            // The two arms can differ with a scene's geometry, so retain the
+            // slower arm as well as their combined render time.
+            performance_record(column, column_deadline_us,
+                elapsed_us(measurement_start, copy_end),
+                elapsed_us(render_start, render_end),
+                elapsed_us(render_start, arm0_render_end),
+                elapsed_us(arm0_render_end, render_end),
+                elapsed_us(render_end, wait_end), elapsed_us(wait_end, copy_end));
         }
 #if (PROFILE_GPU_STEP)
         int64_t t_end = esp_timer_get_time();
@@ -264,6 +364,96 @@ static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_gamma_mode_obj, povdisplay_set_g
 
 // ------------------------------
 
+static mp_obj_t povdisplay_set_color_profile(mp_obj_t profile) {
+    mp_buffer_info_t buffer;
+    mp_get_buffer_raise(profile, &buffer, MP_BUFFER_READ);
+    if (!color_pipeline_apply(buffer.buf, buffer.len)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("invalid POV colour profile"));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_color_profile_obj, povdisplay_set_color_profile);
+
+// ------------------------------
+
+static mp_obj_t povdisplay_set_color_test_pattern(size_t n_args, const mp_obj_t *args) {
+    int pattern = mp_obj_get_int(args[0]);
+    int level = n_args > 1 ? mp_obj_get_int(args[1]) : 255;
+    if (pattern < 0 || level < 0 || level > 255
+        || !color_pipeline_set_test_pattern(pattern, level)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("invalid POV colour test pattern"));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_set_color_test_pattern_obj, 1, 2, povdisplay_set_color_test_pattern);
+
+// ------------------------------
+
+static mp_obj_t povdisplay_set_color_pipeline_enabled(mp_obj_t enabled) {
+    if (!color_pipeline_set_enabled(mp_obj_is_true(enabled))) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("POV colour profile unavailable"));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_color_pipeline_enabled_obj, povdisplay_set_color_pipeline_enabled);
+
+// ------------------------------
+
+static mp_obj_t povdisplay_set_performance_profiling(mp_obj_t enabled) {
+    bool value = mp_obj_is_true(enabled);
+    if (value) {
+        performance_reset();
+    }
+    __atomic_store_n(&performance_enabled, value, __ATOMIC_RELEASE);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_performance_profiling_obj, povdisplay_set_performance_profiling);
+
+static mp_obj_t povdisplay_reset_performance_stats(void) {
+    performance_reset();
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_reset_performance_stats_obj, povdisplay_reset_performance_stats);
+
+static void performance_dict_int(mp_obj_t dict, qstr key, mp_int_t value) {
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(key), mp_obj_new_int(value));
+}
+
+static mp_obj_t povdisplay_get_performance_stats(void) {
+    pov_performance_t snapshot;
+    portENTER_CRITICAL(&performance_lock);
+    snapshot = performance;
+    portEXIT_CRITICAL(&performance_lock);
+
+    uint32_t samples = snapshot.samples;
+    mp_obj_t dict = mp_obj_new_dict(20);
+    performance_dict_int(dict, MP_QSTR_enabled, performance_is_enabled());
+    performance_dict_int(dict, MP_QSTR_calibrated, color_pipeline_is_active());
+    performance_dict_int(dict, MP_QSTR_vs2, vs2_render_active);
+    performance_dict_int(dict, MP_QSTR_sprites, vs2_render_active ? vs2_active_scene.sprite_count : 0);
+    performance_dict_int(dict, MP_QSTR_tilemaps, vs2_render_active ? vs2_active_scene.tilemap_count : 0);
+    performance_dict_int(dict, MP_QSTR_layers, vs2_render_active ? vs2_active_scene.layer_count : 0);
+    performance_dict_int(dict, MP_QSTR_samples, samples);
+    performance_dict_int(dict, MP_QSTR_skipped_updates, snapshot.skipped_updates);
+    performance_dict_int(dict, MP_QSTR_deadline_misses, snapshot.deadline_misses);
+    performance_dict_int(dict, MP_QSTR_deadline_us, snapshot.deadline_us);
+    performance_dict_int(dict, MP_QSTR_avg_total_us, samples ? snapshot.total_us / samples : 0);
+    performance_dict_int(dict, MP_QSTR_max_total_us, snapshot.max_total_us);
+    performance_dict_int(dict, MP_QSTR_avg_render_us, samples ? snapshot.render_us / samples : 0);
+    performance_dict_int(dict, MP_QSTR_max_render_us, snapshot.max_render_us);
+    performance_dict_int(dict, MP_QSTR_max_arm_render_us, snapshot.max_arm_render_us);
+    performance_dict_int(dict, MP_QSTR_avg_spi_wait_us, samples ? snapshot.spi_wait_us / samples : 0);
+    performance_dict_int(dict, MP_QSTR_max_spi_wait_us, snapshot.max_spi_wait_us);
+    performance_dict_int(dict, MP_QSTR_avg_copy_us, samples ? snapshot.copy_us / samples : 0);
+    performance_dict_int(dict, MP_QSTR_max_copy_us, snapshot.max_copy_us);
+    performance_dict_int(dict, MP_QSTR_worst_slack_us,
+        samples ? snapshot.worst_slack_us : 0);
+    return dict;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_performance_stats_obj, povdisplay_get_performance_stats);
+
+// ------------------------------
+
 static mp_obj_t povdisplay_set_column_offset(mp_obj_t offset) {
     column_offset = mp_obj_get_int(offset) % COLUMNS;
     return mp_const_none;
@@ -304,6 +494,12 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_palettes), (mp_obj_t)&povdisplay_set_palettes_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_gamma_mode), (mp_obj_t)&povdisplay_set_gamma_mode_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_profile), (mp_obj_t)&povdisplay_set_color_profile_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_test_pattern), (mp_obj_t)&povdisplay_set_color_test_pattern_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_pipeline_enabled), (mp_obj_t)&povdisplay_set_color_pipeline_enabled_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_performance_profiling), (mp_obj_t)&povdisplay_set_performance_profiling_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_reset_performance_stats), (mp_obj_t)&povdisplay_reset_performance_stats_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_get_performance_stats), (mp_obj_t)&povdisplay_get_performance_stats_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_column_offset), (mp_obj_t)&povdisplay_set_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_column_offset), (mp_obj_t)&povdisplay_get_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },

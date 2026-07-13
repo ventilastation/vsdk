@@ -16,9 +16,15 @@ import struct
 import socket
 import threading
 from base_control import BaseControlState
+from povcal_state import PovCalibrationState
 from povrender import all_strips, set_palettes, spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
-from povrender import set_voom_frame_rgb, clear_voom_frame
+from povrender import (
+    set_voom_frame_rgb,
+    set_voom_frame_apa102,
+    set_apa102_profile_payload,
+    clear_voom_frame,
+)
 from audio import playsound, playmusic, playnotes
 from emu_audio import emu_audio
 import upgrade_server
@@ -160,6 +166,7 @@ workbench_conn = None
 
 last_time_seen = 0
 base_control = BaseControlState()
+povcal_state = PovCalibrationState()
 
 def waitconnect(conn, label):
     while looping:
@@ -186,6 +193,34 @@ def dispatch_command(conn, command, args):
     if command == b"frame_rgb":
         data = conn.read(256 * 54 * 3)
         set_voom_frame_rgb(data)
+
+    elif command == b"frame_apa102":
+        # Raw workbench capture: each spatial LED entry is the original
+        # APA102 [GB, B, G, R] datum. Its global brightness must survive to
+        # the preview decoder; do not reduce this to RGB bytes here.
+        data = conn.read(256 * 54 * 4)
+        set_voom_frame_apa102(data)
+
+    elif command == b"povcal_state":
+        if len(args) != 3:
+            print("comms: malformed povcal_state", args)
+            return
+        schema_version, generation, length = (int(arg) for arg in args)
+        payload = conn.read(length)
+        try:
+            profile = set_apa102_profile_payload(payload, schema_version, generation)
+            povcal_state.apply(profile)
+            print("comms: POV colour profile generation %d loaded" % profile.generation)
+        except ValueError as error:
+            povcal_state.reject(error)
+            print("comms: rejected POV colour profile:", error)
+
+    elif command == b"povcal_error":
+        generation = args[0].decode() if args else "?"
+        code = b" ".join(args[1:]).decode() if len(args) > 1 else "unknown"
+        message = "board error #%s: %s" % (generation, code)
+        povcal_state.reject(message)
+        print("comms: POV colour calibration", message)
 
     elif command == b"sprites":
         clear_voom_frame()
@@ -305,8 +340,23 @@ def dispatch_command(conn, command, args):
         print(command, *args)
 
 
-def _receive_loop(conn, label):
+def _request_povcal_profile(conn, label):
+    if conn is not workbench_conn:
+        return
+    try:
+        conn.send(b"povcal get\n")
+        print("comms: requested POV colour profile")
+    except (socket.error, OSError) as err:
+        print("comms: POV colour profile request failed:", err)
+
+
+def _connect(conn, label):
     waitconnect(conn, label)
+    _request_povcal_profile(conn, label)
+
+
+def _receive_loop(conn, label):
+    _connect(conn, label)
     while looping:
         try:
             l = conn.readline()
@@ -321,12 +371,12 @@ def _receive_loop(conn, label):
 
         except socket.error as err:
             print(f"comms: {label}: {err}")
-            waitconnect(conn, label)
+            _connect(conn, label)
 
         except Exception:
             print(traceback.format_exc())
             conn.close()
-            waitconnect(conn, label)
+            _connect(conn, label)
 
 
 def start():
@@ -385,6 +435,11 @@ def send_joystick(joy1: int, joy2: int = 0, extra: int = 0):
 def send_command(cmd: str):
     """Send a text command frame in-band on the existing connection."""
     send((cmd + '\n').encode('ascii'))
+
+
+def send_povcal(command: str):
+    """Send one calibration command to the connected board/base transport."""
+    send_command("povcal " + command)
 
 def trigger_ota():
     """Send ota_start in-band on the existing connection.

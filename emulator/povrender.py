@@ -10,6 +10,8 @@ import math
 from struct import pack, unpack, unpack_from
 
 from deepspace import deepspace, PIXELS
+from apa102 import decode_preview_rgb
+from color_profile import ColorProfile, DEFAULT_PROFILE
 
 ROWS = 256
 COLUMNS = 256
@@ -29,14 +31,43 @@ upalette = []
 # (the workbench's LED-bus capture, or a full-frame renderer like the
 # Ventilagon port). 256 columns × led_count × 3 bytes (R, G, B per LED).
 _voom_frame_rgb = None
+_voom_frame_apa102 = None
+_apa102_profile = DEFAULT_PROFILE
 
 def set_voom_frame_rgb(data):
-    global _voom_frame_rgb
+    global _voom_frame_rgb, _voom_frame_apa102
     _voom_frame_rgb = bytes(data)
+    _voom_frame_apa102 = None
+
+def set_voom_frame_apa102(data):
+    """Install a raw, spatially reassembled APA102 capture frame.
+
+    The workbench has already placed the two physical arms into display
+    coordinates, but each LED remains exactly [GB, B, G, R].  Decode it only
+    when rendering, so a future calibration-profile change can reinterpret
+    the same captured data correctly.
+    """
+    expected = COLUMNS * led_count * 4
+    if len(data) != expected:
+        raise ValueError("frame_apa102 has %d bytes, expected %d" % (len(data), expected))
+    global _voom_frame_rgb, _voom_frame_apa102
+    _voom_frame_apa102 = bytes(data)
+    _voom_frame_rgb = None
+
+def set_apa102_profile_payload(payload, schema_version=None, generation=None):
+    """Install the board's acknowledged calibration profile for raw preview."""
+    profile = ColorProfile.from_bytes(payload, schema_version, generation)
+    global _apa102_profile
+    _apa102_profile = profile
+    return profile
+
+def get_apa102_profile():
+    return _apa102_profile
 
 def clear_voom_frame():
-    global _voom_frame_rgb
+    global _voom_frame_rgb, _voom_frame_apa102
     _voom_frame_rgb = None
+    _voom_frame_apa102 = None
 
 def clear_vs2_scene():
     global vs2_scene_sprites, vs2_scene_tilemaps
@@ -263,6 +294,20 @@ def step_starfield():
 
 
 def render(column):
+    if _voom_frame_apa102 is not None:
+        # Raw hardware capture: column N = led_count × [GB, B, G, R].
+        # decode_preview_rgb applies the nominal APA102 light model and
+        # monitor sRGB encoding. The calibrated profile-aware decoder will
+        # replace its default response curves without changing this transport.
+        offset = column * led_count * 4
+        pixels = []
+        for i in range(led_count):
+            base = offset + i * 4
+            gb, b, g, r = _voom_frame_apa102[base:base + 4]
+            preview_r, preview_g, preview_b = decode_preview_rgb(gb, b, g, r, _apa102_profile)
+            pixels.append(0xFF000000 | (preview_b << 16) | (preview_g << 8) | preview_r)
+        return pixels
+
     if _voom_frame_rgb is not None:
         # RGB voom frame: column N = led_count × (R, G, B) triples
         # Reconstruct as ABGR uint32 to match the palette entry format used by upalette.

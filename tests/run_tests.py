@@ -41,6 +41,11 @@ CPYTHON_TESTS = [
     "tests/test_vs2_api.py",
     "tests/test_base_control.py",
     "tests/test_uart_logging.py",
+    "tests/test_apa102_preview.py",
+    "tests/test_color_profile.py",
+    "tests/test_color_calibration.py",
+    "tests/test_povcal_state.py",
+    "tests/test_pov_profiling.py",
     "tests/test_tutorial_vs2.py",
     "tests/test_emulator_vs2_render.py",
     "tests/test_mapdemo_vs2.py",
@@ -105,9 +110,22 @@ def run_scripts(interpreter, scripts, label):
     return ok
 
 
-NATIVE_TEST_SOURCES = [
-    "hardware/rotor/modules/povdisplay/gpu.c",
-    "tests/native/test_render_vs2.c",
+NATIVE_TESTS = [
+    (
+        "tests/native/test_render_vs2.c",
+        [
+            "hardware/rotor/modules/povdisplay/gpu.c",
+            "hardware/rotor/modules/povdisplay/color_pipeline.c",
+            "tests/native/test_render_vs2.c",
+        ],
+    ),
+    (
+        "tests/native/test_color_pipeline.c",
+        [
+            "hardware/rotor/modules/povdisplay/color_pipeline.c",
+            "tests/native/test_color_pipeline.c",
+        ],
+    ),
 ]
 
 
@@ -117,22 +135,23 @@ def run_native_tests():
         print("SKIP native renderer tests (no C compiler on PATH)")
         return True
     with tempfile.TemporaryDirectory() as tmpdir:
-        binary = pathlib.Path(tmpdir) / "test_render_vs2"
-        compile_cmd = [
-            compiler, "-std=c11", "-Wall",
-            "-I", "tests/native/stubs",
-            "-I", "hardware/rotor/modules/povdisplay",
-            "-o", str(binary),
-        ] + NATIVE_TEST_SOURCES + ["-lm"]
-        print(f"--- {compiler} tests/native/test_render_vs2.c")
-        result = subprocess.run(compile_cmd, cwd=ROOT)
-        if result.returncode != 0:
-            print("FAIL native renderer tests (compile)")
-            return False
-        result = subprocess.run([str(binary)], cwd=ROOT)
-        if result.returncode != 0:
-            print("FAIL native renderer tests")
-            return False
+        for test_name, sources in NATIVE_TESTS:
+            binary = pathlib.Path(tmpdir) / pathlib.Path(test_name).stem
+            compile_cmd = [
+                compiler, "-std=c11", "-Wall",
+                "-I", "tests/native/stubs",
+                "-I", "hardware/rotor/modules/povdisplay",
+                "-o", str(binary),
+            ] + sources + ["-lm"]
+            print(f"--- {compiler} {test_name}")
+            result = subprocess.run(compile_cmd, cwd=ROOT)
+            if result.returncode != 0:
+                print("FAIL native renderer tests (compile)")
+                return False
+            result = subprocess.run([str(binary)], cwd=ROOT)
+            if result.returncode != 0:
+                print("FAIL native renderer tests")
+                return False
     return True
 
 

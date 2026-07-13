@@ -53,6 +53,7 @@ flashing). There are no more `wifi_config.json` / `settings.json` files.
 | `vs_board` | `led_spi_host`, `led_clk`, `led_mosi`, `led_cs`, `led_freq` | i32 | same | MicroPython LED SPI; native POV display |
 | `vs_board` | `serial_uart`, `serial_tx`, `serial_rx`, `serial_baud` | i32 | same | MicroPython comms; native host/audio bridge |
 | `voom_pov` | `col_offset` | i32  | MicroPython `settings.py` (POV calibration) | POV driver `ventilastation_pov.c` (all native apps) |
+| `voom_pov` | `color_v1` | versioned blob | MicroPython `color_calibration.py` / `povcal commit` | MicroPython and native POV colour pipelines |
 | `voom_md`  | `rom`        | blob | MicroPython `native_apps.py` (before launch) | gwenesis `main.c` |
 | `voom_emu` | `system`     | blob | MicroPython `native_apps.py` (before launch) | retro-core `main.c` (selects the emulator) |
 | `voom_emu` | `rom`        | blob | MicroPython `native_apps.py` (before launch) | retro-core `main.c` |

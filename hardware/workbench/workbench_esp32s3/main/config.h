@@ -25,7 +25,11 @@
 
 #define WB_NUM_LEDS   54     // must match PIXELS in hardware/rotor/modules/povdisplay/gpu.c
 #define WB_COLUMNS    256
-#define WB_FRAME_BYTES (WB_COLUMNS * WB_NUM_LEDS * 3)
+// Reassembled LED telemetry keeps each complete on-wire APA102 LED frame:
+// [0xe0 | global brightness, B, G, R]. The workbench is a passive observer;
+// it must not discard global brightness or reinterpret the colour data.
+#define WB_APA102_LED_FRAME_BYTES 4
+#define WB_FRAME_BYTES (WB_COLUMNS * WB_NUM_LEDS * WB_APA102_LED_FRAME_BYTES)
 
 // ---- DUT UART bridge ----
 #define WB_UART_TX_PIN  6   // -> DUT serial_rx
