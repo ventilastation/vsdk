@@ -62,9 +62,13 @@ def update():
     if comms.was_new_connection():
         print("remotepov: new connection detected, resending all")
         _resend_all()
-    comms.send(b"sprites", sprite_data)
     if vs2_scene_data is not None:
         comms.send(b"vs2_scene %d" % len(vs2_scene_data), vs2_scene_data)
+    else:
+        # A VS2 scene already contains its complete sprite state.  Sending the
+        # legacy table first makes the desktop host clear the VS2 tilemaps,
+        # leaving a visible gap until the following vs2_scene packet arrives.
+        comms.send(b"sprites", sprite_data)
 
 def last_turn_duration():
     return 1234000 + randrange(1000)

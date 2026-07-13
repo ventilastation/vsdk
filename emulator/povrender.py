@@ -21,8 +21,11 @@ led_count = PIXELS
 
 starfield = [(random.randrange(COLUMNS), random.randrange(ROWS)) for n in range(STARS)]
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
-vs2_scene_sprites = None
-vs2_scene_tilemaps = None
+# Decoded VS2 scenes are immutable after publication.  The communications
+# thread swaps this one reference only after it has decoded the full payload,
+# and a display draw captures it once for all 256 columns.
+_vs2_scene = None
+_CURRENT_VS2_SCENE = object()
 all_strips = {}
 qpalette = []
 upalette = []
@@ -70,19 +73,23 @@ def clear_voom_frame():
     _voom_frame_apa102 = None
 
 def clear_vs2_scene():
-    global vs2_scene_sprites, vs2_scene_tilemaps
-    vs2_scene_sprites = None
-    vs2_scene_tilemaps = None
+    global _vs2_scene
+    _vs2_scene = None
 
 def set_vs2_scene(data):
-    global vs2_scene_sprites, vs2_scene_tilemaps
+    global _vs2_scene
     scene = decode_vs2_scene(data)
-    if scene is None:
-        vs2_scene_sprites = None
-        vs2_scene_tilemaps = None
-    else:
-        vs2_scene_sprites = scene["sprites"]
-        vs2_scene_tilemaps = scene["tilemaps"]
+    _vs2_scene = scene
+
+
+def snapshot_vs2_scene():
+    """Return the complete VS2 scene currently published by comms.
+
+    Call this once per visible frame, then pass the result to ``render`` for
+    every column.  A scene update from the receiver thread must not splice two
+    scene revisions into the same circular display frame.
+    """
+    return _vs2_scene
 
 def decode_vs2_scene(data):
     if len(data) < 16 or data[0:4] != b"VS2\0":
@@ -293,7 +300,9 @@ def step_starfield():
         starfield[n] = (x, y)
 
 
-def render(column):
+def render(column, vs2_scene=_CURRENT_VS2_SCENE):
+    if vs2_scene is _CURRENT_VS2_SCENE:
+        vs2_scene = _vs2_scene
     if _voom_frame_apa102 is not None:
         # Raw hardware capture: column N = led_count × [GB, B, G, R].
         # decode_preview_rgb applies the nominal APA102 light model and
@@ -331,11 +340,11 @@ def render(column):
                 print(e, len(pixels), y, px)
                 print(y, deepspace)
 
-    scene_sprites = vs2_scene_sprites
-    use_vs2_renderer = scene_sprites is not None
-    if use_vs2_renderer and vs2_scene_tilemaps:
+    scene_sprites = vs2_scene["sprites"] if vs2_scene is not None else None
+    use_vs2_renderer = vs2_scene is not None
+    if use_vs2_renderer and vs2_scene["tilemaps"]:
         # first slice: all tilemaps draw behind all sprites
-        for tilemap in sorted(vs2_scene_tilemaps, key=lambda t: t["slot"], reverse=True):
+        for tilemap in sorted(vs2_scene["tilemaps"], key=lambda t: t["slot"], reverse=True):
             render_tilemap(pixels, column, tilemap)
     if scene_sprites is None:
         # sprite 0 is drawn on top of all the others

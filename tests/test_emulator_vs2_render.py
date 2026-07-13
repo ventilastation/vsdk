@@ -240,6 +240,20 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         pixels_column_0 = povrender.render(0)
         self.assertEqual(pixels_column_0[13], 20)
 
+    def test_vs2_frame_snapshot_does_not_mix_scene_revisions(self):
+        povrender.all_strips[9] = make_tile_strip()
+        povrender.set_vs2_scene(make_vs2_scene([], [], [default_tilemap(x=10)]))
+        frame_scene = povrender.snapshot_vs2_scene()
+
+        # Simulate the receiver thread publishing the next scene while pyglet
+        # is still walking the previous frame's columns.
+        povrender.set_vs2_scene(make_vs2_scene([], [], [default_tilemap(x=30)]))
+
+        self.assertEqual(povrender.render(10, frame_scene)[13], 10)
+        self.assertEqual(povrender.render(11, frame_scene)[13], 20)
+        self.assertEqual(povrender.render(10)[13], 0)
+        self.assertEqual(povrender.render(30)[13], 10)
+
     def test_vs2_tilemap_draws_behind_sprites(self):
         povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
         povrender.all_strips[9] = make_tile_strip()
