@@ -6,7 +6,7 @@ from pyglet.gl import Config
 from pyglet.gl import *
 
 import config
-from povrender import COLUMNS, pack_colors, repeated, render
+from povrender import COLUMNS, pack_colors, repeated, render, snapshot_vs2_scene
 
 display_enabled = config.DISPLAY_ENABLED
 pyglet.options['vsync'] = display_enabled
@@ -75,10 +75,11 @@ def display_draw():
     glEnable(texture.target)
     glBindTexture(texture.target, texture.id)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    vs2_scene = snapshot_vs2_scene()
     for column in range(256):
         limit = len(vertex_list.colors)
         try:
-            pixels = render(column)[0:limit]
+            pixels = render(column, vs2_scene)[0:limit]
             vertex_list.colors[:] = pack_colors(list(repeated(4, pixels)))
             vertex_list.draw(GL_QUADS)
         except Exception as e:

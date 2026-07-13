@@ -27,7 +27,7 @@ from pyglet.graphics.shader import Shader, ShaderProgram
 
 import comms
 import config
-from povrender import COLUMNS, pack_colors, repeated, render
+from povrender import COLUMNS, pack_colors, repeated, render, snapshot_vs2_scene
 
 display_enabled = config.DISPLAY_ENABLED
 pyglet.options['vsync'] = display_enabled
@@ -465,8 +465,9 @@ def display_draw():
 
     all_pixels = []
     try:
+        vs2_scene = snapshot_vs2_scene()
         for column in range(COLUMNS):
-            all_pixels.extend(render(column))
+            all_pixels.extend(render(column, vs2_scene))
 
         vertex_colors = pack_colors(list(repeated(6, all_pixels)))
         vertex_list.set_attribute_data("colors", vertex_colors)
