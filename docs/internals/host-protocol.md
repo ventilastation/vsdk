@@ -75,6 +75,7 @@ visible; `0x02` and `0x04` are `flip_x` and `flip_y`.
 | Command | Payload | Meaning |
 |---|---|---|
 | `traceback <nbytes>` | `<nbytes>` | UTF-8 Python traceback from the board; hosts display it prominently |
+| `info <nbytes>` | `<nbytes>` | UTF-8 line printed by the hardware MicroPython runtime; hosts write it to their standard output |
 | `debug` | 512 bytes | 32 × (int64 timestamp, int64 turn duration) rotation log; hosts derive RPM/FPS |
 | `ota_progress <stage> <detail> <pct>` | — | OTA status updates ([ota.md](ota.md)) |
 | `ota_done <status>` / `ota_error <msg...>` | — | OTA completion / failure |

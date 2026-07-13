@@ -6,11 +6,34 @@
 # terminal_connected=false, and silently drops all Python output forever.
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
+# Point the CMake build at this board's real partition table. Without this,
+# CONFIG_PARTITION_TABLE_CUSTOM_FILENAME silently falls back to the port's
+# stock default (ports/esp32/boards/sdkconfig.base ->
+# "partitions-4MiBplus.csv"), so any partition-table.bin produced by a normal
+# `make vsdk`/CMake build is wrong for this board -- flashing it clobbers the
+# real layout down to a handful of entries. hardware/rotor/flash_vsdk_image.py
+# has always sidestepped this by generating the table straight from
+# hardware/rotor/partitions-ventilastation.csv instead of using the CMake
+# output; this line makes the CMake build agree with it too. The path is
+# resolved relative to the CMake project root (ports/esp32), not the vsdk
+# repo root.
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../../partitions-ventilastation.csv"
+
+# This board has 16MB of flash; the port's stock default is 4MB
+# (CONFIG_ESPTOOLPY_FLASHSIZE_4MB in boards/sdkconfig.base), which is too
+# small to hold partitions-ventilastation.csv's 16MB layout -- the
+# partition-table.bin build step fails outright ("Partitions tables occupies
+# 16.0MB of flash... which does not fit in configured flash size 4MB") once
+# CONFIG_PARTITION_TABLE_CUSTOM_FILENAME above points at the real table.
+# hardware/rotor/flash_vsdk_image.py already passes --flash_size 16MB to
+# esptool separately, but that only affects the flash step, not this build.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
 # Enable OTA rollback: a new image starts PENDING_VERIFY and must call
 # esp_ota_mark_app_valid_cancel_rollback() within one boot to be confirmed.
 # If the board resets without confirming, the bootloader falls back to the
-# previous valid image (factory).  MicroPython calls this after WiFi connects
-# (see apps/micropython/ventilastation/comms.py).
+# previous valid image (factory).  MicroPython calls this after the main loop
+# has genuinely ticked for a few seconds (see apps/micropython/main.py).
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # Core 0 is reserved for the POV LED SPI task (coreTask/gpu_step, see

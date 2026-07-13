@@ -24,7 +24,11 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 MPY_SOURCE_ROOTS = [
     ROOT / "apps" / "micropython" / "main.py",
+    ROOT / "apps" / "micropython" / "boot.py",
     ROOT / "apps" / "micropython" / "vs2.py",
+    ROOT / "apps" / "micropython" / "updater.py",
+    ROOT / "apps" / "micropython" / "vsdk_recovery.py",
+    ROOT / "apps" / "micropython" / "vsdk_logo_strip.py",
     ROOT / "apps" / "micropython" / "ventilastation",
     ROOT / "system",
     ROOT / "games",
@@ -36,10 +40,15 @@ CPYTHON_TESTS = [
     "tests/test_rom_format.py",
     "tests/test_vs2_api.py",
     "tests/test_base_control.py",
+    "tests/test_uart_logging.py",
     "tests/test_tutorial_vs2.py",
     "tests/test_emulator_vs2_render.py",
     "tests/test_mapdemo_vs2.py",
     "tests/test_vixeous_vs2.py",
+    "tests/test_recovery.py",
+    "tests/test_updater.py",
+    "tests/test_upgrade_server.py",
+    "tests/test_boot.py",
 ]
 
 MICROPYTHON_TESTS = [

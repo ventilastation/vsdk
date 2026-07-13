@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk flash-recovery voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
 MAC ?=
@@ -11,7 +11,7 @@ BAUD ?= 2000000
 # boards of one type are attached or when a particular board must be forced.
 PYTHON ?= python3
 BOARD_DETECTOR := $(abspath tools/find_board.py)
-ROTOR_PORT_TARGETS := flash-vsdk flash-voom flash-launcher flash-retro-core flash-all deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision
+ROTOR_PORT_TARGETS := flash-vsdk flash-recovery flash-voom flash-launcher flash-retro-core flash-all deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision
 WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
 PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS)
 ROTOR_GOALS := $(filter $(ROTOR_PORT_TARGETS),$(MAKECMDGOALS))
@@ -117,11 +117,23 @@ web-emulator-bundle:
 vsdk:
 	$(call idf-env,$(VSDK_IDF_PATH),$(MAKE) -C "$(MICROPYTHON_PORT_DIR)" V=1 BOARD="$(VSDK_BOARD)" BOARD_DIR="$(VSDK_BOARD_DIR)" BOARD_VARIANT="$(VSDK_BOARD_VARIANT)" USER_C_MODULES="$(VSDK_MODULES)" FROZEN_MANIFEST="$(VSDK_FROZEN_MANIFEST)" all)
 
-# flash-vsdk writes MicroPython to both the factory slot and the micropython
-# (ota_2) slot. On first boot, comms.py migrates from factory to ota_2
-# automatically.
+# flash-vsdk is a bench-dev convenience: it writes MicroPython to both the
+# factory slot and the micropython (ota_2) slot over USB, for fast local
+# iteration without waiting on WiFi/OTA. It is NOT the bring-up procedure for
+# a new board -- use flash-recovery for that (see docs/internals/ota.md).
 flash-vsdk: vsdk
 	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_vsdk_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VSDK_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"'
+
+# flash-recovery is the bring-up procedure for a new (or fully-erased) board:
+# USB-flashes only the `factory` partition (the permanent recovery
+# environment) + NVS, read-first so re-running this doesn't clobber an
+# already-provisioned board (pass FORCE=1 to overwrite). Everything else --
+# vfs, native apps, and the real ota_2 micropython copy -- installs over WiFi
+# via recovery's own OTA loop once it boots. Pass WIFI_SSID=/WIFI_PASS= to
+# also provision devel_wifi in the same step.
+FORCE ?=
+flash-recovery: vsdk
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_recovery_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VSDK_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)" $(if $(FORCE),--force,) $(if $(WIFI_SSID),--wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)",)'
 
 voom:
 	$(call rg-build,prboom-go)

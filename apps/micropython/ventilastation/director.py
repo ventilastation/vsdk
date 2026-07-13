@@ -415,7 +415,11 @@ class Director:
         if trace_flags & TRACE_AUTO_GC_FRAME:
             gc.collect()
 
-    def run(self, should_continue=None):
+    def run(self, should_continue=None, feed_wdt=None):
+        # feed_wdt is an optional zero-arg callable, fed once per genuine loop
+        # iteration. Kept as an injected hook (not a machine.WDT import here)
+        # so this loop stays usable by the desktop/headless emulator, which
+        # has no watchdog at all.
         while True:
             if should_continue is not None and not should_continue():
                 utime.sleep_ms(10)
@@ -423,6 +427,8 @@ class Director:
             now = utime.ticks_ms()
             next_loop = utime.ticks_add(now, 30)
             self.step_once()
+            if feed_wdt is not None:
+                feed_wdt()
 
             delay = utime.ticks_diff(next_loop, utime.ticks_ms())
             if delay > 0:

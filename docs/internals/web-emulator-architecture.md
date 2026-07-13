@@ -48,7 +48,7 @@ That means the current hardware flow for `voom` is:
 
 The current combined-image layout for this handoff is defined in:
 
-- `hardware/rotor/partitions-voom.csv`
+- `hardware/rotor/partitions-ventilastation.csv`
 
 and built by:
 

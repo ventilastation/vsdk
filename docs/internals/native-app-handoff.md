@@ -81,7 +81,7 @@ This is a direct launcher hook even though the actual app is still a separate fi
 
 `vsdk` now contains the combined-image pieces needed for this handoff:
 
-- partition layout: `hardware/rotor/partitions-voom.csv`
+- partition layout: `hardware/rotor/partitions-ventilastation.csv`
 - image builder: `hardware/rotor/build_voom_image.py`
 - flash helper: `hardware/rotor/flash_voom_image.py`
 

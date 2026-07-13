@@ -1,0 +1,9 @@
+# Name,        Type, SubType, Offset,   Size,     Flags
+nvs,           data, nvs,     0x9000,   0x4000,
+otadata,       data, ota,     0xd000,   0x2000,
+phy_init,      data, phy,     0xf000,   0x1000,
+factory,       app,  factory, 0x10000,  0x200000,
+prboom-go,     app,  ota_0,   0x210000, 0x180000,
+retro-core,    app,  ota_1,   0x390000, 0x100000,
+micropython,   app,  ota_2,   0x490000, 0x200000,
+vfs,           data, fat,     0x690000, 0x970000,
