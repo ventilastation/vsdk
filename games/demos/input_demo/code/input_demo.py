@@ -1,19 +1,22 @@
 """Live visualiser for every Input Protocol v2 controller control.
 
-The four HUD rows deliberately use 84 compact-font sprites: enough to show
-both joysticks at once, while leaving room below the rotor's 100-sprite limit.
-An uppercase letter means the labelled input is held; a dot means it is up.
+One 21x3 compact-font tilemap shows both joysticks without consuming the
+rotor sprite table.  Pressed controls use the red glyphs from the ROM menu's
+combined font strip; released controls are white dots.
 """
 
 from ventilastation.director import director
-from vs2 import HUD, Scene, Sprite
+from vs2 import EMPTY_TILE, HUD, Scene, Tilemap
 
 
 FONT = "tinyfont_menu.png"
 FONT_WIDTH = 4
+FONT_HEIGHT = 6
 LINE_LENGTH = 21
-LINE_HEIGHT = 7
-LINE_Y = (12, 19, 26, 33)
+LINE_COUNT = 3
+TEXT_X = -(LINE_LENGTH * FONT_WIDTH // 2)
+# HUD Y=0 is the outermost LED.  Keep the compact readout at the visible edge.
+TEXT_Y = 0
 
 
 def _marker(pressed, label):
@@ -33,29 +36,22 @@ def _state_line(prefix, directions, faces, start, back):
     face_text = "".join(
         _marker(pressed, label) for pressed, label in zip(faces, "ABXY")
     )
-    return "%s:%s %s %s%s" % (
+    line = "%s:%s %s %s%s" % (
         prefix, direction_text, face_text,
         _marker(start, "S"), _marker(back, "B"),
     )
-
-
-class TextLine:
-    """One fixed-width HUD line made from the shared compact font."""
-
-    def __init__(self, layer, y):
-        self.value = None
-        self.sprites = []
-        for index in range(LINE_LENGTH):
-            x = (LINE_LENGTH * FONT_WIDTH // 2 - index * FONT_WIDTH) % 256
-            self.sprites.append(layer.add(Sprite(FONT, x=x, y=y, frame=0)))
-
-    def set_value(self, value):
-        value = str(value)[:LINE_LENGTH]
-        if value == self.value:
-            return
-        self.value = value
-        for index, sprite in enumerate(self.sprites):
-            sprite.frame = ord(value[index]) if index < len(value) else 0
+    red_positions = []
+    for index, pressed in enumerate(directions):
+        if pressed:
+            red_positions.append(3 + index)
+    for index, pressed in enumerate(faces):
+        if pressed:
+            red_positions.append(8 + index)
+    if start:
+        red_positions.append(13)
+    if back:
+        red_positions.append(14)
+    return line, red_positions
 
 
 class InputDemo(Scene):
@@ -63,12 +59,33 @@ class InputDemo(Scene):
 
     def on_enter(self):
         super(InputDemo, self).on_enter()
-        hud = self.layer("input-demo", mode=HUD)
-        self.lines = [TextLine(hud, y) for y in LINE_Y]
+        self.hud = self.layer("input-demo", mode=HUD)
+        self.text_frames = bytearray([EMPTY_TILE]) * (LINE_LENGTH * LINE_COUNT)
+        self.text = self.hud.add(Tilemap(
+            FONT, self.text_frames,
+            columns=LINE_LENGTH, rows=LINE_COUNT,
+            tile_width=FONT_WIDTH, tile_height=FONT_HEIGHT,
+            x=TEXT_X, y=TEXT_Y,
+        ))
+        self.line_values = [None] * LINE_COUNT
         self.last_state = None
-        self.lines[0].set_value("     LRUD ABXY S B")
-        self.lines[3].set_value(".=UP LETTER=HELD")
+        self.set_line(0, "     LRUD ABXY S B")
         self.refresh()
+
+    def set_line(self, row, value, red_positions=()):
+        value = str(value)[:LINE_LENGTH]
+        if value == self.line_values[row]:
+            return
+        self.line_values[row] = value
+        offset = row * LINE_LENGTH
+        for index in range(LINE_LENGTH):
+            # The legacy font sprite placement runs clockwise by decrementing
+            # x. Reverse the map columns to preserve that readable order.
+            frame = ord(value[index]) if index < len(value) else EMPTY_TILE
+            if index in red_positions:
+                # ``tinyfont_menu.png`` packs matching red glyphs at 0x80.
+                frame |= 0x80
+            self.text_frames[offset + LINE_LENGTH - 1 - index] = frame
 
     def input_state(self):
         joy1_directions = (
@@ -111,8 +128,10 @@ class InputDemo(Scene):
         if state == self.last_state:
             return
         self.last_state = state
-        self.lines[1].set_value(_state_line("J1", *state[0:4]))
-        self.lines[2].set_value(_state_line("J2", *state[4:8]))
+        joy1_line, joy1_red = _state_line("J1", *state[0:4])
+        joy2_line, joy2_red = _state_line("J2", *state[4:8])
+        self.set_line(1, joy1_line, joy1_red)
+        self.set_line(2, joy2_line, joy2_red)
 
     def step(self):
         self.refresh()

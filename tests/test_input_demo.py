@@ -59,9 +59,16 @@ class InputDemoTests(unittest.TestCase):
 
         scene = load_app("demos.input_demo")
         self.assertEqual(scene._vs_declared_api, "vs2")
-        self.assertEqual(sum(len(line.sprites) for line in scene.lines), 84)
-        self.assertEqual(scene.lines[0].value, "     LRUD ABXY S B")
-        self.assertEqual(scene.lines[3].value, ".=UP LETTER=HELD")
+        self.assertEqual(len(scene.hud.sprites), 0)
+        self.assertEqual(len(scene.hud.tilemaps), 1)
+        self.assertEqual(len(scene.text_frames), 63)
+        self.assertIs(scene.text.frames, scene.text_frames)
+        self.assertEqual(scene.line_values[0], "     LRUD ABXY S B")
+        self.assertEqual(scene.text.y, 0)
+        import vs2
+        payload = vs2.export_scene_payload(scene)
+        self.assertEqual(payload[4], 2)  # tilemap-capable VS2 payload
+        self.assertEqual(payload[7], 1)
 
         comms = director.platform.comms
         joy2 = [director.JOY2_RIGHT | director.JOY2_DOWN | director.BUTTON2_B]
@@ -76,8 +83,19 @@ class InputDemoTests(unittest.TestCase):
         ]))
         director.step_once()
 
-        self.assertEqual(scene.lines[1].value, "J1:L.U. A.XY S.")
-        self.assertEqual(scene.lines[2].value, "J2:.R.D .B.Y .B")
+        self.assertEqual(scene.line_values[1], "J1:L.U. A.XY S.")
+        self.assertEqual(scene.line_values[2], "J2:.R.D .B.Y .B")
+        # Tilemap columns are stored in the clockwise order used by sprites.
+        row = 1 * 21
+        self.assertEqual(scene.text_frames[row + 20], ord("J"))
+        self.assertEqual(scene.text_frames[row + 19], ord("1"))
+        # The ROM menu strip keeps white ASCII at 0..127 and red at 128..254.
+        self.assertEqual(scene.text_frames[row + 17], ord("L") | 0x80)
+        self.assertEqual(scene.text_frames[row + 16], ord("."))
+        self.assertEqual(scene.text_frames[row + 12], ord("A") | 0x80)
+        joy2_row = 2 * 21
+        self.assertEqual(scene.text_frames[joy2_row + 11], ord("B") | 0x80)
+        self.assertEqual(scene.text_frames[joy2_row + 9], ord("Y") | 0x80)
 
 
 if __name__ == "__main__":
