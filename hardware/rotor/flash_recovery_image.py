@@ -2,9 +2,10 @@
 """Flash only the `factory` partition + NVS -- the streamlined bring-up
 procedure for a fresh Ventilastation main board (see docs/internals/ota.md).
 
-Unlike flash_vsdk_image.py (which also writes the ota_2 `micropython` slot --
-now a bench-dev convenience, not the bring-up procedure), this writes
-bootloader + partition table + micropython.bin to `factory` alone. `factory`
+Unlike flash_vsdk_image.py / `make initial-flash` (which also writes the
+ota_2 `micropython` slot and an empty vfs -- now a bench-dev convenience, not
+the bring-up procedure), this writes bootloader + partition table +
+micropython.bin to `factory` alone. `factory`
 is the permanent recovery environment (see apps/micropython/main.py): on a
 fresh board there's no vfs `main.py` yet, so it runs vsdk_recovery.py, which
 fetches everything else -- vfs, native apps, and the real ota_2 micropython
@@ -17,19 +18,10 @@ read-first so re-running this during bench iteration doesn't clobber an
 already-provisioned board. Pass --force to overwrite regardless, or
 --skip-nvs to flash factory only.
 
-Bench-observed timing note: recovery's WiFi connect / mDNS resolution calls
-don't yield to a Ctrl-C interrupt at all (confirmed on hardware -- a raw
-Ctrl-C sent mid-attempt can go unanswered for over a minute), so
-vsdk_recovery.py gives external tools an explicit, guaranteed-idle ~8s
-window right at boot, before the first network attempt, specifically so a
-short fixed poll interval reliably lands inside it (see `_BOOT_GRACE_MS` in
-vsdk_recovery.py). Once any attempt succeeds, recovery's loop exits for
-good anyway: the KeyboardInterrupt it raises isn't a subclass of Exception,
-so it escapes vsdk_recovery.py's `except Exception` handler and the board
-just sits at the REPL from then on -- no further contention. The retry
-budget below is still generous beyond that first window as a safety net
-(e.g. a board that isn't fresh and is mid-cycle when this runs), just with
-a shorter poll interval to reliably catch the boot-grace window itself.
+NVS is read and written entirely over esptool + tools/nvs_partition.py (dump
+the partition, decode/patch/re-encode, write it back) -- no dependency on
+mpremote running code on a booted MicroPython, so this works even on a board
+that isn't running yet. Only the final reset still goes over mpremote.
 """
 
 import argparse
@@ -37,48 +29,23 @@ import pathlib
 import subprocess
 import sys
 import tempfile
-import time
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "tools"))
+import nvs_partition
+
+# Must match the "nvs" row in partitions-ventilastation.csv.
+NVS_OFFSET = 0x9000
+NVS_SIZE = 0x4000
 
 
-_MPREMOTE_TRIES = 6
-_MPREMOTE_RETRY_DELAY_S = 2
-_MPREMOTE_ATTEMPT_TIMEOUT_S = 20
-_MPREMOTE_SETTLE_S = 3
-
-
-def run_mpremote_with_retry(argv, tries=_MPREMOTE_TRIES, delay=_MPREMOTE_RETRY_DELAY_S,
-                             attempt_timeout=_MPREMOTE_ATTEMPT_TIMEOUT_S, settle=_MPREMOTE_SETTLE_S):
-    """Run an mpremote command, retrying on failure.
-
-    Each attempt gets a generous timeout rather than being killed fast: mpremote's
-    own raw-REPL-entry retries internally, and bench testing found a single
-    patient ~20s attempt reliably lands within recovery's boot-grace window
-    (see vsdk_recovery.py's `_BOOT_GRACE_MS`) in well under that time, whereas
-    many short, externally-restarted attempts kept failing -- each fast-killed
-    attempt seems to leave the board's raw-REPL parser in a partial-handshake
-    state that a fresh attempt doesn't cleanly recover from. Once one attempt
-    lands, recovery's loop exits -- but a *successful* `mpremote run` itself
-    appears to soft-reset the board afterward (bench-observed: a call placed
-    right after another successful one needed the same patience again), so
-    every call gets its own brief settle pause first rather than assuming the
-    board stays cooperative indefinitely after the first success.
-    """
-    time.sleep(settle)
-    last_result = None
-    for attempt in range(1, tries + 1):
-        try:
-            last_result = subprocess.run(argv, capture_output=True, text=True, timeout=attempt_timeout)
-        except subprocess.TimeoutExpired:
-            print(f"flash_recovery_image: mpremote attempt {attempt}/{tries} timed out, retrying...")
-            continue
-        if last_result.returncode == 0:
-            return last_result
-        print(f"flash_recovery_image: mpremote attempt {attempt}/{tries} failed, retrying...")
-        time.sleep(delay)
-    raise RuntimeError(
-        f"mpremote command failed after {tries} attempts: {' '.join(argv)}\n"
-        f"{last_result.stderr if last_result else ''}"
-    )
+def run_mpremote(argv):
+    print("$", " ".join(argv))
+    result = subprocess.run(argv, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(result.stdout, end="")
+        print(result.stderr, end="", file=sys.stderr)
+        raise subprocess.CalledProcessError(result.returncode, argv, result.stdout, result.stderr)
+    return result
 
 
 def shell_quote(value):
@@ -160,65 +127,20 @@ _BOARD_KEYS = (
 )
 
 
-def _check_provisioned(port):
-    """Read NVS directly over mpremote; returns (board_ok, wifi_ok)."""
-    script = (
-        "import esp32\n"
-        "def _check(ns, keys, getter):\n"
-        "    try:\n"
-        "        nvs = esp32.NVS(ns)\n"
-        "        for k in keys:\n"
-        "            getter(nvs, k)\n"
-        "        return True\n"
-        "    except Exception:\n"
-        "        return False\n"
-        "board_ok = _check('vs_board', %r, lambda nvs, k: nvs.get_i32(k))\n"
-        "def _wifi_get(nvs, k):\n"
-        "    buf = bytearray(70)\n"
-        "    nvs.get_blob(k, buf)\n"
-        "wifi_ok = _check('devel_wifi', ['ssid', 'password'], _wifi_get)\n"
-        "print('BOARD_OK' if board_ok else 'BOARD_MISSING')\n"
-        "print('WIFI_OK' if wifi_ok else 'WIFI_MISSING')\n"
-    ) % (list(_BOARD_KEYS),)
-
-    with tempfile.TemporaryDirectory() as tmp:
-        script_path = pathlib.Path(tmp) / "check_nvs.py"
-        script_path.write_text(script)
-        result = run_mpremote_with_retry(["mpremote", "connect", port, "run", str(script_path)])
-    output = result.stdout
-    return "BOARD_OK" in output, "WIFI_OK" in output
-
-
-def _run_with_retry(cmd, tries=_MPREMOTE_TRIES, delay=_MPREMOTE_RETRY_DELAY_S,
-                     attempt_timeout=_MPREMOTE_ATTEMPT_TIMEOUT_S, settle=_MPREMOTE_SETTLE_S):
-    """Retry an external tool (provision_board.py/provision_wifi.py) that
-    itself shells out to mpremote once, internally, with no retry of its own.
-    See run_mpremote_with_retry's docstring: each call gets its own settle
-    pause too, since a successful mpremote call appears to soft-reset the
-    board, restarting recovery's cycle (and its boot-grace window) fresh."""
-    time.sleep(settle)
-    result = None
-    for attempt in range(1, tries + 1):
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=attempt_timeout)
-        except subprocess.TimeoutExpired:
-            print(f"flash_recovery_image: attempt {attempt}/{tries} timed out, retrying...")
-            continue
-        if result.returncode == 0:
-            print(result.stdout, end="")
-            return
-        print(f"flash_recovery_image: attempt {attempt}/{tries} failed, retrying...")
-        time.sleep(delay)
-    if result is not None:
-        print(result.stdout, end="")
-        print(result.stderr, end="", file=sys.stderr)
-    raise RuntimeError(f"command failed after {tries} attempts: {' '.join(cmd)}")
+def _check_provisioned(idf_path, port, baud):
+    """Dump + decode NVS over esptool; returns (board_ok, wifi_ok)."""
+    entries = nvs_partition.read_values(idf_path, port, NVS_OFFSET, NVS_SIZE, baud=baud)
+    board_ok = all(("vs_board", key) in entries for key in _BOARD_KEYS)
+    wifi_ok = all(("devel_wifi", key) in entries for key in ("ssid", "password"))
+    return board_ok, wifi_ok
 
 
 def _provision_board(vsdk_root, args):
-    _run_with_retry([
+    run([
         "python3", str(vsdk_root / "tools" / "provision_board.py"),
         "--port", args.port,
+        "--baud", str(args.baud),
+        "--idf-path", str(args.idf_path),
         "--hall-gpio", str(args.hall_gpio),
         "--irdiode-gpio", str(args.irdiode_gpio),
         "--led-spi-host", str(args.led_spi_host),
@@ -240,9 +162,11 @@ def _provision_wifi(vsdk_root, args):
             "(run 'make wifi-provision WIFI_SSID=... WIFI_PASS=...' separately)"
         )
         return
-    _run_with_retry([
+    run([
         "python3", str(vsdk_root / "tools" / "provision_wifi.py"),
         "--port", args.port,
+        "--baud", str(args.baud),
+        "--idf-path", str(args.idf_path),
         "--wifi-ssid", args.wifi_ssid,
         "--wifi-password", args.wifi_password,
     ])
@@ -253,8 +177,8 @@ def _reset_board(port):
         script_path = pathlib.Path(tmp) / "reset.py"
         script_path.write_text("import machine\nmachine.reset()\n")
         try:
-            run_mpremote_with_retry(["mpremote", "connect", port, "run", str(script_path)])
-        except RuntimeError as e:
+            run_mpremote(["mpremote", "connect", port, "run", str(script_path)])
+        except subprocess.CalledProcessError as e:
             # Not fatal: the board is provisioned either way, just sitting at
             # the REPL instead of running. A power cycle also gets it going.
             print(f"flash_recovery_image: final reset failed ({e}); power-cycle the board to start it")
@@ -334,7 +258,7 @@ def main():
     if args.skip_nvs:
         return
 
-    board_ok, wifi_ok = _check_provisioned(args.port)
+    board_ok, wifi_ok = _check_provisioned(args.idf_path, args.port, args.baud)
 
     if args.force or not board_ok:
         print("flash_recovery_image: provisioning vs_board NVS...")

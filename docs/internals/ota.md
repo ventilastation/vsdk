@@ -63,9 +63,9 @@ NVS (`vs_board` wiring, `devel_wifi` credentials) if not already present —
 read-first, so re-running it doesn't clobber an already-configured board
 (pass `FORCE=1` to overwrite). Everything else — `vfs`, the native apps, and
 the real `micropython` copy — installs over WiFi via recovery's own retry
-loop, never USB. `make flash-vsdk` still writes both `factory` and
-`micropython` over USB, but it's a bench-dev convenience now, not the
-bring-up procedure.
+loop, never USB. `make initial-flash` still writes both `factory` and
+`micropython` (plus an empty `vfs`) over USB, but it's a bench-dev
+convenience now, not the bring-up procedure.
 
 The vendored MicroPython source tree is unmodified for this: `apps/micropython/boot.py`,
 a frozen module, is picked up automatically by the stock
@@ -242,7 +242,8 @@ transfers nothing). Otherwise stream to `<path>.tmp`, verify SHA256, then
 `os.rename()` — atomic on LittleFS. Failures skip to the next file and are
 retried next session. `_cleanup_tmp_files()` removes stale `.tmp` debris at
 the start of each session. Files deleted from the host tree are *not*
-deleted on the device; reflash the filesystem (`make deploy-fs`) for that.
+deleted on the device; run `hardware/rotor/deploy_micropython_fs.py --port <p>`
+to push a full, authoritative vfs image over USB if that matters.
 
 ### Tiers 2–3 — `_update_partitions()`
 

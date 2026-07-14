@@ -47,7 +47,7 @@ flashing). There are no more `wifi_config.json` / `settings.json` files.
 
 | Namespace  | Key          | Type | Written by | Read by |
 |------------|--------------|------|------------|---------|
-| `devel_wifi`| `ssid`      | blob | `tools/provision_wifi.py` (`mpremote run`) | MicroPython `updater.py` (OTA only) |
+| `devel_wifi`| `ssid`      | blob | `tools/provision_wifi.py` (dump/patch/reflash NVS over esptool, see `tools/nvs_partition.py`) | MicroPython `updater.py` (OTA only) |
 | `devel_wifi`| `password`  | blob | `tools/provision_wifi.py` | same |
 | `vs_board` | `hall_gpio`, `irdiode_gpio` | i32 | `tools/provision_board.py` / `make configure-board*` | MicroPython POV display; native POV display |
 | `vs_board` | `led_spi_host`, `led_clk`, `led_mosi`, `led_cs`, `led_freq` | i32 | same | MicroPython LED SPI; native POV display |
@@ -209,18 +209,18 @@ Rebuild after changes:
   `apps/retro-go/roms/<system>/`).
 
 Flash (board on `PORT`):
-1. `make flash-vsdk PORT=<p>` — bootloader + partition table + MicroPython. Only
-   needed when the partition table or a C module (`native_apps.c`) changed.
+1. `make initial-flash PORT=<p>` — bootloader + partition table + MicroPython
+   (factory + ota_2) + an empty vfs. Only needed when the partition table or a
+   C module (`native_apps.c`) changed.
 2. On a newly flashed board, `make configure-board PORT=<p>` — seed the shared
    `vs_board` NVS wiring before MicroPython or a native app uses the display or
    base-station UART. This survives later reflashes.
 3. `esptool --port <p> erase_region 0xd000 0x2000` — reset OTA selection (keeps
    NVS) so it boots cleanly to MicroPython. Do after a partition-table change.
-4. `rm -f apps/retro-go/partitions.bin` then
-   `rg_tool.py --target=ventilastation --port=<p> flash prboom-go retro-core gwenesis`
-   — flash only the apps that changed.
-5. `make deploy-fs PORT=<p>` — vfs image at 0x5F0000 (or
-   `deploy_micropython_fs.py --skip-build` to flash an already-built image).
+4. Native apps (`prboom-go`, `retro-core`) and vfs content (Python/ROMs) install
+   over WiFi via the three-tier OTA updater (see [ota.md](ota.md)), not USB.
+   `hardware/rotor/deploy_micropython_fs.py --port=<p>` still exists as a
+   direct-to-USB escape hatch if you need to push a vfs image without OTA.
 
 Note: the board's native USB-CDC re-enumerates on every reset, so a serial
 handle goes stale after a flash; if a flash reports "port busy / doesn't exist",
