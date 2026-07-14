@@ -1,0 +1,7 @@
+{
+  "api": "vs2",
+  "title": "Input Demo",
+  "menu_strip": "menu.png",
+  "menu_frame": 10,
+  "order": 1
+}

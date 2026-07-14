@@ -1398,6 +1398,8 @@
     "system/menu/images/msx.png",
     "system/menu/images/nes.png",
     "system/menu/images/sms.png",
-    "system/shared/other/images/tinyfont_menu.png"
+    "system/shared/other/images/tinyfont_menu.png",
+    "games/demos/input_demo/code/input_demo.py",
+    "games/demos/input_demo/meta.json"
   ]
 }
