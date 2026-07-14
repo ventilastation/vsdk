@@ -58,6 +58,7 @@ CPYTHON_TESTS = [
     "tests/test_upgrade_server.py",
     "tests/test_boot.py",
     "tests/test_native_apps.py",
+    "tests/test_native_exit_transition.py",
     "tests/test_input_protocol_v2.py",
     "tests/test_emulator_inputs_v2.py",
 ]
