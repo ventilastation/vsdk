@@ -19,6 +19,7 @@ freeze(".", "boot.py")
 freeze(".", "vsdk_recovery.py")
 freeze(".", "vsdk_logo_strip.py")
 freeze(".", "updater.py")
+freeze(".", "vsdk_uart_log.py")
 
 # these can go in the filesystem instead of frozen
 # package("apps")
