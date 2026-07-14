@@ -22,8 +22,8 @@ class NativeExitTransitionTests(unittest.TestCase):
         self.assertIn("if (__atomic_load_n(&vs_exit_fade_active, __ATOMIC_ACQUIRE))", pov)
         self.assertIn("led >= RG_VS_PIXELS - black_outer_leds", pov)
         self.assertIn("rg_vs_pov_fade_last_frame_to_black(uint32_t duration_ms)", pov)
-        self.assertIn("RG_VS_EXIT_PRESENT_TIMEOUT_US", pov)
         self.assertIn("__atomic_store_n(&vs_exit_black_outer_leds, RG_VS_PIXELS", pov)
+        self.assertIn("vs_exit_presented_generation", pov)
 
 
 if __name__ == "__main__":
