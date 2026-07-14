@@ -105,6 +105,21 @@ with `is_extra()` / `was_extra_pressed()`.
 - The controller Home/Guide button is not encoded as held input. The emulator
   emits one `exit\n` command on its press edge.
 
+### Keyboard allocation (desktop and web emulators)
+
+The desktop and web emulators share the following keyboard layout. Keys may
+be held together, just like controller controls.
+
+| Input | Keys |
+|-------|------|
+| Joy1 directions | Arrow keys or W/A/S/D |
+| Joy1 A / B / X / Y | Space / O / P / Y |
+| Joy1 Start / Back | Page Up / Page Down |
+| Joy2 directions | H / J / K / L (left / down / up / right) |
+| Joy2 A / B / X / Y | Z / X / C / V |
+| Joy2 Start / Back | Home / End |
+| Exit | Escape |
+
 ### 2. Command frame  (ASCII alphanumeric + `\n`)
 
 Sent only for discrete actions. First byte is ASCII alphanumeric (`a-z`,

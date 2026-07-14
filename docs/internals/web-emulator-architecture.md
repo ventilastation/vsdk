@@ -112,6 +112,11 @@ and `extra`. The WASM worker stores those fields as primitive values exposed
 through `__vs_host`; `BrowserComms` reads them without allocating per-frame
 input objects.
 
+Keyboard input uses the same allocation as the desktop emulator: Page Up/Down
+are Joy1 Start/Back, H/J/K/L is Joy2's directional cluster, Z/X/C/V is Joy2
+ABXY, and Home/End are Joy2 Start/Back. The full table lives in
+`input-protocol-v2.md`.
+
 - One controller: left stick/D-pad is Joy1; right stick is Joy2; its shoulder
   and trigger controls are Joy2 A/B/X/Y.
 - Two controllers: controller 2's left stick/D-pad plus face, Start, and Back

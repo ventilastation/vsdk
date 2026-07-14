@@ -2,7 +2,7 @@ import pyglet
 from pyglet.window import key
 
 import comms
-from inputs_common import keyboard_state, pack_controllers
+from inputs_common import keyboard_state, keyboard_v2_state, pack_controllers
 from pyglet2x.pygletdraw import window, help_label
 
 keys = key.KeyStateHandler()
@@ -24,7 +24,7 @@ def refresh_controllers():
     controllers = connected
 
 def update_label():
-    help_label.text = ("joy or " if controllers else "") + "keys: ←↕→ SPACE ESC Q"
+    help_label.text = ("joy or " if controllers else "") + "keys: arrows/WASD Space O P Y PgUp/PgDn HJKL Z/X/C/V Home/End Esc Q"
 
 @controller_man.event
 def on_connect(ctrl):
@@ -57,5 +57,6 @@ def encode_input_val():
     joy1, joy2, extra, home = pack_controllers(
         primary, secondary,
         (kb_left, kb_right, kb_up, kb_down, kb_boton, kb_accel, kb_decel),
+        keyboard_v2_state(keys),
     )
     return joy1, joy2, extra, home or keys[key.ESCAPE]

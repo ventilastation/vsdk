@@ -6,7 +6,12 @@ import types
 
 fake_pyglet = types.ModuleType("pyglet")
 fake_window = types.ModuleType("pyglet.window")
-fake_window.key = types.SimpleNamespace()
+fake_window.key = types.SimpleNamespace(
+    LEFT="LEFT", RIGHT="RIGHT", UP="UP", DOWN="DOWN",
+    A="A", D="D", W="W", S="S", SPACE="SPACE", O="O", P="P", Y="Y",
+    H="H", J="J", K="K", L="L", Z="Z", X="X", C="C", V="V",
+    PAGEUP="PAGEUP", PAGEDOWN="PAGEDOWN", HOME="HOME", END="END",
+)
 fake_pyglet.window = fake_window
 sys.modules.setdefault("pyglet", fake_pyglet)
 sys.modules.setdefault("pyglet.window", fake_window)
@@ -19,6 +24,8 @@ from inputs_common import (  # noqa: E402
     EXTRA_JOY2_BACK,
     EXTRA_JOY2_START,
     EXTRA_JOY2_Y,
+    keyboard_state,
+    keyboard_v2_state,
     pack_controllers,
 )
 
@@ -87,6 +94,25 @@ def test_two_controllers_give_joy2_its_own_dpad_and_faces():
     assert joy2 == 0x7F, hex(joy2)
     assert extra == (EXTRA_JOY2_Y | EXTRA_JOY2_START | EXTRA_JOY2_BACK)
     assert not home
+
+
+def test_keyboard_maps_all_protocol_v2_controls():
+    pressed = {
+        "LEFT", "O", "P", "Y", "PAGEUP", "PAGEDOWN",
+        "H", "J", "K", "L", "Z", "X", "C", "V", "HOME", "END",
+    }
+
+    class Keys:
+        def __getitem__(self, symbol):
+            return symbol in pressed
+
+    joy1 = keyboard_state(Keys())
+    joy2, extra = keyboard_v2_state(Keys())
+
+    assert joy1 == (True, False, False, False, False, True, True)
+    assert joy2 == 0x7F
+    assert extra == (EXTRA_JOY1_Y | EXTRA_JOY1_START | EXTRA_JOY1_BACK |
+                     EXTRA_JOY2_Y | EXTRA_JOY2_START | EXTRA_JOY2_BACK)
 
 
 def main():

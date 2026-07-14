@@ -12,16 +12,6 @@ const BUTTONS = {
   BUTTON_D: 128,
 };
 
-const KEY_TO_BUTTON = new Map([
-  ["ArrowLeft", BUTTONS.JOY_LEFT],
-  ["ArrowRight", BUTTONS.JOY_RIGHT],
-  ["ArrowUp", BUTTONS.JOY_UP],
-  ["ArrowDown", BUTTONS.JOY_DOWN],
-  ["Space", BUTTONS.BUTTON_A],
-  ["KeyO", BUTTONS.BUTTON_B],
-  ["KeyP", BUTTONS.BUTTON_C],
-]);
-
 // The browser runtime mirrors input-protocol-v2.md.  The first seven bits of
 // each joystick are directions plus A/B/X; Y, Start, and Back live here.
 const INPUT_EXTRA = Object.freeze({
@@ -32,6 +22,60 @@ const INPUT_EXTRA = Object.freeze({
   JOY2_START: 0x10,
   JOY2_BACK: 0x20,
 });
+
+// Keyboard controls deliberately match the desktop emulator.  A key entry
+// can target either joystick byte or the protocol-v2 extra byte.
+const KEY_TO_INPUT = new Map([
+  ["ArrowLeft", { joy1: BUTTONS.JOY_LEFT }],
+  ["KeyA", { joy1: BUTTONS.JOY_LEFT }],
+  ["ArrowRight", { joy1: BUTTONS.JOY_RIGHT }],
+  ["KeyD", { joy1: BUTTONS.JOY_RIGHT }],
+  ["ArrowUp", { joy1: BUTTONS.JOY_UP }],
+  ["KeyW", { joy1: BUTTONS.JOY_UP }],
+  ["ArrowDown", { joy1: BUTTONS.JOY_DOWN }],
+  ["KeyS", { joy1: BUTTONS.JOY_DOWN }],
+  ["Space", { joy1: BUTTONS.BUTTON_A }],
+  ["KeyO", { joy1: BUTTONS.BUTTON_B }],
+  ["KeyP", { joy1: BUTTONS.BUTTON_C }],
+  ["KeyY", { extra: INPUT_EXTRA.JOY1_Y }],
+  ["PageUp", { extra: INPUT_EXTRA.JOY1_START }],
+  ["PageDown", { extra: INPUT_EXTRA.JOY1_BACK }],
+  ["KeyH", { joy2: BUTTONS.JOY_LEFT }],
+  ["KeyL", { joy2: BUTTONS.JOY_RIGHT }],
+  ["KeyK", { joy2: BUTTONS.JOY_UP }],
+  ["KeyJ", { joy2: BUTTONS.JOY_DOWN }],
+  ["KeyZ", { joy2: BUTTONS.BUTTON_A }],
+  ["KeyX", { joy2: BUTTONS.BUTTON_B }],
+  ["KeyC", { joy2: BUTTONS.BUTTON_C }],
+  ["KeyV", { extra: INPUT_EXTRA.JOY2_Y }],
+  ["Home", { extra: INPUT_EXTRA.JOY2_START }],
+  ["End", { extra: INPUT_EXTRA.JOY2_BACK }],
+]);
+
+// Retained for consumers that only use the original Joy1 byte.
+const KEY_TO_BUTTON = new Map(
+  [...KEY_TO_INPUT]
+    .filter(([, input]) => input.joy1)
+    .map(([code, input]) => [code, input.joy1]),
+);
+
+function keyboardInputForCode(code) {
+  return KEY_TO_INPUT.get(code) || null;
+}
+
+function keyboardInputForCodes(codes) {
+  const input = { joy1: 0, joy2: 0, extra: 0 };
+  for (const code of codes) {
+    const mapped = keyboardInputForCode(code);
+    if (!mapped) {
+      continue;
+    }
+    input.joy1 |= mapped.joy1 || 0;
+    input.joy2 |= mapped.joy2 || 0;
+    input.extra |= mapped.extra || 0;
+  }
+  return input;
+}
 
 const EXIT_KEY_CODES = new Set(["Escape"]);
 const GAMEPAD_AXIS_DEAD_ZONE = 0.35;
@@ -372,6 +416,9 @@ function decodeImageStripPayload(slot, payload) {
 export {
   BUTTONS,
   KEY_TO_BUTTON,
+  KEY_TO_INPUT,
+  keyboardInputForCode,
+  keyboardInputForCodes,
   INPUT_EXTRA,
   EXIT_KEY_CODES,
   GAMEPAD_BUTTONS,
