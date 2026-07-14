@@ -60,7 +60,9 @@ class InputDemo(Scene):
     def on_enter(self):
         super(InputDemo, self).on_enter()
         self.hud = self.layer("input-demo", mode=HUD)
-        self.text_frames = bytearray([EMPTY_TILE]) * (LINE_LENGTH * LINE_COUNT)
+        self.text_frames = bytearray(LINE_LENGTH * LINE_COUNT)
+        for index in range(len(self.text_frames)):
+            self.text_frames[index] = EMPTY_TILE
         self.text = self.hud.add(Tilemap(
             FONT, self.text_frames,
             columns=LINE_LENGTH, rows=LINE_COUNT,
