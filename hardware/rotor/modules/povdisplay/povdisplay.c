@@ -294,8 +294,6 @@ void coreTask( void * pvParameters ){
 
     hall_init();
 
-    init_sprites();
-
     spiStartBuses(led_spi_host, led_freq, led_clk, led_mosi, led_cs);
     spiAcquire();
 
@@ -332,6 +330,12 @@ static mp_obj_t povdisplay_init(size_t n_args, const mp_obj_t *args) {
     spi_init(num_pixels);
     printf("Micropython running on core %d\n", xPortGetCoreID());
     ventilagon_init();
+
+    // This must complete before povdisplay.init() returns.  Recovery creates
+    // its status sprite immediately afterwards; doing the reset in coreTask
+    // let the newly spawned GPU task erase that sprite before its first
+    // render.
+    init_sprites();
 
     xTaskCreatePinnedToCore(
             coreTask,   /* Function to implement the task */
