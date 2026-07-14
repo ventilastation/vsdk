@@ -39,8 +39,11 @@ ALLOWED_SUFFIXES = {
 # Console ROM extensions accepted under the emulator "roms/<system>" trees (read
 # by gwenesis / retro-core). Scoped to those trees so .bin/.zip elsewhere aren't
 # swept in. README.md is excluded via SKIP_FILE_NAMES.
-ROM_SUFFIXES = {".nes", ".sms", ".gg", ".col", ".zip"}
-EMU_ROM_ROOTS = {"roms/nes", "roms/sms"}
+ROM_SUFFIXES = {
+    ".nes", ".sms", ".gg", ".col", ".gb", ".gbc", ".zip",
+    ".rom", ".mx1", ".mx2", ".dsk", ".cas", ".fdi", ".gz",
+}
+EMU_ROM_ROOTS = {"roms/nes", "roms/sms", "roms/gb", "roms/msx"}
 
 
 def iter_copy_jobs(vsdk_root):
@@ -53,6 +56,9 @@ def iter_copy_jobs(vsdk_root):
         # Console ROMs, served from /vfs/roms/<system> (gitignored locally).
         ("roms/nes", vsdk_root / "apps/retro-go/roms/nes"),    # retro-core (NES)
         ("roms/sms", vsdk_root / "apps/retro-go/roms/sms"),    # retro-core (Master System)
+        ("roms/gb", vsdk_root / "apps/retro-go/roms/gb"),      # retro-core (Game Boy / Color)
+        ("roms/msx", vsdk_root / "apps/retro-go/roms/msx"),    # fMSX
+        ("retro-go/bios/msx", vsdk_root / "apps/retro-go/roms/bios/msx"),
         ("games", vsdk_root / "games"),
         ("system", vsdk_root / "system"),
     ]
@@ -153,8 +159,8 @@ def main():
     parser.add_argument(
         "--partition-size",
         type=lambda x: int(x, 0),
-        default=0x970000,
-        help="VFS partition size in bytes (default: 0x970000 = 9,895,936 bytes, matches partitions-ventilastation.csv)",
+        default=0x8C0000,
+        help="VFS partition size in bytes (default: 0x8c0000 = 9,175,040 bytes, matches partitions-ventilastation.csv)",
     )
     parser.add_argument(
         "--output",

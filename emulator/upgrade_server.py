@@ -62,6 +62,7 @@ _spec.loader.exec_module(_build_fs)
 _PARTITION_BINS = {
     "prboom-go":   _VSDK_ROOT / "apps/retro-go/prboom-go/build/prboom-go.bin",
     "retro-core":  _VSDK_ROOT / "apps/retro-go/retro-core/build/retro-core.bin",
+    "fmsx":        _VSDK_ROOT / "apps/retro-go/fmsx/build/fmsx.bin",
     "micropython": (
         _VSDK_ROOT /
         "hardware/rotor/micropython/ports/esp32"

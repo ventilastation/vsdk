@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk initial-flash flash-recovery voom launcher flash-launcher retro-core run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk initial-flash flash-recovery voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
 MAC ?=
@@ -148,6 +148,9 @@ flash-launcher: launcher
 
 retro-core:
 	$(call rg-build,retro-core)
+
+fmsx:
+	$(call rg-build,fmsx)
 
 # --- Hardware dev loop via the workbench ---
 # The workbench captures the DUT's real LED SPI bus and streams the frames to

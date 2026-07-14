@@ -38,6 +38,7 @@ static const native_app_entry_t native_apps_registry[] = {
     // retro-core hosts NES, Master System, Game Gear, etc. (the app dispatches on
     // the "system" written to NVS by native_apps.py).
     { "retro-core", "retro-core", NULL },
+    { "fmsx",       "fmsx",       NULL },
 };
 
 static size_t native_apps_registry_len(void) {

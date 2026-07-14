@@ -24,9 +24,10 @@ Defined in `hardware/rotor/partitions-ventilastation.csv`:
 | phy_init   | data/phy    | 0xf000    | 0x1000    | RF cal |
 | factory    | app/factory | 0x10000   | 0x200000  | **MicroPython** (permanent recovery environment) |
 | prboom-go  | app/ota_0   | 0x210000  | 0x180000  | Voom (Doom) |
-| retro-core | app/ota_1   | 0x390000  | 0x100000  | **NES, Master System, Game Gear, …** |
+| retro-core | app/ota_1   | 0x390000  | 0x100000  | **NES, Master System, Game Boy, …** |
 | micropython| app/ota_2   | 0x490000  | 0x200000  | **MicroPython** (normal boot target, OTA-updatable) |
-| vfs        | data/fat\*  | 0x690000  | 0x970000  | LittleFS: code, sprite ROMs, game ROMs |
+| fmsx       | app/ota_3   | 0x690000  | 0xb0000   | fMSX |
+| vfs        | data/fat\*  | 0x740000  | 0x8c0000  | LittleFS: code, sprite ROMs, game ROMs |
 
 \* labelled `fat` historically; the content is LittleFS, mounted at `/` by
 MicroPython and at `/vfs` by retro-go (`RG_STORAGE_ROOT`).
@@ -35,9 +36,10 @@ The `retro-core` slot originally held the standalone retro-go launcher, which is
 disabled (its text is unreadable at the POV display's resolution); the partition
 was repurposed for the multi-emulator `retro-core` app (0.92 MB, fits).
 
-Booting another app = `esp_ota_set_boot_partition(target)` + reboot. On exit the
-native apps set the boot partition back to `factory`, returning to the
-MicroPython menu.
+Booting another app = `esp_ota_set_boot_partition(target)` + reboot. Before a
+native Retro-Go app initializes, it changes the next boot target to
+`micropython`; an exit or later restart therefore returns to the normal Python
+launcher, not recovery.
 
 ## 2. Shared configuration in NVS (single source of truth)
 
@@ -54,9 +56,9 @@ flashing). There are no more `wifi_config.json` / `settings.json` files.
 | `vs_board` | `serial_uart`, `serial_tx`, `serial_rx`, `serial_baud` | i32 | same | MicroPython comms; native host/audio bridge |
 | `voom_pov` | `col_offset` | i32  | MicroPython `settings.py` (POV calibration) | POV driver `ventilastation_pov.c` (all native apps) |
 | `voom_pov` | `color_v1` | versioned blob | MicroPython `color_calibration.py` / `povcal commit` | MicroPython and native POV colour pipelines |
-| `voom_md`  | `rom`        | blob | MicroPython `native_apps.py` (before launch) | gwenesis `main.c` |
-| `voom_emu` | `system`     | blob | MicroPython `native_apps.py` (before launch) | retro-core `main.c` (selects the emulator) |
-| `voom_emu` | `rom`        | blob | MicroPython `native_apps.py` (before launch) | retro-core `main.c` |
+| `vs_native` | `app`       | blob | MicroPython `native_apps.py` (before launch) | native app validates its launch payload |
+| `vs_native` | `system`    | blob | MicroPython `native_apps.py` (before launch) | retro-core `main.c` (selects the emulator) |
+| `vs_native` | `rom`       | blob | MicroPython `native_apps.py` (before launch) | retro-core / fMSX `main.c` |
 
 Notes:
 - **WiFi**: set once with `make wifi-provision WIFI_SSID=... WIFI_PASS=...`,
@@ -83,41 +85,56 @@ runs `native_apps.py` → `vshw_native_apps.launch(<name>)`
 (`hardware/rotor/modules/native_apps/native_apps.c`), which maps the name to a
 partition, sets it as the OTA boot partition, and reboots.
 
-Registry (`native_apps.c`): `voom`→prboom-go, `gwenesis`→gwenesis,
-`retro-core`→retro-core.
+Registry (`native_apps.c`): `voom`→prboom-go, `retro-core`→retro-core, and
+`fmsx`→fmsx.
 
 Menu slugs (`native_apps.py` `APP_REGISTRY`):
-- `native.voom` → Voom (fixed WAD, no ROM arg)
-- `native.nes` → "Super Mario Bros" — `retro-core`, `system=nes`
-- `native.sms` → "Out Run" — `retro-core`, `system=sms`
-- `native.genesis` → Mega Drive — `gwenesis` (registry only, off the menu)
+- `native.voom` → Voom (fixed WAD, no ROM selector)
+- `native.nes` → dynamic NES library — `retro-core`, `system=nes`
+- `native.sms` → dynamic Master System library — `retro-core`, `system=sms`
+- `native.gb` → dynamic Game Boy / Color library — `retro-core`, `system=gb`
+- `native.msx` → dynamic MSX library — `fmsx`
 
-**Handing an emulator its ROM.** The retro-go launcher normally passes the ROM
-path (and the system) via its `bootArgs`/settings, but that uses a
-sentinel-namespaced config file awkward to write from MicroPython. Since the
-launcher is disabled, MicroPython writes the values to NVS just before launching:
+**Handing an emulator its ROM.** The launcher lists each file in its matching
+`/roms/<system>` directory, uses only its basename without the extension as a
+21-character tile label, and writes the selected path to NVS just before
+launching. The Retro-Go launcher normally passes a path (and the system) via
+`bootArgs`/settings, but that is awkward to write from MicroPython and is
+disabled on the POV display.
 
-- **gwenesis** (single system): ROM path → `voom_md`/`rom`; read in `main.c` when
-  `bootArgs` is empty.
-- **retro-core** (many systems): `system` + `rom` → `voom_emu`; `main.c` reads
+- **retro-core** (many systems): `system` + `rom` → `vs_native`; `main.c` reads
   them, sets `app->configNs` (which the dispatch strcmp's — nes/sms/gg/…) and
   `app->romPath`.
+- **fMSX**: `app=fmsx` + `rom` → `vs_native`; `main.c` mounts `/vfs`, reads the
+  selected path and starts fMSX. Its required BIOS files are copied from
+  `apps/retro-go/roms/bios/msx/` to `/vfs/retro-go/bios/msx/`.
 
 ```
-main menu "Super Mario Bros"
-  → native_apps.py writes voom_emu/system="nes", voom_emu/rom="/vfs/roms/nes/…"
+main menu → NES library → selected ROM
+  → native_apps.py writes vs_native/app="retro-core", system="nes", rom="/vfs/roms/nes/…"
   → vshw_native_apps.launch("retro-core")   (OTA → retro-core, reboot)
-  → retro-core main.c: read voom_emu → configNs="nes", romPath=… → nes_main()
+  → retro-core main.c: read vs_native → configNs="nes", romPath=… → nes_main()
 ```
 
-Console ROMs live in `apps/retro-go/roms/<system>/` (`md`, `nes`, `sms` —
-gitignored) and are copied into the vfs image at `/roms/<system>/` by
+Console ROMs live in `apps/retro-go/roms/<system>/` (`nes`, `sms`, `gb`, `msx`
+— gitignored) and are copied into the vfs image at `/roms/<system>/` by
 `build_micropython_fs.py` (ROM extensions scoped to those folders). The
-emulators load `.zip` directly.
+emulators load `.zip` directly where their core supports it.
+
+### Return and selection state
+
+Before a native hand-off, `native_apps.py` saves the main-menu slug, optional
+submenu slug, and selected ROM path in `ventilastation/launcher_state.json` and
+includes the same state in `ventilastation/boot.json`. On the next normal
+MicroPython boot, `consume_native_return()` promotes that intent and the
+launcher reconstructs the last menu/submenu. The active tile is red and pinned
+one tiny-font height above the display bottom (`x=0`, `y=6`); later entries are
+shown above it. `D` from a ROM library clears the submenu state while retaining
+the selected emulator, so that main-menu selection also survives a reboot.
 
 ## 3a. Running a retro-go emulator on the POV board
 
-Every native retro-go emulator (gwenesis, retro-core, …) needs the same three
+Every native retro-go emulator (retro-core, fmsx, …) needs the same three
 adaptations to run headless on the spinning board, because the stock code
 assumes an LCD + SD card + the retro-go launcher. Do these in the app's
 `app_main`, right after `rg_system_init` (see `gwenesis/main/main.c` and
@@ -138,8 +155,8 @@ WiFi and `col_offset`) needs no per-app work — it is already in NVS (§2).
 **Performance (why NES/SMS, not Genesis).** The Genesis is a dual-CPU
 (68000 + Z80) machine and gwenesis runs at ~9 fps / 100 % CPU on the S3. The NES
 (nofrendo) and Master System (smsplus) are single-CPU and run at a locked 60 fps
-using ~50–60 % CPU. `retro-core` gets NES, Master System, Game Gear (and Game
-Boy, PC Engine, … later) from one 0.92 MB app. NES sets `app->frameskip = 0`
+using ~50–60 % CPU. `retro-core` gets NES, Master System, Game Gear and Game
+Boy from one 0.92 MB app. NES sets `app->frameskip = 0`
 (like SMS) so it renders every frame that fits the 16.6 ms budget to the POV.
 
 ## 4. Compressed sprite ROMs
@@ -150,7 +167,7 @@ deflate. `build_micropython_fs.py` stores each as **`<name>.rom.gz`** (gzip) in
 the vfs image; `director.py` finds the `.gz` file and inflates it with the
 board's `deflate` module, parsing it in RAM. Repo `.rom` files stay
 uncompressed, so the desktop/web emulators are unaffected. This freed ~2.4 MB of
-the vfs partition — enough to add the gwenesis app partition and Genesis ROMs.
+the vfs partition — leaving room for the fMSX app partition and console ROMs.
 
 ## 5. Emulator audio bridge
 
@@ -203,7 +220,7 @@ encoding in `emu_audio_bridge.h` already leave room for these.
 Rebuild after changes:
 - MicroPython (`factory`): `make vsdk` — needed for `native_apps.c` / C modules.
 - A native app: `cd apps/retro-go && rg_tool.py build <app> --target=ventilastation`
-  (`<app>` = `prboom-go`, `retro-core`, `gwenesis`).
+  (`<app>` = `prboom-go`, `retro-core`, `fmsx`).
 - vfs image: `python hardware/rotor/build_micropython_fs.py` — needed for any
   Python, sprite ROM, or game ROM change (including new console ROMs dropped into
   `apps/retro-go/roms/<system>/`).
@@ -217,7 +234,7 @@ Flash (board on `PORT`):
    base-station UART. This survives later reflashes.
 3. `esptool --port <p> erase_region 0xd000 0x2000` — reset OTA selection (keeps
    NVS) so it boots cleanly to MicroPython. Do after a partition-table change.
-4. Native apps (`prboom-go`, `retro-core`) and vfs content (Python/ROMs) install
+4. Native apps (`prboom-go`, `retro-core`, `fmsx`) and vfs content (Python/ROMs) install
    over WiFi via the three-tier OTA updater (see [ota.md](ota.md)), not USB.
    `hardware/rotor/deploy_micropython_fs.py --port=<p>` still exists as a
    direct-to-USB escape hatch if you need to push a vfs image without OTA.
