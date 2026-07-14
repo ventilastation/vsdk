@@ -64,6 +64,9 @@ def _post_worker_command(worker_host, line, data=b""):
 class BrowserComms:
     def __init__(self):
         self.buttons = 0
+        self.buttons2 = 0
+        self.extra_buttons = 0
+        self.exit_pending = False
         self.input_updates = []
         self.input_sequence = 0
         self.events = []
@@ -72,10 +75,36 @@ class BrowserComms:
     def receive(self, _bufsize):
         if self.worker_host is not None:
             try:
-                self.set_buttons(self.worker_host.get_buttons())
+                get_joy1 = getattr(self.worker_host, "get_joy1", None)
+                if get_joy1 is None:
+                    self.set_buttons(self.worker_host.get_buttons())
+                else:
+                    self.set_input(
+                        get_joy1(),
+                        self.worker_host.get_joy2(),
+                        self.worker_host.get_extra(),
+                    )
             except Exception:
                 pass
         return _BUTTON_BYTES[self.buttons]
+
+    def next_joy2(self):
+        return self.buttons2
+
+    def next_extra(self):
+        return self.extra_buttons
+
+    def next_command(self):
+        if self.exit_pending:
+            self.exit_pending = False
+            return "exit"
+        if self.worker_host is not None:
+            try:
+                if self.worker_host.consume_exit():
+                    return "exit"
+            except Exception:
+                pass
+        return None
 
     def send(self, line, data=b""):
         if isinstance(line, str):
@@ -98,10 +127,18 @@ class BrowserComms:
         self.events.append(event)
 
     def set_buttons(self, buttons):
-        normalized = buttons & 0xFF
-        if normalized == self.buttons:
+        self.set_input(buttons, 0, 0)
+
+    def set_input(self, joy1, joy2=0, extra=0, exit=False):
+        joy1 = joy1 & 0x7F
+        joy2 = joy2 & 0x7F
+        extra = extra & 0x7F
+        self.exit_pending = self.exit_pending or bool(exit)
+        if joy1 == self.buttons and joy2 == self.buttons2 and extra == self.extra_buttons:
             return
-        self.buttons = normalized
+        self.buttons = joy1
+        self.buttons2 = joy2
+        self.extra_buttons = extra
         self.input_sequence += 1
 
     def set_worker_host(self, worker_host):

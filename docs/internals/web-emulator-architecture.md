@@ -104,6 +104,21 @@ The browser-based emulator is split into four main layers:
    - `platforms/__init__.py` contains the browser display/comms implementation used by the WASM runtime.
    - app boot and scene loading then continue into `games/...` and `system/...` as needed.
 
+## Browser Input Flow
+
+`app.js` uses the standard browser Gamepad API (`navigator.getGamepads()`) and
+sends the same three v2 fields used by the desktop emulator: `joy1`, `joy2`,
+and `extra`. The WASM worker stores those fields as primitive values exposed
+through `__vs_host`; `BrowserComms` reads them without allocating per-frame
+input objects.
+
+- One controller: left stick/D-pad is Joy1; right stick is Joy2; its shoulder
+  and trigger controls are Joy2 A/B/X/Y.
+- Two controllers: controller 2's left stick/D-pad plus face, Start, and Back
+  controls are Joy2; controller 1's right stick is ignored.
+- Guide/Home (or Escape) is latched as one `exit` command, which the Director
+  handles by returning to the MicroPython launcher scene.
+
 ## Frame Flow
 
 Normal rendering now works like this:

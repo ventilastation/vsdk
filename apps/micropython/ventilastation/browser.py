@@ -30,6 +30,10 @@ def set_buttons(buttons):
     _browser_platform().comms.set_buttons(buttons)
 
 
+def set_input(joy1, joy2=0, extra=0, exit=False):
+    _browser_platform().comms.set_input(joy1, joy2, extra, exit)
+
+
 def clear_buttons():
     _browser_platform().comms.set_buttons(0)
 
