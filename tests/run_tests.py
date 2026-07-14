@@ -6,9 +6,10 @@ Usage: python3 tests/run_tests.py
 Runs, from the repo root:
   1. an mpy-cross compile check over every MicroPython source
   2. the CPython test scripts
-  3. the MicroPython test scripts (skipped with a warning if no
+  3. the Node test scripts (skipped with a warning if no Node binary is on PATH)
+  4. the MicroPython test scripts (skipped with a warning if no
      `micropython` unix binary is on PATH)
-  4. the native renderer host tests (skipped with a warning if no C
+  5. the native renderer host tests (skipped with a warning if no C
      compiler is on PATH)
 
 Exits non-zero on the first category that fails.
@@ -56,10 +57,17 @@ CPYTHON_TESTS = [
     "tests/test_upgrade_server.py",
     "tests/test_boot.py",
     "tests/test_native_apps.py",
+    "tests/test_input_protocol_v2.py",
+    "tests/test_emulator_inputs_v2.py",
 ]
 
 MICROPYTHON_TESTS = [
+    "tests/test_browser_input_v2.py",
     "tests/test_director_headless.py",
+]
+
+NODE_TESTS = [
+    "tests/test_web_input_v2.mjs",
 ]
 
 
@@ -160,6 +168,7 @@ def run_native_tests():
 def main():
     ok = check_mpy_compile()
     ok = run_scripts(sys.executable, CPYTHON_TESTS, "CPython") and ok
+    ok = run_scripts("node", NODE_TESTS, "Node") and ok
     ok = run_scripts("micropython", MICROPYTHON_TESTS, "MicroPython") and ok
     ok = run_native_tests() and ok
     print("ALL PASS" if ok else "FAILURES")
