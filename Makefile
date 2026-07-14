@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk flash-recovery voom flash-voom launcher flash-launcher retro-core flash-retro-core fmsx flash-fmsx run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk initial-flash flash-recovery voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
 MAC ?=
@@ -11,7 +11,7 @@ BAUD ?= 2000000
 # boards of one type are attached or when a particular board must be forced.
 PYTHON ?= python3
 BOARD_DETECTOR := $(abspath tools/find_board.py)
-ROTOR_PORT_TARGETS := flash-vsdk flash-recovery flash-voom flash-launcher flash-retro-core flash-fmsx flash-all deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision
+ROTOR_PORT_TARGETS := initial-flash flash-recovery flash-launcher configure-board configure-board-v2 configure-board-eu wifi-provision
 WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
 PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS)
 ROTOR_GOALS := $(filter $(ROTOR_PORT_TARGETS),$(MAKECMDGOALS))
@@ -77,9 +77,10 @@ idf-env = $(IDF_SHELL) 'source "$(1)/export.sh" >/dev/null && $(2)'
 
 # The port drops and re-enumerates for a couple of seconds after every
 # flash's hard reset, so a target that runs right after another one (e.g.
-# inside flash-all) must wait for the port to come back before opening it.
-# The serial lock alone can't help: it serializes access but the previous
-# holder exits while the board is still re-enumerating.
+# initial-flash followed by configure-board) must wait for the port to come
+# back before opening it. The serial lock alone can't help: it serializes
+# access but the previous holder exits while the board is still
+# re-enumerating.
 WAIT_FOR_PORT := $(abspath tools/wait_for_port.py)
 wait-port = python3 "$(WAIT_FOR_PORT)" --port "$(PORT)"
 
@@ -117,11 +118,12 @@ web-emulator-bundle:
 vsdk:
 	$(call idf-env,$(VSDK_IDF_PATH),$(MAKE) -C "$(MICROPYTHON_PORT_DIR)" V=1 BOARD="$(VSDK_BOARD)" BOARD_DIR="$(VSDK_BOARD_DIR)" BOARD_VARIANT="$(VSDK_BOARD_VARIANT)" USER_C_MODULES="$(VSDK_MODULES)" FROZEN_MANIFEST="$(VSDK_FROZEN_MANIFEST)" all)
 
-# flash-vsdk is a bench-dev convenience: it writes MicroPython to both the
-# factory slot and the micropython (ota_2) slot over USB, for fast local
-# iteration without waiting on WiFi/OTA. It is NOT the bring-up procedure for
-# a new board -- use flash-recovery for that (see docs/internals/ota.md).
-flash-vsdk: vsdk
+# initial-flash is a bench-dev convenience: it writes MicroPython to both the
+# factory slot and the micropython (ota_2) slot over USB, plus an empty
+# formatted LittleFS image to the vfs partition, for fast local iteration
+# without waiting on WiFi/OTA. It is NOT the bring-up procedure for a new
+# board -- use flash-recovery for that (see docs/internals/ota.md).
+initial-flash: vsdk
 	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_vsdk_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VSDK_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"'
 
 # flash-recovery is the bring-up procedure for a new (or fully-erased) board:
@@ -138,9 +140,6 @@ flash-recovery: vsdk
 voom:
 	$(call rg-build,prboom-go)
 
-flash-voom: voom
-	$(call rg-flash,prboom-go)
-
 launcher:
 	$(call rg-build,launcher)
 
@@ -150,14 +149,8 @@ flash-launcher: launcher
 retro-core:
 	$(call rg-build,retro-core)
 
-flash-retro-core: retro-core
-	$(call rg-flash,retro-core)
-
 fmsx:
 	$(call rg-build,fmsx)
-
-flash-fmsx: fmsx
-	$(call rg-flash,fmsx)
 
 # --- Hardware dev loop via the workbench ---
 # The workbench captures the DUT's real LED SPI bus and streams the frames to
@@ -175,16 +168,11 @@ run-emulator:
 voom-sounds:
 	cd emulator && python build_voom_sounds.py
 
-flash-all: flash-vsdk flash-voom flash-retro-core flash-fmsx deploy-fs
-
 generate-roms:
 	python3 tools/generate_roms.py
 
 build-fs:
 	python3 hardware/rotor/build_micropython_fs.py
-
-deploy-fs:
-	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)"'
 
 # --- Main-board wiring configuration ---
 # The physical wiring is stored in NVS namespace "vs_board", shared by
@@ -204,7 +192,7 @@ SERIAL_RX ?= 6
 SERIAL_BAUD ?= 115200
 
 configure-board:
-	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./tools/provision_board.py --port "$(PORT)" \
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./tools/provision_board.py --port "$(PORT)" --idf-path "$(VSDK_IDF_PATH)" \
 		--hall-gpio "$(HALL_GPIO)" --irdiode-gpio "$(IRDIODE_GPIO)" \
 		--led-spi-host "$(LED_SPI_HOST)" --led-clk "$(LED_CLK)" \
 		--led-mosi "$(LED_MOSI)" --led-cs "$(LED_CS)" --led-freq "$(LED_FREQ)" \
@@ -230,7 +218,7 @@ BOARD_IP ?=
 
 wifi-provision:
 	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./tools/provision_wifi.py \
-		--port "$(PORT)" \
+		--port "$(PORT)" --idf-path "$(VSDK_IDF_PATH)" \
 		--wifi-ssid "$(WIFI_SSID)" \
 		--wifi-password "$(WIFI_PASS)"'
 

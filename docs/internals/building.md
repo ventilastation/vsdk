@@ -40,7 +40,7 @@ The two boards use the same ESP32-S3 USB descriptor, so
 select the board type they need automatically:
 
 ```sh
-make flash-vsdk       # selects the unique Ventilastation rotor board
+make initial-flash    # selects the unique Ventilastation rotor board
 make workbench-flash  # selects the unique workbench board
 make list-boards      # show ports, board types and USB-JTAG serials
 ```
@@ -55,17 +55,19 @@ lock so parallel invocations cannot corrupt a transfer.
 
 ```sh
 make vsdk                     # build MicroPython firmware (POV modules + frozen manifest)
-make flash-vsdk               # build + flash it (factory and ota_2 slots)
+make initial-flash            # build + flash it (factory + ota_2 slots) and an empty vfs
+make flash-recovery           # bring-up for a new board: factory + NVS only (see ota.md)
 make configure-board          # store Ventilastation III wiring in the board's NVS
 make configure-board-v2       # store the original Ventilastation 2 wiring
 make configure-board-eu       # store the European Edition wiring
 make voom                     # build the Doom (prboom-go) Retro-Go app
-make flash-voom               # build + flash it
-make flash-retro-core         # the multi-console emulator core
+make flash-launcher           # build + flash the Retro-Go launcher (no OTA path yet)
 make build-fs                 # pack games/system Python + ROMs into a LittleFS image
-make deploy-fs                # flash that filesystem image
-make flash-all                # all firmware/filesystem images for a configured board
 ```
+
+Native app partitions (`prboom-go`, `retro-core`) and the LittleFS content are
+no longer flashed over USB day-to-day — they install over WiFi via the
+three-tier OTA updater (see [ota.md](ota.md)).
 
 ## Configuring the main board
 
@@ -81,9 +83,10 @@ make configure-board-v2        # original Ventilastation 2
 make configure-board-eu        # Ventilastation European Edition
 ```
 
-`flash-all` deliberately does not overwrite NVS, so it preserves an existing
-board's wiring. On a new board, run `make configure-board` after `flash-vsdk`
-and before using it.
+`initial-flash` and `flash-recovery` deliberately do not overwrite NVS, so
+they preserve an existing board's wiring. On a new board, run
+`make configure-board` after `initial-flash` (or `flash-recovery`) and before
+using it.
 
 The target uses the same automatic board selection and serial lock as flashing.
 Pass `PORT=...` when needed. For a custom revision, override the individual

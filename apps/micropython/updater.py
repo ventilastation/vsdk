@@ -133,6 +133,33 @@ def _parse_url(url):
     return host, port, path
 
 
+def _is_ipv4_literal(host):
+    parts = host.split(".")
+    if len(parts) != 4:
+        return False
+    for p in parts:
+        if not p.isdigit() or not (0 <= int(p) <= 255):
+            return False
+    return True
+
+
+def _resolve_base_url(base_url):
+    """Resolve base_url's hostname to a numeric IP once, so every subsequent
+    per-file/per-partition connection this session reuses it instead of
+    repeating a fresh DNS/mDNS lookup. socket.getaddrinfo() has no timeout of
+    its own on this port (unlike the socket itself), so a flaky mDNS
+    resolution can stall indefinitely; resolving once here -- right after
+    WiFi connects, before hundreds of per-file connections each get their own
+    chance to hit that -- bounds the exposure to one lookup per session
+    instead of one per file."""
+    host, port, _path = _parse_url(base_url)
+    if _is_ipv4_literal(host):
+        return base_url
+    addr = socket.getaddrinfo(host, port)[0][-1][0]
+    print("updater: resolved", host, "->", addr)
+    return base_url.replace(host, addr, 1)
+
+
 def _http_stream(url, callback, total_size):
     """Stream url, calling callback(chunk) for each received chunk."""
     host, port, path = _parse_url(url)
@@ -210,8 +237,19 @@ def _makedirs(path):
             pass
 
 
+# Scanning + checksumming hundreds of files (games/ROMs/system assets) can
+# take a while with nothing to show for it when everything is already up to
+# date -- print a heartbeat at most this often so the dev loop doesn't look
+# stuck.
+_SCAN_PROGRESS_INTERVAL_MS = 3000
+
+
 def _sync_lfs_files(base_url, files):
+    import utime
+
     total = len(files)
+    checked = 0
+    last_report = utime.ticks_ms()
     for i, entry in enumerate(files):
         rel_path = entry["path"]
         expected_sha = entry["sha256"]
@@ -220,6 +258,15 @@ def _sync_lfs_files(base_url, files):
 
         gc.collect()
         local_sha = _sha256_file(local_path)
+        checked += 1
+
+        now = utime.ticks_ms()
+        if utime.ticks_diff(now, last_report) >= _SCAN_PROGRESS_INTERVAL_MS:
+            pct = checked * 100 // total
+            print("updater: checksummed %d/%d files (%d%%)" % (checked, total, pct))
+            _progress("scan", "checksumming", pct)
+            last_report = now
+
         if local_sha == expected_sha:
             continue  # already up to date
 
@@ -234,8 +281,19 @@ def _sync_lfs_files(base_url, files):
                 def _write(chunk):
                     f.write(chunk)
                     sha.update(chunk)
+                # A large file (e.g. a multi-MB WAD) can take longer than the
+                # watchdog timeout to transfer; nothing else feeds it during
+                # this loop (unlike the per-chunk feed in _update_partitions),
+                # so a slow download used to trip the WDT mid-transfer once it
+                # was actually armed. Throttled like the checksumming
+                # heartbeat above -- most files are small enough that this
+                # never fires.
+                last_report = utime.ticks_ms()
                 for pct in _http_stream(file_url, _write, size):
-                    pass  # per-file progress not sent to save bandwidth
+                    now = utime.ticks_ms()
+                    if utime.ticks_diff(now, last_report) >= _SCAN_PROGRESS_INTERVAL_MS:
+                        _progress("file", rel_path.replace("/", "_"), pct)
+                        last_report = now
             got = binascii.hexlify(sha.digest()).decode()
             if got != expected_sha:
                 print("updater: SHA256 mismatch for", rel_path, "- got", got, "expected", expected_sha)
@@ -261,6 +319,28 @@ def _running_label():
         return None
 
 
+def _partition_matches(part, size, expected_sha, _block=4096):
+    """Hash the partition's actual on-flash content (bounded to the real
+    file size, not the whole partition capacity) and compare to expected_sha.
+    Used to double-check an NVS-cached "up to date" hash actually reflects
+    what's on flash -- the partition may have been rewritten (a bench
+    reflash, a wipe, corruption) without the updater ever running, in which
+    case the cache is stale and must not be trusted (see docs/internals/ota.md
+    and the TODO note about recovery wrongly triggering after a manual flash
+    that didn't update NVS checksums)."""
+    h = hashlib.sha256()
+    buf = bytearray(_block)
+    remaining = size
+    block_num = 0
+    while remaining > 0:
+        part.readblocks(block_num, buf)
+        n = min(_block, remaining)
+        h.update(buf[:n] if n < _block else buf)
+        remaining -= n
+        block_num += 1
+    return binascii.hexlify(h.digest()).decode() == expected_sha
+
+
 def _update_partitions(base_url, partitions):
     import esp32
 
@@ -280,12 +360,26 @@ def _update_partitions(base_url, partitions):
         url = base_url + entry["url"]
         nvs_key = _NVS_KEYS.get(name)
 
-        # Skip if we already have this exact binary.
+        # Skip only if the NVS-cached hash matches the manifest AND (unless
+        # this is the partition we're currently executing -- if it didn't
+        # still hold a valid, bootable image we couldn't be running from it
+        # right now) the partition's actual on-flash bytes still match it.
+        # A stale cache (the partition was rewritten outside the updater,
+        # bypassing NVS) must not be trusted, or a wiped/corrupted partition
+        # would report "up to date" forever.
         if nvs_key:
             stored_sha = _nvs_get(nvs_key)
             if stored_sha == expected_sha:
-                print("updater: partition %s up to date" % name)
-                continue
+                if name == running:
+                    print("updater: partition %s up to date" % name)
+                    continue
+                verify_parts = esp32.Partition.find(esp32.Partition.TYPE_APP, label=name)
+                if verify_parts:
+                    gc.collect()
+                    if _partition_matches(verify_parts[0], size, expected_sha):
+                        print("updater: partition %s up to date" % name)
+                        continue
+                    print("updater: partition %s NVS hash matched but on-flash content didn't -- reinstalling" % name)
 
         # Can't erase the partition we're currently executing from -- hand
         # off to factory instead of skipping forever. factory is the
@@ -449,6 +543,7 @@ def run(base_url, send_fn):
 
     try:
         try:
+            base_url = _resolve_base_url(base_url)
             manifest = _http_get_json(base_url + "/manifest")
         except Exception as e:
             _send(("ota_error manifest_fetch_failed: %s\n" % e).encode())

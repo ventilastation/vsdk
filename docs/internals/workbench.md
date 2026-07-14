@@ -247,13 +247,16 @@ per-chip) is deliberately identical on both boards. (Workbenches provisioned
 before the rename from `voom_wifi` still work: the firmware falls back to
 the old namespace and logs a migration hint.)
 
-Since the workbench is a compiled ESP-IDF app rather than a live
-MicroPython REPL, it can't be provisioned the way `make wifi-provision` does
-for the DUT (`mpremote run` against a live interpreter). Instead,
+Since the workbench is a compiled ESP-IDF app, not MicroPython, its
 `tools/provision_wifi.py` builds a small NVS partition image with
 `nvs_partition_gen.py` and flashes it straight to the `nvs` partition's
 offset (`0x9000`, pinned by `partitions.csv`) — no rebuild or full reflash
-needed to change networks:
+needed to change networks. The DUT's `make wifi-provision` now works the
+same way at the esptool level (see `vsdk/tools/nvs_partition.py`), except it
+dumps the partition first and merges in just the changed keys, since the
+DUT's `nvs` partition also holds `vs_board` wiring and `vsdk_ota` state that
+must survive; the workbench's `nvs` partition holds only `devel_wifi`, so it
+can overwrite the whole partition directly:
 
 ```bash
 source /path/to/esp-idf/esp-5.5.2/export.sh

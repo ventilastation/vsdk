@@ -89,9 +89,19 @@ _CONFIRM_AFTER_MS = 10000
 _wdt = None
 try:
     import machine
-    _wdt = machine.WDT(timeout_ms=15000)
-except Exception:
-    pass  # desktop/headless platforms have no machine.WDT
+except ImportError:
+    machine = None
+if machine is not None:
+    try:
+        # machine.WDT's keyword is "timeout" (see extmod/machine_wdt.c), not
+        # "timeout_ms" -- this previously silently never armed on real
+        # hardware (caught below, indistinguishable from "no WDT support"),
+        # defeating the "a hang counts the same as a crash" guarantee above.
+        _wdt = machine.WDT(timeout=15000)
+    except AttributeError:
+        pass  # this machine module has no WDT at all
+    except Exception as _wdt_error:
+        print("main: WDT arm failed, continuing without it:", _wdt_error)
 
 def _feed_wdt():
     if _wdt is not None:

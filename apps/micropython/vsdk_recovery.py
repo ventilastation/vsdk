@@ -38,6 +38,7 @@ import utime
 
 import updater
 import vsdk_logo_strip
+import vsdk_uart_log
 
 _OTA_URL = "http://ventilastation-base.local:5653"
 _WDT_TIMEOUT_MS = 30000
@@ -48,7 +49,8 @@ _PERSPECTIVE_HUD = 2
 # Keys read from NVS namespace "vs_board" -- the same namespace and key
 # names as ventilastation/board_config.py, kept in sync by hand rather than
 # imported (board_config.py lives on vfs; see the module docstring). Only
-# the display-wiring keys: recovery has no UART/serial comms channel.
+# the display-wiring keys here; the serial_* keys for the UART status link
+# are read separately by vsdk_uart_log.py.
 _DISPLAY_NVS_KEYS = (
     "hall_gpio", "irdiode_gpio", "led_spi_host",
     "led_clk", "led_mosi", "led_cs", "led_freq",
@@ -90,9 +92,21 @@ def _make_sprite():
 def _arm_wdt():
     try:
         import machine
-        return machine.WDT(timeout_ms=_WDT_TIMEOUT_MS)
-    except Exception:
-        return None  # desktop/headless platforms have no machine.WDT
+    except ImportError:
+        return None  # desktop/headless platforms have no machine module at all
+    try:
+        # machine.WDT's keyword is "timeout" (see extmod/machine_wdt.c), not
+        # "timeout_ms" -- this silently never armed on real hardware before
+        # (caught below and treated the same as "no WDT support"), which is
+        # exactly the failure mode this watchdog exists to catch. Any other
+        # construction failure is logged rather than swallowed, so a repeat
+        # doesn't go unnoticed again.
+        return machine.WDT(timeout=_WDT_TIMEOUT_MS)
+    except AttributeError:
+        return None  # this machine module has no WDT at all
+    except Exception as error:
+        vsdk_uart_log.info("recovery: WDT arm failed, continuing without it: %s" % error)
+        return None
 
 
 def _feed(wdt):
@@ -116,6 +130,8 @@ def _make_progress_handler(sprite, wdt):
 
     def handle(line):
         _feed(wdt)
+        raw = line if isinstance(line, (bytes, bytearray)) else line.encode()
+        vsdk_uart_log.send(raw.rstrip(b"\n"))
         try:
             text = (line.decode() if isinstance(line, bytes) else line).strip()
         except Exception:
@@ -142,7 +158,9 @@ def _boot_into_micropython_if_ready():
     import esp32
     parts = esp32.Partition.find(esp32.Partition.TYPE_APP, label="micropython")
     if not parts:
+        vsdk_uart_log.info("recovery: update complete, but no micropython partition yet; holding in recovery")
         return False
+    vsdk_uart_log.info("recovery: update complete, handing off to micropython")
     parts[0].set_boot()
     import machine
     machine.reset()
@@ -184,13 +202,16 @@ def run():
     try:
         sprite = _make_sprite()
         wdt = _arm_wdt()
+        vsdk_uart_log.info("recovery: booted from factory, target %s" % _OTA_URL)
         _boot_grace_period(wdt)
 
         attempt = 0
         while True:
             _feed(wdt)
+            vsdk_uart_log.info("recovery: OTA attempt %d" % (attempt + 1))
             ok = _attempt(sprite, wdt)
             if ok:
+                vsdk_uart_log.info("recovery: OTA attempt %d succeeded" % (attempt + 1))
                 _boot_into_micropython_if_ready()
                 # No micropython partition to hand off to (e.g. a bench board
                 # mid-bring-up): hold here, fully updated, and keep retrying
@@ -199,12 +220,15 @@ def run():
                 attempt = 0
             delay = _BACKOFF_SCHEDULE_MS[min(attempt, len(_BACKOFF_SCHEDULE_MS) - 1)]
             attempt += 1
+            if not ok:
+                vsdk_uart_log.info("recovery: OTA attempt failed, retrying in %dms" % delay)
             waited = 0
             while waited < delay:
                 _feed(wdt)
                 utime.sleep_ms(min(1000, delay - waited))
                 waited += 1000
     except Exception as error:
+        vsdk_uart_log.info("recovery: fatal error, resetting: %s" % error)
         print("recovery: fatal error, resetting:", error)
         import machine
         machine.reset()
