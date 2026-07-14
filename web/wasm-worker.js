@@ -1,12 +1,12 @@
 import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260622T204800Z";
 
-const WORKER_BUILD_VERSION = "worker-debug-20260622T204800Z";
+const WORKER_BUILD_VERSION = "worker-debug-20260714-input-v2b";
 const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T204800Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: `./vendor/micropython/micropython.wasm?v=${MICROPYTHON_WASM_VERSION}`,
-  runtimeBundleUrl: "./runtime-bundle.json",
-  runtimeManifestUrl: "./runtime-manifest.json",
+  runtimeBundleUrl: "./runtime-bundle.json?v=20260714b",
+  runtimeManifestUrl: "./runtime-manifest.json?v=20260714b",
   fsRoot: "/games",
   pystack: 32 * 1024,
   heapsize: 8 * 1024 * 1024,
@@ -277,7 +277,17 @@ class MicroPythonRuntime {
     });
 
     this.mp.registerJsModule("__vs_host", {
-      get_buttons: () => workerHostState.buttons,
+      // get_buttons remains for older browser bundles; the v2 accessors below
+      // keep the bridge primitive-only and avoid per-frame object allocation.
+      get_buttons: () => workerHostState.joy1,
+      get_joy1: () => workerHostState.joy1,
+      get_joy2: () => workerHostState.joy2,
+      get_extra: () => workerHostState.extra,
+      consume_exit: () => {
+        const pending = workerHostState.exit;
+        workerHostState.exit = false;
+        return pending ? 1 : 0;
+      },
       is_running: () => workerHostState.running,
       consume_full_frame_request: () => {
         const shouldSendFullFrame = workerHostState.fullNextFrame;
@@ -732,6 +742,10 @@ const runtimeLoop = {
 };
 const workerHostState = {
   buttons: 0,
+  joy1: 0,
+  joy2: 0,
+  extra: 0,
+  exit: false,
   running: false,
   fullNextFrame: true,
 };
@@ -1099,7 +1113,20 @@ self.addEventListener("message", async (event) => {
     }
 
     if (type === "set_buttons") {
-      workerHostState.buttons = (message.bitmask || 0) & 0xFF;
+      workerHostState.buttons = (message.bitmask || 0) & 0x7F;
+      workerHostState.joy1 = workerHostState.buttons;
+      workerHostState.joy2 = 0;
+      workerHostState.extra = 0;
+      success(id, null);
+      return;
+    }
+
+    if (type === "set_input") {
+      workerHostState.joy1 = (message.joy1 || 0) & 0x7F;
+      workerHostState.joy2 = (message.joy2 || 0) & 0x7F;
+      workerHostState.extra = (message.extra || 0) & 0x7F;
+      workerHostState.buttons = workerHostState.joy1;
+      workerHostState.exit = workerHostState.exit || Boolean(message.exit);
       success(id, null);
       return;
     }

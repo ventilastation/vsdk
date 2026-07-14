@@ -38,6 +38,13 @@ class VentilastationWasmAdapter {
     return this.bridge.call("ventilastation.browser", "set_buttons", bitmask);
   }
 
+  setInput(joy1, joy2 = 0, extra = 0, exit = false) {
+    if (typeof this.bridge.setInput === "function") {
+      return this.bridge.setInput(joy1, joy2, extra, exit);
+    }
+    return this.bridge.call("ventilastation.browser", "set_input", joy1, joy2, extra, exit);
+  }
+
   exportFrame({ full = false } = {}) {
     return this.bridge.call("ventilastation.browser", "export_frame", full);
   }

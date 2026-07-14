@@ -63,6 +63,8 @@ class Director:
     BUTTON_B  = 0x20
     BUTTON_C  = 0x40
     BUTTON_D  = 0x80   # mirrored from extra bit 0; backward-compat for existing games
+    BUTTON_X  = BUTTON_C
+    BUTTON_Y  = BUTTON_D
 
     # joy2 — same bit layout as joy1
     JOY2_LEFT  = 0x01
@@ -72,15 +74,29 @@ class Director:
     BUTTON2_A  = 0x10
     BUTTON2_B  = 0x20
     BUTTON2_C  = 0x40
+    BUTTON2_D  = 0x80
+    BUTTON2_X  = BUTTON2_C
+    BUTTON2_Y  = BUTTON2_D
 
-    # extra buttons (7 available; bit 0 is the physical BUTTON_D)
-    EXTRA_BTN_0 = 0x01
-    EXTRA_BTN_1 = 0x02
-    EXTRA_BTN_2 = 0x04
-    EXTRA_BTN_3 = 0x08
-    EXTRA_BTN_4 = 0x10
-    EXTRA_BTN_5 = 0x20
-    EXTRA_BTN_6 = 0x40
+    # extra buttons.  Bits 0/1 are mirrored into BUTTON_Y/BUTTON2_Y above;
+    # the rest carry Start/Back for the two independent controllers.
+    EXTRA_JOY1_Y     = 0x01
+    EXTRA_JOY2_Y     = 0x02
+    EXTRA_JOY1_START = 0x04
+    EXTRA_JOY1_BACK  = 0x08
+    EXTRA_JOY2_START = 0x10
+    EXTRA_JOY2_BACK  = 0x20
+    EXTRA_RESERVED    = 0x40
+
+    # Compatibility aliases for code written against input-protocol-v2's
+    # original generic extra-bit names.
+    EXTRA_BTN_0 = EXTRA_JOY1_Y
+    EXTRA_BTN_1 = EXTRA_JOY2_Y
+    EXTRA_BTN_2 = EXTRA_JOY1_START
+    EXTRA_BTN_3 = EXTRA_JOY1_BACK
+    EXTRA_BTN_4 = EXTRA_JOY2_START
+    EXTRA_BTN_5 = EXTRA_JOY2_BACK
+    EXTRA_BTN_6 = EXTRA_RESERVED
 
     def __init__(self, platform):
         self.platform = platform
@@ -116,13 +132,37 @@ class Director:
         content = details.encode("utf-8")
         self.report_traceback(content)
 
+    def return_to_menu(self):
+        """Leave every nested scene without rebooting MicroPython.
+
+        Native partitions cannot retain a MicroPython scene, but a normal
+        MicroPython game can: the launcher is always the root scene and the
+        rest of the stack is transient UI or game state.
+        """
+        while len(self.scene_stack) > 1:
+            self.pop()
+        self.buttons = 0
+        self.last_buttons = 0
+        self.buttons2 = 0
+        self.last_buttons2 = 0
+        self.extra_buttons = 0
+        self.last_extra_buttons = 0
+        self.reset_timeout()
+
     def _dispatch_control(self, cmd_line):
-        """Handle a text control command received on the control port (port 5006)."""
+        """Handle a text control command received in-band with input frames.
+
+        Returns True when the command replaced the active scene, so step_once
+        can avoid invoking the scene that has just been popped.
+        """
         parts = cmd_line.split()
         if not parts:
-            return
+            return False
         cmd = parts[0]
-        if cmd == "povcal":
+        if cmd == "exit":
+            self.return_to_menu()
+            return True
+        elif cmd == "povcal":
             from ventilastation import color_calibration
             color_calibration.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
         elif cmd == "povperf":
@@ -132,7 +172,7 @@ class Director:
             base_url = parts[1] if len(parts) > 1 else ""
             if not base_url:
                 print("director: ota_start missing URL")
-                return
+                return False
             print("director: OTA requested from", base_url, "— rebooting into OTA mode")
             # Write the request and reboot so OTA runs before the GPU task starts.
             # Running WiFi while the GPU task holds the SPI bus causes a core crash.
@@ -141,11 +181,12 @@ class Director:
                     _f.write(base_url)
             except Exception as _e:
                 print("director: failed to write ota_request:", _e)
-                return
+                return False
             import machine
             machine.reset()
         else:
             print("director: unknown control command:", cmd_line)
+        return False
 
     def _enter_scene(self, scene):
         api_guard.begin_app(
@@ -225,6 +266,12 @@ class Director:
 
     def is_extra(self, button):
         return bool(button & self.extra_buttons)
+
+    def was_extra_pressed(self, button):
+        return bool(button & self.extra_buttons) and not bool(button & self.last_extra_buttons)
+
+    def was_extra_released(self, button):
+        return not bool(button & self.extra_buttons) and bool(button & self.last_extra_buttons)
 
     def sound_play(self, track):
         if isinstance(track, str):
@@ -387,16 +434,25 @@ class Director:
         if hasattr(self.platform.comms, "next_joy2"):
             self.buttons2      = self.platform.comms.next_joy2()
             self.extra_buttons = self.platform.comms.next_extra()
-            # Mirror EXTRA_BTN_0 → BUTTON_D so existing games work unchanged.
-            if self.extra_buttons & self.EXTRA_BTN_0:
+            # Mirror the fourth face button for both controllers.  Joy1's
+            # bit-7 mirror keeps BUTTON_D games working; Joy2 gains the same
+            # full A/B/X/Y view through is_pressed2()/was_pressed2().
+            if self.extra_buttons & self.EXTRA_JOY1_Y:
                 self.buttons |= self.BUTTON_D
             else:
                 self.buttons &= ~self.BUTTON_D & 0xFF
+            if self.extra_buttons & self.EXTRA_JOY2_Y:
+                self.buttons2 |= self.BUTTON2_D
+            else:
+                self.buttons2 &= ~self.BUTTON2_D & 0xFF
 
         if hasattr(self.platform.comms, "next_command"):
             cmd_line = self.platform.comms.next_command()
             if cmd_line:
-                self._dispatch_control(cmd_line)
+                if self._dispatch_control(cmd_line):
+                    if not self.scene_stack:
+                        return
+                    scene = self.scene_stack[-1]
 
         try:
             scene.scene_step()

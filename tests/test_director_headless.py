@@ -68,6 +68,50 @@ def test_button_edges():
     ], edges
 
 
+def test_joy2_and_exit_return_to_root_scene():
+    runtime = fresh_runtime()
+    comms = runtime.platform.comms
+    joy2 = [0]
+    extra = [0]
+    commands = []
+    comms.next_joy2 = lambda: joy2[0]
+    comms.next_extra = lambda: extra[0]
+    comms.next_command = lambda: commands.pop(0) if commands else None
+    events = []
+
+    class Menu(Scene):
+        def on_enter(self):
+            events.append("menu-enter")
+
+        def step(self):
+            events.append("menu-step")
+
+    class Game(Scene):
+        def on_exit(self):
+            events.append("game-exit")
+
+        def step(self):
+            events.append("game-step")
+
+    menu = Menu()
+    director.push(menu)
+    director.push(Game())
+    comms.push_input(bytes([director.BUTTON_A]))
+    joy2[0] = director.BUTTON2_A | director.BUTTON2_C
+    extra[0] = director.EXTRA_JOY1_Y | director.EXTRA_JOY2_Y
+    director.step_once()
+    assert director.is_pressed(director.BUTTON_Y)
+    assert director.is_pressed2(director.BUTTON2_A | director.BUTTON2_X)
+    assert director.is_pressed2(director.BUTTON2_Y)
+
+    commands.append("exit")
+    director.step_once()
+    assert runtime.scene_stack == [menu]
+    assert events[-3:] == ["game-exit", "menu-enter", "menu-step"], events
+    assert director.buttons == 0
+    assert director.buttons2 == 0
+
+
 def test_push_rollback_on_failing_enter():
     fresh_runtime()
 

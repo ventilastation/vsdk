@@ -20,24 +20,137 @@ const KEY_TO_BUTTON = new Map([
   ["Space", BUTTONS.BUTTON_A],
   ["KeyO", BUTTONS.BUTTON_B],
   ["KeyP", BUTTONS.BUTTON_C],
-  ["Escape", BUTTONS.BUTTON_D],
 ]);
 
-const GAMEPAD_FACE_BUTTONS = new Map([
-  [0, BUTTONS.BUTTON_A],
-  [2, BUTTONS.BUTTON_B],
-  [3, BUTTONS.BUTTON_C],
-  [1, BUTTONS.BUTTON_D],
-  [8, BUTTONS.BUTTON_D],
-  [16, BUTTONS.BUTTON_D],
-]);
+// The browser runtime mirrors input-protocol-v2.md.  The first seven bits of
+// each joystick are directions plus A/B/X; Y, Start, and Back live here.
+const INPUT_EXTRA = Object.freeze({
+  JOY1_Y: 0x01,
+  JOY2_Y: 0x02,
+  JOY1_START: 0x04,
+  JOY1_BACK: 0x08,
+  JOY2_START: 0x10,
+  JOY2_BACK: 0x20,
+});
 
-const GAMEPAD_DPAD_BUTTONS = new Map([
-  [14, BUTTONS.JOY_LEFT],
-  [15, BUTTONS.JOY_RIGHT],
-  [12, BUTTONS.JOY_UP],
-  [13, BUTTONS.JOY_DOWN],
-]);
+const EXIT_KEY_CODES = new Set(["Escape"]);
+const GAMEPAD_AXIS_DEAD_ZONE = 0.35;
+
+// Standard Gamepad API button indices.  Browsers expose this stable layout
+// for controllers whose `mapping` is "standard".
+const GAMEPAD_BUTTONS = Object.freeze({
+  A: 0,
+  B: 1,
+  X: 2,
+  Y: 3,
+  LEFT_SHOULDER: 4,
+  RIGHT_SHOULDER: 5,
+  LEFT_TRIGGER: 6,
+  RIGHT_TRIGGER: 7,
+  BACK: 8,
+  START: 9,
+  DPAD_UP: 12,
+  DPAD_DOWN: 13,
+  DPAD_LEFT: 14,
+  DPAD_RIGHT: 15,
+  GUIDE: 16,
+});
+
+function gamepadButtonPressed(gamepad, index) {
+  const button = gamepad?.buttons[index];
+  return Boolean(button?.pressed || Number(button?.value || 0) > 0.5);
+}
+
+function gamepadDirections(gamepad, axisOffset, includeDpad, invertY) {
+  if (!gamepad) {
+    return 0;
+  }
+  let buttons = 0;
+  const axisX = gamepad.axes[axisOffset] || 0;
+  const rawAxisY = gamepad.axes[axisOffset + 1] || 0;
+  const axisY = invertY ? -rawAxisY : rawAxisY;
+  if (axisX <= -GAMEPAD_AXIS_DEAD_ZONE ||
+      (includeDpad && gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.DPAD_LEFT))) {
+    buttons |= BUTTONS.JOY_LEFT;
+  }
+  if (axisX >= GAMEPAD_AXIS_DEAD_ZONE ||
+      (includeDpad && gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.DPAD_RIGHT))) {
+    buttons |= BUTTONS.JOY_RIGHT;
+  }
+  if (axisY <= -GAMEPAD_AXIS_DEAD_ZONE ||
+      (includeDpad && gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.DPAD_UP))) {
+    buttons |= BUTTONS.JOY_UP;
+  }
+  if (axisY >= GAMEPAD_AXIS_DEAD_ZONE ||
+      (includeDpad && gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.DPAD_DOWN))) {
+    buttons |= BUTTONS.JOY_DOWN;
+  }
+  return buttons;
+}
+
+function addControllerButtons(input, gamepad, player) {
+  const joystickKey = player === 1 ? "joy1" : "joy2";
+  const yBit = player === 1 ? INPUT_EXTRA.JOY1_Y : INPUT_EXTRA.JOY2_Y;
+  const startBit = player === 1 ? INPUT_EXTRA.JOY1_START : INPUT_EXTRA.JOY2_START;
+  const backBit = player === 1 ? INPUT_EXTRA.JOY1_BACK : INPUT_EXTRA.JOY2_BACK;
+  if (gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.A)) {
+    input[joystickKey] |= BUTTONS.BUTTON_A;
+  }
+  if (gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.B)) {
+    input[joystickKey] |= BUTTONS.BUTTON_B;
+  }
+  if (gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.X)) {
+    input[joystickKey] |= BUTTONS.BUTTON_C;
+  }
+  if (gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.Y)) {
+    input.extra |= yBit;
+  }
+  if (gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.START)) {
+    input.extra |= startBit;
+  }
+  if (gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.BACK)) {
+    input.extra |= backBit;
+  }
+  if (gamepadButtonPressed(gamepad, GAMEPAD_BUTTONS.GUIDE)) {
+    input.exit = true;
+  }
+}
+
+// Map standard Gamepad API objects into Input Protocol v2.  This is kept
+// pure so the browser mapping can be exercised without a DOM or WASM host.
+function mapGamepadInput(primary, secondary = null, invertY = false) {
+  const input = { joy1: 0, joy2: 0, extra: 0, exit: false };
+  if (!primary) {
+    return input;
+  }
+
+  input.joy1 = gamepadDirections(primary, 0, true, invertY);
+  addControllerButtons(input, primary, 1);
+
+  if (secondary) {
+    // Controller 2 owns Joy2. Controller 1's right stick is ignored.
+    input.joy2 = gamepadDirections(secondary, 0, true, invertY);
+    addControllerButtons(input, secondary, 2);
+    return input;
+  }
+
+  // A single controller exposes Joy2 through its right stick. Its spare
+  // shoulder/trigger inputs provide Joy2 A/B/X/Y in that order.
+  input.joy2 = gamepadDirections(primary, 2, false, invertY);
+  if (gamepadButtonPressed(primary, GAMEPAD_BUTTONS.LEFT_SHOULDER)) {
+    input.joy2 |= BUTTONS.BUTTON_A;
+  }
+  if (gamepadButtonPressed(primary, GAMEPAD_BUTTONS.LEFT_TRIGGER)) {
+    input.joy2 |= BUTTONS.BUTTON_B;
+  }
+  if (gamepadButtonPressed(primary, GAMEPAD_BUTTONS.RIGHT_SHOULDER)) {
+    input.joy2 |= BUTTONS.BUTTON_C;
+  }
+  if (gamepadButtonPressed(primary, GAMEPAD_BUTTONS.RIGHT_TRIGGER)) {
+    input.extra |= INPUT_EXTRA.JOY2_Y;
+  }
+  return input;
+}
 
 const LedRenderCore = globalThis.VentilastationLedRenderCore;
 if (!LedRenderCore) {
@@ -63,7 +176,6 @@ const SCENE_STEP_MS = 30;
 const MAX_CATCH_UP_STEPS = 6;
 const MAX_TICK_BACKLOG_MS = SCENE_STEP_MS * MAX_CATCH_UP_STEPS;
 const TOUCH_STICK_DEAD_ZONE = 0.26;
-const GAMEPAD_AXIS_DEAD_ZONE = 0.35;
 const FPS_DISPLAY_INTERVAL_MS = 500;
 const RENDER_PROFILE_SAMPLE_LIMIT = 60;
 const MEMORY_SNAPSHOT_HISTORY_LIMIT = 20;
@@ -260,8 +372,10 @@ function decodeImageStripPayload(slot, payload) {
 export {
   BUTTONS,
   KEY_TO_BUTTON,
-  GAMEPAD_FACE_BUTTONS,
-  GAMEPAD_DPAD_BUTTONS,
+  INPUT_EXTRA,
+  EXIT_KEY_CODES,
+  GAMEPAD_BUTTONS,
+  mapGamepadInput,
   LedRenderCore,
   COLUMNS,
   PIXELS,

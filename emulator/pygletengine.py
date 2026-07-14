@@ -15,17 +15,21 @@ class PygletEngine():
     def __init__(self, led_count, comms_send, enable_display=True):
         sound_init()
         display_init(led_count)
-        self.last_input_sent = (0, 0)
+        self.last_input_sent = (0, 0, 0)
+        self.last_exit_pressed = False
         self.comms_send = comms_send
         self.enable_display = enable_display
 
         def process_input():
             import comms
-            joy1, extra = encode_input_val()
+            joy1, joy2, extra, exit_pressed = encode_input_val()
 
-            if (joy1, extra) != self.last_input_sent:
-                comms.send_joystick(joy1, extra=extra)
-                self.last_input_sent = (joy1, extra)
+            if (joy1, joy2, extra) != self.last_input_sent:
+                comms.send_joystick(joy1, joy2, extra)
+                self.last_input_sent = (joy1, joy2, extra)
+            if exit_pressed and not self.last_exit_pressed:
+                comms.send_command("exit")
+            self.last_exit_pressed = exit_pressed
 
         @window.event
         def on_draw():

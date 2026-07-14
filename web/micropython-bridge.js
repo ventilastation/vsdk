@@ -112,6 +112,10 @@ class WorkerBridge {
     return this.request("set_buttons", { bitmask });
   }
 
+  setInput(joy1, joy2 = 0, extra = 0, exit = false) {
+    return this.request("set_input", { joy1, joy2, extra, exit });
+  }
+
   startRuntimeLoop(options = {}) {
     return this.request("start_runtime_loop", options);
   }
@@ -198,7 +202,7 @@ class WorkerBridge {
   }
 }
 
-const WORKER_SCRIPT_VERSION = "worker-debug-20260709-vs2-scene";
+const WORKER_SCRIPT_VERSION = "worker-debug-20260714-input-v2b";
 
 export async function createVentilastationWasmBridge(options = {}) {
   const workerUrl = options.workerUrl || new URL(`./wasm-worker.js?v=${WORKER_SCRIPT_VERSION}`, import.meta.url).href;

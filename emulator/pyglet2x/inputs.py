@@ -2,7 +2,7 @@ import pyglet
 from pyglet.window import key
 
 import comms
-from inputs_common import keyboard_state, pack_input
+from inputs_common import keyboard_state, pack_controllers
 from pyglet2x.pygletdraw import window, help_label
 
 keys = key.KeyStateHandler()
@@ -10,35 +10,35 @@ keys = key.KeyStateHandler()
 def init_inputs():
     window.push_handlers(keys)
 
-def init_controller(ctrl):
-    global controller
-    controller = ctrl
-    print(f"Controller connected: {ctrl.device.name}")
-    controller.open()
-
 controller_man = pyglet.input.ControllerManager()
+controllers = []
+
+
+def refresh_controllers():
+    global controllers
+    connected = list(controller_man.get_controllers())[:2]
+    for ctrl in connected:
+        if ctrl not in controllers:
+            print(f"Controller connected: {ctrl.device.name}")
+            ctrl.open()
+    controllers = connected
 
 def update_label():
-    help_label.text = ("joy or " if controller else "") + "keys: ←↕→ SPACE ESC Q"
+    help_label.text = ("joy or " if controllers else "") + "keys: ←↕→ SPACE ESC Q"
 
 @controller_man.event
 def on_connect(ctrl):
-    init_controller(ctrl)
+    refresh_controllers()
     update_label()
 
 @controller_man.event
 def on_disconnect(ctrl):
     print(f"Controller disconnected: {ctrl.device.name}")
-    global controller
-    controller = None
+    refresh_controllers()
     update_label()
 
-initial_controllers = controller_man.get_controllers()
-print(initial_controllers)
-if initial_controllers:
-    init_controller(initial_controllers[0])
-else:
-    controller = None
+print(controller_man.get_controllers())
+refresh_controllers()
 update_label()
 
 @window.event
@@ -51,23 +51,11 @@ def on_key_press(symbol, modifiers):
         comms.trigger_ota()
 
 def encode_input_val():
-    THR = 0.5
     kb_left, kb_right, kb_up, kb_down, kb_boton, kb_accel, kb_decel = keyboard_state(keys)
-    reset = keys[key.ESCAPE]
-    try:
-        left = controller.leftx < -THR or controller.dpad.x < -THR
-        right = controller.leftx > THR or controller.dpad.x > THR
-        up = controller.lefty < -THR or controller.dpad.y > THR
-        down = controller.lefty > THR or controller.dpad.y < -THR
-
-        boton = controller.a
-
-        accel = controller.lefttrigger > 0 or controller.x
-        decel = controller.righttrigger > 0 or controller.y
-
-        reset = reset or controller.b or controller.guide or controller.back
-    except Exception:
-        left = right = up = down = boton = accel = decel = False
-
-    return pack_input(left or kb_left, right or kb_right, up or kb_up, down or kb_down,
-                      boton or kb_boton, accel or kb_accel, decel or kb_decel, reset)
+    primary = controllers[0] if controllers else None
+    secondary = controllers[1] if len(controllers) > 1 else None
+    joy1, joy2, extra, home = pack_controllers(
+        primary, secondary,
+        (kb_left, kb_right, kb_up, kb_down, kb_boton, kb_accel, kb_decel),
+    )
+    return joy1, joy2, extra, home or keys[key.ESCAPE]

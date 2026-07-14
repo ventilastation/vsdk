@@ -71,10 +71,39 @@ constants so no remapping is needed anywhere:
 |-----|---|---|---|------|----|-------|------|
 |     | C | B | A | down | up | right | left |
 
-The old `BUTTON_D` (formerly bit 7 of the single-byte protocol) is remapped
-to `extra` bit 0. Director mirrors it into `self.buttons` bit 7 so all
-existing MicroPython game code using `BUTTON_D` keeps working. On the C side
-`rg_input.c` does the same mirror so native apps keep working too.
+`extra` carries the fourth face button plus the Start and Back buttons that
+do not fit in either joystick byte:
+
+| Bit | Meaning |
+|-----|---------|
+| 0 | Joy1 Y (`BUTTON_D` compatibility mirror) |
+| 1 | Joy2 Y (`BUTTON2_D` compatibility mirror) |
+| 2 | Joy1 Start |
+| 3 | Joy1 Back |
+| 4 | Joy2 Start |
+| 5 | Joy2 Back |
+| 6 | Reserved (zero) |
+
+Director mirrors extra bits 0 and 1 into the bit-7 Y aliases of `buttons`
+and `buttons2`, so MicroPython games can use full Joy1 and Joy2 ABXY. Native
+apps map all seven meaningful bits to `RG_KEY_*`; no shoulder or trigger
+input is assigned in v2.
+
+For native consumers, Start maps to `RG_KEY_START` and Back maps to
+`RG_KEY_SELECT`; MicroPython games can read each controller's Start/Back bits
+with `is_extra()` / `was_extra_pressed()`.
+
+### Controller allocation
+
+- With one connected gamepad: its left stick and D-pad drive Joy1; its right
+  stick drives Joy2. Its face buttons, Start, and Back belong to Joy1, while
+  its left shoulder, left trigger, right shoulder, and right trigger map to
+  Joy2 A, B, X, and Y respectively.
+- With two gamepads: controller 1's right stick is ignored. Controller 2's
+  left stick and D-pad/cursor directions, face buttons, Start, and Back drive
+  Joy2.
+- The controller Home/Guide button is not encoded as held input. The emulator
+  emits one `exit\n` command on its press edge.
 
 ### 2. Command frame  (ASCII alphanumeric + `\n`)
 
@@ -121,6 +150,7 @@ mid-command from blocking the state machine indefinitely.
 | Command | Parameters | Notes |
 |---------|------------|-------|
 | `reset` | — | Reboot the main board |
+| `exit` | — | Emulator Home/Guide action. Native apps restart and return through their normal launcher route; MicroPython pops the active game/UI scene and returns to its menu without rebooting. |
 | `ota_start` | `<url>` | Start OTA from `http://host:port` |
 | `wifi_config` | `<ssid> <password-hex>` | Write Wi-Fi credentials to NVS. Password is hex-encoded to avoid spaces and non-ASCII. |
 | `povcal get` | — | Return the active versioned POV colour profile as `povcal_state <schema> <generation> <nbytes>` plus its binary payload. |
@@ -145,11 +175,16 @@ povperf start\n
 povperf status\n
 povperf stop\n
 reset\n
+exit\n
 ```
 
 ---
 
-## Implementation Plan
+## Historical implementation outline (superseded)
+
+The protocol implementation below records the original v2 rollout. It is not
+the current button mapping: use the frame, controller allocation, and command
+reference above as the source of truth.
 
 ### New file: `apps/micropython/ventilastation/input_parser.py`
 

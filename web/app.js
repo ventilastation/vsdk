@@ -4,8 +4,8 @@
 import {
   BUTTONS,
   KEY_TO_BUTTON,
-  GAMEPAD_FACE_BUTTONS,
-  GAMEPAD_DPAD_BUTTONS,
+  EXIT_KEY_CODES,
+  mapGamepadInput,
   computeLedFramePixels,
   computeLedFramePixelsFromRgb,
   FORCE_2D_STORAGE_KEY,
@@ -18,7 +18,6 @@ import {
   MAX_CATCH_UP_STEPS,
   MAX_TICK_BACKLOG_MS,
   TOUCH_STICK_DEAD_ZONE,
-  GAMEPAD_AXIS_DEAD_ZONE,
   FPS_DISPLAY_INTERVAL_MS,
   RENDER_PROFILE_SAMPLE_LIMIT,
   MEMORY_SNAPSHOT_HISTORY_LIMIT,
@@ -36,7 +35,7 @@ import {
   decodeSpriteStateBuffer,
   decodeVs2SceneBuffer,
   decodeImageStripPayload,
-} from "./app-support.js?v=20260709b";
+} from "./app-support.js?v=20260714b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260709a";
@@ -51,6 +50,10 @@ class FailedRuntimeAdapter {
   setButtons(_buttons) {
     return;
   }
+
+  setInput(_joy1, _joy2, _extra, _exit) {
+    return;
+  }
 }
 
 class BrowserHostApp {
@@ -61,8 +64,12 @@ class BrowserHostApp {
     this.currentButtons = 0;
     this.keyboardButtons = 0;
     this.touchButtons = 0;
-    this.gamepadButtons = 0;
+    this.gamepadInput = { joy1: 0, joy2: 0, extra: 0, exit: false };
+    this.currentInput = { joy1: 0, joy2: 0, extra: 0 };
+    this.keyboardExitPressed = false;
+    this.exitPressed = false;
     this.activeGamepadIndex = null;
+    this.connectedGamepadCount = 0;
     this.assetIndex = new Map();
     this.assetRenderCache = new Map();
     this.visibleStripSlots = [];
@@ -431,6 +438,7 @@ class BrowserHostApp {
         editorOpen: this.editorOpen,
         pollingHalted: this.pollingHalted,
         currentButtons: this.currentButtons,
+        currentInput: this.currentInput,
       }),
     };
   }
@@ -536,6 +544,14 @@ class BrowserHostApp {
         return;
       }
       this.audio.enable();
+      if (EXIT_KEY_CODES.has(event.code)) {
+        event.preventDefault();
+        this.keyboardExitPressed = true;
+        this.syncButtons();
+        this.addDiagnostic("input.exit.keydown", { code: event.code });
+        this.renderStatus();
+        return;
+      }
       const bit = KEY_TO_BUTTON.get(event.code);
       if (!bit) {
         return;
@@ -548,6 +564,19 @@ class BrowserHostApp {
     });
 
     window.addEventListener("keyup", (event) => {
+      if (EXIT_KEY_CODES.has(event.code)) {
+        const wasPressed = this.keyboardExitPressed;
+        this.keyboardExitPressed = false;
+        if (wasPressed) {
+          this.syncButtons();
+          this.addDiagnostic("input.exit.keyup", { code: event.code });
+          this.renderStatus();
+        }
+        if (!isEditableEventTarget(event.target)) {
+          event.preventDefault();
+        }
+        return;
+      }
       const bit = KEY_TO_BUTTON.get(event.code);
       if (!bit) {
         return;
@@ -568,7 +597,8 @@ class BrowserHostApp {
     window.addEventListener("blur", () => {
       this.keyboardButtons = 0;
       this.touchButtons = 0;
-      this.gamepadButtons = 0;
+      this.gamepadInput = { joy1: 0, joy2: 0, extra: 0, exit: false };
+      this.keyboardExitPressed = false;
       this.touchStickPointerId = null;
       this.syncButtons();
       this.addDiagnostic("input.blur", { buttons: 0 });
@@ -596,7 +626,7 @@ class BrowserHostApp {
       const wasActive = gamepad.index === this.activeGamepadIndex;
       if (wasActive) {
         this.activeGamepadIndex = null;
-        this.gamepadButtons = 0;
+        this.gamepadInput = { joy1: 0, joy2: 0, extra: 0, exit: false };
       }
       this.selectActiveGamepad();
       this.addDiagnostic("input.gamepad.disconnected", {
@@ -613,13 +643,15 @@ class BrowserHostApp {
 
   getConnectedGamepads() {
     if (typeof navigator.getGamepads !== "function") {
+      this.connectedGamepadCount = 0;
       return [];
     }
-    return Array.from(navigator.getGamepads()).filter(Boolean);
+    const gamepads = Array.from(navigator.getGamepads()).filter(Boolean);
+    this.connectedGamepadCount = gamepads.length;
+    return gamepads;
   }
 
-  selectActiveGamepad() {
-    const gamepads = this.getConnectedGamepads();
+  selectActiveGamepad(gamepads = this.getConnectedGamepads()) {
     const activeGamepad = gamepads.find((gamepad) => gamepad.index === this.activeGamepadIndex);
     if (activeGamepad) {
       return activeGamepad;
@@ -636,58 +668,34 @@ class BrowserHostApp {
     return nextGamepad;
   }
 
-  readGamepadButtons() {
-    const gamepad = this.selectActiveGamepad();
-    if (!gamepad) {
-      return 0;
-    }
-
-    let buttons = 0;
-
-    for (const [index, bit] of GAMEPAD_FACE_BUTTONS) {
-      if (gamepad.buttons[index]?.pressed) {
-        buttons |= bit;
-      }
-    }
-
-    for (const [index, bit] of GAMEPAD_DPAD_BUTTONS) {
-      if (gamepad.buttons[index]?.pressed) {
-        buttons |= bit;
-      }
-    }
-
-    const axisX = gamepad.axes[0] || 0;
-    const rawAxisY = gamepad.axes[1] || 0;
-    const axisY = this.invertGamepadY ? -rawAxisY : rawAxisY;
-    if (axisX <= -GAMEPAD_AXIS_DEAD_ZONE) {
-      buttons |= BUTTONS.JOY_LEFT;
-    }
-    if (axisX >= GAMEPAD_AXIS_DEAD_ZONE) {
-      buttons |= BUTTONS.JOY_RIGHT;
-    }
-    if (axisY <= -GAMEPAD_AXIS_DEAD_ZONE) {
-      buttons |= BUTTONS.JOY_UP;
-    }
-    if (axisY >= GAMEPAD_AXIS_DEAD_ZONE) {
-      buttons |= BUTTONS.JOY_DOWN;
-    }
-
-    return buttons & 0xff;
+  readGamepadInput() {
+    const gamepads = this.getConnectedGamepads();
+    const primary = this.selectActiveGamepad(gamepads);
+    const secondary = gamepads.find((gamepad) => gamepad.index !== primary?.index) || null;
+    return mapGamepadInput(primary, secondary, this.invertGamepadY);
   }
 
-  updateGamepadButtons() {
-    const nextButtons = this.readGamepadButtons();
-    if (nextButtons === this.gamepadButtons) {
+  updateGamepadInput() {
+    const nextInput = this.readGamepadInput();
+    const previous = this.gamepadInput;
+    if (nextInput.joy1 === previous.joy1 &&
+        nextInput.joy2 === previous.joy2 &&
+        nextInput.extra === previous.extra &&
+        nextInput.exit === previous.exit) {
       return false;
     }
-    if (nextButtons !== 0) {
+    if (nextInput.joy1 || nextInput.joy2 || nextInput.extra || nextInput.exit) {
       this.audio.enable();
     }
-    this.gamepadButtons = nextButtons;
+    this.gamepadInput = nextInput;
     this.syncButtons();
     this.addDiagnostic("input.gamepad.state", {
       activeIndex: this.activeGamepadIndex,
-      buttons: this.gamepadButtons,
+      connected: this.connectedGamepadCount,
+      joy1: nextInput.joy1,
+      joy2: nextInput.joy2,
+      extra: nextInput.extra,
+      exit: nextInput.exit,
     });
     return true;
   }
@@ -862,8 +870,19 @@ class BrowserHostApp {
   }
 
   syncButtons() {
-    this.currentButtons = (this.keyboardButtons | this.touchButtons | this.gamepadButtons) & 0xff;
-    this.adapter.setButtons(this.currentButtons);
+    const joy1 = (this.keyboardButtons | this.touchButtons | this.gamepadInput.joy1) & 0x7f;
+    const joy2 = this.gamepadInput.joy2 & 0x7f;
+    const extra = this.gamepadInput.extra & 0x7f;
+    const exitPressed = this.keyboardExitPressed || this.gamepadInput.exit;
+    const exit = exitPressed && !this.exitPressed;
+    this.exitPressed = exitPressed;
+    this.currentButtons = joy1;
+    this.currentInput = { joy1, joy2, extra };
+    if (typeof this.adapter.setInput === "function") {
+      this.adapter.setInput(joy1, joy2, extra, exit);
+    } else {
+      this.adapter.setButtons(joy1);
+    }
     this.renderTouchButtons();
     this.renderTouchStickFromButtons();
   }
@@ -940,7 +959,7 @@ class BrowserHostApp {
         this.addDiagnostic("input.gamepad.invert_y", {
           enabled: this.invertGamepadY,
         });
-        if (this.updateGamepadButtons()) {
+        if (this.updateGamepadInput()) {
           this.renderStatus();
         }
       });
@@ -1709,7 +1728,7 @@ class BrowserHostApp {
 
   handleWorkerFrame(frame) {
     try {
-      const gamepadChanged = this.updateGamepadButtons();
+      const gamepadChanged = this.updateGamepadInput();
       this.applyFrame(frame);
       this.renderFrame();
       this.refreshFrameMemorySummary();
@@ -1732,7 +1751,7 @@ class BrowserHostApp {
 
   async pollFrame(full = false) {
     try {
-      const gamepadChanged = this.updateGamepadButtons();
+      const gamepadChanged = this.updateGamepadInput();
       const now = performance.now();
       let stepsDue = 0;
       if (this.lastSceneTickAt === null) {
@@ -1976,11 +1995,16 @@ class BrowserHostApp {
   }
 
   renderStatus() {
-    this.elements.buttonMask.textContent = `Buttons 0x${this.currentButtons.toString(16).padStart(2, "0")}`;
+    this.elements.buttonMask.textContent =
+      `J1 0x${this.currentInput.joy1.toString(16).padStart(2, "0")} ` +
+      `J2 0x${this.currentInput.joy2.toString(16).padStart(2, "0")} ` +
+      `X 0x${this.currentInput.extra.toString(16).padStart(2, "0")}`;
     if (this.elements.gamepadStatus) {
       this.elements.gamepadStatus.textContent = this.activeGamepadIndex === null
         ? "Gamepad none"
-        : `Gamepad ${this.activeGamepadIndex + 1}`;
+        : this.connectedGamepadCount > 1
+          ? `Gamepads ${this.connectedGamepadCount} (primary ${this.activeGamepadIndex + 1})`
+          : `Gamepad ${this.activeGamepadIndex + 1}`;
     }
     if (this.elements.webglScaleStatus) {
       this.elements.webglScaleStatus.textContent = this.webglResolutionScalePreference === WEBGL_RESOLUTION_SCALE_AUTO
@@ -2084,7 +2108,11 @@ class BrowserHostApp {
       ["Column Offset", frame.column_offset],
       ["Gamma", frame.gamma_mode],
       ["Buttons", `0x${frame.buttons.toString(16).padStart(2, "0")}`],
-      ["Gamepad", this.activeGamepadIndex === null ? "None" : `Controller ${this.activeGamepadIndex + 1}`],
+      ["Gamepad", this.activeGamepadIndex === null
+        ? "None"
+        : this.connectedGamepadCount > 1
+          ? `${this.connectedGamepadCount} controllers (primary ${this.activeGamepadIndex + 1})`
+          : `Controller ${this.activeGamepadIndex + 1}`],
       ["Renderer", this.force2dFallback ? "2D fallback" : this.renderer.available ? "WebGL" : "2D fallback"],
       ["Fullscreen", this.isFullscreen ? "Active" : "Windowed"],
       ["WebGL Scale", this.webglResolutionScalePreference === WEBGL_RESOLUTION_SCALE_AUTO
@@ -2219,6 +2247,7 @@ class BrowserHostApp {
       adapterName: this.adapter.name,
       adapterSource: this.runtime.source,
       currentButtons: this.currentButtons,
+      currentInput: this.currentInput,
       runtimeError: this.runtime.error ? {
         message: this.runtime.error.message || String(this.runtime.error),
         stack: this.runtime.error.stack || null,
@@ -2241,14 +2270,16 @@ class BrowserHostApp {
 
 async function resolveRuntime() {
   const adapter = window.VentilastationRuntimeAdapter;
-  if (adapter && typeof adapter.setButtons === "function" && typeof adapter.exportFrame === "function") {
+  if (adapter && (typeof adapter.setInput === "function" || typeof adapter.setButtons === "function") &&
+      typeof adapter.exportFrame === "function") {
     return { adapter, source: "preloaded" };
   }
   const createWasmAdapter = window.createVentilastationWasmAdapter;
   if (typeof createWasmAdapter === "function") {
     try {
       const wasmAdapter = await createWasmAdapter();
-      if (wasmAdapter && typeof wasmAdapter.setButtons === "function" && typeof wasmAdapter.exportFrame === "function") {
+      if (wasmAdapter && (typeof wasmAdapter.setInput === "function" || typeof wasmAdapter.setButtons === "function") &&
+          typeof wasmAdapter.exportFrame === "function") {
         return { adapter: wasmAdapter, source: "wasm" };
       }
     } catch (error) {

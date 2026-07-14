@@ -1275,7 +1275,6 @@
     "apps/micropython/ventilastation/platforms/desktop.py",
     "apps/micropython/ventilastation/platforms/hardware.py",
     "apps/micropython/ventilastation/platforms/headless.py",
-    "apps/micropython/ventilastation/updater.py",
     "system/menu/images/src/make_voom_menu.py",
     "apps/micropython/ventilastation/catalog.py",
     "games/alecu/ventap/meta.json",
@@ -1386,6 +1385,19 @@
     "games/alecu/mapdemo/images/__images__.yaml",
     "games/alecu/mapdemo/images/ship.png",
     "games/alecu/mapdemo/images/terrain.png",
-    "games/alecu/mapdemo/menu.png"
+    "games/alecu/mapdemo/menu.png",
+    "apps/micropython/boot.py",
+    "apps/micropython/updater.py",
+    "apps/micropython/vsdk_logo_strip.py",
+    "apps/micropython/vsdk_recovery.py",
+    "apps/micropython/vsdk_uart_log.py",
+    "apps/micropython/ventilastation/color_calibration.py",
+    "apps/micropython/ventilastation/pov_profiling.py",
+    "apps/micropython/ventilastation/uart_logging.py",
+    "system/menu/images/gameboy.png",
+    "system/menu/images/msx.png",
+    "system/menu/images/nes.png",
+    "system/menu/images/sms.png",
+    "system/shared/other/images/tinyfont_menu.png"
   ]
 }
