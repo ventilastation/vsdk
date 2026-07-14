@@ -138,8 +138,12 @@ def _make_progress_handler(sprite, wdt):
             return
         if text.startswith("ota_progress start"):
             _set_frame(sprite, vsdk_logo_strip.FRAME_WIFI)
-        elif text.startswith("ota_progress file") or text.startswith("ota_progress partition"):
+        elif text.startswith("ota_progress downloading") or text.startswith("ota_progress file"):
             _set_frame(sprite, vsdk_logo_strip.FRAME_DOWNLOADING)
+        elif text.startswith("ota_progress checking") or text.startswith("ota_progress scan"):
+            _set_frame(sprite, vsdk_logo_strip.FRAME_CHECKING)
+        elif text.startswith("ota_progress writing") or text.startswith("ota_progress partition"):
+            _set_frame(sprite, vsdk_logo_strip.FRAME_WRITING)
         elif text.startswith("ota_error"):
             outcome["ok"] = False
             _set_frame(sprite, vsdk_logo_strip.FRAME_ERROR)

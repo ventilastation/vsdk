@@ -161,7 +161,9 @@ Tier 3: MicroPython firmware  (micropython ota_2 — stream + verify + set_boot)
 
 Progress is reported back over the comms channel as
 `ota_progress <stage> <detail> <pct>`, completion as `ota_done ok`, errors
-as `ota_error <message>`.
+as `ota_error <message>`. Recovery renders the three update stages as a
+status ring: `downloading` is green, `checking` (SHA256 checksums) is yellow,
+and `writing` (flash erase/write) is red.
 
 ---
 
@@ -248,6 +250,9 @@ the start of each session. Files deleted from the host tree are *not*
 deleted on the device; run `hardware/rotor/deploy_micropython_fs.py --port <p>`
 to push a full, authoritative vfs image over USB if that matters.
 
+The updater reports the local scan and final SHA256 comparison as
+`checking`, and the HTTP stream as `downloading`.
+
 ### Tiers 2–3 — `_update_partitions()`
 
 For each partition in `fmsx`, `retro-core`, `prboom-go`, `micropython` order: skip
@@ -255,6 +260,9 @@ if the NVS-stored SHA256 matches the manifest (a missing/never-set hash
 counts as "differs"); otherwise erase, stream in 4096-byte blocks, verify
 SHA256, store the hash in NVS. A mismatch leaves NVS unchanged (retried next
 session).
+
+The updater reports validation as `checking` and the erase/stream/write phase
+as `writing`.
 
 The partition currently executing is never written directly — for
 `prboom-go`/`retro-core`/`fmsx` that's simply skipped for this pass (the board is

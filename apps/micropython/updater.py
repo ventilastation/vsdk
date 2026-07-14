@@ -12,6 +12,9 @@ Tiers run in order:
 
 Progress is reported back over the comms channel as:
     ota_progress <stage> <detail> <pct>
+where stage is `checking` while checksums are calculated, `downloading`
+while a file is fetched, or `writing` while a flash partition is erased or
+written.
 Completion:
     ota_done ok
 Errors:
@@ -250,6 +253,7 @@ def _sync_lfs_files(base_url, files):
     total = len(files)
     checked = 0
     last_report = utime.ticks_ms()
+    _progress("checking", "files", 0)
     for i, entry in enumerate(files):
         rel_path = entry["path"]
         expected_sha = entry["sha256"]
@@ -264,13 +268,13 @@ def _sync_lfs_files(base_url, files):
         if utime.ticks_diff(now, last_report) >= _SCAN_PROGRESS_INTERVAL_MS:
             pct = checked * 100 // total
             print("updater: checksummed %d/%d files (%d%%)" % (checked, total, pct))
-            _progress("scan", "checksumming", pct)
+            _progress("checking", "files", pct)
             last_report = now
 
         if local_sha == expected_sha:
             continue  # already up to date
 
-        _progress("file", rel_path.replace("/", "_"), i * 100 // total)
+        _progress("downloading", rel_path.replace("/", "_"), i * 100 // total)
         tmp_path = local_path + ".tmp"
         file_url = base_url + "/files/" + _url_quote(rel_path)
         sha = hashlib.sha256()
@@ -292,8 +296,9 @@ def _sync_lfs_files(base_url, files):
                 for pct in _http_stream(file_url, _write, size):
                     now = utime.ticks_ms()
                     if utime.ticks_diff(now, last_report) >= _SCAN_PROGRESS_INTERVAL_MS:
-                        _progress("file", rel_path.replace("/", "_"), pct)
+                        _progress("downloading", rel_path.replace("/", "_"), pct)
                         last_report = now
+            _progress("checking", rel_path.replace("/", "_"), 100)
             got = binascii.hexlify(sha.digest()).decode()
             if got != expected_sha:
                 print("updater: SHA256 mismatch for", rel_path, "- got", got, "expected", expected_sha)
@@ -308,7 +313,7 @@ def _sync_lfs_files(base_url, files):
             except OSError:
                 pass
 
-    _progress("file", "done", 100)
+    _progress("checking", "files", 100)
 
 
 def _running_label():
@@ -319,7 +324,7 @@ def _running_label():
         return None
 
 
-def _partition_matches(part, size, expected_sha, _block=4096):
+def _partition_matches(part, size, expected_sha, _block=4096, progress_fn=None):
     """Hash the partition's actual on-flash content (bounded to the real
     file size, not the whole partition capacity) and compare to expected_sha.
     Used to double-check an NVS-cached "up to date" hash actually reflects
@@ -332,12 +337,20 @@ def _partition_matches(part, size, expected_sha, _block=4096):
     buf = bytearray(_block)
     remaining = size
     block_num = 0
+    last_progress = -1
     while remaining > 0:
         part.readblocks(block_num, buf)
         n = min(_block, remaining)
         h.update(buf[:n] if n < _block else buf)
         remaining -= n
         block_num += 1
+        if progress_fn:
+            pct = (size - remaining) * 100 // size
+            # Ten-percent increments make validation visible without flooding
+            # the serial status channel once per 4 KiB flash block.
+            if pct == 100 or pct >= last_progress + 10:
+                progress_fn(pct)
+                last_progress = pct
     return binascii.hexlify(h.digest()).decode() == expected_sha
 
 
@@ -376,7 +389,11 @@ def _update_partitions(base_url, partitions):
                 verify_parts = esp32.Partition.find(esp32.Partition.TYPE_APP, label=name)
                 if verify_parts:
                     gc.collect()
-                    if _partition_matches(verify_parts[0], size, expected_sha):
+                    _progress("checking", name, 0)
+                    if _partition_matches(
+                        verify_parts[0], size, expected_sha,
+                        progress_fn=lambda pct: _progress("checking", name, pct),
+                    ):
                         print("updater: partition %s up to date" % name)
                         continue
                     print("updater: partition %s NVS hash matched but on-flash content didn't -- reinstalling" % name)
@@ -399,7 +416,7 @@ def _update_partitions(base_url, partitions):
             factory_parts[0].set_boot()
             machine.reset()
 
-        _progress("partition", name, 0)
+        _progress("writing", name, 0)
         print("updater: flashing partition", name, "(%d bytes)" % size)
 
         try:
@@ -437,7 +454,7 @@ def _update_partitions(base_url, partitions):
                         block_pos = 0
 
             for pct in _http_stream(url, write_chunk, size):
-                _progress("partition", name, pct)
+                _progress("writing", name, pct)
                 gc.collect()
 
             # Flush remaining bytes padded to _BLOCK boundary.
@@ -447,6 +464,7 @@ def _update_partitions(base_url, partitions):
                 part.writeblocks(offset // _BLOCK, block_buf)
                 offset += _BLOCK
 
+            _progress("checking", name, 100)
             got = binascii.hexlify(sha.digest()).decode()
             if got != expected_sha:
                 print("updater: SHA256 mismatch for partition", name)
@@ -458,7 +476,6 @@ def _update_partitions(base_url, partitions):
             if nvs_key:
                 _nvs_set(nvs_key, expected_sha)
             print("updater: partition", name, "flashed OK")
-            _progress("partition", name, 100)
 
             # MicroPython firmware is handled last: set it as boot and reboot.
             # The new image will call mark_app_valid_cancel_rollback() after WiFi.
@@ -470,7 +487,7 @@ def _update_partitions(base_url, partitions):
 
         except Exception as e:
             print("updater: error flashing partition", name, ":", e)
-            _progress("partition", name + "_error", 0)
+            _progress("writing", name + "_error", 0)
             # Continue to next partition rather than aborting entirely.
 
 

@@ -272,7 +272,7 @@ class SyncLfsFilesHeartbeatTests(unittest.TestCase):
                 unittest.mock.patch.object(updater.os, "rename", lambda a, b: None):
             updater._sync_lfs_files("http://base", files)
 
-        progress_lines = [s for s in sent if s.startswith(b"ota_progress file big_file.bin")]
+        progress_lines = [s for s in sent if s.startswith(b"ota_progress downloading big_file.bin")]
         self.assertTrue(progress_lines, "expected at least one heartbeat during the slow download")
 
 
