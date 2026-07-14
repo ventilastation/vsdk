@@ -53,9 +53,10 @@ Current Python pieces:
 - `apps/micropython/ventilastation/app_loader.py`
 - `apps/micropython/ventilastation/platforms/__init__.py`
 
-The launcher persists intent in:
+The launcher persists intent and restoration state in:
 
 - `ventilastation/boot.json`
+- `ventilastation/launcher_state.json`
 
 The hardware platform optionally exposes:
 
@@ -72,6 +73,8 @@ The rotor firmware now includes:
 Current behavior:
 
 - `"voom"` maps to app partition `"prboom-go"`
+- `"retro-core"` maps to the multi-emulator partition
+- `"fmsx"` maps to the MSX partition
 - `available("voom")` checks whether that partition exists on flash
 - `launch("voom")` switches the boot partition and restarts the chip
 
@@ -133,13 +136,29 @@ cd hardware/rotor
 python3 flash_voom_image.py --build --port /dev/cu.usbmodemXXXX
 ```
 
-## Launcher Entry
+## Launcher Entries and Return State
 
-The default launcher menu now includes:
+The default launcher includes:
 
 - `native.voom`
+- `native.nes`
+- `native.sms`
+- `native.gb`
+- `native.msx`
 
-That entry currently uses an existing bundled menu tile and routes through:
+NES, SMS, Game Boy, and MSX open dynamic ROM libraries. The library uses a
+single packed tiny-font tilemap with white and red ASCII frames; its active
+line is red and held at the readable bottom of the POV display. It stores the
+last selected native slug and ROM path before hand-off, and reconstructs that
+submenu after the native app reboots back into MicroPython. `D` backs out to
+the main menu with the emulator still selected.
+
+Every Ventilastation-targeted native Retro-Go build changes its return boot
+partition to `micropython` during initialisation and `rg_system_exit()` also
+targets that partition. The recovery `factory` partition is not part of normal
+native-app exit behavior.
+
+The launcher routes through:
 
 - `system/launcher/code/__init__.py`
 - `apps/micropython/ventilastation/native_apps.py`

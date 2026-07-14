@@ -36,7 +36,8 @@ factory,       app,  factory, 0x10000,  0x200000
 prboom-go,     app,  ota_0,   0x210000, 0x180000
 retro-core,    app,  ota_1,   0x390000, 0x100000
 micropython,   app,  ota_2,   0x490000, 0x200000
-vfs,           data, fat,     0x690000, 0x970000
+fmsx,          app,  ota_3,   0x690000, 0xB0000
+vfs,           data, fat,     0x740000, 0x8C0000
 ```
 
 | Partition | Role | Ever OTA-written? |
@@ -44,6 +45,7 @@ vfs,           data, fat,     0x690000, 0x970000
 | `factory` | **Permanent recovery environment** (see below) — not a write-once bootstrap copy. | **Never** — the only USB-writable partition besides NVS; `make flash-recovery` is the bring-up procedure. |
 | `prboom-go` | Voom (prboom) binary. | Yes — OTA tier 2. |
 | `retro-core` | NES / SMS emulator binary. | Yes — OTA tier 2. |
+| `fmsx` | MSX emulator binary. | Yes — OTA tier 2. |
 | `micropython` | Active MicroPython firmware (ota_2). Normal boot target once installed. | Yes — OTA tier 3, via a hand-off through `factory` (see below). |
 | `vfs` | LittleFS: Python code, ROMs, user data. | Yes — OTA tier 1 (file-by-file). |
 
@@ -153,7 +155,7 @@ same tier logic; the only difference is what triggers a run.
 
 ```
 Tier 1: LFS file sync         (full LittleFS content — file-by-file, safe)
-Tier 2: Native app partitions (prboom-go, retro-core — stream + verify)
+Tier 2: Native app partitions (prboom-go, retro-core, fmsx — stream + verify)
 Tier 3: MicroPython firmware  (micropython ota_2 — stream + verify + set_boot)
 ```
 
@@ -213,6 +215,7 @@ deterministic gzip transform as the image and appear as `.rom.gz`.
   "partitions": {
     "prboom-go":   {"size": 1245184, "sha256": "...", "url": "/partitions/prboom-go"},
     "retro-core":  {"size": 1048576, "sha256": "...", "url": "/partitions/retro-core"},
+    "fmsx":        {"size": 616416, "sha256": "...", "url": "/partitions/fmsx"},
     "micropython": {"size": 2490368, "sha256": "...", "url": "/partitions/micropython"}
   }
 }
@@ -246,14 +249,14 @@ deleted on the device; reflash the filesystem (`make deploy-fs`) for that.
 
 ### Tiers 2–3 — `_update_partitions()`
 
-For each partition in `retro-core`, `prboom-go`, `micropython` order: skip
+For each partition in `fmsx`, `retro-core`, `prboom-go`, `micropython` order: skip
 if the NVS-stored SHA256 matches the manifest (a missing/never-set hash
 counts as "differs"); otherwise erase, stream in 4096-byte blocks, verify
 SHA256, store the hash in NVS. A mismatch leaves NVS unchanged (retried next
 session).
 
 The partition currently executing is never written directly — for
-`prboom-go`/`retro-core` that's simply skipped for this pass (the board is
+`prboom-go`/`retro-core`/`fmsx` that's simply skipped for this pass (the board is
 presumably running the other one, or `factory`). For `micropython`
 specifically, a running image can never safely overwrite the partition it's
 booted from, so instead of skipping forever, it **hands off to `factory`**:

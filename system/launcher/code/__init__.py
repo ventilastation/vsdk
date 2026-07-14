@@ -1,10 +1,12 @@
 import utime
 
 from ventilastation import menu
+from ventilastation import native_apps
 from ventilastation import sprites
 from ventilastation.app_loader import load_app
 from ventilastation.catalog import build_menu_options
 from ventilastation.director import director, stripes
+from ventilastation.scene import Scene
 from ventilastation.shuffler import shuffled
 
 def game_menu_strip(game_slug):
@@ -17,11 +19,24 @@ def game_menu_strip(game_slug):
 STATIC_MENU_ENTRIES = [
     (2, "tutorial_vs2", "menu.png", 10),
     (20, "native.voom", "voom.png", 0),
-    (30, "native.nes", "megadrive.png", 0),   # Super Mario Bros (NES); placeholder icon
-    (40, "native.sms", "megadrive.png", 0),   # Out Run (Master System); placeholder icon
+    (30, "native.nes", "nes.png", 0),
+    (40, "native.sms", "sms.png", 0),
+    (50, "native.gb", "gameboy.png", 0),
+    (60, "native.msx", "msx.png", 0),
     (70, "gallery", "pollitos.png", 0),
     (240, "credits", "menu.png", 3),
 ]
+
+# Text rows use one combined 4x6 strip.  Frames 0..127 are white ASCII and
+# frames 128..254 are the matching red glyphs.  Four rows x 21 glyphs stay
+# within the hardware's 100-sprite limit.
+FONT_STRIP = "tinyfont_menu.png"
+FONT_WIDTH = 4
+FONT_HEIGHT = 6
+ROM_LABEL_CHARS = 21
+VISIBLE_ROM_ROWS = 4
+SELECTED_ROM_Y = FONT_HEIGHT
+ROM_ROW_STEP = FONT_HEIGHT * 2
 
 MAIN_MENU_OPTIONS = build_menu_options(STATIC_MENU_ENTRIES)
 
@@ -47,6 +62,127 @@ def make_me_a_planet(strip):
     planet.set_x(0)
     planet.set_y(220)
     return planet
+
+
+class RomTextRow:
+    """A fixed-width, one-colour line rendered from the combined tiny font."""
+
+    def __init__(self):
+        self.sprites = []
+        for index in range(ROM_LABEL_CHARS):
+            sprite = sprites.Sprite()
+            sprite.set_strip(stripes[FONT_STRIP])
+            # Coordinate zero is the display's bottom centre.  Descending x
+            # matches the existing font renderer's clockwise POV orientation.
+            sprite.set_x((ROM_LABEL_CHARS * FONT_WIDTH // 2 - index * FONT_WIDTH) % 256)
+            sprite.set_perspective(2)
+            sprite.set_frame(0)
+            self.sprites.append(sprite)
+
+    def hide(self):
+        for sprite in self.sprites:
+            sprite.disable()
+
+    def show(self, text, y, red=False):
+        text = text[:ROM_LABEL_CHARS]
+        for index, sprite in enumerate(self.sprites):
+            sprite.set_y(y)
+            if index < len(text):
+                code = ord(text[index])
+                # The packed strip has ASCII glyphs only.  ROM discovery has
+                # already normalised labels, but retain this guard for status
+                # strings and future callers.
+                if code < 32 or code > 126:
+                    code = ord("?")
+                if red:
+                    code |= 0x80
+                sprite.set_frame(code)
+            else:
+                sprite.set_frame(0)
+
+
+class RomLibraryMenu(Scene):
+    """A virtualised ROM list that keeps the selection at the readable bottom."""
+
+    stripes_rom = "other"
+
+    def __init__(self, slug, selected_rom=None):
+        super().__init__()
+        self.slug = slug
+        self.selected_rom = selected_rom
+        self.entries = []
+        self.selected_index = 0
+        self.rows = []
+
+    def on_enter(self):
+        super().on_enter()
+        self.entries = native_apps.list_roms(self.slug)
+        self.selected_index = self._selected_entry_index()
+        self.rows = [RomTextRow() for _ in range(VISIBLE_ROM_ROWS)]
+        self._render_rows()
+
+    def _selected_entry_index(self):
+        if not self.selected_rom:
+            return 0
+        for index, entry in enumerate(self.entries):
+            if entry["path"] == self.selected_rom:
+                return index
+        return 0
+
+    def _render_rows(self):
+        if not self.entries:
+            self.rows[0].show("NO ROMS", SELECTED_ROM_Y, red=True)
+            for row in self.rows[1:]:
+                row.hide()
+            return
+        for row_index, row in enumerate(self.rows):
+            entry_index = self.selected_index + row_index
+            if entry_index >= len(self.entries):
+                row.hide()
+                continue
+            row.show(
+                self.entries[entry_index]["label"],
+                SELECTED_ROM_Y + row_index * ROM_ROW_STEP,
+                red=row_index == 0,
+            )
+
+    def _move(self, delta):
+        if not self.entries:
+            return
+        new_index = self.selected_index + delta
+        if new_index < 0:
+            new_index = 0
+        if new_index >= len(self.entries):
+            new_index = len(self.entries) - 1
+        if new_index != self.selected_index:
+            self.selected_index = new_index
+            native_apps.remember_rom_selection(
+                self.slug, self.entries[self.selected_index]["path"]
+            )
+            director.sound_play(b"alecu.vyruss/shoot3")
+            self._render_rows()
+
+    def _launch_selected(self):
+        if not self.entries:
+            return
+        entry = self.entries[self.selected_index]
+        native_apps.remember_rom_selection(self.slug, entry["path"])
+        director.sound_play(b"alecu.vyruss/shoot1")
+        native_apps.launch_native_scene(self.slug, entry["path"])
+        raise StopIteration()
+
+    def step(self):
+        # Match the main menu's controller direction convention.
+        if director.was_pressed(director.JOY_DOWN):
+            self._move(-1)
+        if director.was_pressed(director.JOY_UP):
+            self._move(1)
+        if director.was_pressed(director.BUTTON_A):
+            self._launch_selected()
+        if director.was_pressed(director.BUTTON_D):
+            native_apps.leave_rom_menu(self.slug)
+            director.pop()
+            raise StopIteration()
 
 
 class SystemMenu(menu.Menu):
@@ -140,6 +276,10 @@ class GamesMenu(menu.Menu):
 
     def on_option_pressed(self, option_index):
         app_chosen = self.options[option_index][0]
+        if native_apps.has_rom_library(app_chosen):
+            native_apps.remember_rom_selection(app_chosen)
+            director.push(RomLibraryMenu(app_chosen))
+            raise StopIteration()
         load_app(app_chosen)
         raise StopIteration()
 
@@ -183,11 +323,23 @@ class GamesMenu(menu.Menu):
                 self.es_tincho.set_frame(pf)
 
 
-def main():
-    return GamesMenu(MAIN_MENU_OPTIONS)
+def _main_menu_index(slug):
+    for index, option in enumerate(MAIN_MENU_OPTIONS):
+        if option[0] == slug:
+            return index
+    return 0
+
+
+def main(launcher_state=None):
+    launcher_state = launcher_state or native_apps.read_launcher_state()
+    return GamesMenu(MAIN_MENU_OPTIONS, _main_menu_index(launcher_state.get("main_slug")))
 
 
 def setup():
-    launcher = main()
+    launcher_state = native_apps.consume_native_return()
+    launcher = main(launcher_state)
     launcher.call_later(700, launcher.load_images)
     director.push(launcher)
+    submenu_slug = launcher_state.get("submenu_slug")
+    if submenu_slug and native_apps.has_rom_library(submenu_slug):
+        director.push(RomLibraryMenu(submenu_slug, launcher_state.get("rom_path")))

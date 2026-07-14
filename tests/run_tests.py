@@ -55,6 +55,7 @@ CPYTHON_TESTS = [
     "tests/test_updater.py",
     "tests/test_upgrade_server.py",
     "tests/test_boot.py",
+    "tests/test_native_apps.py",
 ]
 
 MICROPYTHON_TESTS = [

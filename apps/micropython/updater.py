@@ -7,7 +7,7 @@ Tiers run in order:
   1. LFS file sync     — the full LittleFS content (code, ROMs, game assets);
                          SHA256-skip so only changed files transfer, atomic
                          rename per file
-  2. Native partitions — prboom-go, retro-core; stream + SHA256 verify
+  2. Native partitions — prboom-go, retro-core, fmsx; stream + SHA256 verify
   3. MicroPython fw    — micropython (ota_2); stream + SHA256 verify + set_boot + reboot
 
 Progress is reported back over the comms channel as:
@@ -59,6 +59,7 @@ _NVS_NS = "vsdk_ota"
 _NVS_KEYS = {
     "prboom-go":   "prboom_sha",
     "retro-core":  "retro_sha",
+    "fmsx":        "fmsx_sha",
     "micropython": "mp_sha",
 }
 
@@ -269,7 +270,7 @@ def _update_partitions(base_url, partitions):
     # writeblocks(block_num, buf) writes aligned 4096-byte blocks.
     _BLOCK = 4096
 
-    order = ["retro-core", "prboom-go", "micropython"]
+    order = ["fmsx", "retro-core", "prboom-go", "micropython"]
     for name in order:
         if name not in partitions:
             continue

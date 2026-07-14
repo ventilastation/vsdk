@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk flash-recovery voom flash-voom launcher flash-launcher retro-core flash-retro-core run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk flash-vsdk flash-recovery voom flash-voom launcher flash-launcher retro-core flash-retro-core fmsx flash-fmsx run-emulator voom-sounds flash-all generate-roms build-fs deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
 
 PORT ?=
 MAC ?=
@@ -11,7 +11,7 @@ BAUD ?= 2000000
 # boards of one type are attached or when a particular board must be forced.
 PYTHON ?= python3
 BOARD_DETECTOR := $(abspath tools/find_board.py)
-ROTOR_PORT_TARGETS := flash-vsdk flash-recovery flash-voom flash-launcher flash-retro-core flash-all deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision
+ROTOR_PORT_TARGETS := flash-vsdk flash-recovery flash-voom flash-launcher flash-retro-core flash-fmsx flash-all deploy-fs configure-board configure-board-v2 configure-board-eu wifi-provision
 WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
 PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS)
 ROTOR_GOALS := $(filter $(ROTOR_PORT_TARGETS),$(MAKECMDGOALS))
@@ -153,6 +153,12 @@ retro-core:
 flash-retro-core: retro-core
 	$(call rg-flash,retro-core)
 
+fmsx:
+	$(call rg-build,fmsx)
+
+flash-fmsx: fmsx
+	$(call rg-flash,fmsx)
+
 # --- Hardware dev loop via the workbench ---
 # The workbench captures the DUT's real LED SPI bus and streams the frames to
 # the desktop emulator over Wi-Fi (see docs/internals/workbench.md). BOARD_IP
@@ -169,7 +175,7 @@ run-emulator:
 voom-sounds:
 	cd emulator && python build_voom_sounds.py
 
-flash-all: flash-vsdk flash-voom flash-retro-core deploy-fs
+flash-all: flash-vsdk flash-voom flash-retro-core flash-fmsx deploy-fs
 
 generate-roms:
 	python3 tools/generate_roms.py
