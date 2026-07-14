@@ -1,7 +1,7 @@
 import pyglet
 from pyglet.window import key
 
-from inputs_common import keyboard_state, pack_directions
+from inputs_common import keyboard_state, keyboard_v2_state, pack_directions
 from pyglet1x.pygletdraw import window
 
 keys = key.KeyStateHandler()
@@ -23,6 +23,7 @@ def on_key_press(symbol, modifiers):
 
 def encode_input_val():
     kb_left, kb_right, kb_up, kb_down, kb_boton, kb_accel, kb_decel = keyboard_state(keys)
+    kb_joy2, kb_extra = keyboard_v2_state(keys)
     def pressed(joystick, number):
         try:
             return bool(joystick.buttons[number])
@@ -64,4 +65,6 @@ def encode_input_val():
         joy2 |= pressed(primary, 4) << 4 | left_trigger << 5 | pressed(primary, 5) << 6
         extra |= right_trigger << 1
         home = pressed(primary, 8)
+    joy2 |= kb_joy2
+    extra |= kb_extra
     return joy1, joy2, extra, home or keys[key.ESCAPE]

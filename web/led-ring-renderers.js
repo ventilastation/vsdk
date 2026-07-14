@@ -7,7 +7,7 @@ import {
   createLedRingGeometry,
   DEFAULT_WEBGL_RESOLUTION_SCALE,
   fillRepeatedLedColors,
-} from "./app-support.js?v=20260709a";
+} from "./app-support.js?v=20260714c";
 
 
 class LedRingWebGLRenderer {

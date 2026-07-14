@@ -202,15 +202,31 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(sprite.frame, logo_strip.FRAME_WIFI)
         self.assertIsNone(outcome["ok"])
 
-        handle(b"ota_progress file some_file 10\n")
+        handle(b"ota_progress downloading some_file 10\n")
         self.assertEqual(sprite.frame, logo_strip.FRAME_DOWNLOADING)
 
-        handle(b"ota_progress partition micropython 50\n")
-        self.assertEqual(sprite.frame, logo_strip.FRAME_DOWNLOADING)
+        handle(b"ota_progress checking files 50\n")
+        self.assertEqual(sprite.frame, logo_strip.FRAME_CHECKING)
+
+        handle(b"ota_progress writing micropython 50\n")
+        self.assertEqual(sprite.frame, logo_strip.FRAME_WRITING)
 
         handle(b"ota_error manifest_fetch_failed: timeout\n")
         self.assertEqual(sprite.frame, logo_strip.FRAME_ERROR)
         self.assertFalse(outcome["ok"])
+
+    def test_progress_handler_accepts_legacy_file_and_partition_stages(self):
+        _install_fakes()
+        import vsdk_recovery as recovery
+
+        sprite = recovery._make_sprite()
+        handle, _outcome = recovery._make_progress_handler(sprite, wdt=None)
+
+        handle(b"ota_progress file some_file 10\n")
+        self.assertEqual(sprite.frame, logo_strip.FRAME_DOWNLOADING)
+
+        handle(b"ota_progress partition micropython 50\n")
+        self.assertEqual(sprite.frame, logo_strip.FRAME_WRITING)
 
     def test_progress_handler_success_sets_success_frame(self):
         _install_fakes()
@@ -233,7 +249,7 @@ class RecoveryTests(unittest.TestCase):
         handle, _outcome = recovery._make_progress_handler(sprite, wdt)
 
         handle(b"ota_progress start fetching_manifest 0\n")
-        handle(b"ota_progress file a 10\n")
+        handle(b"ota_progress downloading a 10\n")
 
         self.assertEqual(wdt.feed_count, 2)
 
@@ -326,6 +342,20 @@ class LogoStripTests(unittest.TestCase):
         for frame in range(logo_strip.TOTAL_FRAMES):
             entry = logo_strip.PALETTE[frame * 4:frame * 4 + 4]
             self.assertEqual(entry[0], 255)  # alpha/reserved byte
+
+    def test_update_status_frames_have_requested_colors(self):
+        self.assertEqual(
+            logo_strip.PALETTE[logo_strip.FRAME_DOWNLOADING * 4:logo_strip.FRAME_DOWNLOADING * 4 + 4],
+            bytes([255, 0, 160, 0]),  # green, stored as alpha/blue/green/red
+        )
+        self.assertEqual(
+            logo_strip.PALETTE[logo_strip.FRAME_CHECKING * 4:logo_strip.FRAME_CHECKING * 4 + 4],
+            bytes([255, 0, 200, 200]),  # yellow
+        )
+        self.assertEqual(
+            logo_strip.PALETTE[logo_strip.FRAME_WRITING * 4:logo_strip.FRAME_WRITING * 4 + 4],
+            bytes([255, 0, 0, 200]),  # red
+        )
 
     def test_install_wires_palette_and_strip_into_native_modules(self):
         display = FakeDisplay()

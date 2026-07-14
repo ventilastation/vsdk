@@ -6,6 +6,8 @@ globalThis.VentilastationLedRenderCore = {};
 const {
   BUTTONS,
   INPUT_EXTRA,
+  keyboardInputForCode,
+  keyboardInputForCodes,
   mapGamepadInput,
 } = await import(new URL("../web/app-support.js", import.meta.url));
 
@@ -62,13 +64,34 @@ function testInvertedYAxis() {
   assert(input.joy2 === BUTTONS.JOY_DOWN);
 }
 
+function testKeyboardMapsAllProtocolV2Controls() {
+  assert(keyboardInputForCode("PageUp").extra === INPUT_EXTRA.JOY1_START);
+  assert(keyboardInputForCode("PageDown").extra === INPUT_EXTRA.JOY1_BACK);
+  assert(keyboardInputForCode("KeyH").joy2 === BUTTONS.JOY_LEFT);
+  assert(keyboardInputForCode("KeyJ").joy2 === BUTTONS.JOY_DOWN);
+  assert(keyboardInputForCode("KeyK").joy2 === BUTTONS.JOY_UP);
+  assert(keyboardInputForCode("KeyL").joy2 === BUTTONS.JOY_RIGHT);
+  assert(keyboardInputForCode("KeyZ").joy2 === BUTTONS.BUTTON_A);
+  assert(keyboardInputForCode("KeyX").joy2 === BUTTONS.BUTTON_B);
+  assert(keyboardInputForCode("KeyC").joy2 === BUTTONS.BUTTON_C);
+  assert(keyboardInputForCode("KeyV").extra === INPUT_EXTRA.JOY2_Y);
+  assert(keyboardInputForCode("Home").extra === INPUT_EXTRA.JOY2_START);
+  assert(keyboardInputForCode("End").extra === INPUT_EXTRA.JOY2_BACK);
+
+  const combined = keyboardInputForCodes(["ArrowLeft", "KeyA", "KeyZ", "PageUp"]);
+  assert(combined.joy1 === BUTTONS.JOY_LEFT);
+  assert(combined.joy2 === BUTTONS.BUTTON_A);
+  assert(combined.extra === INPUT_EXTRA.JOY1_START);
+}
+
 function assert(value, message = "assertion failed") {
   if (!value) {
     throw new Error(message);
   }
 }
 
-const tests = [testSingleControllerMapping, testSecondControllerOwnsJoy2, testInvertedYAxis];
+const tests = [testSingleControllerMapping, testSecondControllerOwnsJoy2, testInvertedYAxis,
+  testKeyboardMapsAllProtocolV2Controls];
 for (const test of tests) {
   test();
   console.log("ok", test.name);

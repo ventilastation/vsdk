@@ -3,7 +3,8 @@
 
 import {
   BUTTONS,
-  KEY_TO_BUTTON,
+  keyboardInputForCode,
+  keyboardInputForCodes,
   EXIT_KEY_CODES,
   mapGamepadInput,
   computeLedFramePixels,
@@ -35,7 +36,7 @@ import {
   decodeSpriteStateBuffer,
   decodeVs2SceneBuffer,
   decodeImageStripPayload,
-} from "./app-support.js?v=20260714b";
+} from "./app-support.js?v=20260714c";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260709a";
@@ -62,7 +63,8 @@ class BrowserHostApp {
     this.runtime = runtime;
     this.executionError = this.extractProminentError(runtime.error);
     this.currentButtons = 0;
-    this.keyboardButtons = 0;
+    this.keyboardInput = { joy1: 0, joy2: 0, extra: 0 };
+    this.keyboardCodes = new Set();
     this.touchButtons = 0;
     this.gamepadInput = { joy1: 0, joy2: 0, extra: 0, exit: false };
     this.currentInput = { joy1: 0, joy2: 0, extra: 0 };
@@ -552,12 +554,12 @@ class BrowserHostApp {
         this.renderStatus();
         return;
       }
-      const bit = KEY_TO_BUTTON.get(event.code);
-      if (!bit) {
+      const input = keyboardInputForCode(event.code);
+      if (!input) {
         return;
       }
       event.preventDefault();
-      this.keyboardButtons |= bit;
+      this.setKeyboardCode(event.code, true);
       this.syncButtons();
       this.addDiagnostic("input.keydown", { code: event.code, buttons: this.currentButtons });
       this.renderStatus();
@@ -577,13 +579,13 @@ class BrowserHostApp {
         }
         return;
       }
-      const bit = KEY_TO_BUTTON.get(event.code);
-      if (!bit) {
+      const input = keyboardInputForCode(event.code);
+      if (!input) {
         return;
       }
-      const wasPressed = Boolean(this.keyboardButtons & bit);
+      const wasPressed = this.keyboardCodes.has(event.code);
       if (wasPressed) {
-        this.keyboardButtons &= ~bit;
+        this.setKeyboardCode(event.code, false);
         this.syncButtons();
         this.addDiagnostic("input.keyup", { code: event.code, buttons: this.currentButtons });
         this.renderStatus();
@@ -595,7 +597,8 @@ class BrowserHostApp {
     });
 
     window.addEventListener("blur", () => {
-      this.keyboardButtons = 0;
+      this.keyboardInput = { joy1: 0, joy2: 0, extra: 0 };
+      this.keyboardCodes.clear();
       this.touchButtons = 0;
       this.gamepadInput = { joy1: 0, joy2: 0, extra: 0, exit: false };
       this.keyboardExitPressed = false;
@@ -869,10 +872,19 @@ class BrowserHostApp {
     );
   }
 
+  setKeyboardCode(code, pressed) {
+    if (pressed) {
+      this.keyboardCodes.add(code);
+    } else {
+      this.keyboardCodes.delete(code);
+    }
+    this.keyboardInput = keyboardInputForCodes(this.keyboardCodes);
+  }
+
   syncButtons() {
-    const joy1 = (this.keyboardButtons | this.touchButtons | this.gamepadInput.joy1) & 0x7f;
-    const joy2 = this.gamepadInput.joy2 & 0x7f;
-    const extra = this.gamepadInput.extra & 0x7f;
+    const joy1 = (this.keyboardInput.joy1 | this.touchButtons | this.gamepadInput.joy1) & 0x7f;
+    const joy2 = (this.keyboardInput.joy2 | this.gamepadInput.joy2) & 0x7f;
+    const extra = (this.keyboardInput.extra | this.gamepadInput.extra) & 0x7f;
     const exitPressed = this.keyboardExitPressed || this.gamepadInput.exit;
     const exit = exitPressed && !this.exitPressed;
     this.exitPressed = exitPressed;

@@ -35,8 +35,9 @@ the emulator starts.
 ### Running
 
 `./vs-emu.sh` (or `vs-emu.bat`) regenerates ROMs and starts the desktop
-emulator. Arrow keys move the joystick; SPACE is button A; a USB gamepad
-works too.
+emulator. Arrow keys (or W/A/S/D) move Joy1; Space/O/P/Y are Joy1 A/B/X/Y;
+Page Up and Page Down are Start and Back. H/J/K/L plus Z/X/C/V provide Joy2,
+and Home/End are Joy2 Start/Back. A USB gamepad works too.
 
 ## Part II: How to clone the simplest game
 

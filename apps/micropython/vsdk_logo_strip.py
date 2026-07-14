@@ -28,10 +28,12 @@ PALETTE_GROUP = 0
 
 FRAME_BOOT = 0          # dim blue: recovery is starting up
 FRAME_WIFI = 1          # blue: connecting to WiFi
-FRAME_DOWNLOADING = 2   # green: fetching/writing an update
-FRAME_ERROR = 3         # amber: a step failed, about to retry
-FRAME_SUCCESS = 4       # bright green: update verified, about to reboot
-TOTAL_FRAMES = 5
+FRAME_DOWNLOADING = 2   # green: fetching an update over HTTP
+FRAME_CHECKING = 3      # yellow: scanning or validating SHA256 checksums
+FRAME_WRITING = 4       # red: erasing or writing a flash partition
+FRAME_ERROR = 5         # amber: a step failed, about to retry
+FRAME_SUCCESS = 6       # bright green: update verified, about to reboot
+TOTAL_FRAMES = 7
 
 # Palette entries, (255, blue, green, red) per entry -- matches the BGRA-ish
 # layout `director._parse_rom_memory()`/the ROM tooling already use.
@@ -39,6 +41,8 @@ _COLOR_BY_FRAME = {
     FRAME_BOOT: (60, 0, 0),
     FRAME_WIFI: (200, 60, 0),
     FRAME_DOWNLOADING: (0, 160, 0),
+    FRAME_CHECKING: (0, 200, 200),
+    FRAME_WRITING: (0, 0, 200),
     FRAME_ERROR: (0, 140, 200),
     FRAME_SUCCESS: (40, 220, 40),
 }

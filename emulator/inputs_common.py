@@ -28,17 +28,19 @@ except ImportError:
 
 
 def keyboard_state(keys):
-    """Return (left, right, up, down, boton, accel, decel) from the keyboard
-    and the base's GPIO buttons -- the fallback when no game controller is
-    connected, and OR-ed with the controller state when one is."""
+    """Return Joy1's first seven input bits from the keyboard and base GPIO.
+
+    Page Up and Page Down deliberately do not appear here: protocol v2 uses
+    them for Joy1 Start and Back in ``keyboard_v2_state()``.
+    """
     return (
         keys[key.LEFT] or keys[key.A] or base_button_left(),
         keys[key.RIGHT] or keys[key.D] or base_button_right(),
         keys[key.UP] or keys[key.W],
         keys[key.DOWN] or keys[key.S],
         keys[key.SPACE],
-        keys[key.PAGEUP] or keys[key.P],
-        keys[key.PAGEDOWN] or keys[key.O],
+        keys[key.O],
+        keys[key.P],
     )
 
 
@@ -58,6 +60,29 @@ EXTRA_JOY1_START = 0x04
 EXTRA_JOY1_BACK  = 0x08
 EXTRA_JOY2_START = 0x10
 EXTRA_JOY2_BACK  = 0x20
+
+
+def keyboard_v2_state(keys):
+    """Return (joy2, extra) for keyboard-only Input Protocol v2 controls.
+
+    The layout keeps Joy1 close to the existing desktop controls while using
+    the familiar H/J/K/L cursor cluster and Z/X/C/V face-button cluster for
+    Joy2. Home/End provide Joy2 Start/Back without colliding with Joy1's
+    Page Up/Page Down controls.
+    """
+    joy2 = pack_directions(
+        keys[key.H], keys[key.L], keys[key.K], keys[key.J],
+    )
+    joy2 |= (bool(keys[key.Z]) << 4 |
+             bool(keys[key.X]) << 5 |
+             bool(keys[key.C]) << 6)
+    extra = (bool(keys[key.Y]) * EXTRA_JOY1_Y |
+             bool(keys[key.V]) * EXTRA_JOY2_Y |
+             bool(keys[key.PAGEUP]) * EXTRA_JOY1_START |
+             bool(keys[key.PAGEDOWN]) * EXTRA_JOY1_BACK |
+             bool(keys[key.HOME]) * EXTRA_JOY2_START |
+             bool(keys[key.END]) * EXTRA_JOY2_BACK)
+    return joy2, extra
 
 
 def pack_directions(left, right, up, down):
@@ -131,7 +156,8 @@ def primary_joy2_buttons(controller):
     return face, extra
 
 
-def pack_controllers(primary, secondary=None, keyboard=(False,) * 7):
+def pack_controllers(primary, secondary=None, keyboard=(False,) * 7,
+                     keyboard_v2=(0, 0)):
     """Encode up to two standard pyglet controllers into input protocol v2.
 
     A single controller contributes left-stick/D-pad to joy1 and right stick
@@ -139,6 +165,7 @@ def pack_controllers(primary, secondary=None, keyboard=(False,) * 7):
     left-stick/D-pad, while the first right stick is ignored.
     """
     kb_left, kb_right, kb_up, kb_down, kb_a, kb_b, kb_x = keyboard
+    kb_joy2, kb_extra = keyboard_v2
     joy1 = pack_directions(kb_left, kb_right, kb_up, kb_down)
     joy2 = 0
     extra = 0
@@ -164,4 +191,6 @@ def pack_controllers(primary, secondary=None, keyboard=(False,) * 7):
         home = home or secondary_home
 
     joy1 |= (bool(kb_a) << 4 | bool(kb_b) << 5 | bool(kb_x) << 6)
+    joy2 |= kb_joy2
+    extra |= kb_extra
     return joy1, joy2, extra, home
