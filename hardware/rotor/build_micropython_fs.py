@@ -95,7 +95,7 @@ def iter_copy_jobs(vsdk_root):
                 yield ("file", f"{remote_root}/{relative.as_posix()}", path)
 
 
-def build_image(vsdk_root, partition_size, output_path):
+def build_image(vsdk_root, partition_size, output_path, empty=False):
     try:
         from littlefs import LittleFS
     except ImportError:
@@ -104,6 +104,12 @@ def build_image(vsdk_root, partition_size, output_path):
 
     block_count = partition_size // BLOCK_SIZE
     fs = LittleFS(block_size=BLOCK_SIZE, block_count=block_count)
+
+    if empty:
+        output_path.write_bytes(fs.context.buffer)
+        print(f"Created {output_path}")
+        print(f"  0 files (empty), {len(fs.context.buffer):,} bytes ({block_count} blocks × {BLOCK_SIZE})")
+        return
 
     for retro_go_dir in ("retro-go", "retro-go/cache", "retro-go/saves", "retro-go/config"):
         print(f"  mkdir /{retro_go_dir}")
@@ -155,11 +161,16 @@ def main():
         type=pathlib.Path,
         default=default_output,
     )
+    parser.add_argument(
+        "--empty",
+        action="store_true",
+        help="Produce a formatted image with no files (for bench bring-up; see make initial-flash)",
+    )
     args = parser.parse_args()
 
     args.output = args.output.resolve()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    build_image(vsdk_root, args.partition_size, args.output)
+    build_image(vsdk_root, args.partition_size, args.output, empty=args.empty)
 
 
 if __name__ == "__main__":

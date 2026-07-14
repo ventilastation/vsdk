@@ -107,8 +107,12 @@ def _install_fakes(nvs_values=None, partitions=()):
     machine.reset = _reset
 
     class FakeWDT:
-        def __init__(self, timeout_ms=None):
-            self.timeout_ms = timeout_ms
+        # Real machine.WDT's keyword is "timeout" (see extmod/machine_wdt.c),
+        # not "timeout_ms" -- matching that here is what caught vsdk_recovery
+        # 's _arm_wdt() passing the wrong keyword and never actually arming
+        # a watchdog on real hardware.
+        def __init__(self, timeout=None):
+            self.timeout = timeout
             self.feed_count = 0
 
         def feed(self):
@@ -224,7 +228,7 @@ class RecoveryTests(unittest.TestCase):
         machine, _esp32, _display, _sprites = _install_fakes()
         import vsdk_recovery as recovery
 
-        wdt = machine.WDT(timeout_ms=30000)
+        wdt = machine.WDT(timeout=30000)
         sprite = recovery._make_sprite()
         handle, _outcome = recovery._make_progress_handler(sprite, wdt)
 
@@ -283,14 +287,14 @@ class RecoveryTests(unittest.TestCase):
         machine, _esp32, _display, _sprites = _install_fakes()
         import vsdk_recovery as recovery
 
-        wdt = machine.WDT(timeout_ms=30000)
+        wdt = machine.WDT(timeout=30000)
         recovery._BOOT_GRACE_MS = 1000
         recovery._boot_grace_period(wdt)
 
         self.assertGreaterEqual(wdt.feed_count, 2)
 
         recovery._BOOT_GRACE_MS = 0
-        wdt2 = machine.WDT(timeout_ms=30000)
+        wdt2 = machine.WDT(timeout=30000)
         recovery._boot_grace_period(wdt2)
         self.assertEqual(wdt2.feed_count, 0)
 

@@ -1,7 +1,9 @@
+import hashlib
 import os
 import sys
 import types
 import unittest
+import unittest.mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "apps", "micropython"))
@@ -150,6 +152,162 @@ class UpdaterTier3Tests(unittest.TestCase):
         updater._update_partitions("http://base", self._partitions_manifest("new_sha"))
 
         self.assertEqual(machine.reset_calls, [])
+
+
+class _FakeFlashPartition:
+    """In-memory stand-in for esp32.Partition, readblocks() only."""
+
+    def __init__(self, data):
+        self.data = data
+
+    def readblocks(self, block_num, buf):
+        offset = block_num * len(buf)
+        chunk = self.data[offset:offset + len(buf)]
+        buf[:len(chunk)] = chunk
+        if len(chunk) < len(buf):
+            buf[len(chunk):] = b"\xff" * (len(buf) - len(chunk))
+
+
+class PartitionMatchesTests(unittest.TestCase):
+    """_partition_matches() is what stops a stale NVS-cached hash from
+    hiding a partition that was rewritten (wiped, reflashed, corrupted)
+    outside the updater -- see _update_partitions()'s skip-check."""
+
+    def setUp(self):
+        sys.modules.pop("updater", None)
+
+    def test_matches_when_content_equals_expected_hash(self):
+        import updater
+        content = b"a valid firmware image" + b"\x00" * 100
+        expected = hashlib.sha256(content).hexdigest()
+        part = _FakeFlashPartition(content)
+
+        self.assertTrue(updater._partition_matches(part, len(content), expected))
+
+    def test_does_not_match_when_partition_was_wiped(self):
+        import updater
+        content = b"a valid firmware image" + b"\x00" * 100
+        expected = hashlib.sha256(content).hexdigest()
+        wiped = _FakeFlashPartition(b"\x00" * len(content))
+
+        self.assertFalse(updater._partition_matches(wiped, len(content), expected))
+
+    def test_ignores_bytes_beyond_the_declared_size(self):
+        import updater
+        real_content = b"x" * 5000  # spans more than one 4096-byte block
+        expected = hashlib.sha256(real_content).hexdigest()
+        # Trailing garbage past `size` (e.g. a previous, larger image's
+        # leftovers) must not affect the hash.
+        on_flash = real_content + b"garbage-from-a-previous-image"
+        part = _FakeFlashPartition(on_flash)
+
+        self.assertTrue(updater._partition_matches(part, len(real_content), expected))
+
+
+class SyncLfsFilesHeartbeatTests(unittest.TestCase):
+    """A large file's download can outlast the watchdog timeout with nothing
+    else feeding it (unlike _update_partitions()'s per-chunk feed) -- see the
+    real crash this caught: task_wdt firing mid-transfer of a multi-MB WAD."""
+
+    def setUp(self):
+        sys.modules.pop("updater", None)
+        self._had_utime = "utime" in sys.modules
+        self._prev_utime = sys.modules.get("utime")
+
+    def tearDown(self):
+        if self._had_utime:
+            sys.modules["utime"] = self._prev_utime
+        else:
+            sys.modules.pop("utime", None)
+
+    def test_sends_progress_heartbeat_during_a_slow_download(self):
+        fake_time = [0]
+
+        class FakeUtime:
+            @staticmethod
+            def ticks_ms():
+                return fake_time[0]
+
+            @staticmethod
+            def ticks_diff(a, b):
+                return a - b
+
+        sys.modules["utime"] = FakeUtime
+
+        import updater
+
+        content = b"y" * 100
+        expected_sha = hashlib.sha256(content).hexdigest()
+        files = [{"path": "big/file.bin", "size": len(content), "sha256": expected_sha}]
+
+        def fake_http_stream(url, callback, total_size):
+            # 4 chunks, each "taking" 1200ms of fake clock time -- crosses
+            # the 3000ms heartbeat threshold partway through the transfer.
+            chunk_size = 25
+            for i in range(0, len(content), chunk_size):
+                callback(content[i:i + chunk_size])
+                fake_time[0] += 1200
+                yield min(i + chunk_size, len(content)) * 100 // total_size
+
+        class FakeFile:
+            def __init__(self, path, mode):
+                self.buf = bytearray()
+
+            def write(self, data):
+                self.buf += data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        sent = []
+        updater._comms_send = lambda line: sent.append(line)
+        updater._sha256_file = lambda path: None  # local file doesn't exist yet
+
+        with unittest.mock.patch.object(updater, "_http_stream", fake_http_stream), \
+                unittest.mock.patch.object(updater, "_makedirs", lambda path: None), \
+                unittest.mock.patch("builtins.open", FakeFile), \
+                unittest.mock.patch.object(updater.os, "rename", lambda a, b: None):
+            updater._sync_lfs_files("http://base", files)
+
+        progress_lines = [s for s in sent if s.startswith(b"ota_progress file big_file.bin")]
+        self.assertTrue(progress_lines, "expected at least one heartbeat during the slow download")
+
+
+class ResolveBaseUrlTests(unittest.TestCase):
+    """_resolve_base_url() replaces the hostname with a numeric IP once per
+    session, so hundreds of per-file connections during tier 1 don't each
+    repeat a fresh (and occasionally hanging) mDNS/DNS lookup."""
+
+    def setUp(self):
+        sys.modules.pop("updater", None)
+
+    def test_leaves_ipv4_literal_untouched_and_skips_lookup(self):
+        import updater
+
+        def _unexpected(*a):
+            raise AssertionError("getaddrinfo should not be called for an IP literal")
+
+        with unittest.mock.patch.object(updater.socket, "getaddrinfo", _unexpected):
+            self.assertEqual(
+                updater._resolve_base_url("http://192.168.1.5:5653"),
+                "http://192.168.1.5:5653",
+            )
+
+    def test_resolves_hostname_to_ip_once(self):
+        import updater
+        calls = []
+
+        def fake_getaddrinfo(host, port):
+            calls.append((host, port))
+            return [(0, 0, 0, "", ("192.168.1.42", port))]
+
+        with unittest.mock.patch.object(updater.socket, "getaddrinfo", fake_getaddrinfo):
+            resolved = updater._resolve_base_url("http://ventilastation-base.local:5653")
+        self.assertEqual(resolved, "http://192.168.1.42:5653")
+        self.assertEqual(calls, [("ventilastation-base.local", 5653)])
 
 
 class UrlQuoteTests(unittest.TestCase):
