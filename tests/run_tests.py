@@ -61,6 +61,7 @@ CPYTHON_TESTS = [
     "tests/test_native_exit_transition.py",
     "tests/test_input_protocol_v2.py",
     "tests/test_emulator_inputs_v2.py",
+    "tests/test_emulator_ota.py",
 ]
 
 MICROPYTHON_TESTS = [

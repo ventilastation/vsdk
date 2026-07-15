@@ -28,8 +28,8 @@ def parse_args(argv=None):
                         help="input/audio host only; the spinning LEDs are the display")
     parser.add_argument("--serial-port", default=None,
                         help="USB serial transport port (default: autodetect)")
-    parser.add_argument("--ota-host", default=None,
-                        help="LAN address the board should use to reach this emulator's OTA server")
+    parser.add_argument("--no-ota-server", dest="ota_server", action="store_false", default=True,
+                        help="do not serve OTA upgrades locally; use another ventilastation-base.local server")
     return parser.parse_args(argv)
 
 

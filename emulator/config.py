@@ -27,9 +27,9 @@ DISPLAY_ENABLED = True
 # comms.ConnSerial). Auto-detected when None.
 SERIAL_PORT = None
 
-# Optional LAN address advertised in ota_start. This is useful on a host with
-# several active networks, where automatic route selection picks the wrong one.
-OTA_HOST = None
+# The emulator normally serves an OTA bundle itself. A hardware base can
+# disable this while a development server advertises the same mDNS hostname.
+OTA_SERVER_ENABLED = True
 
 SERIAL_DEVICE_RASPI2 = "ttyUSB"
 SERIAL_DEVICE_RASPI3 = "ttyACM"
@@ -40,12 +40,12 @@ SERVER_PORT = 5005
 
 def configure(args):
     """Apply parsed command-line arguments (see emu.py)."""
-    global HARDWARE_MODE, USE_IP, DISPLAY_ENABLED, SERIAL_PORT, OTA_HOST, SERVER_IP
+    global HARDWARE_MODE, USE_IP, DISPLAY_ENABLED, SERIAL_PORT, OTA_SERVER_ENABLED, SERVER_IP
 
     HARDWARE_MODE = args.remote or args.no_display
     DISPLAY_ENABLED = not args.no_display
     SERIAL_PORT = args.serial_port
-    OTA_HOST = getattr(args, "ota_host", None)
+    OTA_SERVER_ENABLED = getattr(args, "ota_server", True)
 
     # The positional host is either an IP/hostname, or the literal "SERIAL"
     # to force the legacy serial-only transport (Super Ventilagon base,

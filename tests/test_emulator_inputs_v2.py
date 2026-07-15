@@ -8,9 +8,10 @@ fake_pyglet = types.ModuleType("pyglet")
 fake_window = types.ModuleType("pyglet.window")
 fake_window.key = types.SimpleNamespace(
     LEFT="LEFT", RIGHT="RIGHT", UP="UP", DOWN="DOWN",
-    A="A", D="D", W="W", S="S", SPACE="SPACE", O="O", P="P", Y="Y",
+    A="A", D="D", W="W", S="S", SPACE="SPACE", O="O", P="P", U="U", Y="Y",
     H="H", J="J", K="K", L="L", Z="Z", X="X", C="C", V="V",
     PAGEUP="PAGEUP", PAGEDOWN="PAGEDOWN", HOME="HOME", END="END",
+    MOD_CTRL=0x100, MOD_COMMAND=0x200,
 )
 fake_pyglet.window = fake_window
 sys.modules.setdefault("pyglet", fake_pyglet)
@@ -26,6 +27,7 @@ from inputs_common import (  # noqa: E402
     EXTRA_JOY2_Y,
     keyboard_state,
     keyboard_v2_state,
+    ota_shortcut_pressed,
     pack_controllers,
 )
 
@@ -113,6 +115,13 @@ def test_keyboard_maps_all_protocol_v2_controls():
     assert joy2 == 0x7F
     assert extra == (EXTRA_JOY1_Y | EXTRA_JOY1_START | EXTRA_JOY1_BACK |
                      EXTRA_JOY2_Y | EXTRA_JOY2_START | EXTRA_JOY2_BACK)
+
+
+def test_ota_shortcut_requires_ctrl_or_command():
+    assert ota_shortcut_pressed("U", 0x100)
+    assert ota_shortcut_pressed("U", 0x200)
+    assert not ota_shortcut_pressed("U", 0)
+    assert not ota_shortcut_pressed("Y", 0x100)
 
 
 def main():

@@ -16,7 +16,7 @@ logo = pyglet.image.load("logo.png")
 window.set_icon(logo)
 window.set_caption("Ventilastation Emulator")
 fps_display = pyglet.window.FPSDisplay(window)
-help_label = pyglet.text.Label("arrows/WASD Space O P Y PgUp/PgDn HJKL Z/X/C/V Home/End Esc Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
+help_label = pyglet.text.Label("arrows/WASD Space O P Y PgUp/PgDn HJKL Z/X/C/V Home/End Ctrl/⌘-U Esc Q", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
 
 LED_SIZE = min(window.width, window.height) / 2
 vertex_list = None

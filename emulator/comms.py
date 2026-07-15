@@ -28,6 +28,7 @@ from povrender import (
 )
 from audio import playsound, playmusic, playnotes
 from emu_audio import emu_audio
+from ota_controls import OTA_SERVER_URL, ota_start_command
 import upgrade_server
 
 
@@ -382,10 +383,14 @@ def _receive_loop(conn, label):
 
 def start():
     """Create the mode-appropriate connections and start the receive
-    threads plus the OTA upgrade server. Call once, after config.configure()."""
+    threads and (unless disabled) the OTA upgrade server. Call once, after
+    config.configure()."""
     global display_conn, workbench_conn
 
-    upgrade_server.start(port=5653)
+    if config.OTA_SERVER_ENABLED:
+        upgrade_server.start(port=5653)
+    else:
+        print("comms: local OTA server disabled; using ventilastation-base.local")
 
     if platform.system() == "Windows":
         display_conn = ConnWinNamedPipe()
@@ -463,56 +468,12 @@ def stop_povperf_capture():
 
 
 def trigger_ota():
-    """Send ota_start in-band on the existing connection.
-
-    Serial transports do not have a socket or a peer-derived local address, but
-    the upgrade server still listens on the host's Wi-Fi/LAN interface. Prefer
-    an explicit address, then a TCP connection's address, then the default
-    network route so serial and Wi-Fi can be used together.
-    """
+    """Request an OTA from the mDNS-advertised Ventilastation base server."""
     try:
-        local_ip = _ota_server_ip()
-        url = f"http://{local_ip}:5653"
-        send_command(f"ota_start {url}")
-        print(f"comms: sent ota_start (server at {url})")
+        send_command(ota_start_command())
+        print(f"comms: sent ota_start (server at {OTA_SERVER_URL})")
     except Exception as e:
         print(f"comms: trigger_ota failed: {e}")
-
-
-def _ota_server_ip():
-    """Return a non-loopback address reachable by the board's Wi-Fi network."""
-    if config.OTA_HOST:
-        return config.OTA_HOST
-
-    # A TCP display connection already tells us which local interface reaches
-    # the board/workbench. This does not apply to pyserial's Serial object.
-    sock = getattr(display_conn, "sock", None)
-    getsockname = getattr(sock, "getsockname", None)
-    if getsockname:
-        local_ip = getsockname()[0]
-        if local_ip and not local_ip.startswith("127."):
-            return local_ip
-
-    # UDP connect chooses the default network route without sending a packet.
-    # It is the usual Wi-Fi address when the emulator talks to the board over
-    # USB serial but serves the upgrade over the LAN.
-    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        probe.connect(("8.8.8.8", 80))
-        local_ip = probe.getsockname()[0]
-        if local_ip and not local_ip.startswith("127."):
-            return local_ip
-    finally:
-        probe.close()
-
-    # Some isolated LANs do not have a default route. Try host aliases before
-    # asking the user to choose an address explicitly.
-    for _, _, _, _, sockaddr in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-        local_ip = sockaddr[0]
-        if local_ip and not local_ip.startswith("127."):
-            return local_ip
-
-    raise RuntimeError("cannot determine a LAN address; pass --ota-host <wifi-ip>")
 
 
 def send_workbench(line):
