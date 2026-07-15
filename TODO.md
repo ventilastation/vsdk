@@ -7,7 +7,7 @@ history of this file for the record.
 
 - Close the loop: let an agent drive a sandboxed browser + HTTP server so
   it can watch and interact with the web emulator.
-- Merge the common boot code between `ventilastation/browser.py` and
+- [DISCARDED] Merge the common boot code between `ventilastation/browser.py` and
   `main.py` (games menu creation/push).
 - [ONGOING] Step-by-step debugging of running MicroPython code.
 - [ONGOING] Pixel editor integrated into the web workflow (Piskel embed
@@ -21,41 +21,41 @@ history of this file for the record.
 
 - [planned] New sprite type holding a byte array rendered as text from a strip; also
   usable for tile-based backgrounds.
-- [vyruss vs2] Port existing games to the v2 APIs.
+- [done] Port existing games [vyruss] to the v2 APIs.
 - [done] Go through the Discord suggestions and GitHub bug reports and shape the
   v2 API list (music loop flag already done).
 
 ## Deployment / OTA (see docs/internals/ota.md)
 
-- Upgrade voom without rebooting (partition OTA works; still reboots).
-- Generated list of console ROMs.
+- [done] Upgrade voom without rebooting (partition OTA works; still reboots).
+- [done] Generated list of console ROMs.
 
 ## Display quality
 
-- Darker colors in the center LEDs are way off for Voom; the gamma curve
+- [done] Darker colors in the center LEDs are way off for Voom; the gamma curve
   may need a rework.
-- Master System shows display delays; NES degrades quickly — audit what
+- [done] Master System shows display delays; NES degrades quickly — audit what
   else runs on the POV core.
-- Exit keys are unreliable in SMS/NES; consider forcing a key combo.
+- [done] Exit keys are unreliable in SMS/NES; consider forcing a key combo.
 
 ## Voom
 
-- [ONGOING] Make the rest of retro-go usable on the LED POV and emulator
-  displays, including the launcher menus (text illegible at POV
-  resolution today).
+- [done] Make the rest of retro-go usable on the LED POV and emulator
+  displays.
+- [discarded] Launcher menus using tiles (text illegible at POV resolution today).
 - Stereo separation/pan as available in I_StartSound.
-- Disable the board OPL synth and audio playback in LED/emulator modes.
-- LEDs on the base get red with damage (taking black from palette)
-- LEDs on the base show a shade of blue indicating percentage of shielding
-- servo on the base reflects the percentage of damage.
+- [done] Disable the board OPL synth and audio playback in LED/emulator modes.
+- [done] LEDs on the base get red with damage (taking black from palette)
+- [done] LEDs on the base show a shade of blue indicating percentage of shielding
+- [done] servo on the base reflects the percentage of damage.
 
 ## Workbench
 
-- Color intensity needs a proper reversal of the full finish_with_gamma
+- [done] Color intensity needs a proper reversal of the full finish_with_gamma
   pipeline (per-LED intensity table + brightness); put_pixel currently
   passes wire bytes through unchanged. The intensity table's origin:
   vyruss/images/intensidades.py in the pre-vsdk repo.
-- Ventilagon is not rendered properly on the workbench capture.
+- [done] Ventilagon is not rendered properly on the workbench capture.
 
 ## New game
 
@@ -65,7 +65,7 @@ history of this file for the record.
 
 - [done] Since the workbench was added to this project, the feature to have the main board emit display frames via wifi no longer makes sense (the tcp bridge). Remove that feature, and all references to it in the project, Makefiles, documentation, etc.
 - [done] Create some script that identifies what USB port the ventilastation board and the workbench board are connected to. Perhaps add some identification in the build or flash process, or in the NVS partition, so the two types of boards can be told apart. Then make all Makefile targets that expect a PORT default to using this new script so the user does not need to specify the PORT all of the time, only if more than one board is found of the same type, or if the user wants to force the reflash of a given type of board.
-- the sync-server.py and sync.py combo were the fastest way to upload changes files to the lfs partition. I want them integrated into the upgrade_server, so 
+- [done] the sync-server.py and sync.py combo were the fastest way to upload changes files to the lfs partition. I want them integrated into the upgrade_server, so 
 
 - provide a way to start an upgrade from the web editor. Using webserial, and having the browser connect to the micropython board via websockets. 
 - serve the whole editor from the ventilastation webserver. Perhaps it's the raspi doing the wifi AP and http serving?
@@ -74,8 +74,8 @@ history of this file for the record.
 - be able to add new images and sounds from the editor.
 - [alecu] code a whole new game in the editor.
 
-- move hw_config to NVS, use the GPIOs defined there for retro-go, prboom, et al.
-- rename the Makefile targets so they follow a coherent pattern. Right now there's workbench-flash and flash-vsdk and deploy-fs and flash-all, if they do mostly the same they should be named similarly.
+- [done] move hw_config to NVS, use the GPIOs defined there for retro-go, prboom, et al.
+- [done] rename the Makefile targets so they follow a coherent pattern. Right now there's workbench-flash and flash-vsdk and deploy-fs and flash-all, if they do mostly the same they should be named similarly.
 
 - [ongoing] Let's plan a new vsdk branch, call it "vsdk-api-v2" and branch it from main. I want to build a new API for ventilastation games, but for now keep the existing API in parallel. Games should be able to import from one API or the other, not both. There are some requests for this new API in the issue tracker at [https://github.com/ventilastation/vsdk/issues](https://github.com/ventilastation/vsdk/issues) , issues #89, #90, #91, #92, #93, #95, #96, #97, #98, #109, #110, #111, #112. All of this work might need a separate render function in gpu.c and a different memory structure for sprites, and new renderers in both emulators. We can create a copy of Vyruss and port it to this new API, but please change the menu icon so we can tell them apart.
 - API shape refinement: deciding what VS2 should expose for layers, sprite groups, transforms, text/HUD, fullscreen sprites, and whether we want helper abstractions above the raw shared sprite memory.
@@ -88,40 +88,74 @@ history of this file for the record.
 
 - sounds and music: be able to specify a base folder, so later commands dont need to specify it. Ej: setSoundFolder("/alecu/vyruss"), and later playSound("mondongo.mp3") or playSound("/other/mondongo2.mp3")
 
-- add more buttons and second joystick to input payload, so prboom can use SELECT and START buttons
+- [done] add more buttons and second joystick to input payload, so prboom can use SELECT and START buttons
 
-- only one SMS audio channel seems to be working. The drums work, but the melody is nowhere to be heard.
+- [done] only one SMS audio channel seems to be working. The drums work, but the melody is nowhere to be heard.
 
 
-- when exiting native apps, the menu should restart with that game selected.
+- [done] when exiting native apps, the menu should restart with that game selected.
 
 - [done] the base emulator should have dark gray background, white/red buttons, black needle, and "Super Ventilagon" in black, matching the original.
 
 
-- [ongoing] streamline the first install and upgrade processes:
-  - First install should be to flash a minimal "factory recover" micropython partition and an NVS partition, and then configure that NVS partition with the uart, hall and led spis GPIOs. On boot, this partition should display the ventilastation logo and keep requesting a "factory upgrade" from the base. 
-  - Any seriously failed upgrade should go back to that factory recover partition.
-  - Upgrades triggered from the base should upload the binary apps.
+- [done] streamline the first install and upgrade processes:
+  - [done] First install should be to flash a minimal "factory recover" micropython partition and an NVS partition, and then configure that NVS partition with the uart, hall and led spis GPIOs. On boot, this partition should display the ventilastation logo and keep requesting a "factory upgrade" from the base. 
+  - [done] Any seriously failed upgrade should go back to that factory recover partition.
+  - [done] Upgrades triggered from the base should upload the binary apps.
 
 
-- [ongoing] vs2 tiles look bad on the desktop emulator. Some frames they look ok, but often some frames the tiles look partially missing, like a block of less than a hundred successive columns have not been rendered, or were missing at the time of rendering. This happens randomly throught the emulator, but never happens thru the crossing from column 255 to 0.
+- [done] vs2 tiles look bad on the desktop emulator. Some frames they look ok, but often some frames the tiles look partially missing, like a block of less than a hundred successive columns have not been rendered, or were missing at the time of rendering. This happens randomly throught the emulator, but never happens thru the crossing from column 255 to 0.
 
-- I don't want local changes to the Micropython source tree. Move the main.py logic elsewhere. Check if it makes sense to use a frozen boot.py or _boot.py as main.c mentions. Revert that last commit to the micropython source tree that modifies main.c
-Also, the non-recovery main.py could be renamed vs_main.py if needed.
+- [done] I don't want local changes to the Micropython source tree. Move the main.py logic elsewhere. Check if it makes sense to use a frozen boot.py or _boot.py as main.c mentions. Revert that last commit to the micropython source tree that modifies main.c
+[not needed] Also, the non-recovery main.py could be renamed vs_main.py if needed.
 
 - use the same esp version for retro-core and prboom, as the one used for micropython
 
 - recovery should accept serial commands. ota_start, wifi_config, reset. Perhaps we can add one more command to set LED and HALL gpios.
 
-- let's get rid of old targets if they no longer make sense. Eg: flash-vsdk, flash-voom, flash-retro-core, flash-all, deploy-fs
 
 - drop frame_rgb from the workbench.
 
 - streamline our retro-go changes to support ventilastation. Let's keep the master branch exactly as it is on the parent repository, and create a branch called ventilastation that will track all the changes we've made to support this hardware.
 
-- upgrade needs to be more verbose.
-- recovery sometimes is wrongly automatically triggered after using doom or retro-core.
-
 - upgrade logo is not visible, only the starfield
+
+- [ongoing] calibrated colors are too slow: dropped columns.
+
+-------
+- [done] let's get rid of old targets if they no longer make sense. Eg: flash-vsdk, flash-voom, flash-retro-core, flash-all, deploy-fs
+- [done] upgrade needs to be more verbose.
+
 - workspace display connection is flaky
-- 
+- [done] recovery sometimes is wrongly automatically triggered after using doom or retro-core. (probably after a manual flash that didn't update NVS checksums)
+
+- kalman filtering for the speed of rotations
+
+----
+
+# desktop emulator
+- streamline the ways the desktop emulator is used:
+  1. interacting with a ventilastation board via the workbench
+    - board is always configured for SPI LED output, workbench provides Hall RPMs
+    - workbench sends read SPI frames via TCP to the emulator
+    - board sends input/output via UART, forwarded thru the workbench to USB serial, and shown by the emulator
+    - upgrades go from board directly via wifi to upgrade server running in the emulator
+  2. running local micropython code
+    - local micropython process is started, and connects to the emulator via tcp localhost
+    - micropython sends screen data via remotepov.update, via tcp
+    - emulator shows received screen output
+    - tcp is used for input and audio
+  3. emulator running in the raspi in the ventilagon base
+    - board is configured for SPI LED output, actually spinning and 100% playable. Hall sensor is activated as the board rotates
+    - the only displayable image is on the spinning leds, nothing is shown on the emulator.
+    - raspi is connected via serial uart to the spinning board (via rs485 and a slip ring, but this should be transparent for the code)
+    - upgrades go from board via wifi to the http server running in the emulator.
+
+
+
+- reorder emulator buttons: ARROWS + U(SPC)IOP, WASD + 123456 (FIXME) 
+- ventilastation on a board ends up corrupting the menu display with red blotches (hw and wb)
+- alternate starts of the sms with sound and without
+- reboot into rom menu is slooow, and briefly shows the previous menu.
+- rom menu: more compact. Animate transitions: red highlight changes instantly, selected item moves with some ease-out smooth animation into place.
+- add sd card to workbench setup
