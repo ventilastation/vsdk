@@ -9,6 +9,14 @@ SOUND_ROOTS = (
     ("../system", "system"),
 )
 
+# Installed game packages (.vs2 zips, see emulator/package_manager.py) keep
+# their mp3s inside the zip; they're extracted into a cache only when needed
+# and loaded after the tree walk so a package wins over an in-tree game with
+# the same slug.
+_EMULATOR_DIR = os.path.dirname(os.path.abspath(__file__))
+PACKAGES_DIR = os.path.join(_EMULATOR_DIR, "..", "installed_packages")
+SOUND_CACHE_DIR = os.path.join(_EMULATOR_DIR, "..", "build", "base", "sound_cache")
+
 pyglet.options['debug_media'] = False
 
 if platform.system() == "Windows":
@@ -100,6 +108,63 @@ def is_newer(filename_1, filename_2):
     return os.path.getmtime(filename_1) > os.path.getmtime(filename_2)
 
 
+def register_package_sounds(package_path):
+    """Extract one package's sounds/*.mp3 into the cache (skipped while the
+    cached copy is newer than the package) and (re)load them under
+    "<slug>/<asset>" keys -- the same shape tree games get."""
+    import zipfile
+
+    slug = os.path.basename(package_path)[:-len(".vs2")]
+    cache_dir = os.path.join(SOUND_CACHE_DIR, slug)
+    loaded = 0
+    with zipfile.ZipFile(package_path) as archive:
+        for member in archive.namelist():
+            if not (member.startswith("sounds/") and member.endswith(".mp3")):
+                continue
+            asset = member[len("sounds/"):-len(".mp3")]
+            if not asset or "/" in asset:
+                continue
+            target = os.path.join(cache_dir, asset + ".mp3")
+            if (not os.path.exists(target)
+                    or os.path.getmtime(package_path) > os.path.getmtime(target)):
+                os.makedirs(cache_dir, exist_ok=True)
+                with open(target, "wb") as out:
+                    out.write(archive.read(member))
+            sound = load_sound(target)
+            if sound:
+                sounds[bytes(slug + "/" + asset, "latin1")] = sound
+                loaded += 1
+    return loaded
+
+
+def scan_package_sounds():
+    if not os.path.isdir(PACKAGES_DIR):
+        return
+    for filename in sorted(os.listdir(PACKAGES_DIR)):
+        if not filename.endswith(".vs2") or filename.endswith(".no-sound.vs2"):
+            continue
+        try:
+            register_package_sounds(os.path.join(PACKAGES_DIR, filename))
+        except Exception as e:
+            print("WARNING: cannot load package sounds:", filename, e)
+
+
+def rescan_package_sounds(slug=None):
+    """Pick up a freshly uploaded package without restarting the base; runs
+    on its own thread like sound_init's initial load."""
+    def _rescan():
+        if slug is None:
+            scan_package_sounds()
+            return
+        try:
+            count = register_package_sounds(
+                os.path.join(PACKAGES_DIR, slug + ".vs2"))
+            print("Loaded", count, "sounds from package", slug)
+        except Exception as e:
+            print("WARNING: cannot load package sounds:", slug, e)
+    threading.Thread(target=_rescan, daemon=True).start()
+
+
 def sound_init():
     def load_sounds():
         for root_path, root_kind in SOUND_ROOTS:
@@ -117,6 +182,9 @@ def sound_init():
                         sound_name = sound_name_from_path(root_kind, root_path, fullname)
                         if sound_name:
                             sounds[bytes(sound_name, "latin1")] = sound
+
+        # After the tree so a package overrides an in-tree game's sounds.
+        scan_package_sounds()
 
         # startup sound
         sound_queue.append(("sound", bytes("ventilagon/audio/es/superventilagon", "latin1")))

@@ -20,12 +20,19 @@ class Menu(Scene):
         self.sprites = []
         self.y_step = 20 #250 // len(self.options)
         for n, (option_id, strip_name, frame) in enumerate(self.options):
+            strip_index = stripes.get(strip_name)
+            if strip_index is None:
+                # Icon missing from the menu rom (a game installed before its
+                # icon merge landed, or a stale rom right after a system OTA):
+                # show a generic frame instead of crashing the whole menu.
+                strip_index = stripes.get("menu.png", 0)
+                frame = 0
             sprite = MenuSprite()
             sprite.selected_frame = frame
             sprite.set_x(-32)
             sprite.set_y(int(n * self.y_step))
             sprite.set_perspective(1)
-            sprite.set_strip(stripes[strip_name])
+            sprite.set_strip(strip_index)
             sprite.set_frame(frame)
 
             self.sprites.append(sprite)

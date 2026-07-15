@@ -35,6 +35,7 @@ import gzip
 import hashlib
 import importlib.util
 import json
+import mimetypes
 import pathlib
 import socket
 import sys
@@ -42,6 +43,20 @@ import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+try:
+    import package_manager
+except ImportError:
+    # Loaded by file path (tests use importlib on this module) rather than
+    # with emulator/ on sys.path; register the sibling module under its
+    # canonical name so every importer shares one instance (hooks + status).
+    _pm_spec = importlib.util.spec_from_file_location(
+        "package_manager",
+        pathlib.Path(__file__).resolve().parent / "package_manager.py",
+    )
+    package_manager = importlib.util.module_from_spec(_pm_spec)
+    sys.modules["package_manager"] = package_manager
+    _pm_spec.loader.exec_module(package_manager)
 
 try:
     from zeroconf import Zeroconf, ServiceInfo
@@ -74,6 +89,31 @@ _PARTITION_BINS = {
 # manifest/files/partitions live off dev build-output paths to serving a
 # fixed pre-built layout instead (see tools/package_release.py).
 _BUNDLE_DIR = None
+
+# Wired up by comms.start() when this server runs inside the emulator
+# process; standalone runs leave them None (uploads still work, but nothing
+# rescans audio and installs can't be triggered without a board link).
+on_package_saved = None   # called with (slug) after a successful upload
+trigger_install = None    # called with (slug) to send install_start
+
+# The web editor is served from the checkout so the base is its own origin
+# (a GitHub-Pages HTTPS editor can't POST to this plain-HTTP server).
+_WEB_ROOT = _VSDK_ROOT / "web"
+
+# Directories /api/listdir may enumerate (the editor merges tree game
+# assets, e.g. sounds, with its in-browser workspace).
+_LISTABLE_ROOTS = ("games", "system")
+
+_EXTRA_MIME_TYPES = {
+    ".mjs": "text/javascript",
+    ".js": "text/javascript",
+    ".wasm": "application/wasm",
+    ".rom": "application/octet-stream",
+    ".vs2": "application/octet-stream",
+    ".py": "text/plain; charset=utf-8",
+    ".yaml": "text/plain; charset=utf-8",
+    ".md": "text/plain; charset=utf-8",
+}
 
 # Per-device-path cache keyed on (mtime_ns, size) of the source file, so
 # repeated /manifest requests don't re-hash (and re-gzip) unchanged files.
@@ -193,6 +233,22 @@ def _get_partition(name):
     return None
 
 
+def _safe_relative_path(url_path):
+    """URL path -> relative segments, or None when it escapes the root."""
+    segments = [s for s in url_path.split("/") if s and s != "."]
+    if any(s == ".." for s in segments):
+        return None
+    return segments
+
+
+def _guess_type(path):
+    mime = _EXTRA_MIME_TYPES.get(path.suffix.lower())
+    if mime:
+        return mime
+    guessed, _encoding = mimetypes.guess_type(path.name)
+    return guessed or "application/octet-stream"
+
+
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"upgrade_server: {fmt % args}")
@@ -204,13 +260,129 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_json(self, payload, code=200):
+        self._send(code, "application/json", json.dumps(payload).encode())
+
+    def _serve_editor(self, path):
+        """Static file from the web/ tree (the editor and, through its
+        apps/games/system symlinks, the runtime files and game assets)."""
+        segments = _safe_relative_path(path)
+        if segments is None:
+            self._send(404, "text/plain", b"not found")
+            return
+        target = _WEB_ROOT.joinpath(*segments) if segments else _WEB_ROOT
+        if target.is_dir():
+            target = target / "index.html"
+        if not target.is_file():
+            self._send(404, "text/plain", b"not found")
+            return
+        self._send(200, _guess_type(target), target.read_bytes())
+
+    def _handle_listdir(self, query):
+        rel = urllib.parse.parse_qs(query).get("path", [""])[0]
+        segments = _safe_relative_path(rel)
+        if not segments or segments[0] not in _LISTABLE_ROOTS:
+            self._send_json({"error": "path must be under games/ or system/"}, 400)
+            return
+        target = _VSDK_ROOT.joinpath(*segments)
+        if not target.is_dir():
+            self._send_json({"path": "/".join(segments), "entries": []})
+            return
+        entries = [
+            {"name": child.name, "dir": child.is_dir(), "size": child.stat().st_size}
+            for child in sorted(target.iterdir())
+            if not child.name.startswith(".")
+        ]
+        self._send_json({"path": "/".join(segments), "entries": entries})
+
+    def _handle_packages_get(self, path):
+        if path == "/packages":
+            self._send_json({"packages": package_manager.list_packages()})
+            return
+        rest = path[len("/packages/"):]
+        if rest.endswith(package_manager.BOARD_SUFFIX):
+            slug = rest[:-len(package_manager.BOARD_SUFFIX)]
+            try:
+                body, _sha, _size = package_manager.get_board_file(slug)
+            except package_manager.PackageError as error:
+                self._send(404, "text/plain", str(error).encode())
+                return
+            package_manager.set_install_status(slug, "serving")
+            self._send(200, "application/octet-stream", body)
+            return
+        if rest.endswith("/status"):
+            slug = rest[:-len("/status")]
+            self._send_json(package_manager.get_install_status(slug))
+            return
+        if rest.endswith(package_manager.PACKAGE_SUFFIX):
+            slug = rest[:-len(package_manager.PACKAGE_SUFFIX)]
+            source = package_manager.package_path(slug)
+            if source.is_file():
+                self._send(200, "application/octet-stream", source.read_bytes())
+            else:
+                self._send(404, "text/plain", b"no such package")
+            return
+        self._send(404, "text/plain", b"unknown packages endpoint")
+
+    def do_POST(self):
+        raw_path, _, _query = self.path.partition("?")
+        path = urllib.parse.unquote(raw_path).rstrip("/")
+
+        if path.startswith("/packages/"):
+            rest = path[len("/packages/"):]
+
+            if rest.endswith(package_manager.PACKAGE_SUFFIX):
+                slug = rest[:-len(package_manager.PACKAGE_SUFFIX)]
+                length = int(self.headers.get("Content-Length", 0))
+                data = self.rfile.read(length)
+                try:
+                    meta = package_manager.save_package(slug, data)
+                except package_manager.PackageError as error:
+                    self._send_json({"error": str(error)}, 400)
+                    return
+                if on_package_saved is not None:
+                    try:
+                        on_package_saved(slug)
+                    except Exception as error:
+                        print(f"upgrade_server: on_package_saved failed: {error}")
+                self._send_json({"ok": True, "slug": slug, "meta": meta})
+                return
+
+            if rest.endswith("/install"):
+                slug = rest[:-len("/install")]
+                if not package_manager.package_path(slug).is_file():
+                    self._send_json({"error": "no such package"}, 404)
+                    return
+                if trigger_install is None:
+                    self._send_json(
+                        {"error": "no board link (standalone server)"}, 503)
+                    return
+                try:
+                    trigger_install(slug)
+                except Exception as error:
+                    self._send_json({"error": str(error)}, 500)
+                    return
+                self._send_json(package_manager.get_install_status(slug))
+                return
+
+        self._send(404, "text/plain", b"unknown endpoint")
+
     def do_GET(self):
         # File paths can contain spaces, parens, commas, etc. (many ROM
         # filenames); the device percent-encodes them when building the
         # request (see updater.py's _url_quote -- a raw space in the request
         # line breaks this server's own request-line parsing). Decode back
         # to the raw path before matching against manifest entries.
-        path = urllib.parse.unquote(self.path.rstrip("/"))
+        raw_path, _, query = self.path.partition("?")
+        path = urllib.parse.unquote(raw_path).rstrip("/")
+
+        if path.startswith("/packages"):
+            self._handle_packages_get(path)
+            return
+
+        if path == "/api/listdir":
+            self._handle_listdir(query)
+            return
 
         if path == "/manifest":
             try:
@@ -243,7 +415,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(404, "text/plain", b"partition binary not found")
             return
 
-        self._send(404, "text/plain", b"unknown endpoint")
+        # Anything else is the web editor (index.html for "/").
+        self._serve_editor(path)
 
 
 _mdns_zc = None

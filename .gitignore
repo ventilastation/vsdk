@@ -16,6 +16,9 @@ hardware/rotor/micropython
 apps/micropython/roms/*.rom
 *.mp3.wav
 
+# Game packages pushed from the editor (see emulator/package_manager.py)
+installed_packages/
+
 # Per-device / per-user state
 apps/micropython/ventilastation/settings.json
 

@@ -76,6 +76,56 @@ def _check_ota_boot():
 
 _check_ota_boot()
 
+# Package install boot mode: like OTA above, but fetches exactly one stripped
+# game package (.no-sound.vs2) named by /install_request, which director.py
+# writes on "install_start <url> <sha256> <size>". The installer lives on the
+# vfs (not frozen) -- a broken copy must never brick boot, so any failure
+# falls through to the normal launcher and a fix ships via tier-1 OTA.
+def _check_install_boot():
+    try:
+        with open("/install_request") as _f:
+            _request = _f.read().strip()
+    except OSError:
+        return
+    import os
+    try:
+        os.remove("/install_request")
+    except OSError:
+        pass
+    if not _request:
+        return
+    print("main: package install boot mode:", _request)
+    _send = lambda msg: None
+    if sys.platform == "esp32":
+        try:
+            from ventilastation.serialcomms import send as _send
+        except Exception:
+            pass
+    installed = False
+    try:
+        from ventilastation import installer
+        installed = installer.run(_request, _send)
+    except Exception as _e:
+        print("main: package install failed:", _e)
+    if installed:
+        print("main: package installed, rebooting")
+        import machine
+        machine.reset()
+    print("main: package install failed, continuing normal boot")
+
+_check_install_boot()
+
+# A system OTA restores the tree's roms/menu.rom.gz, which shadows the merged
+# plain menu rom carrying installed packages' icons (director.load_rom prefers
+# the .gz). Re-merge the stored packages' icons when that happened; on a
+# normal boot this is just two stats.
+try:
+    from ventilastation import menurom as _menurom
+    if _menurom.refresh_from_packages():
+        print("main: menu rom re-merged from installed packages")
+except Exception as _menu_error:
+    print("main: menu rom refresh failed:", _menu_error)
+
 # A freshly OTA'd ota_2 image boots in the bootloader's "pending verify"
 # rollback state (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y). Only confirm it
 # once the main loop has genuinely run for a few seconds -- gated on real

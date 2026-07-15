@@ -1,5 +1,10 @@
 import { EmbeddedPiskelEditor } from "./piskel-embed.js?v=20260622d";
 import {
+  buildPackageForGame,
+  probePackageServer,
+  pushPackage,
+} from "./package-builder.js";
+import {
   findStripedefItemForPath,
   getSerializedSpritePath,
   isSerializedSpritePath,
@@ -340,6 +345,7 @@ class WorkspaceIde {
       newDrawer: document.querySelector("#editor-new-drawer"),
       saveButton: document.querySelector("#editor-save-button"),
       runButton: document.querySelector("#editor-run-button"),
+      pushButton: document.querySelector("#editor-push-button"),
       newGameButton: document.querySelector("#editor-new-game-button"),
       newSourceButton: document.querySelector("#editor-new-source-button"),
       newStripeButton: document.querySelector("#editor-new-stripe-button"),
@@ -405,6 +411,16 @@ class WorkspaceIde {
     });
     this.elements.runButton?.addEventListener("click", () => {
       void this.runAction("Run failed", () => this.saveAndRun());
+    });
+    this.elements.pushButton?.addEventListener("click", () => {
+      void this.runAction("Push failed", () => this.pushToConsole());
+    });
+    // The push button only appears when this page is served by a
+    // Ventilastation base (same origin as the package endpoints).
+    this.packageServerAvailable = false;
+    void probePackageServer().then((available) => {
+      this.packageServerAvailable = available;
+      this.updateActionState();
     });
     this.elements.newGameButton?.addEventListener("click", () => {
       void this.runAction("Create game failed", () => this.createNewGame());
@@ -869,6 +885,18 @@ class WorkspaceIde {
     this.setStatus(autostartSlug ? `Restarting runtime for ${autostartSlug}` : "Restarting runtime");
     await this.api.restartRuntime({ full: true, autostartSlug });
     this.setStatus("Runtime restarted");
+  }
+
+  async pushToConsole() {
+    const gameKey = this.currentGameKey;
+    if (!gameKey) {
+      throw new Error("Open a game first, then push it to the console.");
+    }
+    await this.saveCurrentFile();
+    const { slug, bytes } = await buildPackageForGame(
+      this.api, gameKey, (text) => this.setStatus(text));
+    await pushPackage(slug, bytes, (text) => this.setStatus(text));
+    this.setStatus(`Installed ${slug} on the console`);
   }
 
   showEditorMode(mode) {
@@ -1336,6 +1364,14 @@ class WorkspaceIde {
       this.elements.runButton.textContent = isBusy && this.activeActionLabel === "Run failed"
         ? "Starting..."
         : "Save + Run";
+    }
+    if (this.elements.pushButton) {
+      this.elements.pushButton.hidden = !this.packageServerAvailable;
+      this.elements.pushButton.disabled =
+        isBusy || !this.currentGameKey || !this.packageServerAvailable;
+      this.elements.pushButton.textContent = isBusy && this.activeActionLabel === "Push failed"
+        ? "Pushing..."
+        : "Push to console";
     }
     this.renderCreateState();
   }

@@ -56,6 +56,12 @@ CPYTHON_TESTS = [
     "tests/test_recovery.py",
     "tests/test_updater.py",
     "tests/test_upgrade_server.py",
+    "tests/test_vszip.py",
+    "tests/test_menurom.py",
+    "tests/test_installer.py",
+    "tests/test_package_game.py",
+    "tests/test_package_server.py",
+    "tests/test_install_dispatch.py",
     "tests/test_boot.py",
     "tests/test_native_apps.py",
     "tests/test_native_exit_transition.py",
@@ -67,10 +73,12 @@ CPYTHON_TESTS = [
 MICROPYTHON_TESTS = [
     "tests/test_browser_input_v2.py",
     "tests/test_director_headless.py",
+    "tests/test_installer_micropython.py",
 ]
 
 NODE_TESTS = [
     "tests/test_web_input_v2.mjs",
+    "tests/test_package_builder_zip.mjs",
 ]
 
 
