@@ -98,6 +98,13 @@ int main(void) {
     CHECK((outer_dark_red & 0x1f) < 31 && (outer_dark_red >> 24) >= 32,
           "very dark tones lower global brightness only after preserving RGB resolution");
 
+    // The compact per-LED Q10 scale must not round a normal target down across
+    // the RGB-PWM/global-brightness handoff. This is deliberately a radial
+    // LED whose scale is not exactly representable in Q10.
+    uint32_t fractional_scale_red = color_pipeline_encode_rgb(45, 96, 0, 0);
+    CHECK((fractional_scale_red & 0x1f) == 25 && (fractional_scale_red >> 24) >= 32,
+          "fractional LED scale preserves RGB-PWM preference at the GB handoff");
+
     uint32_t inner_red = color_pipeline_encode_rgb(0, 255, 0, 0);
     CHECK((inner_red & 0x1f) < 31 && (inner_red >> 24) >= 32,
           "inner LED uses global brightness for a dark radial target");
