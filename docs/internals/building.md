@@ -101,7 +101,7 @@ The complete key list and the ownership of each value are in
 
 For the desktop-emulator development loop against real hardware
 (`run-emulator` via the workbench, OTA sync via `wifi-provision` + the
-emulator's U key) and the workbench board (`workbench-*` targets), see the
+emulator's Ctrl-U/Command-U shortcut) and the workbench board (`workbench-*` targets), see the
 comments in the [Makefile](../../Makefile), [ota.md](ota.md) and
 [workbench.md](workbench.md).
 

@@ -2,8 +2,8 @@
 
 Listens on port 5653 in a daemon thread. The device calls GET /manifest to
 discover what's available, then fetches individual files or partition binaries.
-Triggered from the emulator UI (U key) which sends "ota_start <url>" to the
-device via the existing comms channel.
+Triggered from the emulator UI (Ctrl-U or Command-U) which sends
+"ota_start <url>" to the device via the existing comms channel.
 
 Also advertises itself as "ventilastation-base.local" over mDNS (via the
 "zeroconf" package) so the device can find it without any NVS-stored IP.

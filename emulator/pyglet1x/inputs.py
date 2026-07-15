@@ -1,7 +1,10 @@
 import pyglet
 from pyglet.window import key
 
-from inputs_common import keyboard_state, keyboard_v2_state, pack_directions
+import comms
+from inputs_common import (
+    keyboard_state, keyboard_v2_state, ota_shortcut_pressed, pack_directions,
+)
 from pyglet1x.pygletdraw import window
 
 keys = key.KeyStateHandler()
@@ -20,6 +23,9 @@ def on_key_press(symbol, modifiers):
         return pyglet.event.EVENT_HANDLED
     if symbol == pyglet.window.key.Q:
         pyglet.app.exit()
+    if ota_shortcut_pressed(symbol, modifiers):
+        comms.trigger_ota()
+        return pyglet.event.EVENT_HANDLED
 
 def encode_input_val():
     kb_left, kb_right, kb_up, kb_down, kb_boton, kb_accel, kb_decel = keyboard_state(keys)

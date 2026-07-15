@@ -85,6 +85,11 @@ def keyboard_v2_state(keys):
     return joy2, extra
 
 
+def ota_shortcut_pressed(symbol, modifiers):
+    """Accept Ctrl-U everywhere and Command-U on macOS in both Pyglet APIs."""
+    return symbol == key.U and bool(modifiers & (key.MOD_CTRL | key.MOD_COMMAND))
+
+
 def pack_directions(left, right, up, down):
     return (bool(left) << 0 | bool(right) << 1 |
             bool(up) << 2 | bool(down) << 3)

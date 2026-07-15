@@ -114,21 +114,19 @@ line-based command channel that carries sprites/sound — from the base, the
 workbench UART bridge, or the desktop emulator):
 
 ```
-ota_start http://<host-ip>:5653
+ota_start http://ventilastation-base.local:5653
 ```
 
-The desktop emulator sends this when you press **U** in the pyglet window
-(`emulator/pyglet2x/pygletdraw.py` → `comms.trigger_ota()`). With a TCP
-workbench connection it uses that connection's local interface; with a direct
-serial board connection it discovers the host's default LAN/Wi-Fi address, so
-the serial control link and Wi-Fi OTA server work together. Its
-`upgrade_server` (below) is already listening on port 5653.
+The desktop emulator sends this when you press **Ctrl-U** (or **Command-U**
+on macOS) in either Pyglet window backend. The URL always targets the mDNS
+name advertised by the OTA server, so it works identically over a workbench
+connection or direct serial.
 
-On a computer with several active networks, specify the address reachable by
-the board explicitly:
+The emulator starts its own server by default. A hardware base can leave a
+development server as the upgrade source instead:
 
 ```sh
-python emu.py SERIAL --serial-port /dev/tty.usbserial-144220 --ota-host 192.168.1.42
+python emu.py SERIAL --serial-port /dev/tty.usbserial-144220 --no-ota-server
 ```
 
 The device does **not** run the update inline: the GPU task and WiFi both
@@ -170,7 +168,8 @@ and `writing` (flash erase/write) is red.
 ## Emulator HTTP upgrade server
 
 `emulator/upgrade_server.py` runs on port 5653 in a daemon thread, started
-by `emulator/comms.py` alongside the display connection. It can also run
+by `emulator/comms.py` alongside the display connection unless
+`--no-ota-server` is used. It can also run
 standalone (`python3 emulator/upgrade_server.py --bundle <dir> --port 5653`),
 serving a fixed pre-built layout instead of computing everything live from
 dev build-output paths — for a production base Pi that doesn't have the
