@@ -25,9 +25,11 @@ from pyglet.math import Mat4
 from pyglet.graphics import Group
 from pyglet.graphics.shader import Shader, ShaderProgram
 
+import numpy as np
+
 import comms
 import config
-from povrender import COLUMNS, pack_colors, repeated, render, snapshot_vs2_scene
+from povrender import COLUMNS, render_frame, snapshot_vs2_scene
 
 display_enabled = config.DISPLAY_ENABLED
 pyglet.options['vsync'] = display_enabled
@@ -531,13 +533,11 @@ def display_draw():
     orig_projection = window.projection
     window.projection = pm.Mat4.orthogonal_projection(-x_half, x_half, -y_half, y_half, -100, 100)
 
-    all_pixels = []
     try:
         vs2_scene = snapshot_vs2_scene()
-        for column in range(COLUMNS):
-            all_pixels.extend(render(column, vs2_scene))
+        pixels = render_frame(vs2_scene)  # numpy uint32[COLUMNS*led_count], 0xAABBGGRR
 
-        vertex_colors = pack_colors(list(repeated(4, all_pixels)))
+        vertex_colors = np.repeat(pixels, 4).astype("<u4").tobytes()
         vertex_list.set_attribute_data("colors", vertex_colors)
         batch.draw()
     except Exception as e:

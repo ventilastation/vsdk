@@ -26,6 +26,12 @@ apps/micropython/ventilastation/settings.json
 emulator/ffmpeg-win/*.dll
 emulator/ffmpeg-win/*.exe
 
+# Built by emulator/native/build.sh (see native_render.py); platform-specific,
+# rebuilt automatically by vs-emu.sh.
+emulator/native/*.so
+emulator/native/*.dll
+emulator/native/*.dylib
+
 # Node
 node_modules/
 

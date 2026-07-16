@@ -18,7 +18,7 @@ import threading
 from base_control import BaseControlState
 from povcal_state import PovCalibrationState
 from povperf_controls import start_capture, stop_capture
-from povrender import all_strips, set_palettes, spritedata
+from povrender import set_palettes, set_image_strip, set_spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
 from povrender import (
     set_voom_frame_rgb,
@@ -228,7 +228,7 @@ def dispatch_command(conn, command, args):
     elif command == b"sprites":
         clear_voom_frame()
         clear_vs2_scene()
-        spritedata[:] = conn.read(5*100)
+        set_spritedata(conn.read(5*100))
 
     elif command == b"vs2_scene":
         clear_voom_frame()
@@ -287,7 +287,7 @@ def dispatch_command(conn, command, args):
     elif command == b"imagestrip":
         slot, length = args
         slot_number = int(slot.decode())
-        all_strips[slot_number] = conn.read(int(length))
+        set_image_strip(slot_number, conn.read(int(length)))
 
     elif command == b"ota_progress":
         stage = args[0].decode() if args else "?"

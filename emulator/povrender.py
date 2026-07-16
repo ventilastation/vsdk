@@ -9,9 +9,12 @@ import random
 import math
 from struct import pack, unpack, unpack_from
 
+import numpy as np
+
 from deepspace import deepspace, PIXELS
 from apa102 import decode_frame
 from color_profile import ColorProfile, DEFAULT_PROFILE
+import native_render
 
 ROWS = 256
 COLUMNS = 256
@@ -21,6 +24,12 @@ led_count = PIXELS
 
 starfield = [(random.randrange(COLUMNS), random.randrange(ROWS)) for n in range(STARS)]
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
+
+def set_spritedata(data):
+    """Install the pre-VS2 fixed 100-sprite-slot table, keeping the Python
+    renderer's spritedata and the native renderer's sprites[] in sync."""
+    spritedata[:] = data
+    native_render.set_legacy_sprites(data)
 # Decoded VS2 scenes are immutable after publication.  The communications
 # thread swaps this one reference only after it has decoded the full payload,
 # and a display draw captures it once for all 256 columns.
@@ -94,11 +103,13 @@ def clear_voom_frame():
 def clear_vs2_scene():
     global _vs2_scene
     _vs2_scene = None
+    native_render.clear_scene()
 
 def set_vs2_scene(data):
     global _vs2_scene
     scene = decode_vs2_scene(data)
     _vs2_scene = scene
+    native_render.decode_scene(data)
 
 
 def snapshot_vs2_scene():
@@ -226,6 +237,16 @@ def set_palettes(paldata):
     global palette, upalette
     palette = change_colors(paldata)
     upalette = unpack_palette(palette)
+    native_render.set_palette(paldata)
+
+def set_image_strip(slot, data):
+    """Install one decoded image strip, keeping the Python renderer's
+    all_strips and the native renderer's image_stripes[] in sync. ImageStrip's
+    C layout (frame_width, frame_height, total_frames, palette, then raw
+    pixel data) is byte-identical to this wire blob, so the native side is a
+    zero-copy pointer cast -- see emu_gpu_set_image_strip()."""
+    all_strips[slot] = data
+    native_render.set_image_strip(slot, data)
 
 def get_visible_column(sprite_x, sprite_width, render_column):
     sprite_column = sprite_width - 1 - ((render_column - sprite_x + COLUMNS) % COLUMNS)
@@ -331,6 +352,7 @@ def step_starfield():
             y = ROWS - 1
             x = random.randrange(COLUMNS)
         starfield[n] = (x, y)
+    native_render.step_starfield()
 
 
 def render(column, vs2_scene=_CURRENT_VS2_SCENE):
@@ -442,3 +464,27 @@ def render(column, vs2_scene=_CURRENT_VS2_SCENE):
                         set_pixel(pixels, led, color)
 
     return pixels
+
+
+def render_frame(vs2_scene):
+    """Render all 256 columns at once. Returns a numpy uint32 array
+    (COLUMNS*led_count) of packed pixels in render()'s 0xAABBGGRR layout.
+
+    Raw hardware-capture display (_voom_frame_apa102_pixels/_voom_frame_rgb)
+    still goes through render() per column -- the native renderer only
+    replaces the VS2-scene path and the pre-VS2 fixed 100-sprite-slot path
+    (render()/render_tilemap()'s two branches in Python), which is what
+    real games and the menu actually spend their render time in.
+    """
+    if _voom_frame_apa102_pixels is None and _voom_frame_rgb is None:
+        native_pixels = (
+            native_render.render_frame() if vs2_scene is not None
+            else native_render.render_legacy_frame()
+        )
+        if native_pixels is not None:
+            return native_pixels
+
+    all_pixels = []
+    for column in range(COLUMNS):
+        all_pixels.extend(render(column, vs2_scene))
+    return np.array(all_pixels, dtype=np.uint32)
