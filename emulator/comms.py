@@ -59,6 +59,24 @@ class ConnIP(ConnectionBase):
             self.sock.send(b)
 
 class ConnSerial(ConnectionBase):
+    def readline(self):
+        # Don't rely on io.RawIOBase's built-in readline() here: pyserial's
+        # Serial only exposes readinto() (serialutil.py), and on at least
+        # some CPython versions (seen on 3.14) the C-level readline()
+        # fallback for a peek-less RawIOBase ends up calling read() with
+        # size=None instead of an int, crashing inside serialposix.py's
+        # `size - len(read)`. Reading one byte at a time ourselves sidesteps
+        # that machinery entirely.
+        line = bytearray()
+        while True:
+            byte = self.sockfile.read(1)
+            if not byte:
+                break
+            line += byte
+            if byte == b"\n":
+                break
+        return bytes(line)
+
     def setup(self):
         import serial
 
