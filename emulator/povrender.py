@@ -256,6 +256,23 @@ def set_pixel(pixels, led, color):
     if 0 <= led < led_count:
         pixels[led] = color
 
+# Every strip's 4-byte header (w, h, total_frames, pal_base) is immutable for
+# as long as the strip's bytes object lives -- comms.py always installs a new
+# bytes object on reload, so caching by identity needs no manual invalidation.
+# Without this, render()/render_tilemap() re-ran struct.unpack on the same
+# static header for every column (256x/frame) for every visible sprite/tile.
+_strip_header_cache = {}
+
+def _strip_header(strip):
+    cached = _strip_header_cache.get(id(strip))
+    if cached is not None and cached[0] is strip:
+        return cached[1:]
+    w, h, total_frames, pal = unpack("BBBB", strip[0:4])
+    if w == 255: w = 256 # special case for the planet backdrops
+    header = (w, h, total_frames, 256 * pal, memoryview(strip)[4:])
+    _strip_header_cache[id(strip)] = (strip,) + header
+    return header
+
 def render_tilemap(pixels, column, tilemap):
     # FULLSCREEN tilemaps are unsupported; only TUNNEL (1) and HUD (2) render.
     perspective = tilemap["perspective"]
@@ -264,15 +281,12 @@ def render_tilemap(pixels, column, tilemap):
     strip = all_strips.get(tilemap["image"])
     if not strip:
         return
-    w, h, total_frames, pal = unpack("BBBB", strip[0:4])
-    if w == 255: w = 256 # special case for the planet backdrops
+    w, h, total_frames, pal_base, pixeldata = _strip_header(strip)
     tile_w = tilemap["tile_width"]
     tile_h = tilemap["tile_height"]
     if w != tile_w or h != tile_h:
         return
     total_frames = total_frames or 1
-    pal_base = 256 * pal
-    pixeldata = memoryview(strip)[4:]
 
     map_columns = tilemap["columns"]
     map_w = map_columns * tile_w
@@ -390,10 +404,7 @@ def render(column, vs2_scene=_CURRENT_VS2_SCENE):
         strip = all_strips.get(image)
         if not strip:
             continue
-        w, h, total_frames, pal = unpack("BBBB", strip[0:4])
-        pal_base = 256 * pal
-        if w == 255: w = 256 # special case for the planet backdrops
-        pixeldata = memoryview(strip)[4:]
+        w, h, total_frames, pal_base, pixeldata = _strip_header(strip)
 
         frame %= total_frames
 

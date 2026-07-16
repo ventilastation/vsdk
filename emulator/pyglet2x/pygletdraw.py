@@ -156,12 +156,23 @@ texture = pyglet.image.load("glow.png").get_texture(rectangle=True)
 group = RenderGroup(texture, shader_program)
 
 def display_init(led_count):
+    """Build the LED quad geometry as an indexed vertex list.
+
+    Each LED quad has 4 distinct corners; the previous non-indexed list
+    stored 6 vertices per LED (2 duplicated) so every triangle could inline
+    its own corners. That meant the "colors" attribute -- the one thing
+    updated every frame from the rendered pixels -- carried 6x redundant
+    copies of the same per-LED color, tripling the pack/upload cost for no
+    visual difference. Indexing lets each corner (and its color) exist once,
+    referenced twice by the index buffer for its two triangles.
+    """
     led_step = (LED_SIZE / led_count)
     vertex_pos = []
     theta = (math.pi * 2 / COLUMNS)
     def arc_chord(r):
         return 2 * r * math.sin(theta / 2)
 
+    indices = []
 
     for column in range(COLUMNS):
         x1, x2 = 0, 0
@@ -176,18 +187,22 @@ def display_init(led_count):
             v2 = pm.Vec2(x2, y1).rotate(angle)
             v3 = pm.Vec2(x4, y2).rotate(angle)
             v4 = pm.Vec2(x3, y2).rotate(angle)
-            vertex_pos.extend([v1.x, v1.y, v2.x, v2.y, v3.x, v3.y,
-                                v1.x, v1.y, v3.x, v3.y, v4.x, v4.y])
+            # 4 unique corners; the original two triangles were (v1,v2,v3)
+            # and (v1,v3,v4), reproduced here via indices instead of
+            # duplicating v1/v3 in the vertex data itself.
+            base = (column * led_count + i) * 4
+            vertex_pos.extend([v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v4.x, v4.y])
+            indices.extend([base, base + 1, base + 2, base, base + 2, base + 3])
             x1, x2 = x3, x4
 
-    vertex_colors = (255, 128, 0, 255) * led_count * 6 * COLUMNS
-    texture_pos = (0.0,0.0,0, 1.0,0.0,0, 1.0,1.0,0, 
-                   0.0,0.0,0, 1.0,1.0,0, 0.0,1.0,0) * led_count * COLUMNS
+    vertex_colors = (255, 128, 0, 255) * led_count * 4 * COLUMNS
+    texture_pos = (0.0, 0.0, 0, 1.0, 0.0, 0, 1.0, 1.0, 0, 0.0, 1.0, 0) * led_count * COLUMNS
 
     global vertex_list
-    vertex_list = shader_program.vertex_list(
-        led_count * 6 * COLUMNS,
-        mode=GL_TRIANGLES,
+    vertex_list = shader_program.vertex_list_indexed(
+        led_count * 4 * COLUMNS,
+        GL_TRIANGLES,
+        indices,
         position=('f', vertex_pos),
         colors=('Bn', vertex_colors),
         tex_coords=('f', texture_pos),
@@ -435,48 +450,73 @@ def draw_workbench_controls():
     controls_batch.draw()
 
 
+# Base state preview: a compact Super Ventilagon-inspired dial + button
+# preview. Built once here and repositioned/recolored in place every frame
+# instead of allocating fresh Shape/Label objects per draw (each allocation
+# sets up its own vertex list/shader state, which was costing several
+# ms/frame -- occasionally tens of ms -- for geometry that's otherwise
+# static from frame to frame).
+_bp_width, _bp_height = 194, 126
+_bp_dial_w, _bp_dial_h = 100, 64
+base_preview_batch = pyglet.graphics.Batch()
+
+bp_panel_outer = shapes.Rectangle(0, 0, _bp_width, _bp_height, color=(3, 4, 6), batch=base_preview_batch)
+bp_panel_inner = shapes.Rectangle(0, 0, _bp_width - 8, _bp_height - 8, color=(13, 16, 22), batch=base_preview_batch)
+# The 16 WS2812s are hidden behind a rectangular, black-bezel instrument
+# panel. Their current strip color lights its face rather than appearing
+# as individual dots.
+bp_dial_back = shapes.Rectangle(0, 0, _bp_dial_w, _bp_dial_h, color=(1, 2, 4), batch=base_preview_batch)
+# The illuminated display occupies the upper part; the lower third is
+# the black control panel where the real needle pivots.
+bp_dial_face = shapes.Rectangle(0, 0, _bp_dial_w - 12, _bp_dial_h - 29, color=(0, 0, 0), batch=base_preview_batch)
+bp_label_super = pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, weight="bold",
+                                    anchor_x="center", color=(0, 0, 0, 255), batch=base_preview_batch)
+bp_label_ventilagon = pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, weight="bold",
+                                         anchor_x="center", color=(0, 0, 0, 255), batch=base_preview_batch)
+bp_needle = shapes.Line(0, 0, 0, 0, thickness=3, color=(0, 0, 0), batch=base_preview_batch)
+bp_pivot = shapes.Circle(0, 0, 4, color=(0, 0, 0), batch=base_preview_batch)
+bp_button_rings = [shapes.Circle(0, 0, 15, color=(20, 22, 25), batch=base_preview_batch) for _ in range(2)]
+bp_button_faces = [shapes.Circle(0, 0, 12, color=(235, 235, 230), batch=base_preview_batch) for _ in range(2)]
+bp_button_leds = [shapes.Circle(0, 0, 5, color=(52, 12, 12), batch=base_preview_batch) for _ in range(2)]
+
+
 def draw_base_preview():
-    """Draw a compact Super Ventilagon-inspired base state preview."""
+    """Position/recolor the base state preview for this frame and draw it."""
     state = comms.base_control
-    width, height = 194, 126
-    x, y = window.width - width - 14, 14
-    shapes.Rectangle(x, y, width, height, color=(3, 4, 6)).draw()
-    shapes.Rectangle(x + 4, y + 4, width - 8, height - 8, color=(13, 16, 22)).draw()
+    # Right-aligned against the window edge, so this is recomputed every
+    # frame in case the window was resized.
+    x, y = window.width - _bp_width - 14, 14
+    bp_panel_outer.position = (x, y)
+    bp_panel_inner.position = (x + 4, y + 4)
 
-    red, green, blue = state.dial_rgb
+    dial_x, dial_y = x + 12, y + 34
+    bp_dial_back.position = (dial_x, dial_y)
+    bp_dial_face.position = (dial_x + 6, dial_y + 22)
+    bp_dial_face.color = state.dial_rgb
 
-    # The 16 WS2812s are hidden behind a rectangular, black-bezel instrument
-    # panel. Their current strip color lights its face rather than appearing
-    # as individual dots.
-    dial_x, dial_y, dial_w, dial_h = x + 12, y + 34, 100, 64
-    shapes.Rectangle(dial_x, dial_y, dial_w, dial_h, color=(1, 2, 4)).draw()
-    # The illuminated display occupies the upper part; the lower third is
-    # the black control panel where the real needle pivots.
-    shapes.Rectangle(dial_x + 6, dial_y + 22, dial_w - 12, dial_h - 29,
-                     color=(red, green, blue)).draw()
     # The real pivot sits below the rectangular panel. A 100-degree sweep
     # reproduces its constrained mechanical travel: left-up, top, right-up.
-    center_x, center_y = dial_x + dial_w / 2, dial_y + 11
-    pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, weight="bold",
-                      x=center_x, y=dial_y + 45, anchor_x="center",
-                      color=(0, 0, 0, 255)).draw()
-    pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, weight="bold",
-                      x=center_x, y=dial_y + 37, anchor_x="center",
-                      color=(0, 0, 0, 255)).draw()
+    center_x, center_y = dial_x + _bp_dial_w / 2, dial_y + 11
+    bp_label_super.position = (center_x, dial_y + 45, 0)
+    bp_label_ventilagon.position = (center_x, dial_y + 37, 0)
+
     # Preview orientation: 0 = left-up, midpoint = top, 255 = right-up.
     angle = math.radians(140 - 100 * state.servo_position / 255)
-    needle_x = center_x + math.cos(angle) * 40
-    needle_y = center_y + math.sin(angle) * 40
-    shapes.Line(center_x, center_y, needle_x, needle_y, thickness=3, color=(0, 0, 0)).draw()
-    shapes.Circle(center_x, center_y, 4, color=(0, 0, 0)).draw()
+    bp_needle.x, bp_needle.y = center_x, center_y
+    bp_needle.x2 = center_x + math.cos(angle) * 40
+    bp_needle.y2 = center_y + math.sin(angle) * 40
+    bp_pivot.position = (center_x, center_y)
 
     now_ms = int(time.monotonic() * 1000)
     for index, mask in enumerate((1, 2)):
         lit = state.button_lit(mask, now_ms)
         button_x = x + 130 + index * 37
-        shapes.Circle(button_x, y + 39, 15, color=(20, 22, 25)).draw()
-        shapes.Circle(button_x, y + 39, 12, color=(235, 235, 230)).draw()
-        shapes.Circle(button_x, y + 39, 5, color=(230, 24, 20) if lit else (52, 12, 12)).draw()
+        bp_button_rings[index].position = (button_x, y + 39)
+        bp_button_faces[index].position = (button_x, y + 39)
+        bp_button_leds[index].position = (button_x, y + 39)
+        bp_button_leds[index].color = (230, 24, 20) if lit else (52, 12, 12)
+
+    base_preview_batch.draw()
 
 def display_draw():
     window.clear()
@@ -497,7 +537,7 @@ def display_draw():
         for column in range(COLUMNS):
             all_pixels.extend(render(column, vs2_scene))
 
-        vertex_colors = pack_colors(list(repeated(6, all_pixels)))
+        vertex_colors = pack_colors(list(repeated(4, all_pixels)))
         vertex_list.set_attribute_data("colors", vertex_colors)
         batch.draw()
     except Exception as e:
