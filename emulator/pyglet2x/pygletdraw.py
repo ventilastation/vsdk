@@ -1,3 +1,4 @@
+import ctypes
 import math
 import random
 import time
@@ -17,9 +18,16 @@ from pyglet.gl import (
     glEnable,
     glBlendFunc,
     glDisable,
+    glTexSubImage2D,
     GL_TEXTURE0,
+    GL_TEXTURE1,
+    GL_TEXTURE_2D,
     GL_TRIANGLES,
     GL_BLEND,
+    GL_RGBA,
+    GL_RGBA8,
+    GL_UNSIGNED_BYTE,
+    GL_NEAREST,
 )
 from pyglet.math import Mat4
 from pyglet.graphics import Group
@@ -40,52 +48,54 @@ pyglet.options['vsync'] = display_enabled
 _vertex_source = """#version 330 core
     in vec2 position;
     in vec3 tex_coords;
-    in vec4 colors;
+    in vec2 led_uv;
     out vec3 texture_coords;
-    out vec4 v_colors;
+    out vec2 v_led_uv;
 
-    uniform WindowBlock 
+    uniform WindowBlock
     {                       // This UBO is defined on Window creation, and available
         mat4 projection;    // in all Shaders. You can modify these matrixes with the
         mat4 view;          // Window.view and Window.projection properties.
-    } window;  
+    } window;
 
     void main()
     {
         gl_Position = window.projection * window.view * vec4(position, 1, 1);
         texture_coords = tex_coords;
-        v_colors = colors;
+        v_led_uv = led_uv;
     }
 """
 
 _fragment_source = """#version 330 core
     in vec3 texture_coords;
-    in vec4 v_colors;
+    in vec2 v_led_uv;
     out vec4 final_colors;
 
     uniform sampler2D our_texture;
+    uniform sampler2D led_colors;
 
     // Pill shape with bloom glow
     void main() {
         vec2 uv = texture_coords.xy;
         vec2 center = vec2(0.5);
         vec2 p = uv - center;
-        
+
         // Pill dimensions
         float width = 0.1;
         float height = 0.05;
         float radius = height;
-        
+
         // Distance to pill shape
         vec2 q = abs(p) - vec2(width - radius, height - radius);
         float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-        
+
         float pill = smoothstep(0.01, -0.01, dist);
         float glow = exp(-dist * dist * 10.0) * 0.3;
-        
-        final_colors = v_colors * (pill + glow);
+
+        vec4 led_color = texture(led_colors, v_led_uv);
+        final_colors = led_color * (pill + glow);
     }
-    
+
 """
 
 vert_shader = Shader(_vertex_source, 'vertex')
@@ -96,17 +106,22 @@ shader_program = ShaderProgram(vert_shader, frag_shader)
 # Define a custom `Group` to encapsulate OpenGL state
 #####################################################
 class RenderGroup(Group):
-    """A Group that enables and binds a Texture and ShaderProgram.
+    """A Group that enables and binds two Textures and a ShaderProgram.
 
-    RenderGroups are equal if their Texture and ShaderProgram
-    are equal.
+    `texture` (unit 0) is the glow/pill shape; `led_texture` (unit 1) holds
+    the current frame's per-LED colors, sampled directly in the fragment
+    shader instead of carrying them as a per-vertex attribute (see
+    display_draw()). RenderGroups are equal if their Textures and
+    ShaderProgram are equal.
     """
-    def __init__(self, texture, program, order=0, parent=None):
+    def __init__(self, texture, led_texture, program, order=0, parent=None):
         """Create a RenderGroup.
 
         :Parameters:
             `texture` : `~pyglet.image.Texture`
-                Texture to bind.
+                Glow/pill shape texture to bind on unit 0.
+            `led_texture` : `~pyglet.image.Texture`
+                Per-LED color data texture to bind on unit 1.
             `program` : `~pyglet.graphics.shader.ShaderProgram`
                 ShaderProgram to use.
             `order` : int
@@ -116,11 +131,14 @@ class RenderGroup(Group):
         """
         super().__init__(order, parent)
         self.texture = texture
+        self.led_texture = led_texture
         self.program = program
 
     def set_state(self):
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(self.texture.target, self.texture.id)
+        glActiveTexture(GL_TEXTURE1)
+        glBindTexture(self.led_texture.target, self.led_texture.id)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_COLOR, GL_SRC_COLOR)
         glBlendEquation(GL_MAX)
@@ -131,12 +149,14 @@ class RenderGroup(Group):
         glDisable(GL_BLEND)
 
     def __hash__(self):
-        return hash((self.texture.target, self.texture.id, self.order, self.parent, self.program))
+        return hash((self.texture.target, self.texture.id, self.led_texture.id,
+                     self.order, self.parent, self.program))
 
     def __eq__(self, other):
         return (self.__class__ is other.__class__ and
                 self.texture.target == other.texture.target and
                 self.texture.id == other.texture.id and
+                self.led_texture.id == other.led_texture.id and
                 self.order == other.order and
                 self.program == other.program and
                 self.parent == other.parent)
@@ -155,7 +175,22 @@ led_count = 54
 LED_SIZE = 100
 vertex_list = None
 texture = pyglet.image.load("glow.png").get_texture(rectangle=True)
-group = RenderGroup(texture, shader_program)
+# Per-LED color data as a small texture instead of a per-vertex attribute:
+# one texel per LED (COLUMNS x led_count), updated wholesale each frame via
+# glTexSubImage2D in display_draw(). GL_NEAREST so sampling never blends
+# neighboring LEDs/columns together.
+led_color_texture = pyglet.image.Texture.create(
+    COLUMNS, led_count, target=GL_TEXTURE_2D, internalformat=GL_RGBA8,
+    min_filter=GL_NEAREST, mag_filter=GL_NEAREST, fmt=GL_RGBA,
+)
+group = RenderGroup(texture, led_color_texture, shader_program)
+# our_texture (unit 0, the glow/pill shape) isn't actually sampled in the
+# fragment shader -- the pill/glow effect is procedural, computed from
+# texture_coords directly -- so the GLSL compiler optimizes that uniform
+# away and setting it would raise. Only led_colors (unit 1) is real.
+shader_program.use()
+shader_program["led_colors"] = 1
+shader_program.stop()
 
 def display_init(led_count):
     """Build the LED quad geometry as an indexed vertex list.
@@ -170,6 +205,7 @@ def display_init(led_count):
     """
     led_step = (LED_SIZE / led_count)
     vertex_pos = []
+    led_uv = []
     theta = (math.pi * 2 / COLUMNS)
     def arc_chord(r):
         return 2 * r * math.sin(theta / 2)
@@ -195,9 +231,14 @@ def display_init(led_count):
             base = (column * led_count + i) * 4
             vertex_pos.extend([v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v4.x, v4.y])
             indices.extend([base, base + 1, base + 2, base, base + 2, base + 3])
+            # Texel center for this LED in led_color_texture (COLUMNS wide,
+            # led_count tall); identical for all 4 corners -- it's which LED
+            # this quad is, not a per-corner value.
+            u = (column + 0.5) / COLUMNS
+            v = (i + 0.5) / led_count
+            led_uv.extend([u, v] * 4)
             x1, x2 = x3, x4
 
-    vertex_colors = (255, 128, 0, 255) * led_count * 4 * COLUMNS
     texture_pos = (0.0, 0.0, 0, 1.0, 0.0, 0, 1.0, 1.0, 0, 0.0, 1.0, 0) * led_count * COLUMNS
 
     global vertex_list
@@ -206,7 +247,7 @@ def display_init(led_count):
         GL_TRIANGLES,
         indices,
         position=('f', vertex_pos),
-        colors=('Bn', vertex_colors),
+        led_uv=('f', led_uv),
         tex_coords=('f', texture_pos),
         group=group,
         batch=batch
@@ -535,10 +576,18 @@ def display_draw():
 
     try:
         vs2_scene = snapshot_vs2_scene()
-        pixels = render_frame(vs2_scene)  # numpy uint32[COLUMNS*led_count], 0xAABBGGRR
+        pixels = render_frame(vs2_scene)  # numpy uint32[COLUMNS*led_count], 0xAABBGGRR == RGBA bytes
 
-        vertex_colors = np.repeat(pixels, 4).astype("<u4").tobytes()
-        vertex_list.set_attribute_data("colors", vertex_colors)
+        # One texel per LED instead of a per-vertex attribute repeated 4x:
+        # rows are LEDs (height=led_count), columns are POV columns
+        # (width=COLUMNS), matching led_color_texture's shape.
+        image = np.ascontiguousarray(pixels.reshape(COLUMNS, led_count).T)
+        glBindTexture(GL_TEXTURE_2D, led_color_texture.id)
+        glTexSubImage2D(
+            GL_TEXTURE_2D, 0, 0, 0, COLUMNS, led_count,
+            GL_RGBA, GL_UNSIGNED_BYTE,
+            image.ctypes.data_as(ctypes.c_void_p),
+        )
         batch.draw()
     except Exception as e:
         traceback.print_exc()
