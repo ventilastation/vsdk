@@ -474,6 +474,13 @@
     const positions = [];
     const texCoords = [];
     const centers = [];
+    // Texel center for this LED in a PIXELS-wide x COLUMNS-tall color
+    // texture (see LedRingWebGLRenderer): identical for all 6 vertices of a
+    // LED's quad -- it's which LED this is, not a per-corner value. PIXELS
+    // is the texture width (not COLUMNS) so the ledPixels array -- already
+    // column-major/led-minor, i.e. row-major for a (COLUMNS rows x PIXELS
+    // cols) image -- can be uploaded to the texture with no reshaping.
+    const ledUVs = [];
 
     function arcChord(radius) {
       return 2 * radius * Math.sin(theta / 2);
@@ -523,6 +530,13 @@
         );
 
         centers.push(center.x, center.y);
+
+        const u = (led + 0.5) / PIXELS;
+        const v = (column + 0.5) / COLUMNS;
+        for (let corner = 0; corner < 6; corner += 1) {
+          ledUVs.push(u, v);
+        }
+
         x1 = x3;
         x2 = x4;
       }
@@ -532,6 +546,7 @@
       positions: new Float32Array(positions),
       texCoords: new Float32Array(texCoords),
       centers: new Float32Array(centers),
+      ledUVs: new Float32Array(ledUVs),
       ledCount: COLUMNS * PIXELS,
       vertexCount: COLUMNS * PIXELS * 6,
       worldRadius: LED_SIZE * 1.9,

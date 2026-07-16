@@ -36,10 +36,10 @@ import {
   decodeSpriteStateBuffer,
   decodeVs2SceneBuffer,
   decodeImageStripPayload,
-} from "./app-support.js?v=20260714c";
+} from "./app-support.js?v=20260716a";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260709a";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260716a";
 
 
 class FailedRuntimeAdapter {

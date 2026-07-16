@@ -3,7 +3,7 @@
 
 import {
   resolveFirstAvailableUrl,
-} from "./app-support.js?v=20260714c";
+} from "./app-support.js?v=20260716a";
 
 
 class BrowserAudioHost {
