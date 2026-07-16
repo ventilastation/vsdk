@@ -6,8 +6,7 @@ import {
   PIXELS,
   createLedRingGeometry,
   DEFAULT_WEBGL_RESOLUTION_SCALE,
-  fillRepeatedLedColors,
-} from "./app-support.js?v=20260714c";
+} from "./app-support.js?v=20260716a";
 
 
 class LedRingWebGLRenderer {
@@ -36,12 +35,12 @@ class LedRingWebGLRenderer {
       `
         attribute vec2 a_position;
         attribute vec2 a_texCoord;
-        attribute vec4 a_color;
+        attribute vec2 a_ledUV;
         uniform vec2 u_resolution;
         uniform vec2 u_center;
         uniform float u_scale;
         varying vec2 v_texCoord;
-        varying vec4 v_color;
+        varying vec2 v_ledUV;
 
         void main() {
           vec2 pos = u_center + (a_position * vec2(1.0, -1.0) * u_scale);
@@ -49,13 +48,14 @@ class LedRingWebGLRenderer {
           vec2 clip = zeroToOne * 2.0 - 1.0;
           gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
           v_texCoord = a_texCoord;
-          v_color = a_color;
+          v_ledUV = a_ledUV;
         }
       `,
       `
         precision mediump float;
         varying vec2 v_texCoord;
-        varying vec4 v_color;
+        varying vec2 v_ledUV;
+        uniform sampler2D u_ledColors;
 
         void main() {
           vec2 center = vec2(0.5, 0.5);
@@ -67,7 +67,8 @@ class LedRingWebGLRenderer {
           float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
           float pill = smoothstep(0.01, -0.01, dist);
           float glow = exp(-dist * dist * 10.0) * 0.3;
-          gl_FragColor = v_color * (pill + glow);
+          vec4 ledColor = texture2D(u_ledColors, v_ledUV);
+          gl_FragColor = ledColor * (pill + glow);
         }
       `
     );
@@ -80,21 +81,36 @@ class LedRingWebGLRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.geometry.texCoords, gl.STATIC_DRAW);
 
-    this.colorBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, this.geometry.vertexCount * 4, gl.DYNAMIC_DRAW);
-    this.colorBytes = new Uint8Array(this.geometry.vertexCount * 4);
-    this.colorWords = new Uint32Array(this.colorBytes.buffer);
+    // Static per-vertex "which LED is this" texture coordinate -- uploaded
+    // once, never touched again. Per-frame color data goes into a texture
+    // instead (see ledColorTexture below) rather than a per-vertex
+    // attribute repeated 6x and re-uploaded every frame.
+    this.ledUVBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.ledUVBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, this.geometry.ledUVs, gl.STATIC_DRAW);
+
+    // One texel per LED (PIXELS wide x COLUMNS tall -- ledPixels is already
+    // column-major/led-minor, i.e. row-major for that shape, so it uploads
+    // with no reshaping). NPOT-safe wrap/filter for WebGL1 (PIXELS=54 isn't
+    // a power of two).
+    this.ledColorTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.ledColorTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, PIXELS, COLUMNS, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     this.attribs = {
       position: gl.getAttribLocation(this.program, "a_position"),
       texCoord: gl.getAttribLocation(this.program, "a_texCoord"),
-      color: gl.getAttribLocation(this.program, "a_color"),
+      ledUV: gl.getAttribLocation(this.program, "a_ledUV"),
     };
     this.uniforms = {
       resolution: gl.getUniformLocation(this.program, "u_resolution"),
       center: gl.getUniformLocation(this.program, "u_center"),
       scale: gl.getUniformLocation(this.program, "u_scale"),
+      ledColors: gl.getUniformLocation(this.program, "u_ledColors"),
     };
 
     gl.enable(gl.BLEND);
@@ -182,13 +198,16 @@ class LedRingWebGLRenderer {
     gl.enableVertexAttribArray(this.attribs.texCoord);
     gl.vertexAttribPointer(this.attribs.texCoord, 2, gl.FLOAT, false, 0, 0);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
-    fillRepeatedLedColors(ledPixels, this.colorWords, 6);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.ledUVBuffer);
+    gl.enableVertexAttribArray(this.attribs.ledUV);
+    gl.vertexAttribPointer(this.attribs.ledUV, 2, gl.FLOAT, false, 0, 0);
     const afterColorExpandAt = performance.now();
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.colorBytes);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.ledColorTexture);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, PIXELS, COLUMNS, gl.RGBA, gl.UNSIGNED_BYTE, ledPixels);
+    gl.uniform1i(this.uniforms.ledColors, 0);
     const afterUploadAt = performance.now();
-    gl.enableVertexAttribArray(this.attribs.color);
-    gl.vertexAttribPointer(this.attribs.color, 4, gl.UNSIGNED_BYTE, true, 0, 0);
 
     gl.uniform2f(this.uniforms.resolution, width, height);
     gl.uniform2f(this.uniforms.center, width * 0.5, height * 0.5);
@@ -204,7 +223,7 @@ class LedRingWebGLRenderer {
       totalMs: finishedAt - startedAt,
       resolutionScale: scale,
       vertexCount: this.geometry.vertexCount,
-      colorBytes: this.colorBytes.length,
+      colorBytes: ledPixels.length,
     };
     return true;
   }

@@ -18,7 +18,7 @@ import threading
 from base_control import BaseControlState
 from povcal_state import PovCalibrationState
 from povperf_controls import start_capture, stop_capture
-from povrender import all_strips, set_palettes, spritedata
+from povrender import set_palettes, set_image_strip, set_spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
 from povrender import (
     set_voom_frame_rgb,
@@ -26,9 +26,10 @@ from povrender import (
     set_apa102_profile_payload,
     clear_voom_frame,
 )
-from audio import playsound, playmusic, playnotes
+from audio import playsound, playmusic, playnotes, rescan_package_sounds
 from emu_audio import emu_audio
 from ota_controls import OTA_SERVER_URL, ota_start_command
+import package_manager
 import upgrade_server
 
 
@@ -58,6 +59,24 @@ class ConnIP(ConnectionBase):
             self.sock.send(b)
 
 class ConnSerial(ConnectionBase):
+    def readline(self):
+        # Don't rely on io.RawIOBase's built-in readline() here: pyserial's
+        # Serial only exposes readinto() (serialutil.py), and on at least
+        # some CPython versions (seen on 3.14) the C-level readline()
+        # fallback for a peek-less RawIOBase ends up calling read() with
+        # size=None instead of an int, crashing inside serialposix.py's
+        # `size - len(read)`. Reading one byte at a time ourselves sidesteps
+        # that machinery entirely.
+        line = bytearray()
+        while True:
+            byte = self.sockfile.read(1)
+            if not byte:
+                break
+            line += byte
+            if byte == b"\n":
+                break
+        return bytes(line)
+
     def setup(self):
         import serial
 
@@ -227,7 +246,7 @@ def dispatch_command(conn, command, args):
     elif command == b"sprites":
         clear_voom_frame()
         clear_vs2_scene()
-        spritedata[:] = conn.read(5*100)
+        set_spritedata(conn.read(5*100))
 
     elif command == b"vs2_scene":
         clear_voom_frame()
@@ -286,7 +305,7 @@ def dispatch_command(conn, command, args):
     elif command == b"imagestrip":
         slot, length = args
         slot_number = int(slot.decode())
-        all_strips[slot_number] = conn.read(int(length))
+        set_image_strip(slot_number, conn.read(int(length)))
 
     elif command == b"ota_progress":
         stage = args[0].decode() if args else "?"
@@ -301,6 +320,23 @@ def dispatch_command(conn, command, args):
     elif command == b"ota_error":
         msg = b" ".join(args).decode()
         print(f"OTA error: {msg}")
+
+    elif command == b"install_progress":
+        stage = args[0].decode() if args else "?"
+        detail = args[1].decode() if len(args) > 1 else ""
+        pct = args[2].decode() if len(args) > 2 else ""
+        print(f"install [{stage}] {detail} {pct}%")
+        package_manager.note_install_progress(stage, detail, pct)
+
+    elif command == b"install_done":
+        slug = args[0].decode() if args else "?"
+        print(f"package install complete: {slug}")
+        package_manager.note_install_done(slug)
+
+    elif command == b"install_error":
+        msg = b" ".join(args).decode()
+        print(f"package install error: {msg}")
+        package_manager.note_install_error(msg)
 
     elif command == b"traceback":
         length = args[0]
@@ -387,6 +423,8 @@ def start():
     config.configure()."""
     global display_conn, workbench_conn
 
+    upgrade_server.trigger_install = trigger_install
+    upgrade_server.on_package_saved = _on_package_saved
     if config.OTA_SERVER_ENABLED:
         upgrade_server.start(port=5653)
     else:
@@ -423,6 +461,12 @@ def shutdown():
         workbench_conn.close()
 
 
+# The pyglet thread streams joystick frames while the upgrade server's HTTP
+# thread may send install_start; serialize writes so command lines can't
+# interleave with a frame mid-transfer.
+_send_lock = threading.Lock()
+
+
 def send(b):
     """Send raw bytes toward the DUT. In hardware mode these go over the
     workbench serial bridge; otherwise over the main display connection."""
@@ -430,7 +474,8 @@ def send(b):
     if target is None:
         return
     try:
-        target.send(b)
+        with _send_lock:
+            target.send(b)
     except (socket.error, OSError) as err:
         print(err)
 
@@ -474,6 +519,22 @@ def trigger_ota():
         print(f"comms: sent ota_start (server at {OTA_SERVER_URL})")
     except Exception as e:
         print(f"comms: trigger_ota failed: {e}")
+
+
+def trigger_install(slug):
+    """Ask the board to fetch and install one uploaded package: builds (or
+    reuses) the stripped .no-sound.vs2 and names exactly that file in the
+    install_start command -- no manifest sync involved."""
+    _data, sha, size = package_manager.get_board_file(slug)
+    url = f"{OTA_SERVER_URL}/packages/{slug}{package_manager.BOARD_SUFFIX}"
+    send_command(f"install_start {url} {sha} {size}")
+    package_manager.note_install_triggered(slug)
+    print(f"comms: sent install_start for {slug} ({size} bytes)")
+
+
+def _on_package_saved(slug):
+    print(f"comms: package {slug} uploaded")
+    rescan_package_sounds(slug)
 
 
 def send_workbench(line):

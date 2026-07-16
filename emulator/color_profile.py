@@ -97,6 +97,15 @@ class ColorProfile:
         self.global_response = tuple(int(value) for value in global_response)
         self.pwm_response = tuple(tuple(int(value) for value in row) for row in pwm_response)
         self._validate()
+        # Expanding each 17-knot PWM curve to a 256-entry byte-indexed table
+        # is O(256) work done once per profile load. It lets both the
+        # reference per-pixel decoder below and the vectorized whole-frame
+        # decoder in apa102.py share the same precomputed values instead of
+        # re-interpolating the knots on every pixel.
+        self.pwm_byte_lut = tuple(
+            tuple(_interpolate(curve, byte) for byte in range(256))
+            for curve in self.pwm_response
+        )
 
     @classmethod
     def default(cls, generation=0):
@@ -236,9 +245,9 @@ class ColorProfile:
 
         global_light = self.global_response[brightness]
         led_light = (
-            global_light * _interpolate(self.pwm_response[0], red_pwm) / (Q15_ONE * Q15_ONE),
-            global_light * _interpolate(self.pwm_response[1], green_pwm) / (Q15_ONE * Q15_ONE),
-            global_light * _interpolate(self.pwm_response[2], blue_pwm) / (Q15_ONE * Q15_ONE),
+            global_light * self.pwm_byte_lut[0][max(0, min(255, int(red_pwm)))] / (Q15_ONE * Q15_ONE),
+            global_light * self.pwm_byte_lut[1][max(0, min(255, int(green_pwm)))] / (Q15_ONE * Q15_ONE),
+            global_light * self.pwm_byte_lut[2][max(0, min(255, int(blue_pwm)))] / (Q15_ONE * Q15_ONE),
         )
         preview_linear = []
         for row in range(3):

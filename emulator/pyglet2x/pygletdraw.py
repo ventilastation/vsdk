@@ -1,3 +1,4 @@
+import ctypes
 import math
 import random
 import time
@@ -17,17 +18,26 @@ from pyglet.gl import (
     glEnable,
     glBlendFunc,
     glDisable,
+    glTexSubImage2D,
     GL_TEXTURE0,
+    GL_TEXTURE1,
+    GL_TEXTURE_2D,
     GL_TRIANGLES,
     GL_BLEND,
+    GL_RGBA,
+    GL_RGBA8,
+    GL_UNSIGNED_BYTE,
+    GL_NEAREST,
 )
 from pyglet.math import Mat4
 from pyglet.graphics import Group
 from pyglet.graphics.shader import Shader, ShaderProgram
 
+import numpy as np
+
 import comms
 import config
-from povrender import COLUMNS, pack_colors, repeated, render, snapshot_vs2_scene
+from povrender import COLUMNS, render_frame, snapshot_vs2_scene
 
 display_enabled = config.DISPLAY_ENABLED
 pyglet.options['vsync'] = display_enabled
@@ -38,52 +48,54 @@ pyglet.options['vsync'] = display_enabled
 _vertex_source = """#version 330 core
     in vec2 position;
     in vec3 tex_coords;
-    in vec4 colors;
+    in vec2 led_uv;
     out vec3 texture_coords;
-    out vec4 v_colors;
+    out vec2 v_led_uv;
 
-    uniform WindowBlock 
+    uniform WindowBlock
     {                       // This UBO is defined on Window creation, and available
         mat4 projection;    // in all Shaders. You can modify these matrixes with the
         mat4 view;          // Window.view and Window.projection properties.
-    } window;  
+    } window;
 
     void main()
     {
         gl_Position = window.projection * window.view * vec4(position, 1, 1);
         texture_coords = tex_coords;
-        v_colors = colors;
+        v_led_uv = led_uv;
     }
 """
 
 _fragment_source = """#version 330 core
     in vec3 texture_coords;
-    in vec4 v_colors;
+    in vec2 v_led_uv;
     out vec4 final_colors;
 
     uniform sampler2D our_texture;
+    uniform sampler2D led_colors;
 
     // Pill shape with bloom glow
     void main() {
         vec2 uv = texture_coords.xy;
         vec2 center = vec2(0.5);
         vec2 p = uv - center;
-        
+
         // Pill dimensions
         float width = 0.1;
         float height = 0.05;
         float radius = height;
-        
+
         // Distance to pill shape
         vec2 q = abs(p) - vec2(width - radius, height - radius);
         float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-        
+
         float pill = smoothstep(0.01, -0.01, dist);
         float glow = exp(-dist * dist * 10.0) * 0.3;
-        
-        final_colors = v_colors * (pill + glow);
+
+        vec4 led_color = texture(led_colors, v_led_uv);
+        final_colors = led_color * (pill + glow);
     }
-    
+
 """
 
 vert_shader = Shader(_vertex_source, 'vertex')
@@ -94,17 +106,22 @@ shader_program = ShaderProgram(vert_shader, frag_shader)
 # Define a custom `Group` to encapsulate OpenGL state
 #####################################################
 class RenderGroup(Group):
-    """A Group that enables and binds a Texture and ShaderProgram.
+    """A Group that enables and binds two Textures and a ShaderProgram.
 
-    RenderGroups are equal if their Texture and ShaderProgram
-    are equal.
+    `texture` (unit 0) is the glow/pill shape; `led_texture` (unit 1) holds
+    the current frame's per-LED colors, sampled directly in the fragment
+    shader instead of carrying them as a per-vertex attribute (see
+    display_draw()). RenderGroups are equal if their Textures and
+    ShaderProgram are equal.
     """
-    def __init__(self, texture, program, order=0, parent=None):
+    def __init__(self, texture, led_texture, program, order=0, parent=None):
         """Create a RenderGroup.
 
         :Parameters:
             `texture` : `~pyglet.image.Texture`
-                Texture to bind.
+                Glow/pill shape texture to bind on unit 0.
+            `led_texture` : `~pyglet.image.Texture`
+                Per-LED color data texture to bind on unit 1.
             `program` : `~pyglet.graphics.shader.ShaderProgram`
                 ShaderProgram to use.
             `order` : int
@@ -114,11 +131,14 @@ class RenderGroup(Group):
         """
         super().__init__(order, parent)
         self.texture = texture
+        self.led_texture = led_texture
         self.program = program
 
     def set_state(self):
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(self.texture.target, self.texture.id)
+        glActiveTexture(GL_TEXTURE1)
+        glBindTexture(self.led_texture.target, self.led_texture.id)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_COLOR, GL_SRC_COLOR)
         glBlendEquation(GL_MAX)
@@ -129,12 +149,14 @@ class RenderGroup(Group):
         glDisable(GL_BLEND)
 
     def __hash__(self):
-        return hash((self.texture.target, self.texture.id, self.order, self.parent, self.program))
+        return hash((self.texture.target, self.texture.id, self.led_texture.id,
+                     self.order, self.parent, self.program))
 
     def __eq__(self, other):
         return (self.__class__ is other.__class__ and
                 self.texture.target == other.texture.target and
                 self.texture.id == other.texture.id and
+                self.led_texture.id == other.led_texture.id and
                 self.order == other.order and
                 self.program == other.program and
                 self.parent == other.parent)
@@ -153,15 +175,42 @@ led_count = 54
 LED_SIZE = 100
 vertex_list = None
 texture = pyglet.image.load("glow.png").get_texture(rectangle=True)
-group = RenderGroup(texture, shader_program)
+# Per-LED color data as a small texture instead of a per-vertex attribute:
+# one texel per LED (COLUMNS x led_count), updated wholesale each frame via
+# glTexSubImage2D in display_draw(). GL_NEAREST so sampling never blends
+# neighboring LEDs/columns together.
+led_color_texture = pyglet.image.Texture.create(
+    COLUMNS, led_count, target=GL_TEXTURE_2D, internalformat=GL_RGBA8,
+    min_filter=GL_NEAREST, mag_filter=GL_NEAREST, fmt=GL_RGBA,
+)
+group = RenderGroup(texture, led_color_texture, shader_program)
+# our_texture (unit 0, the glow/pill shape) isn't actually sampled in the
+# fragment shader -- the pill/glow effect is procedural, computed from
+# texture_coords directly -- so the GLSL compiler optimizes that uniform
+# away and setting it would raise. Only led_colors (unit 1) is real.
+shader_program.use()
+shader_program["led_colors"] = 1
+shader_program.stop()
 
 def display_init(led_count):
+    """Build the LED quad geometry as an indexed vertex list.
+
+    Each LED quad has 4 distinct corners; the previous non-indexed list
+    stored 6 vertices per LED (2 duplicated) so every triangle could inline
+    its own corners. That meant the "colors" attribute -- the one thing
+    updated every frame from the rendered pixels -- carried 6x redundant
+    copies of the same per-LED color, tripling the pack/upload cost for no
+    visual difference. Indexing lets each corner (and its color) exist once,
+    referenced twice by the index buffer for its two triangles.
+    """
     led_step = (LED_SIZE / led_count)
     vertex_pos = []
+    led_uv = []
     theta = (math.pi * 2 / COLUMNS)
     def arc_chord(r):
         return 2 * r * math.sin(theta / 2)
 
+    indices = []
 
     for column in range(COLUMNS):
         x1, x2 = 0, 0
@@ -176,20 +225,29 @@ def display_init(led_count):
             v2 = pm.Vec2(x2, y1).rotate(angle)
             v3 = pm.Vec2(x4, y2).rotate(angle)
             v4 = pm.Vec2(x3, y2).rotate(angle)
-            vertex_pos.extend([v1.x, v1.y, v2.x, v2.y, v3.x, v3.y,
-                                v1.x, v1.y, v3.x, v3.y, v4.x, v4.y])
+            # 4 unique corners; the original two triangles were (v1,v2,v3)
+            # and (v1,v3,v4), reproduced here via indices instead of
+            # duplicating v1/v3 in the vertex data itself.
+            base = (column * led_count + i) * 4
+            vertex_pos.extend([v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v4.x, v4.y])
+            indices.extend([base, base + 1, base + 2, base, base + 2, base + 3])
+            # Texel center for this LED in led_color_texture (COLUMNS wide,
+            # led_count tall); identical for all 4 corners -- it's which LED
+            # this quad is, not a per-corner value.
+            u = (column + 0.5) / COLUMNS
+            v = (i + 0.5) / led_count
+            led_uv.extend([u, v] * 4)
             x1, x2 = x3, x4
 
-    vertex_colors = (255, 128, 0, 255) * led_count * 6 * COLUMNS
-    texture_pos = (0.0,0.0,0, 1.0,0.0,0, 1.0,1.0,0, 
-                   0.0,0.0,0, 1.0,1.0,0, 0.0,1.0,0) * led_count * COLUMNS
+    texture_pos = (0.0, 0.0, 0, 1.0, 0.0, 0, 1.0, 1.0, 0, 0.0, 1.0, 0) * led_count * COLUMNS
 
     global vertex_list
-    vertex_list = shader_program.vertex_list(
-        led_count * 6 * COLUMNS,
-        mode=GL_TRIANGLES,
+    vertex_list = shader_program.vertex_list_indexed(
+        led_count * 4 * COLUMNS,
+        GL_TRIANGLES,
+        indices,
         position=('f', vertex_pos),
-        colors=('Bn', vertex_colors),
+        led_uv=('f', led_uv),
         tex_coords=('f', texture_pos),
         group=group,
         batch=batch
@@ -435,48 +493,73 @@ def draw_workbench_controls():
     controls_batch.draw()
 
 
+# Base state preview: a compact Super Ventilagon-inspired dial + button
+# preview. Built once here and repositioned/recolored in place every frame
+# instead of allocating fresh Shape/Label objects per draw (each allocation
+# sets up its own vertex list/shader state, which was costing several
+# ms/frame -- occasionally tens of ms -- for geometry that's otherwise
+# static from frame to frame).
+_bp_width, _bp_height = 194, 126
+_bp_dial_w, _bp_dial_h = 100, 64
+base_preview_batch = pyglet.graphics.Batch()
+
+bp_panel_outer = shapes.Rectangle(0, 0, _bp_width, _bp_height, color=(3, 4, 6), batch=base_preview_batch)
+bp_panel_inner = shapes.Rectangle(0, 0, _bp_width - 8, _bp_height - 8, color=(13, 16, 22), batch=base_preview_batch)
+# The 16 WS2812s are hidden behind a rectangular, black-bezel instrument
+# panel. Their current strip color lights its face rather than appearing
+# as individual dots.
+bp_dial_back = shapes.Rectangle(0, 0, _bp_dial_w, _bp_dial_h, color=(1, 2, 4), batch=base_preview_batch)
+# The illuminated display occupies the upper part; the lower third is
+# the black control panel where the real needle pivots.
+bp_dial_face = shapes.Rectangle(0, 0, _bp_dial_w - 12, _bp_dial_h - 29, color=(0, 0, 0), batch=base_preview_batch)
+bp_label_super = pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, weight="bold",
+                                    anchor_x="center", color=(0, 0, 0, 255), batch=base_preview_batch)
+bp_label_ventilagon = pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, weight="bold",
+                                         anchor_x="center", color=(0, 0, 0, 255), batch=base_preview_batch)
+bp_needle = shapes.Line(0, 0, 0, 0, thickness=3, color=(0, 0, 0), batch=base_preview_batch)
+bp_pivot = shapes.Circle(0, 0, 4, color=(0, 0, 0), batch=base_preview_batch)
+bp_button_rings = [shapes.Circle(0, 0, 15, color=(20, 22, 25), batch=base_preview_batch) for _ in range(2)]
+bp_button_faces = [shapes.Circle(0, 0, 12, color=(235, 235, 230), batch=base_preview_batch) for _ in range(2)]
+bp_button_leds = [shapes.Circle(0, 0, 5, color=(52, 12, 12), batch=base_preview_batch) for _ in range(2)]
+
+
 def draw_base_preview():
-    """Draw a compact Super Ventilagon-inspired base state preview."""
+    """Position/recolor the base state preview for this frame and draw it."""
     state = comms.base_control
-    width, height = 194, 126
-    x, y = window.width - width - 14, 14
-    shapes.Rectangle(x, y, width, height, color=(3, 4, 6)).draw()
-    shapes.Rectangle(x + 4, y + 4, width - 8, height - 8, color=(13, 16, 22)).draw()
+    # Right-aligned against the window edge, so this is recomputed every
+    # frame in case the window was resized.
+    x, y = window.width - _bp_width - 14, 14
+    bp_panel_outer.position = (x, y)
+    bp_panel_inner.position = (x + 4, y + 4)
 
-    red, green, blue = state.dial_rgb
+    dial_x, dial_y = x + 12, y + 34
+    bp_dial_back.position = (dial_x, dial_y)
+    bp_dial_face.position = (dial_x + 6, dial_y + 22)
+    bp_dial_face.color = state.dial_rgb
 
-    # The 16 WS2812s are hidden behind a rectangular, black-bezel instrument
-    # panel. Their current strip color lights its face rather than appearing
-    # as individual dots.
-    dial_x, dial_y, dial_w, dial_h = x + 12, y + 34, 100, 64
-    shapes.Rectangle(dial_x, dial_y, dial_w, dial_h, color=(1, 2, 4)).draw()
-    # The illuminated display occupies the upper part; the lower third is
-    # the black control panel where the real needle pivots.
-    shapes.Rectangle(dial_x + 6, dial_y + 22, dial_w - 12, dial_h - 29,
-                     color=(red, green, blue)).draw()
     # The real pivot sits below the rectangular panel. A 100-degree sweep
     # reproduces its constrained mechanical travel: left-up, top, right-up.
-    center_x, center_y = dial_x + dial_w / 2, dial_y + 11
-    pyglet.text.Label("SUPER", font_name="Courier New", font_size=7, weight="bold",
-                      x=center_x, y=dial_y + 45, anchor_x="center",
-                      color=(0, 0, 0, 255)).draw()
-    pyglet.text.Label("VENTILAGON", font_name="Courier New", font_size=6, weight="bold",
-                      x=center_x, y=dial_y + 37, anchor_x="center",
-                      color=(0, 0, 0, 255)).draw()
+    center_x, center_y = dial_x + _bp_dial_w / 2, dial_y + 11
+    bp_label_super.position = (center_x, dial_y + 45, 0)
+    bp_label_ventilagon.position = (center_x, dial_y + 37, 0)
+
     # Preview orientation: 0 = left-up, midpoint = top, 255 = right-up.
     angle = math.radians(140 - 100 * state.servo_position / 255)
-    needle_x = center_x + math.cos(angle) * 40
-    needle_y = center_y + math.sin(angle) * 40
-    shapes.Line(center_x, center_y, needle_x, needle_y, thickness=3, color=(0, 0, 0)).draw()
-    shapes.Circle(center_x, center_y, 4, color=(0, 0, 0)).draw()
+    bp_needle.x, bp_needle.y = center_x, center_y
+    bp_needle.x2 = center_x + math.cos(angle) * 40
+    bp_needle.y2 = center_y + math.sin(angle) * 40
+    bp_pivot.position = (center_x, center_y)
 
     now_ms = int(time.monotonic() * 1000)
     for index, mask in enumerate((1, 2)):
         lit = state.button_lit(mask, now_ms)
         button_x = x + 130 + index * 37
-        shapes.Circle(button_x, y + 39, 15, color=(20, 22, 25)).draw()
-        shapes.Circle(button_x, y + 39, 12, color=(235, 235, 230)).draw()
-        shapes.Circle(button_x, y + 39, 5, color=(230, 24, 20) if lit else (52, 12, 12)).draw()
+        bp_button_rings[index].position = (button_x, y + 39)
+        bp_button_faces[index].position = (button_x, y + 39)
+        bp_button_leds[index].position = (button_x, y + 39)
+        bp_button_leds[index].color = (230, 24, 20) if lit else (52, 12, 12)
+
+    base_preview_batch.draw()
 
 def display_draw():
     window.clear()
@@ -491,14 +574,20 @@ def display_draw():
     orig_projection = window.projection
     window.projection = pm.Mat4.orthogonal_projection(-x_half, x_half, -y_half, y_half, -100, 100)
 
-    all_pixels = []
     try:
         vs2_scene = snapshot_vs2_scene()
-        for column in range(COLUMNS):
-            all_pixels.extend(render(column, vs2_scene))
+        pixels = render_frame(vs2_scene)  # numpy uint32[COLUMNS*led_count], 0xAABBGGRR == RGBA bytes
 
-        vertex_colors = pack_colors(list(repeated(6, all_pixels)))
-        vertex_list.set_attribute_data("colors", vertex_colors)
+        # One texel per LED instead of a per-vertex attribute repeated 4x:
+        # rows are LEDs (height=led_count), columns are POV columns
+        # (width=COLUMNS), matching led_color_texture's shape.
+        image = np.ascontiguousarray(pixels.reshape(COLUMNS, led_count).T)
+        glBindTexture(GL_TEXTURE_2D, led_color_texture.id)
+        glTexSubImage2D(
+            GL_TEXTURE_2D, 0, 0, 0, COLUMNS, led_count,
+            GL_RGBA, GL_UNSIGNED_BYTE,
+            image.ctypes.data_as(ctypes.c_void_p),
+        )
         batch.draw()
     except Exception as e:
         traceback.print_exc()

@@ -48,6 +48,8 @@ shape and the rules that keep biting.
 - **[emulator-audio.md](emulator-audio.md)** — streaming console
   sound-chip register writes to the host synth (`emulator/chipsynth`).
 - **[ota.md](ota.md)** — the three-tier OTA update system.
+- **[game-packages.md](game-packages.md)** — .vs2 game packages: editor/CLI
+  build, push to the base, single-file board install, menu rom merging.
 - **[native-app-handoff.md](native-app-handoff.md)** — launching retro-go
   apps (Voom, NES, SMS) from the MicroPython launcher via partition
   switching.

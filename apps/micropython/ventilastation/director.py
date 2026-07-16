@@ -184,6 +184,23 @@ class Director:
                 return False
             import machine
             machine.reset()
+        elif cmd == "install_start":
+            # "install_start <url> <sha256> <size>" — fetch and install one
+            # stripped game package (.no-sound.vs2). Same reboot dance as
+            # ota_start: the transfer must run before the GPU task starts.
+            if len(parts) != 4:
+                print("director: malformed install_start:", cmd_line)
+                return False
+            request = " ".join(parts[1:])
+            print("director: package install requested — rebooting into install mode")
+            try:
+                with open("/install_request", "w") as _f:
+                    _f.write(request)
+            except Exception as _e:
+                print("director: failed to write install_request:", _e)
+                return False
+            import machine
+            machine.reset()
         else:
             print("director: unknown control command:", cmd_line)
         return False

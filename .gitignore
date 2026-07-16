@@ -16,12 +16,21 @@ hardware/rotor/micropython
 apps/micropython/roms/*.rom
 *.mp3.wav
 
+# Game packages pushed from the editor (see emulator/package_manager.py)
+installed_packages/
+
 # Per-device / per-user state
 apps/micropython/ventilastation/settings.json
 
 # Vendored-at-setup binaries (see emulator/ffmpeg-win/README.md)
 emulator/ffmpeg-win/*.dll
 emulator/ffmpeg-win/*.exe
+
+# Built by emulator/native/build.sh (see native_render.py); platform-specific,
+# rebuilt automatically by vs-emu.sh.
+emulator/native/*.so
+emulator/native/*.dll
+emulator/native/*.dylib
 
 # Node
 node_modules/

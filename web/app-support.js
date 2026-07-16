@@ -332,22 +332,6 @@ function buildRenderProfileSnapshot(samples) {
   };
 }
 
-function fillRepeatedLedColors(ledPixels, repeatedWords, multiplier) {
-  const ledWords = new Uint32Array(
-    ledPixels.buffer,
-    ledPixels.byteOffset,
-    ledPixels.byteLength / 4
-  );
-  let dest = 0;
-  for (let index = 0; index < ledWords.length; index += 1) {
-    const word = ledWords[index];
-    for (let repeat = 0; repeat < multiplier; repeat += 1) {
-      repeatedWords[dest] = word;
-      dest += 1;
-    }
-  }
-}
-
 async function resolveFirstAvailableUrl(paths, { method = "HEAD" } = {}) {
   for (const baseUrl of PROJECT_ROOT_CANDIDATES) {
     for (const path of paths) {
@@ -460,7 +444,6 @@ export {
   getNestedValue,
   summarizeProfileValues,
   buildRenderProfileSnapshot,
-  fillRepeatedLedColors,
   resolveFirstAvailableUrl,
   decodeSpriteStateBuffer,
   decodeVs2SceneBuffer,

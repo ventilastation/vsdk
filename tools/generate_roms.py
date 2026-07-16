@@ -72,9 +72,13 @@ def rom_name_for_folder(folder):
     return folder.parts[-1]
 
 
-def generate_rom(folder, palettegroups, spritedef_path):
-    rom_name = rom_name_for_folder(folder)
-    rom_filename = Path(ROMS_FOLDER) / (rom_name + ".rom")
+def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
+    if rom_filename is None:
+        rom_name = rom_name_for_folder(folder)
+        rom_filename = Path(ROMS_FOLDER) / (rom_name + ".rom")
+    else:
+        rom_filename = Path(rom_filename)
+        rom_name = rom_filename.stem
     rom_timestamp = rom_filename.stat().st_mtime if rom_filename.exists() else 0
     src_filenames = (folder / filename for group in palettegroups for filename, _ in group)
 
@@ -291,11 +295,37 @@ def load_palettegroups(spritedef_path):
         palettegroups.append(normalized_group)
     return palettegroups
 
-for search_root in SEARCH_ROOTS:
-    if not search_root.exists():
-        continue
-    for root, dirs, files in search_root.walk(on_error=print):
-        if STRIPEDEF_FILENAME in files:
-            spritedef_path = root / STRIPEDEF_FILENAME
-            palettegroups = load_palettegroups(spritedef_path)
-            generate_rom(root, palettegroups, spritedef_path)
+def generate_menu_icon_rom(game_dir, rom_filename):
+    """Build a one-strip rom holding a game's menu icon and its palette.
+
+    The strip id matches ventilastation/catalog.py's default menu_strip
+    (<group>/<name>/menu.png), so merging this rom into the board's menu
+    rom (ventilastation/menurom.py) makes a package-installed game's icon
+    addressable by the launcher without touching any yaml."""
+    import json
+
+    game_dir = Path(game_dir)
+    menu_png = game_dir / "menu.png"
+    frames = 1
+    meta_path = game_dir / "meta.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+        frames = int(meta.get("menu_frames", 1))
+    strip_id = "/".join(game_dir.parts[-2:]) + "/menu.png"
+    palettegroups = [[("menu.png", {"frames": frames, "id": strip_id})]]
+    generate_rom(game_dir, palettegroups, menu_png, rom_filename=rom_filename)
+
+
+def generate_all(search_roots=SEARCH_ROOTS):
+    for search_root in search_roots:
+        if not search_root.exists():
+            continue
+        for root, dirs, files in search_root.walk(on_error=print):
+            if STRIPEDEF_FILENAME in files:
+                spritedef_path = root / STRIPEDEF_FILENAME
+                palettegroups = load_palettegroups(spritedef_path)
+                generate_rom(root, palettegroups, spritedef_path)
+
+
+if __name__ == "__main__":
+    generate_all()

@@ -9,9 +9,12 @@ import random
 import math
 from struct import pack, unpack, unpack_from
 
+import numpy as np
+
 from deepspace import deepspace, PIXELS
-from apa102 import decode_preview_rgb
+from apa102 import decode_frame
 from color_profile import ColorProfile, DEFAULT_PROFILE
+import native_render
 
 ROWS = 256
 COLUMNS = 256
@@ -21,6 +24,12 @@ led_count = PIXELS
 
 starfield = [(random.randrange(COLUMNS), random.randrange(ROWS)) for n in range(STARS)]
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
+
+def set_spritedata(data):
+    """Install the pre-VS2 fixed 100-sprite-slot table, keeping the Python
+    renderer's spritedata and the native renderer's sprites[] in sync."""
+    spritedata[:] = data
+    native_render.set_legacy_sprites(data)
 # Decoded VS2 scenes are immutable after publication.  The communications
 # thread swaps this one reference only after it has decoded the full payload,
 # and a display draw captures it once for all 256 columns.
@@ -34,52 +43,73 @@ upalette = []
 # (the workbench's LED-bus capture, or a full-frame renderer like the
 # Ventilagon port). 256 columns × led_count × 3 bytes (R, G, B per LED).
 _voom_frame_rgb = None
-_voom_frame_apa102 = None
+_voom_frame_apa102_raw = None
+_voom_frame_apa102_pixels = None
 _apa102_profile = DEFAULT_PROFILE
 
 def set_voom_frame_rgb(data):
-    global _voom_frame_rgb, _voom_frame_apa102
+    global _voom_frame_rgb, _voom_frame_apa102_raw, _voom_frame_apa102_pixels
     _voom_frame_rgb = bytes(data)
-    _voom_frame_apa102 = None
+    _voom_frame_apa102_raw = None
+    _voom_frame_apa102_pixels = None
+
+def _decode_apa102_frame():
+    """Recompute the cached preview pixels for the current raw capture.
+
+    decode_frame() is vectorized but still costs real time; running it once
+    here per captured frame (or per calibration update) instead of once per
+    rendered pixel per redraw is what keeps the desktop preview off the CPU's
+    critical path.
+    """
+    global _voom_frame_apa102_pixels
+    if _voom_frame_apa102_raw is None:
+        _voom_frame_apa102_pixels = None
+    else:
+        _voom_frame_apa102_pixels = decode_frame(_voom_frame_apa102_raw, _apa102_profile).tolist()
 
 def set_voom_frame_apa102(data):
     """Install a raw, spatially reassembled APA102 capture frame.
 
     The workbench has already placed the two physical arms into display
-    coordinates, but each LED remains exactly [GB, B, G, R].  Decode it only
-    when rendering, so a future calibration-profile change can reinterpret
-    the same captured data correctly.
+    coordinates, but each LED remains exactly [GB, B, G, R]. Decoded once here
+    into preview pixels; set_apa102_profile_payload() re-decodes this same raw
+    frame if a new calibration profile arrives before the next capture does.
     """
     expected = COLUMNS * led_count * 4
     if len(data) != expected:
         raise ValueError("frame_apa102 has %d bytes, expected %d" % (len(data), expected))
-    global _voom_frame_rgb, _voom_frame_apa102
-    _voom_frame_apa102 = bytes(data)
+    global _voom_frame_rgb, _voom_frame_apa102_raw
+    _voom_frame_apa102_raw = bytes(data)
     _voom_frame_rgb = None
+    _decode_apa102_frame()
 
 def set_apa102_profile_payload(payload, schema_version=None, generation=None):
     """Install the board's acknowledged calibration profile for raw preview."""
     profile = ColorProfile.from_bytes(payload, schema_version, generation)
     global _apa102_profile
     _apa102_profile = profile
+    _decode_apa102_frame()
     return profile
 
 def get_apa102_profile():
     return _apa102_profile
 
 def clear_voom_frame():
-    global _voom_frame_rgb, _voom_frame_apa102
+    global _voom_frame_rgb, _voom_frame_apa102_raw, _voom_frame_apa102_pixels
     _voom_frame_rgb = None
-    _voom_frame_apa102 = None
+    _voom_frame_apa102_raw = None
+    _voom_frame_apa102_pixels = None
 
 def clear_vs2_scene():
     global _vs2_scene
     _vs2_scene = None
+    native_render.clear_scene()
 
 def set_vs2_scene(data):
     global _vs2_scene
     scene = decode_vs2_scene(data)
     _vs2_scene = scene
+    native_render.decode_scene(data)
 
 
 def snapshot_vs2_scene():
@@ -207,6 +237,16 @@ def set_palettes(paldata):
     global palette, upalette
     palette = change_colors(paldata)
     upalette = unpack_palette(palette)
+    native_render.set_palette(paldata)
+
+def set_image_strip(slot, data):
+    """Install one decoded image strip, keeping the Python renderer's
+    all_strips and the native renderer's image_stripes[] in sync. ImageStrip's
+    C layout (frame_width, frame_height, total_frames, palette, then raw
+    pixel data) is byte-identical to this wire blob, so the native side is a
+    zero-copy pointer cast -- see emu_gpu_set_image_strip()."""
+    all_strips[slot] = data
+    native_render.set_image_strip(slot, data)
 
 def get_visible_column(sprite_x, sprite_width, render_column):
     sprite_column = sprite_width - 1 - ((render_column - sprite_x + COLUMNS) % COLUMNS)
@@ -237,6 +277,23 @@ def set_pixel(pixels, led, color):
     if 0 <= led < led_count:
         pixels[led] = color
 
+# Every strip's 4-byte header (w, h, total_frames, pal_base) is immutable for
+# as long as the strip's bytes object lives -- comms.py always installs a new
+# bytes object on reload, so caching by identity needs no manual invalidation.
+# Without this, render()/render_tilemap() re-ran struct.unpack on the same
+# static header for every column (256x/frame) for every visible sprite/tile.
+_strip_header_cache = {}
+
+def _strip_header(strip):
+    cached = _strip_header_cache.get(id(strip))
+    if cached is not None and cached[0] is strip:
+        return cached[1:]
+    w, h, total_frames, pal = unpack("BBBB", strip[0:4])
+    if w == 255: w = 256 # special case for the planet backdrops
+    header = (w, h, total_frames, 256 * pal, memoryview(strip)[4:])
+    _strip_header_cache[id(strip)] = (strip,) + header
+    return header
+
 def render_tilemap(pixels, column, tilemap):
     # FULLSCREEN tilemaps are unsupported; only TUNNEL (1) and HUD (2) render.
     perspective = tilemap["perspective"]
@@ -245,15 +302,12 @@ def render_tilemap(pixels, column, tilemap):
     strip = all_strips.get(tilemap["image"])
     if not strip:
         return
-    w, h, total_frames, pal = unpack("BBBB", strip[0:4])
-    if w == 255: w = 256 # special case for the planet backdrops
+    w, h, total_frames, pal_base, pixeldata = _strip_header(strip)
     tile_w = tilemap["tile_width"]
     tile_h = tilemap["tile_height"]
     if w != tile_w or h != tile_h:
         return
     total_frames = total_frames or 1
-    pal_base = 256 * pal
-    pixeldata = memoryview(strip)[4:]
 
     map_columns = tilemap["columns"]
     map_w = map_columns * tile_w
@@ -298,24 +352,18 @@ def step_starfield():
             y = ROWS - 1
             x = random.randrange(COLUMNS)
         starfield[n] = (x, y)
+    native_render.step_starfield()
 
 
 def render(column, vs2_scene=_CURRENT_VS2_SCENE):
     if vs2_scene is _CURRENT_VS2_SCENE:
         vs2_scene = _vs2_scene
-    if _voom_frame_apa102 is not None:
-        # Raw hardware capture: column N = led_count × [GB, B, G, R].
-        # decode_preview_rgb applies the nominal APA102 light model and
-        # monitor sRGB encoding. The calibrated profile-aware decoder will
-        # replace its default response curves without changing this transport.
-        offset = column * led_count * 4
-        pixels = []
-        for i in range(led_count):
-            base = offset + i * 4
-            gb, b, g, r = _voom_frame_apa102[base:base + 4]
-            preview_r, preview_g, preview_b = decode_preview_rgb(gb, b, g, r, _apa102_profile)
-            pixels.append(0xFF000000 | (preview_b << 16) | (preview_g << 8) | preview_r)
-        return pixels
+    if _voom_frame_apa102_pixels is not None:
+        # Raw hardware capture: column N = led_count × [GB, B, G, R], already
+        # decoded into preview pixels by _decode_apa102_frame() when the frame
+        # (or the calibration profile) was installed.
+        offset = column * led_count
+        return _voom_frame_apa102_pixels[offset:offset + led_count]
 
     if _voom_frame_rgb is not None:
         # RGB voom frame: column N = led_count × (R, G, B) triples
@@ -378,10 +426,7 @@ def render(column, vs2_scene=_CURRENT_VS2_SCENE):
         strip = all_strips.get(image)
         if not strip:
             continue
-        w, h, total_frames, pal = unpack("BBBB", strip[0:4])
-        pal_base = 256 * pal
-        if w == 255: w = 256 # special case for the planet backdrops
-        pixeldata = memoryview(strip)[4:]
+        w, h, total_frames, pal_base, pixeldata = _strip_header(strip)
 
         frame %= total_frames
 
@@ -419,3 +464,27 @@ def render(column, vs2_scene=_CURRENT_VS2_SCENE):
                         set_pixel(pixels, led, color)
 
     return pixels
+
+
+def render_frame(vs2_scene):
+    """Render all 256 columns at once. Returns a numpy uint32 array
+    (COLUMNS*led_count) of packed pixels in render()'s 0xAABBGGRR layout.
+
+    Raw hardware-capture display (_voom_frame_apa102_pixels/_voom_frame_rgb)
+    still goes through render() per column -- the native renderer only
+    replaces the VS2-scene path and the pre-VS2 fixed 100-sprite-slot path
+    (render()/render_tilemap()'s two branches in Python), which is what
+    real games and the menu actually spend their render time in.
+    """
+    if _voom_frame_apa102_pixels is None and _voom_frame_rgb is None:
+        native_pixels = (
+            native_render.render_frame() if vs2_scene is not None
+            else native_render.render_legacy_frame()
+        )
+        if native_pixels is not None:
+            return native_pixels
+
+    all_pixels = []
+    for column in range(COLUMNS):
+        all_pixels.extend(render(column, vs2_scene))
+    return np.array(all_pixels, dtype=np.uint32)
