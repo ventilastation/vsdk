@@ -2,13 +2,13 @@
 
 Desktop emulator frame time went from ~80ms to ~2.7ms across four rounds of
 profiling and fixes (branch `perf/desktop-emulator-render`). This doc is the
-reusable part: what was actually slow, why, and the general lessons -- so the
-same investigation doesn't have to be redone from scratch for the web
-emulator (see "Open work" at the end).
+reusable part: what was actually slow, why, and the general lessons -- and
+now also what happened applying them to the web emulator (see "Applying this
+to the web emulator" at the end).
 
 ## Status
 
-**Desktop emulator: done.** Four commits on `perf/desktop-emulator-render`:
+**Desktop emulator: done.** Five commits on `perf/desktop-emulator-render`:
 
 1. `684773b` -- vectorized + cached the APA102 raw-capture preview decode
    (color-profile handshake had made it ~5x slower: ~9.5fps ceiling).
@@ -21,7 +21,17 @@ emulator (see "Open work" at the end).
 4. `ea2ab9a` -- moved per-LED colors from a duplicated per-vertex attribute
    to a sampled texture. ~25ms -> ~2.7ms/frame.
 
-**Web emulator: not started.** See "Applying this to the web emulator" below.
+**Web emulator: WebGL color-texture fix landed (`042f42c`), unverified in a
+real browser.** Same anti-pattern as desktop step 4 above -- confirmed by
+reading `LedRingWebGLRenderer.render()`, not by live profiling (no browser
+available in this environment; see "Applying this to the web emulator"
+below for what that constrains). JS compositing (`led-render-core.js`'s
+`computeLedFramePixels`) was measured directly under Node and is not a
+bottleneck (~0.6ms/frame at 14 sprites, ~1.9ms at 50, using
+`process.hrtime`) -- so the WASM-compile idea is probably not worth pursuing
+for that stage specifically; it might still be worth it to collapse the
+three parallel renderer implementations (Python/C/JS) into one, which is a
+maintainability argument more than a performance one for this stage.
 
 ## Lesson 1: profile the real thing, not your assumption of it
 
@@ -144,42 +154,62 @@ against the existing test suite (`tests/test_apa102_preview.py`,
 
 ## Applying this to the web emulator
 
-Not yet done. The web emulator's rendering is architecturally different
-enough that the specific fixes won't port directly, but the questions to ask
-are the same ones from Lesson 1: profile the real thing running (idle menu,
-real assets), don't assume which code path or layer is hot.
+**Investigated and one fix landed (`042f42c`); not verified in a real
+browser** -- this sandbox has no browser, no Playwright/Puppeteer, no
+headless-GL. Everything below was confirmed by reading code and by running
+`led-render-core.js` under plain Node (it's Node-importable via its UMD
+wrapper, same trick `tests/test_web_input_v2.mjs` already uses to import
+browser JS headlessly), not by loading a real page. Test in a real browser
+before trusting the WebGL change; see the commit message for what to check
+(the diagnostics panel's existing "Color Expand"/"Upload" timings, Force 2D
+Fallback toggle for a before/after comparison).
 
-Relevant existing pieces (see `docs/internals/web-emulator-architecture.md`):
+Confirmed structure (see `docs/internals/web-emulator-architecture.md` for
+the wider architecture):
 
-- `web/led-render-core.js` / `web/led-ring-renderers.js` -- the browser-side
-  renderer(s); likely the JS-side equivalent of `povrender.py`'s per-column
-  compositing loop, and so the likely home of a Lesson-2-shaped bottleneck
-  (per-vertex/per-pixel JS work, WebGL upload cost) if `app.js` renders via
-  WebGL.
-- `web/render-parity-test.js` -- already exists and is tested for parity
-  against the Python renderer per `tests/native/test_render_vs2.c`'s doc
-  comment ("fixtures mirror ... web/render-parity-test.js"). That means
-  there may already be three parallel implementations of the same rendering
-  logic (Python, C, JS) -- worth checking whether the JS one could instead
-  call into a WASM build of `gpu.c`, the same "reuse the canonical
-  implementation" move as Lesson 4, rather than a fourth from-scratch port.
-- MicroPython itself already runs as WASM in a worker
-  (`web/wasm-worker.js`), and `gpu.c` already builds as a MicroPython native
-  C module on real hardware -- so compiling it into the WASM MicroPython
-  build (Emscripten) is plausible, not just "compile gpu.c to a standalone
-  WASM module called from JS." Which of the two is more viable depends on
-  how the existing WASM build is put together; needs investigation before
-  committing to either.
-- If `app.js` renders via WebGL: the same per-entity-data-as-texture idea
-  from Lesson 2 applies directly (WebGL supports textures the same way
-  desktop GL does). If it renders via the 2D canvas fallback path, the
-  bottleneck shape is likely different (canvas `putImageData`/`fillRect`
-  costs instead of vertex/texture upload costs) and needs its own profiling
-  pass before assuming the same fix applies.
-- Given `docs/internals/web-emulator-architecture.md`'s existing "Current
-  Memory Rule" (prefer pointer+length over fresh bytes objects across the
-  MicroPython<->JS bridge, because bytes allocations caused heap growth in
-  the WASM build) -- any fix here should keep that rule in mind; a
-  texture-upload approach still needs the pixel data to reach JS as a
-  pointer+length view into WASM memory, not a freshly-allocated bytes
-  payload, to avoid reintroducing the leak that rule was written to prevent.
+- **Rendering is JS, not WASM.** MicroPython (running as WASM,
+  `web/wasm-worker.js`) only hands over raw sprite/VS2-scene bytes via
+  `post_present_ptr`; `app.js` decodes them and calls
+  `computeLedFramePixels()` in `web/led-render-core.js` every frame -- a
+  full JS reimplementation of `povrender.py`'s per-column/per-sprite
+  compositing loop. `web/render-parity-test.js` confirms this is a third
+  hand-maintained parallel implementation (Python/C/JS), kept in sync by
+  copying test fixtures across all three by hand (per
+  `tests/native/test_render_vs2.c`'s doc comment).
+- **That JS compositing stage is not the bottleneck.** Measured directly
+  under Node (`process.hrtime`, warmed-up loop): ~0.6ms/frame at 14 sprites
+  (roughly the desktop menu's sprite count), ~1.9ms at 50. V8's JIT handles
+  this fine; unlike the desktop's CPython interpreter, there's no
+  Lesson-4-shaped win available here on performance grounds alone. Reusing
+  `gpu.c` via a WASM build (Emscripten already builds a MicroPython
+  webassembly variant via `tools/build-micropython-webassembly.sh`, using
+  the standard `USER_C_MODULES`-equivalent variant mechanism -- so linking
+  `gpu.c` in is plausible, not from zero) would still be worth considering,
+  but as a maintainability move (collapse three parallel implementations
+  into one canonical source) rather than a performance one.
+- **The WebGL renderer had the exact Lesson-2 anti-pattern.**
+  `LedRingWebGLRenderer.render()` (`web/led-ring-renderers.js`) called
+  `fillRepeatedLedColors(ledPixels, this.colorWords, 6)` every frame --
+  duplicating each LED's color into 6 vertices -- then re-uploaded the
+  whole buffer via `bufferSubData` every frame. Fixed in `042f42c` the same
+  way as desktop step 4: static per-vertex `ledUV` (uploaded once) plus a
+  small per-LED color texture uploaded via `texSubImage2D` each frame,
+  sampled in the fragment shader. Convenient simplification here: the
+  `ledPixels` array is already column-major/led-minor (row-major for a
+  `PIXELS`-wide x `COLUMNS`-tall image), so the texture upload needs no
+  reshape/transpose the way the desktop one did.
+- **The Canvas 2D fallback (`LedRingCanvasRenderer`) was not touched.** It
+  does a `save()/translate()/rotate()/fillRect()/restore()` per lit LED (up
+  to 13,824 calls/frame) -- a different problem shape (per-shape Canvas API
+  call overhead, not vertex/texture upload), only reached when WebGL is
+  unavailable or forced off, and not something the JS-compositing
+  measurement above rules in or out. Worth its own profiling pass if it
+  turns out to matter in practice.
+- The existing "Current Memory Rule" in
+  `docs/internals/web-emulator-architecture.md` (prefer pointer+length over
+  fresh `bytes` objects across the MicroPython<->JS bridge, since that
+  caused heap growth in the WASM build) wasn't implicated here -- the
+  texture upload happens entirely on the JS/WebGL side, downstream of
+  where `ledPixels` already lands as a `Uint8Array`. Keep it in mind if a
+  future fix moves compositing into WASM, though: that would reopen the
+  same bridge-payload question this rule was written for.
