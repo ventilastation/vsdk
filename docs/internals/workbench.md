@@ -360,6 +360,18 @@ traffic on whatever terminal is watching the workbench's USB port. This is
 the link the pyglet emulator's `workbench_conn` (above) uses for button
 state and audio requests.
 
+## Device identification (RESYNC)
+
+`handle_host_bytes()` in `serial_bridge.c` also watches the host→DUT byte
+stream for the RESYNC marker (see
+[input-protocol-v2.md](input-protocol-v2.md#resync--device-identification)),
+intercepting it rather than forwarding it to the DUT. On match, the
+workbench itself resets (`esp_restart()`) and prints
+`VENTILASTATION WORKBENCH <version> <githash>` as the first thing
+`app_main()` does — this is what `tools/find_board.py` and the emulator now
+use to pick the workbench's port reliably, replacing the older
+`VSDK_BOARD_PROBE` literal-match probe.
+
 ## DUT firmware: one small change
 
 Everything the workbench does is transparent to the DUT except one addition:

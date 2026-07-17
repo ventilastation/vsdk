@@ -33,6 +33,69 @@ import package_manager
 import upgrade_server
 
 
+# --- RESYNC device identification (see
+# docs/internals/input-protocol-v2.md#resync--device-identification) ---
+# tools/find_board.py does the same probe for Makefile targets, using raw
+# termios instead of pyserial (which comms.py already depends on for its
+# actual connections, and which works on Windows too).
+RESYNC = b"\n\n\xd2ESYNC\n"
+_RESYNC_ID_PREFIX = b"VENTILASTATION "
+_RESYNC_KIND_BY_NAME = {
+    b"WORKBENCH": "workbench",
+    b"ROTOR": "ventilastation",
+    b"BASE": "base",
+}
+
+
+def _parse_resync_identification(response):
+    """Extract the device kind from a RESYNC identification line, if present."""
+    index = response.find(_RESYNC_ID_PREFIX)
+    if index == -1:
+        return None
+    rest = response[index + len(_RESYNC_ID_PREFIX):]
+    name = rest.split(b" ", 1)[0].split(b"\n", 1)[0].split(b"\r", 1)[0]
+    return _RESYNC_KIND_BY_NAME.get(name)
+
+
+def _probe_serial_kind(port, baud):
+    """Send RESYNC on `port` at `baud` and return the identified device kind,
+    or None (port didn't answer, isn't a Ventilastation device, or answered a
+    kind we don't recognize)."""
+    import serial
+
+    try:
+        with serial.Serial(port, baud, timeout=0.05) as ser:
+            ser.reset_input_buffer()
+            ser.write(RESYNC)
+            # Generous window: every device actually resets (or, for the
+            # base Arduino, reinitializes in place) before printing its
+            # identification line.
+            deadline = time.time() + 2.5
+            response = bytearray()
+            while time.time() < deadline:
+                chunk = ser.read(256)
+                if chunk:
+                    response.extend(chunk)
+                    kind = _parse_resync_identification(bytes(response))
+                    if kind:
+                        return kind
+            return None
+    except (OSError, serial.SerialException):
+        return None
+
+
+def _find_serial_port_for_kind(expected_kind, candidates, bauds=(115200, 57600)):
+    """Return the first candidate port that identifies itself as
+    `expected_kind` over RESYNC, trying each baud rate in turn (the rotor and
+    workbench's native USB-Serial-JTAG mostly ignores baud; the base Arduino
+    is a real UART at 57600)."""
+    for port in candidates:
+        for baud in bauds:
+            if _probe_serial_kind(port, baud) == expected_kind:
+                return port
+    return None
+
+
 class ConnectionBase:
     def __init__(self):
         self.sock = None
@@ -59,6 +122,13 @@ class ConnIP(ConnectionBase):
             self.sock.send(b)
 
 class ConnSerial(ConnectionBase):
+    def __init__(self, expected_kind=None):
+        super().__init__()
+        # "workbench" or "ventilastation" (the rotor's legacy direct-serial
+        # transport) -- used to pick the right port via RESYNC instead of
+        # guessing by name pattern. None keeps the old guess-only behavior.
+        self.expected_kind = expected_kind
+
     def readline(self):
         # Don't rely on io.RawIOBase's built-in readline() here: pyserial's
         # Serial only exposes readinto() (serialutil.py), and on at least
@@ -80,26 +150,36 @@ class ConnSerial(ConnectionBase):
     def setup(self):
         import serial
 
-        port = config.SERIAL_PORT or self._autodetect()
+        port = config.SERIAL_PORT or self._autodetect(self.expected_kind)
         if not port:
             raise socket.error("no serial port found (pass --serial-port /dev/tty... explicitly)")
         self.sock = self.sockfile = serial.Serial(port, 115200)
 
     @staticmethod
-    def _autodetect():
+    def _autodetect(expected_kind=None):
         # Cross-platform: match common USB-serial naming across macOS
         # (cu.usbmodem*/cu.usbserial*) and Linux (ttyACM*/ttyUSB*) for the
-        # workbench's USB bridge.
+        # workbench's USB bridge (and the rotor's own native USB-JTAG, for
+        # the legacy direct-serial transport).
+        candidates = []
         try:
             from serial.tools import list_ports
             candidates = [
                 p.device for p in list_ports.comports()
                 if any(tag in p.device for tag in ("usbmodem", "usbserial", "ttyACM", "ttyUSB"))
             ]
-            if candidates:
-                return sorted(candidates)[0]
         except ImportError:
             pass
+
+        if expected_kind and candidates:
+            port = _find_serial_port_for_kind(expected_kind, sorted(candidates))
+            if port:
+                return port
+            print(f"comms: no {expected_kind} board identified itself via RESYNC "
+                  "on any candidate port; falling back to guessing by port name")
+
+        if candidates:
+            return sorted(candidates)[0]
 
         # Legacy /dev scan (Super Ventilagon base on Raspberry Pi).
         try:
@@ -433,11 +513,11 @@ def start():
     if platform.system() == "Windows":
         display_conn = ConnWinNamedPipe()
     elif not config.USE_IP:
-        display_conn = ConnSerial()
+        display_conn = ConnSerial(expected_kind="ventilastation")
     else:
         display_conn = ConnIP()
 
-    workbench_conn = ConnSerial() if (config.HARDWARE_MODE and config.USE_IP) else None
+    workbench_conn = ConnSerial(expected_kind="workbench") if (config.HARDWARE_MODE and config.USE_IP) else None
 
     display_thread = threading.Thread(target=_receive_loop, args=(display_conn, "display"))
     display_thread.daemon = True
@@ -551,6 +631,11 @@ def send_workbench(line):
 
 # --- Super Ventilagon base: dedicated Arduino driving the start/stop relay ---
 
+# Fixed GPIO UART on a deployed Raspberry Pi Base -- not USB-enumerable, so
+# it can't be found by the RESYNC probe below (which only walks USB-serial
+# candidate ports). Kept as the fallback for that real deployed case; a
+# bench-tested Arduino on its own USB-to-serial adapter is found by RESYNC
+# identification first, same as the workbench/rotor in ConnSerial.
 ARDUINO_DEVICE = "/dev/ttyAMA0"
 _arduino = None
 _arduino_commands = {
@@ -560,11 +645,30 @@ _arduino_commands = {
     b"attract": b"s"
 }
 
+def _find_arduino_port():
+    try:
+        from serial.tools import list_ports
+        candidates = [
+            p.device for p in list_ports.comports()
+            if any(tag in p.device for tag in ("usbmodem", "usbserial", "ttyACM", "ttyUSB"))
+        ]
+    except ImportError:
+        candidates = []
+    port = _find_serial_port_for_kind("base", sorted(candidates), bauds=(57600, 115200))
+    if port:
+        return port
+    if os.path.exists(ARDUINO_DEVICE):
+        return ARDUINO_DEVICE
+    return None
+
 def _arduino_init():
     global _arduino
     try:
         import serial
-        _arduino = serial.Serial(ARDUINO_DEVICE, 57600)
+        port = _find_arduino_port()
+        if not port:
+            raise OSError("no base Arduino found")
+        _arduino = serial.Serial(port, 57600)
     except Exception:
         print("NOTE: Super Ventilagon base - Arduino not detected")
         _arduino = None
