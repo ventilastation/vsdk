@@ -160,6 +160,75 @@ mid-command from blocking the state machine indefinitely.
 
 ---
 
+## RESYNC / Device Identification
+
+Three separate devices speak this byte-level protocol to a host: the
+workbench board, the Base Arduino, and the rotor board (either running
+MicroPython or a native retro-go app, depending on which OTA partition is
+currently active). Tooling (the emulator, `tools/find_board.py`, and
+whatever Makefile targets pick a serial port) needs a reliable way to ask
+"what are you?" that works regardless of what the device happens to be
+doing — including if it's wedged.
+
+RESYNC is a 9-byte marker recognized unconditionally, in any parser state:
+
+```
+\n \n 0xD2 'E' 'S' 'Y' 'N' 'C' \n
+0A 0A D2  45  53  59  4E  43  0A
+```
+
+Only the leading `'R'` has its high bit set (`0x52 | 0x80 = 0xD2`); the rest
+of "ESYNC" is plain ASCII. This is always safe to recognize mid-frame or
+mid-command: bit 7 of every legitimate joystick data byte is always 0 (see
+above), so `0xD2` can never appear in real data. The leading `\n\n` is not
+load-bearing for recognition (the marker is matched as a fixed byte
+sequence regardless of state) but flushes/no-ops whatever a receiver might
+be accumulating in `COMMAND` state right up to the marker.
+
+On receiving the full sequence, a device:
+
+1. Stops whatever it is doing.
+2. Resets — a real reboot where the platform has one; a full in-place
+   reinitialization of its own state where it doesn't (e.g. the Base
+   Arduino, which has no reset facility and nothing that can wedge given
+   its simple non-blocking poll loop, so a state reinit is equivalent to a
+   reboot for its purposes).
+3. Prints one line as the first thing its application code does after
+   that reset (unavoidably after any ROM/bootloader output on a device
+   that reboots — "first" means first from the application, not literally
+   the first byte on the wire):
+
+```
+VENTILASTATION <NAME> <version> <githash>\n
+```
+
+`NAME` is `WORKBENCH`, `BASE`, or `ROTOR`. The rotor reports `ROTOR`
+regardless of whether MicroPython or a native retro-go app is currently
+running — for port-identification purposes what matters is which board is
+attached, not which application partition happens to be active. The
+leading `VENTILASTATION` token is a fixed anchor a prober can check for
+before parsing the rest of the line, since a port might have unrelated
+hardware on it that never answers this protocol at all. `<githash>` is
+`unknown` on builds that don't have one (see per-firmware notes).
+
+This protocol is the canonical way to identify a connected device; prefer
+it over ad hoc heuristics (port-name pattern matching, hardcoded device
+paths, REPL interruption) wherever a caller needs to know what's on the
+other end of a serial port. See `tools/find_board.py` and
+`emulator/comms.py` for the two current callers.
+
+The rotor board exposes two physically separate serial interfaces: the
+dedicated base-station UART (`input_parser.py`'s usual command channel) and
+the native USB-Serial-JTAG/UART0 console (the REPL wire). RESYNC is
+recognized on *either* one independently (`input_parser.py` for the former,
+`console_resync.py` for the latter), and the identification banner is
+always printed to both regardless of which interface the marker arrived
+on — so a prober connected only to the console (as `tools/find_board.py`
+and the emulator normally are) still gets a reliable answer without
+needing a wire into the base-station UART.
+
+---
+
 ## Command Reference
 
 | Command | Parameters | Notes |

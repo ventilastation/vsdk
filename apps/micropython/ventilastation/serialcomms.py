@@ -1,6 +1,7 @@
 import machine
 import sys
-from ventilastation import board_config
+from ventilastation import board_config, version
+from ventilastation.console_resync import ConsoleResyncScanner
 from ventilastation.input_parser import InputParser
 from ventilastation.uart_logging import InfoWriter
 
@@ -11,6 +12,22 @@ uart = machine.UART(
     baudrate=board_config.get("serial_baud"),
 )
 _parser = InputParser()
+_console_scanner = ConsoleResyncScanner()
+
+# RESYNC identification banner: the first thing this device puts on the wire
+# after any reset (including a RESYNC-triggered one), sent to both the
+# dedicated base-station UART and the console (UART0-REPL/USB-Serial-JTAG),
+# since RESYNC can arrive on either -- see console_resync.py and
+# docs/internals/input-protocol-v2.md#resync--device-identification. Written
+# raw to the UART rather than via print(), since install_stdout() (below,
+# called by main.py right after this module is imported) wraps print()
+# output in an "info" command envelope that a RESYNC prober wouldn't
+# recognize as the identification line it's looking for; the plain print()
+# here runs before that reassignment happens, so it still reaches the real
+# console.
+_banner = "VENTILASTATION %s %s %s" % (version.NAME, version.VERSION, version.GIT_HASH)
+uart.write(_banner + "\n")
+print(_banner)
 
 def _drain():
     chunk = uart.read(64)
@@ -24,6 +41,12 @@ def receive(bufsize):
 def next_command():
     _drain()
     return _parser.pop_command()
+
+def next_resync():
+    _drain()
+    if _parser.pop_resync():
+        return True
+    return _console_scanner.poll_pending()
 
 def next_joy2():
     return _parser.joy2

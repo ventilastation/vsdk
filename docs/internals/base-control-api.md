@@ -71,6 +71,20 @@ strip LEDs use one common curve. Future measured calibration may replace the
 2.2 table and add per-channel gains, but that remains Arduino-local and does
 not change the public byte API.
 
+## Device identification (RESYNC)
+
+The Arduino also watches its incoming byte stream for the RESYNC marker
+(see
+[input-protocol-v2.md](input-protocol-v2.md#resync--device-identification)),
+independent of the `base ...` command parser. On match it reinitializes its
+state (strip off, servo at rest, button LEDs off — the same defaults
+`setup()` establishes) and prints
+`VENTILASTATION BASE <version> <githash>`. The Arduino has no reset
+facility and nothing in its simple poll loop can wedge, so this
+reinitialization is the full RESYNC response — there is no separate "hard
+reset" path. `<githash>` is `unknown`: the Arduino build has no git-hash
+injection today, unlike the ESP-IDF firmwares.
+
 ## Emulator preview
 
 Both emulators present a compact, read-only preview at the stage's bottom
