@@ -15,6 +15,7 @@ import {
   EDITOR_OPEN_STORAGE_KEY,
   RENDERER_PROFILING_STORAGE_KEY,
   WEBGL_RESOLUTION_SCALE_STORAGE_KEY,
+  SCENE_RENDERER_STORAGE_KEY,
   SCENE_STEP_MS,
   MAX_CATCH_UP_STEPS,
   MAX_TICK_BACKLOG_MS,
@@ -36,10 +37,10 @@ import {
   decodeSpriteStateBuffer,
   decodeVs2SceneBuffer,
   decodeImageStripPayload,
-} from "./app-support.js?v=20260716a";
+} from "./app-support.js?v=20260717b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260716a";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260717f";
 
 
 class FailedRuntimeAdapter {
@@ -73,10 +74,12 @@ class BrowserHostApp {
     this.activeGamepadIndex = null;
     this.connectedGamepadCount = 0;
     this.assetIndex = new Map();
+    this.assetVersion = 0;
     this.assetRenderCache = new Map();
     this.visibleStripSlots = [];
     this.palette = null;
     this.paletteVersion = 0;
+    this.paletteUploadVersion = 0;
     this.paletteLoadedBytes = 0;
     this.lastFrame = null;
     this.lastFrameShape = null;
@@ -109,6 +112,9 @@ class BrowserHostApp {
     this.force2dFallback = this.readForce2dPreference();
     this.invertGamepadY = this.readInvertGamepadYPreference();
     this.rendererProfiling = this.readRendererProfilingPreference();
+    this.sceneRendererMode = this.readSceneRendererPreference();
+    this.lastRendererComparison = null;
+    this.rendererComparisonRunning = false;
     this.webglResolutionScalePreference = this.readWebglResolutionScalePreference();
     this.webglResolutionScale = this.webglResolutionScalePreference === WEBGL_RESOLUTION_SCALE_AUTO
       ? DEFAULT_WEBGL_RESOLUTION_SCALE
@@ -163,6 +169,10 @@ class BrowserHostApp {
       force2dFallback: document.querySelector("#force-2d-fallback"),
       invertGamepadY: document.querySelector("#invert-gamepad-y"),
       enableRendererProfiling: document.querySelector("#enable-renderer-profiling"),
+      sceneRendererMode: document.querySelector("#scene-renderer-mode"),
+      sceneRendererStatus: document.querySelector("#scene-renderer-status"),
+      runRendererComparison: document.querySelector("#run-renderer-comparison"),
+      rendererComparison: document.querySelector("#renderer-comparison"),
       webglResolutionScale: document.querySelector("#webgl-resolution-scale"),
       basePreviewStrip: document.querySelector("#base-preview-strip"),
       basePreviewDial: document.querySelector("#base-preview-dial"),
@@ -223,6 +233,8 @@ class BrowserHostApp {
 
     let decodedSprites = null;
     let decodedVs2Scene = null;
+    let legacySceneBytes = null;
+    let vs2SceneBytes = null;
     const remainingEvents = [];
 
     for (const event of frame.events) {
@@ -253,6 +265,7 @@ class BrowserHostApp {
         this.palette = event.data;
         this.paletteLoadedBytes = event.data.length;
         this.paletteVersion += 1;
+        this.paletteUploadVersion += 1;
         this.assetRenderCache.clear();
         continue;
       }
@@ -261,6 +274,7 @@ class BrowserHostApp {
         const asset = decodeImageStripPayload(slot, event.data);
         if (asset) {
           this.assetIndex.set(slot, asset);
+          this.assetVersion += 1;
           this.assetRenderCache.delete(slot);
         }
         continue;
@@ -268,12 +282,15 @@ class BrowserHostApp {
       if (event.command === "sprites" && event.data instanceof Uint8Array) {
         if (decodedVs2Scene === null) {
           decodedSprites = decodeSpriteStateBuffer(event.data);
+          legacySceneBytes = event.data;
         }
         continue;
       }
       if (event.command === "vs2_scene" && event.data instanceof Uint8Array) {
         decodedVs2Scene = decodeVs2SceneBuffer(event.data);
         decodedSprites = decodedVs2Scene.sprites;
+        vs2SceneBytes = event.data;
+        legacySceneBytes = null;
         continue;
       }
       if (event.command === "frame_rgb" && event.data instanceof Uint8Array) {
@@ -287,6 +304,8 @@ class BrowserHostApp {
     frame.sprites = decodedSprites || [];
     frame.tilemaps = decodedVs2Scene ? decodedVs2Scene.tilemaps : [];
     frame.vs2Scene = decodedVs2Scene;
+    frame.sceneKind = vs2SceneBytes ? "vs2" : legacySceneBytes ? "legacy" : null;
+    frame.sceneBytes = vs2SceneBytes || legacySceneBytes;
     frame.assets = [];
     frame.events = remainingEvents;
   }
@@ -381,12 +400,14 @@ class BrowserHostApp {
       hasExportFrame: typeof this.adapter.exportFrame === "function",
       hasMemorySnapshot: typeof this.adapter.memorySnapshot === "function",
       hasWebGL: this.renderer.available,
+      hasSceneShader: this.renderer.sceneAvailable,
     });
     this.renderRuntimeStatus();
     this.bindInput();
     this.bindVisibility();
     this.bindCopyDiagnostics();
     this.bindDebugControls();
+    this.renderRendererComparison();
     this.bindFullscreenControls();
     this.bindEditorToggle();
     this.bindInspectorToggle();
@@ -493,6 +514,7 @@ class BrowserHostApp {
     this.lastFrameShape = null;
     this.lastRenderedLedPixels = null;
     this.assetIndex.clear();
+    this.assetVersion += 1;
     this.assetRenderCache.clear();
     this.audio.resetCache();
     this.visibleStripSlots = [];
@@ -993,6 +1015,40 @@ class BrowserHostApp {
         } else {
           this.refreshCopyDiagnostics();
         }
+      });
+    }
+
+    if (this.elements.sceneRendererMode) {
+      if (this.sceneRendererMode === "shader" && !this.renderer.sceneAvailable) {
+        this.sceneRendererMode = "cpu";
+        this.writeSceneRendererPreference(this.sceneRendererMode);
+      }
+      this.elements.sceneRendererMode.value = this.sceneRendererMode;
+      this.elements.sceneRendererMode.addEventListener("change", () => {
+        const requestedMode = this.elements.sceneRendererMode.value;
+        this.sceneRendererMode = requestedMode === "shader" && this.renderer.sceneAvailable
+          ? "shader"
+          : "cpu";
+        this.elements.sceneRendererMode.value = this.sceneRendererMode;
+        this.writeSceneRendererPreference(this.sceneRendererMode);
+        this.renderProfileSamples = [];
+        this.fullscreenRenderProfileSamples = [];
+        this.lastFullscreenRenderProfile = null;
+        this.addDiagnostic("renderer.compositor", {
+          mode: this.sceneRendererMode,
+          shaderAvailable: this.renderer.sceneAvailable,
+        });
+        if (this.lastFrame) {
+          this.renderFrame();
+        } else {
+          this.renderStatus();
+        }
+      });
+    }
+
+    if (this.elements.runRendererComparison) {
+      this.elements.runRendererComparison.addEventListener("click", () => {
+        void this.runRendererComparison();
       });
     }
 
@@ -1507,6 +1563,22 @@ class BrowserHostApp {
     this.writeBooleanPreference(RENDERER_PROFILING_STORAGE_KEY, enabled);
   }
 
+  readSceneRendererPreference() {
+    try {
+      return localStorage.getItem(SCENE_RENDERER_STORAGE_KEY) === "shader" ? "shader" : "cpu";
+    } catch (_error) {
+      return "cpu";
+    }
+  }
+
+  writeSceneRendererPreference(mode) {
+    try {
+      localStorage.setItem(SCENE_RENDERER_STORAGE_KEY, mode === "shader" ? "shader" : "cpu");
+    } catch (_error) {
+      return;
+    }
+  }
+
   readWebglResolutionScalePreference() {
     try {
       const rawValue = localStorage.getItem(WEBGL_RESOLUTION_SCALE_STORAGE_KEY);
@@ -1706,6 +1778,7 @@ class BrowserHostApp {
     ) {
       this.palette = frame.palette;
       this.paletteVersion = Number(frame.palette_version || 0);
+      this.paletteUploadVersion += 1;
       this.paletteLoadedBytes = frame.palette.length;
       this.assetRenderCache.clear();
     }
@@ -1717,6 +1790,7 @@ class BrowserHostApp {
           loadedBytes: asset.data?.length ?? 0,
           data: asset.data ?? null,
         });
+        this.assetVersion += 1;
       }
     }
     this.runtime.error = null;
@@ -1727,9 +1801,10 @@ class BrowserHostApp {
       this.renderRuntimeStatus();
     }
     this.lastFrame = frame;
-    this.visibleStripSlots = Array.isArray(frame.sprites)
-      ? [...new Set(frame.sprites.map((sprite) => sprite.image_strip).filter((slot) => Number.isInteger(slot) && slot > 0))]
-      : [];
+    this.visibleStripSlots = [...new Set([
+      ...(Array.isArray(frame.sprites) ? frame.sprites.map((sprite) => sprite.image_strip) : []),
+      ...(Array.isArray(frame.tilemaps) ? frame.tilemaps.map((tilemap) => tilemap.image_strip) : []),
+    ].filter((slot) => Number.isInteger(slot) && slot >= 0))];
     this.addDiagnostic("frame.ok", {
       frame: frame.frame,
       sprites: Array.isArray(frame.sprites) ? frame.sprites.length : -1,
@@ -1840,30 +1915,50 @@ class BrowserHostApp {
       const asset = this.assetIndex.get(slot);
       return !asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength;
     });
+    const sceneInput = this.getSceneRenderInput(frame);
+    const useSceneShader = this.sceneRendererMode === "shader" &&
+      !this.force2dFallback &&
+      !hasPendingVisibleAsset &&
+      Boolean(sceneInput) &&
+      this.renderer.sceneAvailable;
     const beforePixelsAt = this.rendererProfiling ? performance.now() : 0;
-    let ledPixels;
-    if (frame.povFrameRgb instanceof Uint8Array) {
-      // Raw polar framebuffer path (Super Ventilagon / Voom): bypass sprite compositing.
-      ledPixels = computeLedFramePixelsFromRgb(frame.povFrameRgb);
-    } else if (hasPendingVisibleAsset && this.lastRenderedLedPixels) {
-      ledPixels = this.lastRenderedLedPixels;
-    } else {
-      ledPixels = computeLedFramePixels(frame, this.assetIndex, this.palette);
+    let ledPixels = null;
+    if (!useSceneShader) {
+      if (frame.povFrameRgb instanceof Uint8Array) {
+        // Raw polar framebuffer path (Super Ventilagon / Voom): bypass sprite compositing.
+        ledPixels = computeLedFramePixelsFromRgb(frame.povFrameRgb);
+      } else if (hasPendingVisibleAsset && this.lastRenderedLedPixels) {
+        ledPixels = this.lastRenderedLedPixels;
+      } else {
+        ledPixels = computeLedFramePixels(frame, this.assetIndex, this.palette);
+      }
     }
     const afterPixelsAt = this.rendererProfiling ? performance.now() : 0;
-    if (!hasPendingVisibleAsset) {
+    if (ledPixels && !hasPendingVisibleAsset) {
       this.lastRenderedLedPixels = ledPixels;
     }
     this.renderCanvasVisibility();
     const beforeRendererAt = this.rendererProfiling ? performance.now() : 0;
-    const rendered = !this.force2dFallback && this.renderer.render(ledPixels);
+    let composition = useSceneShader ? "shader" : "cpu";
+    let rendered = useSceneShader
+      ? this.renderer.renderScene(sceneInput)
+      : !this.force2dFallback && this.renderer.render(ledPixels);
+    if (!rendered && useSceneShader) {
+      composition = "cpu";
+      ledPixels = computeLedFramePixels(frame, this.assetIndex, this.palette);
+      this.lastRenderedLedPixels = ledPixels;
+      rendered = !this.force2dFallback && this.renderer.render(ledPixels);
+    }
     if ((!rendered || this.force2dFallback) && this.fallbackRenderer) {
-      this.fallbackRenderer.render(ledPixels);
+      this.fallbackRenderer.render(ledPixels || this.lastRenderedLedPixels || computeLedFramePixels(frame, this.assetIndex, this.palette));
     }
     const afterRendererAt = this.rendererProfiling ? performance.now() : 0;
     if (this.rendererProfiling) {
       this.recordRenderProfile({
-        renderer: rendered && !this.force2dFallback ? "webgl" : "canvas",
+        renderer: rendered && !this.force2dFallback
+          ? composition === "shader" ? "scene-webgl" : "webgl"
+          : "canvas",
+        composition,
         totalMs: afterRendererAt - startedAt,
         computePixelsMs: afterPixelsAt - beforePixelsAt,
         rendererMs: afterRendererAt - beforeRendererAt,
@@ -1874,6 +1969,195 @@ class BrowserHostApp {
     }
     this.renderStatus();
     this.renderInspectors(frame);
+  }
+
+  getSceneRenderInput(frame) {
+    if (!frame?.sceneBytes || !frame.sceneKind || frame.povFrameRgb instanceof Uint8Array) {
+      return null;
+    }
+    return {
+      sceneKind: frame.sceneKind,
+      sceneBytes: frame.sceneBytes,
+      assetIndex: this.assetIndex,
+      assetVersion: this.assetVersion,
+      palette: this.palette,
+      paletteVersion: this.paletteUploadVersion,
+      frameNumber: frame.frame || 0,
+      columnOffset: frame.column_offset || 0,
+    };
+  }
+
+  async runRendererComparison() {
+    if (this.rendererComparisonRunning) {
+      return;
+    }
+    const frame = this.lastFrame;
+    const sceneInput = this.getSceneRenderInput(frame);
+    if (!frame || !sceneInput || !this.renderer.sceneAvailable || this.force2dFallback) {
+      this.lastRendererComparison = {
+        error: this.force2dFallback
+          ? "Switch off the 2D renderer to compare GPU composition."
+          : "This frame has no legacy-sprite or VS2 scene payload for the shader.",
+      };
+      this.renderRendererComparison();
+      return;
+    }
+    const hasPendingVisibleAsset = this.visibleStripSlots.some((slot) => {
+      const asset = this.assetIndex.get(slot);
+      return !asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength;
+    });
+    if (hasPendingVisibleAsset) {
+      this.lastRendererComparison = { error: "Waiting for the visible image strips to load." };
+      this.renderRendererComparison();
+      return;
+    }
+
+    this.rendererComparisonRunning = true;
+    this.lastRendererComparison = { running: true };
+    this.renderRendererComparison();
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    const samples = 24;
+    const cpuTotals = [];
+    const cpuCompose = [];
+    const shaderTotals = [];
+    try {
+      // Warm both pipelines so lazy program/texture allocation is not part of
+      // the result. gl.finish is deliberately used only in this explicit
+      // benchmark; normal-frame profiling remains asynchronous.
+      this.renderer.render(computeLedFramePixels(frame, this.assetIndex, this.palette));
+      this.renderer.finish();
+      this.renderer.renderScene(sceneInput);
+      this.renderer.finish();
+      const expectedPixels = computeLedFramePixels(frame, this.assetIndex, this.palette);
+      const shaderPixels = this.renderer.readScenePixels();
+      const shaderCore = globalThis.VentilastationSceneShaderCore;
+      const packedScene = sceneInput.sceneKind === "vs2"
+        ? shaderCore.packSceneVs2(sceneInput.sceneBytes)
+        : shaderCore.packSceneLegacy(sceneInput.sceneBytes);
+      const softwarePixels = shaderCore.renderSceneSoftware({
+        strips: shaderCore.packStrips(this.assetIndex),
+        palette: shaderCore.packPalette(this.palette),
+        sceneData: packedScene,
+        stars: shaderCore.packStars(shaderCore.computeStarPositions(sceneInput.frameNumber)),
+        deepspace: shaderCore.packDeepspace(),
+        columnOffset: sceneInput.columnOffset,
+      });
+      let parityMismatches = 0;
+      let firstParityMismatch = null;
+      let softwareParityMismatches = 0;
+      if (!shaderPixels || shaderPixels.length !== expectedPixels.length) {
+        parityMismatches = -1;
+      } else {
+        for (let index = 0; index < expectedPixels.length; index += 1) {
+          if (shaderPixels[index] !== expectedPixels[index]) {
+            parityMismatches += 1;
+            if (!firstParityMismatch) {
+              firstParityMismatch = {
+                column: Math.floor(index / 4 / 54),
+                led: Math.floor(index / 4) % 54,
+                channel: index % 4,
+                expected: Array.from(expectedPixels.subarray(index - (index % 4), index - (index % 4) + 4)),
+                shader: Array.from(shaderPixels.subarray(index - (index % 4), index - (index % 4) + 4)),
+              };
+            }
+          }
+        }
+      }
+      for (let index = 0; index < expectedPixels.length; index += 1) {
+        if (softwarePixels[index] !== expectedPixels[index]) {
+          softwareParityMismatches += 1;
+        }
+      }
+      if (firstParityMismatch && this.palette instanceof Uint8Array) {
+        const findPaletteMatches = (rgba) => {
+          const matches = [];
+          for (let paletteIndex = 0; paletteIndex * 1024 + 1024 <= this.palette.length; paletteIndex += 1) {
+            for (let colorIndex = 0; colorIndex < 256; colorIndex += 1) {
+              const base = (paletteIndex * 256 + colorIndex) * 4;
+              if (this.palette[base + 3] === rgba[0] &&
+                  this.palette[base + 2] === rgba[1] &&
+                  this.palette[base + 1] === rgba[2]) {
+                matches.push([paletteIndex, colorIndex]);
+              }
+            }
+          }
+          return matches;
+        };
+        firstParityMismatch.expectedPaletteMatches = findPaletteMatches(firstParityMismatch.expected);
+        firstParityMismatch.shaderPaletteMatches = findPaletteMatches(firstParityMismatch.shader);
+        const expectedPaletteEntry = firstParityMismatch.expectedPaletteMatches[0];
+        if (expectedPaletteEntry) {
+          firstParityMismatch.gpuPaletteTexel = Array.from(
+            this.renderer.readScenePaletteEntry(expectedPaletteEntry[0], expectedPaletteEntry[1]) || [],
+          );
+        }
+      }
+
+      for (let index = 0; index < samples; index += 1) {
+        const startedAt = performance.now();
+        const ledPixels = computeLedFramePixels(frame, this.assetIndex, this.palette);
+        const afterComposeAt = performance.now();
+        this.renderer.render(ledPixels);
+        this.renderer.finish();
+        cpuCompose.push(afterComposeAt - startedAt);
+        cpuTotals.push(performance.now() - startedAt);
+      }
+      for (let index = 0; index < samples; index += 1) {
+        const startedAt = performance.now();
+        this.renderer.renderScene(sceneInput);
+        this.renderer.finish();
+        shaderTotals.push(performance.now() - startedAt);
+      }
+      const average = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+      const cpuTotalMs = average(cpuTotals);
+      const shaderTotalMs = average(shaderTotals);
+      this.lastRendererComparison = {
+        samples,
+        sceneKind: sceneInput.sceneKind,
+        cpuTotalMs,
+        cpuComposeMs: average(cpuCompose),
+        shaderTotalMs,
+        speedup: shaderTotalMs > 0 ? cpuTotalMs / shaderTotalMs : null,
+        parityMismatches,
+        firstParityMismatch,
+        softwareParityMismatches,
+      };
+      this.addDiagnostic("renderer.comparison", this.lastRendererComparison);
+    } catch (error) {
+      this.lastRendererComparison = { error: error?.message || String(error) };
+    } finally {
+      this.rendererComparisonRunning = false;
+      this.renderRendererComparison();
+      if (this.lastFrame) {
+        this.renderFrame();
+      }
+    }
+  }
+
+  renderRendererComparison() {
+    const element = this.elements.rendererComparison;
+    const button = this.elements.runRendererComparison;
+    if (button) {
+      button.disabled = this.rendererComparisonRunning;
+    }
+    if (!element) {
+      return;
+    }
+    const result = this.lastRendererComparison;
+    if (!result) {
+      element.textContent = "Runs 24 synchronized frames through both full rendering paths on this device.";
+    } else if (result.running) {
+      element.textContent = "Comparing CPU and shader paths…";
+    } else if (result.error) {
+      element.textContent = result.error;
+    } else {
+      const parity = result.parityMismatches === 0
+        ? "pixel parity pass"
+        : result.parityMismatches < 0
+          ? "parity readback unavailable"
+          : `${result.parityMismatches} mismatched channels`;
+      element.textContent = `${result.sceneKind.toUpperCase()} · CPU ${formatProfileMs(result.cpuTotalMs)} frame (${formatProfileMs(result.cpuComposeMs)} compositor) · Shader ${formatProfileMs(result.shaderTotalMs)} frame · ${result.speedup?.toFixed(2) || "--"}× · ${parity}`;
+    }
   }
 
   updateDisplayedFps() {
@@ -2023,6 +2307,11 @@ class BrowserHostApp {
         ? `Scale Auto ${Math.round(this.webglResolutionScale * 100)}%`
         : `Scale ${Math.round(this.webglResolutionScale * 100)}%`;
     }
+    if (this.elements.sceneRendererStatus) {
+      this.elements.sceneRendererStatus.textContent = this.sceneRendererMode === "shader"
+        ? this.renderer.sceneAvailable ? "Compositor shader" : "Compositor CPU fallback"
+        : "Compositor CPU";
+    }
     if (this.elements.frameCounter) {
       this.elements.frameCounter.textContent = this.displayedFps === null
         ? "FPS --"
@@ -2126,6 +2415,9 @@ class BrowserHostApp {
           ? `${this.connectedGamepadCount} controllers (primary ${this.activeGamepadIndex + 1})`
           : `Controller ${this.activeGamepadIndex + 1}`],
       ["Renderer", this.force2dFallback ? "2D fallback" : this.renderer.available ? "WebGL" : "2D fallback"],
+      ["Compositor", this.sceneRendererMode === "shader"
+        ? this.renderer.sceneAvailable ? "GPU shader" : "CPU fallback"
+        : "CPU (existing)"],
       ["Fullscreen", this.isFullscreen ? "Active" : "Windowed"],
       ["WebGL Scale", this.webglResolutionScalePreference === WEBGL_RESOLUTION_SCALE_AUTO
         ? `Auto (${Math.round(this.webglResolutionScale * 100)}%)`
@@ -2144,6 +2436,14 @@ class BrowserHostApp {
           ["Upload", `${formatProfileMs(profile.detail.uploadMs?.avg)} avg / ${formatProfileMs(profile.detail.uploadMs?.max)} max`],
           ["Draw Submit", `${formatProfileMs(profile.detail.drawSubmitMs?.avg)} avg / ${formatProfileMs(profile.detail.drawSubmitMs?.max)} max`],
         );
+      } else if (profile.renderer === "scene-webgl") {
+        summary.push(
+          ["GPU Scene", `${formatProfileMs(profile.detail.sceneMs?.avg)} avg / ${formatProfileMs(profile.detail.sceneMs?.max)} max`],
+          ["Scene Pack", `${formatProfileMs(profile.detail.scenePackMs?.avg)} avg / ${formatProfileMs(profile.detail.scenePackMs?.max)} max`],
+          ["Scene Upload", `${formatProfileMs(profile.detail.sceneDynamicUploadMs?.avg)} avg / ${formatProfileMs(profile.detail.sceneDynamicUploadMs?.max)} max`],
+          ["Scene Submit", `${formatProfileMs(profile.detail.sceneDrawSubmitMs?.avg)} avg / ${formatProfileMs(profile.detail.sceneDrawSubmitMs?.max)} max`],
+          ["Ring Submit", `${formatProfileMs(profile.detail.ringDrawSubmitMs?.avg)} avg / ${formatProfileMs(profile.detail.ringDrawSubmitMs?.max)} max`],
+        );
       } else {
         summary.push([
           "Canvas Draw",
@@ -2161,6 +2461,11 @@ class BrowserHostApp {
         summary.push(
           ["FS Upload", `${formatProfileMs(fullscreenProfile.detail.uploadMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.detail.uploadMs?.max)} max`],
           ["FS Draw Submit", `${formatProfileMs(fullscreenProfile.detail.drawSubmitMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.detail.drawSubmitMs?.max)} max`],
+        );
+      } else if (fullscreenProfile.renderer === "scene-webgl") {
+        summary.push(
+          ["FS GPU Scene", `${formatProfileMs(fullscreenProfile.detail.sceneMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.detail.sceneMs?.max)} max`],
+          ["FS Scene Pack", `${formatProfileMs(fullscreenProfile.detail.scenePackMs?.avg)} avg / ${formatProfileMs(fullscreenProfile.detail.scenePackMs?.max)} max`],
         );
       } else {
         summary.push([
@@ -2193,6 +2498,13 @@ class BrowserHostApp {
       paletteLength: frame.palette_length ?? this.palette?.length,
       paletteVersion: frame.palette_version ?? this.paletteVersion,
       paletteLoadedBytes: this.paletteLoadedBytes,
+      sceneRenderer: {
+        mode: this.sceneRendererMode,
+        available: this.renderer.sceneAvailable,
+        sceneKind: frame.sceneKind || null,
+        sceneBytes: frame.sceneBytes?.length ?? null,
+        comparison: this.lastRendererComparison,
+      },
       spriteCount: Array.isArray(frame.sprites) ? frame.sprites.length : null,
       assetCount: this.assetIndex.size,
       eventCount: Array.isArray(frame.events) ? frame.events.length : null,

@@ -5,7 +5,10 @@ import comms
 from inputs_common import (
     keyboard_state, keyboard_v2_state, ota_shortcut_pressed, pack_controllers,
 )
-from pyglet2x.pygletdraw import window, help_label
+from pyglet2x.pygletdraw import (
+    compare_scene_renderers, dismiss_overlay, toggle_help_overlay,
+    toggle_scene_renderer, toggle_settings_overlay, window,
+)
 
 keys = key.KeyStateHandler()
 
@@ -25,30 +28,37 @@ def refresh_controllers():
             ctrl.open()
     controllers = connected
 
-def update_label():
-    help_label.text = ("joy or " if controllers else "") + "keys: arrows/WASD Space O P Y PgUp/PgDn HJKL Z/X/C/V Home/End Ctrl/⌘-U Esc Q"
-
 @controller_man.event
 def on_connect(ctrl):
     refresh_controllers()
-    update_label()
 
 @controller_man.event
 def on_disconnect(ctrl):
     print(f"Controller disconnected: {ctrl.device.name}")
     refresh_controllers()
-    update_label()
 
 print(controller_man.get_controllers())
 refresh_controllers()
-update_label()
 
 @window.event
 def on_key_press(symbol, modifiers):
     if symbol == pyglet.window.key.ESCAPE:
+        dismiss_overlay()
         return pyglet.event.EVENT_HANDLED
     if symbol == pyglet.window.key.Q:
         pyglet.app.exit()
+    if symbol == pyglet.window.key.F1:
+        toggle_help_overlay()
+        return pyglet.event.EVENT_HANDLED
+    if symbol == pyglet.window.key.F4:
+        toggle_settings_overlay()
+        return pyglet.event.EVENT_HANDLED
+    if symbol == pyglet.window.key.F2:
+        toggle_scene_renderer()
+        return pyglet.event.EVENT_HANDLED
+    if symbol == pyglet.window.key.F3:
+        compare_scene_renderers()
+        return pyglet.event.EVENT_HANDLED
     if ota_shortcut_pressed(symbol, modifiers):
         comms.trigger_ota()
         return pyglet.event.EVENT_HANDLED

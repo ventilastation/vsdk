@@ -6,7 +6,8 @@ import {
   PIXELS,
   createLedRingGeometry,
   DEFAULT_WEBGL_RESOLUTION_SCALE,
-} from "./app-support.js?v=20260716a";
+} from "./app-support.js?v=20260717b";
+import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260717e";
 
 
 class LedRingWebGLRenderer {
@@ -18,7 +19,13 @@ class LedRingWebGLRenderer {
     this.displayWidth = canvas.clientWidth || 0;
     this.displayHeight = canvas.clientHeight || 0;
     this.lastDevicePixelRatio = null;
-    this.gl = canvas.getContext("webgl", {
+    // Keep the existing WebGL1 ring path as a fallback, but prefer WebGL2 so
+    // the scene compositor can sample integer strip/scene textures.
+    this.gl = canvas.getContext("webgl2", {
+      alpha: true,
+      antialias: false,
+      premultipliedAlpha: false,
+    }) || canvas.getContext("webgl", {
       alpha: true,
       antialias: false,
       premultipliedAlpha: false,
@@ -30,9 +37,28 @@ class LedRingWebGLRenderer {
     }
 
     const gl = this.gl;
+    this.isWebGL2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
     this.blendMinMax = gl.getExtension("EXT_blend_minmax");
     this.program = this.createProgram(
-      `
+      this.isWebGL2 ? `#version 300 es
+        in vec2 a_position;
+        in vec2 a_texCoord;
+        in vec2 a_ledUV;
+        uniform vec2 u_resolution;
+        uniform vec2 u_center;
+        uniform float u_scale;
+        out vec2 v_texCoord;
+        out vec2 v_ledUV;
+
+        void main() {
+          vec2 pos = u_center + (a_position * vec2(1.0, -1.0) * u_scale);
+          vec2 zeroToOne = pos / u_resolution;
+          vec2 clip = zeroToOne * 2.0 - 1.0;
+          gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
+          v_texCoord = a_texCoord;
+          v_ledUV = a_ledUV;
+        }
+      ` : `
         attribute vec2 a_position;
         attribute vec2 a_texCoord;
         attribute vec2 a_ledUV;
@@ -51,7 +77,27 @@ class LedRingWebGLRenderer {
           v_ledUV = a_ledUV;
         }
       `,
-      `
+      this.isWebGL2 ? `#version 300 es
+        precision mediump float;
+        in vec2 v_texCoord;
+        in vec2 v_ledUV;
+        uniform sampler2D u_ledColors;
+        out vec4 out_color;
+
+        void main() {
+          vec2 center = vec2(0.5, 0.5);
+          vec2 p = v_texCoord - center;
+          float width = 0.1;
+          float height = 0.05;
+          float radius = height;
+          vec2 q = abs(p) - vec2(width - radius, height - radius);
+          float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+          float pill = smoothstep(0.01, -0.01, dist);
+          float glow = exp(-dist * dist * 10.0) * 0.3;
+          vec4 ledColor = texture(u_ledColors, v_ledUV);
+          out_color = ledColor * (pill + glow);
+        }
+      ` : `
         precision mediump float;
         varying vec2 v_texCoord;
         varying vec2 v_ledUV;
@@ -99,7 +145,25 @@ class LedRingWebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, PIXELS, COLUMNS, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      this.isWebGL2 ? gl.RGBA8 : gl.RGBA,
+      PIXELS,
+      COLUMNS,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      null,
+    );
+
+    // Compiling the full scene compositor is expensive and, on a few GPU
+    // drivers, can disrupt the first paint. The normal emulator path remains
+    // the existing CPU compositor, so defer shader program creation until the
+    // user selects it (or explicitly runs the comparison).
+    this.sceneCompositor = null;
+    this.sceneInitializationAttempted = false;
+    this.sceneError = null;
 
     this.attribs = {
       position: gl.getAttribLocation(this.program, "a_position"),
@@ -176,18 +240,8 @@ class LedRingWebGLRenderer {
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
   }
 
-  render(ledPixels) {
-    if (!this.available) {
-      this.lastProfile = null;
-      return false;
-    }
-
-    const startedAt = performance.now();
-    const { width, height, scale } = this.resize();
-    const afterResizeAt = performance.now();
+  bindLedRingGeometry() {
     const gl = this.gl;
-    this.clear();
-    const afterClearAt = performance.now();
     gl.useProgram(this.program);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
@@ -201,6 +255,37 @@ class LedRingWebGLRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.ledUVBuffer);
     gl.enableVertexAttribArray(this.attribs.ledUV);
     gl.vertexAttribPointer(this.attribs.ledUV, 2, gl.FLOAT, false, 0, 0);
+  }
+
+  drawLedRing(width, height, scale) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, width, height);
+    gl.enable(gl.BLEND);
+    this.clear();
+    this.bindLedRingGeometry();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.ledColorTexture);
+    gl.uniform1i(this.uniforms.ledColors, 0);
+    gl.uniform2f(this.uniforms.resolution, width, height);
+    gl.uniform2f(this.uniforms.center, width * 0.5, height * 0.5);
+    gl.uniform1f(this.uniforms.scale, Math.min(width, height) / 200);
+    gl.drawArrays(gl.TRIANGLES, 0, this.geometry.vertexCount);
+  }
+
+  render(ledPixels) {
+    if (!this.available) {
+      this.lastProfile = null;
+      return false;
+    }
+
+    const startedAt = performance.now();
+    const { width, height, scale } = this.resize();
+    const afterResizeAt = performance.now();
+    const gl = this.gl;
+    this.clear();
+    const afterClearAt = performance.now();
+    this.bindLedRingGeometry();
     const afterColorExpandAt = performance.now();
 
     gl.activeTexture(gl.TEXTURE0);
@@ -209,6 +294,9 @@ class LedRingWebGLRenderer {
     gl.uniform1i(this.uniforms.ledColors, 0);
     const afterUploadAt = performance.now();
 
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, width, height);
+    gl.enable(gl.BLEND);
     gl.uniform2f(this.uniforms.resolution, width, height);
     gl.uniform2f(this.uniforms.center, width * 0.5, height * 0.5);
     gl.uniform1f(this.uniforms.scale, Math.min(width, height) / 200);
@@ -226,6 +314,67 @@ class LedRingWebGLRenderer {
       colorBytes: ledPixels.length,
     };
     return true;
+  }
+
+  renderScene(sceneInput) {
+    if (!this.available || !this.ensureSceneCompositor()) {
+      this.lastProfile = null;
+      return false;
+    }
+    const startedAt = performance.now();
+    const { width, height, scale } = this.resize();
+    const afterResizeAt = performance.now();
+    if (!this.sceneCompositor.render(sceneInput)) {
+      this.lastProfile = null;
+      return false;
+    }
+    const afterSceneAt = performance.now();
+    this.drawLedRing(width, height, scale);
+    const finishedAt = performance.now();
+    this.lastProfile = {
+      resizeMs: afterResizeAt - startedAt,
+      sceneMs: afterSceneAt - afterResizeAt,
+      sceneDetail: this.sceneCompositor.lastProfile,
+      ringDrawSubmitMs: finishedAt - afterSceneAt,
+      totalMs: finishedAt - startedAt,
+      resolutionScale: scale,
+      vertexCount: this.geometry.vertexCount,
+      colorBytes: 0,
+    };
+    return true;
+  }
+
+  finish() {
+    if (this.available && this.gl?.finish) {
+      this.gl.finish();
+    }
+  }
+
+  readScenePixels() {
+    return this.sceneCompositor?.readPixels() || null;
+  }
+
+  readScenePaletteEntry(paletteIndex, colorIndex) {
+    return this.sceneCompositor?.readPaletteEntry(paletteIndex, colorIndex) || null;
+  }
+
+  get sceneAvailable() {
+    // Before the first GPU-scene request, WebGL2 support is the useful answer
+    // for the options UI. Once initialization was attempted, expose the real
+    // compositor result so failed compilation falls straight back to CPU.
+    return this.isWebGL2 && (!this.sceneInitializationAttempted || Boolean(this.sceneCompositor?.available));
+  }
+
+  ensureSceneCompositor() {
+    if (!this.isWebGL2) {
+      return false;
+    }
+    if (!this.sceneInitializationAttempted) {
+      this.sceneInitializationAttempted = true;
+      this.sceneCompositor = new LedSceneWebGLCompositor(this.gl, this.ledColorTexture);
+      this.sceneError = this.sceneCompositor.error || null;
+    }
+    return Boolean(this.sceneCompositor?.available);
   }
 }
 

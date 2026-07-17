@@ -7,6 +7,7 @@ fills from the wire protocol, and renders one 54-pixel LED column at a time
 
 import random
 import math
+import threading
 from struct import pack, unpack, unpack_from
 
 import numpy as np
@@ -25,10 +26,22 @@ led_count = PIXELS
 starfield = [(random.randrange(COLUMNS), random.randrange(ROWS)) for n in range(STARS)]
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 
+# The native compositor normally consumes decoded Python structures.  The
+# full-frame scene shader instead needs the original wire bytes, plus a stable
+# snapshot of assets and palette.  Updates arrive from comms.py's receiver
+# thread, so publish those references under a small lock rather than letting a
+# texture upload observe a half-replaced dictionary.
+_scene_shader_lock = threading.RLock()
+_scene_assets_revision = 0
+_scene_palette_revision = 0
+_vs2_scene_bytes = None
+_palette_wire_bytes = b""
+
 def set_spritedata(data):
     """Install the pre-VS2 fixed 100-sprite-slot table, keeping the Python
     renderer's spritedata and the native renderer's sprites[] in sync."""
-    spritedata[:] = data
+    with _scene_shader_lock:
+        spritedata[:] = data
     native_render.set_legacy_sprites(data)
 # Decoded VS2 scenes are immutable after publication.  The communications
 # thread swaps this one reference only after it has decoded the full payload,
@@ -101,14 +114,18 @@ def clear_voom_frame():
     _voom_frame_apa102_pixels = None
 
 def clear_vs2_scene():
-    global _vs2_scene
-    _vs2_scene = None
+    global _vs2_scene, _vs2_scene_bytes
+    with _scene_shader_lock:
+        _vs2_scene = None
+        _vs2_scene_bytes = None
     native_render.clear_scene()
 
 def set_vs2_scene(data):
-    global _vs2_scene
+    global _vs2_scene, _vs2_scene_bytes
     scene = decode_vs2_scene(data)
-    _vs2_scene = scene
+    with _scene_shader_lock:
+        _vs2_scene = scene
+        _vs2_scene_bytes = bytes(data) if scene is not None else None
     native_render.decode_scene(data)
 
 
@@ -119,7 +136,31 @@ def snapshot_vs2_scene():
     every column.  A scene update from the receiver thread must not splice two
     scene revisions into the same circular display frame.
     """
-    return _vs2_scene
+    with _scene_shader_lock:
+        return _vs2_scene
+
+
+def snapshot_scene_shader_input():
+    """Return the raw state for one GPU scene pass, or ``None`` for captures.
+
+    ``frame_rgb`` and ``frame_apa102`` are already final LED pixels rather
+    than sprite/VS2 scenes, so they deliberately remain on the existing CPU
+    upload path.  The returned tuple/dicts only contain immutable byte
+    strings, allowing the Pyglet draw thread to upload it after releasing the
+    receiver lock.
+    """
+    with _scene_shader_lock:
+        if _voom_frame_apa102_pixels is not None or _voom_frame_rgb is not None:
+            return None
+        return {
+            "kind": "vs2" if _vs2_scene_bytes is not None else "legacy",
+            "scene": _vs2_scene_bytes if _vs2_scene_bytes is not None else bytes(spritedata),
+            "assets": tuple(all_strips.items()),
+            "palette": _palette_wire_bytes,
+            "stars": tuple(starfield),
+            "assets_revision": _scene_assets_revision,
+            "palette_revision": _scene_palette_revision,
+        }
 
 def decode_vs2_scene(data):
     if len(data) < 16 or data[0:4] != b"VS2\0":
@@ -234,9 +275,12 @@ def repeated(n, iterable):
             yield item
 
 def set_palettes(paldata):
-    global palette, upalette
+    global palette, upalette, _palette_wire_bytes, _scene_palette_revision
     palette = change_colors(paldata)
     upalette = unpack_palette(palette)
+    with _scene_shader_lock:
+        _palette_wire_bytes = bytes(paldata)
+        _scene_palette_revision += 1
     native_render.set_palette(paldata)
 
 def set_image_strip(slot, data):
@@ -245,7 +289,10 @@ def set_image_strip(slot, data):
     C layout (frame_width, frame_height, total_frames, palette, then raw
     pixel data) is byte-identical to this wire blob, so the native side is a
     zero-copy pointer cast -- see emu_gpu_set_image_strip()."""
-    all_strips[slot] = data
+    global _scene_assets_revision
+    with _scene_shader_lock:
+        all_strips[slot] = bytes(data)
+        _scene_assets_revision += 1
     native_render.set_image_strip(slot, data)
 
 def get_visible_column(sprite_x, sprite_width, render_column):

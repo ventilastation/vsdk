@@ -23,6 +23,11 @@ USE_IP = True
 # the display).
 DISPLAY_ENABLED = True
 
+# Full-frame compositor used by the Pyglet 2 desktop display.  "cpu" keeps
+# the established native/Python renderer; "shader" evaluates raw sprites or
+# VS2 scene bytes in one OpenGL pass.  Pyglet 1.x remains CPU-only.
+SCENE_RENDERER = "cpu"
+
 # Explicit serial port for a direct board or workbench USB bridge (see
 # comms.ConnSerial). Auto-detected when None.
 SERIAL_PORT = None
@@ -40,12 +45,13 @@ SERVER_PORT = 5005
 
 def configure(args):
     """Apply parsed command-line arguments (see emu.py)."""
-    global HARDWARE_MODE, USE_IP, DISPLAY_ENABLED, SERIAL_PORT, OTA_SERVER_ENABLED, SERVER_IP
+    global HARDWARE_MODE, USE_IP, DISPLAY_ENABLED, SERIAL_PORT, OTA_SERVER_ENABLED, SERVER_IP, SCENE_RENDERER
 
     HARDWARE_MODE = args.remote or args.no_display
     DISPLAY_ENABLED = not args.no_display
     SERIAL_PORT = args.serial_port
     OTA_SERVER_ENABLED = getattr(args, "ota_server", True)
+    SCENE_RENDERER = getattr(args, "scene_renderer", "cpu")
 
     # The positional host is either an IP/hostname, or the literal "SERIAL"
     # to force the legacy serial-only transport (Super Ventilagon base,
