@@ -14,6 +14,12 @@
 #define MAX_BLINK_MS 10000UL
 #define COMMAND_MAX 48
 
+// No git-hash injection for this build (no existing Arduino build
+// automation to hook a codegen step into, unlike the two ESP-IDF/CMake
+// firmwares) -- hand-bump FIRMWARE_VERSION when this sketch changes.
+#define FIRMWARE_VERSION "v1.0"
+#define FIRMWARE_GIT_HASH "unknown"
+
 Adafruit_NeoPixel pixels(NUM_PIXELS, NEO_PIN, NEO_GRB + NEO_KHZ800);
 Servo servo;
 
@@ -23,6 +29,13 @@ uint8_t button_mask = 0;
 unsigned long button_blink_ms = 0;
 char command_buffer[COMMAND_MAX + 1];
 uint8_t command_length = 0;
+
+// RESYNC / device identification (see
+// docs/internals/input-protocol-v2.md#resync--device-identification).
+// Mirrors input_parser.py's _RESYNC_SEQUENCE byte-for-byte.
+const uint8_t RESYNC_SEQUENCE[] = { '\n', '\n', 0xD2, 'E', 'S', 'Y', 'N', 'C', '\n' };
+const uint8_t RESYNC_LEN = sizeof(RESYNC_SEQUENCE);
+uint8_t resync_match = 0;
 
 // Doom palette values target a gamma-corrected monitor. WS2812 PWM is close
 // to linear, so use this 2.2 transfer curve before driving the physical strip.
@@ -111,9 +124,47 @@ void handle_command(char *line) {
   }
 }
 
+// RESYNC has no CPU reset to fall back on for this sketch, unlike the other
+// two Ventilastation devices -- and doesn't need one. Nothing here blocks or
+// uses interrupts/threads (poll_serial()/update_buttons() are a plain
+// non-blocking loop), so there's nothing a real reboot would recover that
+// reinitializing state and re-applying the safe defaults setup() establishes
+// doesn't already achieve, without the visible LED/servo glitch an actual
+// reboot would cause. See
+// docs/internals/base-control-api.md#device-identification-resync.
+void handle_resync() {
+  strip_red = 0;
+  strip_green = 0;
+  strip_blue = 0;
+  servo_position = 0;
+  button_mask = 0;
+  button_blink_ms = 0;
+  command_length = 0;
+  apply_strip();
+  apply_servo();
+  update_buttons();
+  Serial.println(F("VENTILASTATION BASE " FIRMWARE_VERSION " " FIRMWARE_GIT_HASH));
+}
+
 void poll_serial() {
   while (Serial.available()) {
-    char input = (char)Serial.read();
+    uint8_t input = (uint8_t)Serial.read();
+
+    // Track a possible RESYNC match in parallel with normal parsing, not
+    // instead of it -- see input_parser.py's feed() for the full rationale
+    // (0x0A is both the marker's first byte and this parser's own line
+    // terminator, so a partial or failed match must not swallow it).
+    if (input == RESYNC_SEQUENCE[resync_match]) {
+      resync_match++;
+      if (resync_match == RESYNC_LEN) {
+        resync_match = 0;
+        handle_resync();
+        continue;
+      }
+    } else {
+      resync_match = (input == RESYNC_SEQUENCE[0]) ? 1 : 0;
+    }
+
     if (input == '\n' || input == '\r') {
       if (command_length) {
         command_buffer[command_length] = '\0';

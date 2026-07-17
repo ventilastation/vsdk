@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
-"""Find a connected Ventilastation or workbench USB serial port.
+"""Find a connected Ventilastation rotor, workbench, or base serial port.
 
-Both boards use the ESP32-S3 native USB-Serial-JTAG device, so their USB
-descriptors are identical. This tool uses a firmware-level probe:
+All three Ventilastation devices (see
+docs/internals/input-protocol-v2.md#resync--device-identification) answer
+the same RESYNC marker the same way: stop, reset, and print
+``VENTILASTATION <NAME> <version> <githash>`` as the first thing after that
+reset. This is a single, uniform, always-recognized probe that works
+regardless of what a device happens to be doing (including a rotor running
+a native retro-go app instead of MicroPython, or a wedged device of any
+kind) -- it replaces the older ``VSDK_BOARD_PROBE``/REPL-interrupt probe,
+which only covered two of the three devices and only worked for the rotor
+when its MicroPython REPL was actually reachable.
 
-* the workbench firmware answers ``VSDK_BOARD_PROBE`` itself;
-* the Ventilastation MicroPython firmware answers with its explicit board ID
-  through the USB REPL.
+The rotor and workbench both expose ESP32-S3 native USB-Serial-JTAG (baud
+rate is effectively ignored by that USB-CDC interface); the base Arduino is
+a real UART at 57600 baud, typically reached via its own USB-to-serial
+adapter during bench testing. Each port is probed at 115200 first, then
+57600 if nothing answered.
 
 Only Python's standard library is used, so this works before an ESP-IDF
 virtualenv (and pyserial) is active.
@@ -27,9 +37,14 @@ import time
 from dataclasses import dataclass
 
 
-PROBE = b"VSDK_BOARD_PROBE\n"
-WORKBENCH_REPLY = b"VSDK_BOARD_ID=workbench"
-ROTOR_REPLY = b"VSDK_BOARD_ID=ventilastation"
+RESYNC = b"\n\n\xd2ESYNC\n"
+ID_PREFIX = b"VENTILASTATION "
+BOARD_KIND_BY_NAME = {
+    b"WORKBENCH": "workbench",
+    b"ROTOR": "ventilastation",  # kept as the existing --board value
+    b"BASE": "base",
+}
+PROBE_BAUD_RATES = (115200, 57600)
 
 
 @dataclass
@@ -139,15 +154,18 @@ def write_all(fd: int, data: bytes) -> None:
             time.sleep(0.01)
 
 
-def configure_serial(fd: int) -> list:
+_BAUD_CONSTANTS = {115200: termios.B115200, 57600: termios.B57600}
+
+
+def configure_serial(fd: int, baud: int) -> list:
     saved = termios.tcgetattr(fd)
     attrs = termios.tcgetattr(fd)
     attrs[0] = 0
     attrs[1] = 0
     attrs[2] = termios.CLOCAL | termios.CREAD | termios.CS8
     attrs[3] = 0
-    attrs[4] = termios.B115200
-    attrs[5] = termios.B115200
+    attrs[4] = _BAUD_CONSTANTS[baud]
+    attrs[5] = _BAUD_CONSTANTS[baud]
     attrs[6][termios.VMIN] = 0
     attrs[6][termios.VTIME] = 1
     termios.tcsetattr(fd, termios.TCSANOW, attrs)
@@ -161,6 +179,30 @@ def restore_serial(fd: int, saved: list) -> None:
         pass
 
 
+def parse_identification(response: bytes) -> str | None:
+    """Extract the board kind from a RESYNC identification line, if present."""
+    index = response.find(ID_PREFIX)
+    if index == -1:
+        return None
+    rest = response[index + len(ID_PREFIX):]
+    name = rest.split(b" ", 1)[0].split(b"\n", 1)[0].split(b"\r", 1)[0]
+    return BOARD_KIND_BY_NAME.get(name)
+
+
+def probe_port_at_baud(fd: int, baud: int) -> str | None:
+    saved = configure_serial(fd, baud)
+    try:
+        read_for(fd, 0.15)  # drain whatever was already buffered
+        write_all(fd, RESYNC)
+        # Generous window: every device actually resets (the base Arduino
+        # reinitializes in place instead, but the window doesn't need to
+        # distinguish the two) before printing its identification line.
+        response = read_for(fd, 2.5)
+        return parse_identification(response)
+    finally:
+        restore_serial(fd, saved)
+
+
 def probe_port(port: str) -> tuple[str | None, str]:
     """Return (board kind, evidence) for one port."""
     try:
@@ -168,48 +210,15 @@ def probe_port(port: str) -> tuple[str | None, str]:
     except OSError as exc:
         return None, f"cannot open: {exc}"
 
-    saved: list | None = None
     try:
-        saved = configure_serial(fd)
-        initial = read_for(fd, 0.15)
-
-        write_all(fd, PROBE)
-        response = initial + read_for(fd, 0.45)
-        # The log fallback keeps already-flashed workbenches selectable while
-        # they are being upgraded to the explicit probe protocol.
-        if WORKBENCH_REPLY in response or b"Ventilastation workbench" in response or b"led_capture:" in response:
-            return "workbench", "workbench probe reply"
-
-        # Ventilastation exposes a normal MicroPython REPL over USB-JTAG.
-        # Interrupt the current program, ask for the explicit frozen board ID,
-        # and soft-reboot after a successful match so detection is non-sticky.
-        write_all(fd, b"\x03")
-        read_for(fd, 0.15)
-        write_all(fd, b'from vsdk_board import BOARD_ID; print("VSDK_BOARD_ID=" + BOARD_ID)\r\n')
-        repl_response = read_for(fd, 0.75)
-        # The package fallback keeps an existing rotor selectable before its
-        # next MicroPython build includes board_id. It still requires the
-        # Ventilastation package, rather than treating every MicroPython REPL
-        # as a rotor board.
-        if ROTOR_REPLY not in repl_response and b"ImportError" in repl_response:
-            write_all(fd, b'import ventilastation.board_config; print("VSDK_BOARD_ID=ventilastation")\r\n')
-            repl_response += read_for(fd, 0.75)
-        if ROTOR_REPLY in repl_response or (
-            b"Ventilastation with ESP32S3" in repl_response and b">>>" in repl_response
-        ):
-            write_all(fd, b"\x04")
-            # Let the soft reboot finish before releasing the port. On this
-            # firmware the USB REPL becomes available after the application
-            # starts, not immediately after the ROM boot text; waiting here
-            # avoids making the next invocation race USB-REPL enumeration.
-            read_for(fd, 2.5)
-            return "ventilastation", "MicroPython board ID"
+        for baud in PROBE_BAUD_RATES:
+            kind = probe_port_at_baud(fd, baud)
+            if kind:
+                return kind, f"RESYNC identification at {baud} baud"
         return None, "no recognized board response"
     except (OSError, termios.error) as exc:
         return None, f"probe failed: {exc}"
     finally:
-        if saved is not None:
-            restore_serial(fd, saved)
         os.close(fd)
 
 
@@ -259,7 +268,7 @@ def choose(boards: list[Board], requested: str, mac: str | None) -> Board:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--board", choices=("ventilastation", "workbench"), help="board type to select")
+    parser.add_argument("--board", choices=("ventilastation", "workbench", "base"), help="board type to select")
     parser.add_argument("--mac", help="USB-JTAG serial/MAC to select")
     parser.add_argument("--list", action="store_true", help="list and classify all candidate ports")
     args = parser.parse_args()

@@ -23,7 +23,11 @@ static const char *TAG = "workbench";
 
 void app_main(void) {
     ESP_LOGI(TAG, "Ventilastation workbench starting");
-    ESP_LOGI(TAG, "VSDK_BOARD_ID=workbench");
+    // The RESYNC identification banner (see
+    // docs/internals/input-protocol-v2.md#resync--device-identification),
+    // printed once serial_bridge_begin() brings up the USB-Serial-JTAG
+    // driver, supersedes the old ad hoc "VSDK_BOARD_ID=workbench" log line
+    // this used to print here.
 
     reset_ctl_begin();
     serial_bridge_begin();

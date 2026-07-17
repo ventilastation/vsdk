@@ -19,6 +19,7 @@
 #include "driver/uart.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -26,8 +27,20 @@
 #define BRIDGE_BUF_SIZE 256
 #define UART_RING_BUF_SIZE (BRIDGE_BUF_SIZE * 4)
 
-static const uint8_t BOARD_PROBE[] = "VSDK_BOARD_PROBE\n";
-static const uint8_t BOARD_PROBE_REPLY[] = "VSDK_BOARD_ID=workbench\n";
+// WB_GIT_HASH is defined by CMakeLists.txt from ESP-IDF's own PROJECT_VER
+// (git-describe-based); this fallback only applies to a build that doesn't
+// define it.
+#ifndef WB_GIT_HASH
+#define WB_GIT_HASH "unknown"
+#endif
+#define WB_VERSION "v1.0"
+
+// RESYNC / device identification (see
+// docs/internals/input-protocol-v2.md#resync--device-identification).
+// Replaces the older VSDK_BOARD_PROBE literal-match probe: RESYNC is
+// recognized by all three Ventilastation devices the same way, not just the
+// workbench, and works even when whatever's on the other end is wedged.
+static const uint8_t RESYNC_SEQUENCE[] = { '\n', '\n', 0xD2, 'E', 'S', 'Y', 'N', 'C', '\n' };
 
 static void forward_to_dut(const uint8_t *buf, size_t len) {
     if (len > 0) {
@@ -35,27 +48,32 @@ static void forward_to_dut(const uint8_t *buf, size_t len) {
     }
 }
 
-// Keep the board-identification request out of the DUT UART. All other bytes
-// remain byte-for-byte transparent for the emulator's normal bridge traffic.
+// Keep the RESYNC marker out of the DUT UART. All other bytes remain
+// byte-for-byte transparent for the emulator's normal bridge traffic -- a
+// partial/failed match is replayed to the DUT exactly as received, so this
+// never eats bytes the DUT was supposed to see.
 static void handle_host_bytes(const uint8_t *buf, size_t len) {
-    static uint8_t candidate[sizeof(BOARD_PROBE) - 1];
+    static uint8_t candidate[sizeof(RESYNC_SEQUENCE)];
     static size_t candidate_len;
 
     for (size_t i = 0; i < len; i++) {
         uint8_t byte = buf[i];
-        if (byte == BOARD_PROBE[candidate_len]) {
+        if (byte == RESYNC_SEQUENCE[candidate_len]) {
             candidate[candidate_len++] = byte;
-            if (candidate_len == sizeof(BOARD_PROBE) - 1) {
-                usb_serial_jtag_write_bytes(BOARD_PROBE_REPLY, sizeof(BOARD_PROBE_REPLY) - 1,
-                                            pdMS_TO_TICKS(20));
+            if (candidate_len == sizeof(RESYNC_SEQUENCE)) {
+                // esp_restart() never returns in practice (immediate
+                // reboot); resetting candidate_len first is just defensive
+                // in case that assumption ever changes, matching the same
+                // precaution in vs_host_bridge.c.
                 candidate_len = 0;
+                esp_restart(); // identification banner is printed on next boot
             }
             continue;
         }
 
         forward_to_dut(candidate, candidate_len);
         candidate_len = 0;
-        if (byte == BOARD_PROBE[0]) {
+        if (byte == RESYNC_SEQUENCE[0]) {
             candidate[candidate_len++] = byte;
         } else {
             forward_to_dut(&byte, 1);
@@ -107,6 +125,14 @@ void serial_bridge_begin(void) {
         ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&usj_cfg));
     }
     usb_serial_jtag_vfs_use_driver();
+
+    // RESYNC identification banner (see
+    // docs/internals/input-protocol-v2.md#resync--device-identification):
+    // the first thing this board puts on the wire, raw -- not routed through
+    // ESP_LOGx, whose prefix/timestamp would make the line unrecognizable to
+    // a RESYNC prober.
+    static const char banner[] = "VENTILASTATION WORKBENCH " WB_VERSION " " WB_GIT_HASH "\n";
+    usb_serial_jtag_write_bytes(banner, sizeof(banner) - 1, pdMS_TO_TICKS(20));
 
     // Core 1 is reserved for led_capture.c's tasks (SPI-slave capture +
     // decode); keep everything else, including this bridge, on core 0.

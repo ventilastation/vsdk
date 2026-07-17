@@ -18,3 +18,10 @@ idf_component_register(
         lwip
         mdns
 )
+
+# PROJECT_VER is ESP-IDF's own git-describe-based project version (see
+# $ENV{IDF_PATH}/tools/cmake/project.cmake) -- reuse it as serial_bridge.c's
+# RESYNC identification banner git hash (see
+# docs/internals/input-protocol-v2.md#resync--device-identification) rather
+# than adding a second git-invoking CMake step.
+target_compile_definitions(${COMPONENT_LIB} PRIVATE WB_GIT_HASH="${PROJECT_VER}")

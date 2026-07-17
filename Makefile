@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk initial-flash flash-recovery voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision list-boards
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk initial-flash flash-recovery voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision base-monitor list-boards
 
 PORT ?=
 MAC ?=
@@ -13,12 +13,28 @@ PYTHON ?= python3
 BOARD_DETECTOR := $(abspath tools/find_board.py)
 ROTOR_PORT_TARGETS := initial-flash flash-recovery flash-launcher configure-board configure-board-v2 configure-board-eu wifi-provision
 WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
-PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS)
+BASE_PORT_TARGETS := base-monitor
+PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS) $(BASE_PORT_TARGETS)
 ROTOR_GOALS := $(filter $(ROTOR_PORT_TARGETS),$(MAKECMDGOALS))
 WORKBENCH_GOALS := $(filter $(WORKBENCH_PORT_TARGETS),$(MAKECMDGOALS))
+BASE_GOALS := $(filter $(BASE_PORT_TARGETS),$(MAKECMDGOALS))
 
 ifneq ($(strip $(ROTOR_GOALS)),)
 ifneq ($(strip $(WORKBENCH_GOALS)),)
+ifeq ($(strip $(PORT)),)
+$(error Targets for both board types need separate invocations or an explicit PORT=...)
+endif
+endif
+endif
+ifneq ($(strip $(ROTOR_GOALS)),)
+ifneq ($(strip $(BASE_GOALS)),)
+ifeq ($(strip $(PORT)),)
+$(error Targets for both board types need separate invocations or an explicit PORT=...)
+endif
+endif
+endif
+ifneq ($(strip $(WORKBENCH_GOALS)),)
+ifneq ($(strip $(BASE_GOALS)),)
 ifeq ($(strip $(PORT)),)
 $(error Targets for both board types need separate invocations or an explicit PORT=...)
 endif
@@ -31,6 +47,9 @@ BOARD_KIND := ventilastation
 endif
 ifneq ($(strip $(WORKBENCH_GOALS)),)
 BOARD_KIND := workbench
+endif
+ifneq ($(strip $(BASE_GOALS)),)
+BOARD_KIND := base
 endif
 
 ifneq ($(strip $(BOARD_KIND)),)
@@ -249,3 +268,13 @@ workbench-monitor:
 
 workbench-wifi-provision:
 	$(SERIAL_LOCK) $(call idf-env,$(WORKBENCH_IDF_PATH),python3 "$(WORKBENCH_DIR)/tools/provision_wifi.py" --port "$(PORT)" --wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)")
+
+# --- Base Arduino (buttons/servo/dial relay; see docs/internals/base-control-api.md) ---
+# Not an ESP-IDF project, so there's no build/flash target here (use the
+# Arduino IDE/arduino-cli directly) -- just a serial monitor, since
+# find_board.py can now identify it the same way it identifies the rotor and
+# workbench (see docs/internals/input-protocol-v2.md#resync--device-identification).
+# Usage:
+#   make base-monitor
+base-monitor:
+	$(PYTHON) -m serial.tools.miniterm "$(PORT)" 57600

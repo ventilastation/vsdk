@@ -471,6 +471,17 @@ class Director:
             else:
                 self.buttons2 &= ~self.BUTTON2_D & 0xFF
 
+        # RESYNC (docs/internals/input-protocol-v2.md#resync--device-identification)
+        # takes priority over any queued command: it's an explicit request to
+        # stop and reset, checked ahead of _dispatch_control so a RESYNC byte
+        # sequence that happened to also queue a garbage command (its own
+        # "ESYNC" text can transiently look like one -- see input_parser.py)
+        # can't run that command first. The identification banner itself is
+        # printed on the next boot, not here -- see serialcomms.py.
+        if hasattr(self.platform.comms, "next_resync") and self.platform.comms.next_resync():
+            import machine
+            machine.reset()
+
         if hasattr(self.platform.comms, "next_command"):
             cmd_line = self.platform.comms.next_command()
             if cmd_line:

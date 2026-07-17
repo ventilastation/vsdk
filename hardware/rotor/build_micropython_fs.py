@@ -6,6 +6,7 @@ import gzip
 import os
 import pathlib
 import struct
+import subprocess
 import sys
 
 BLOCK_SIZE = 4096  # SPI flash sector size on ESP32
@@ -122,6 +123,36 @@ def iter_copy_jobs(vsdk_root):
                 yield ("file", f"{remote_root}/{relative.as_posix()}", path)
 
 
+def write_version_file(vsdk_root):
+    """Regenerate ventilastation/version.py with the current git hash before
+    it's swept into the VFS image -- the RESYNC identification banner's
+    <githash> (see docs/internals/input-protocol-v2.md#resync--device-identification).
+    Best-effort: falls back to "unknown" (the file's committed placeholder)
+    if git isn't available, matching the ESP-IDF firmwares' own PROJECT_VER
+    fallback behavior.
+    """
+    version_path = vsdk_root / "apps/micropython/ventilastation/version.py"
+    try:
+        git_hash = subprocess.run(
+            ["git", "describe", "--always", "--dirty"],
+            cwd=vsdk_root, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        print("warning: `git describe` failed; version.py keeps its committed placeholder hash")
+        return
+    version_path.write_text(
+        '"""Firmware identity for the RESYNC device-identification protocol (see\n'
+        'docs/internals/input-protocol-v2.md#resync--device-identification).\n\n'
+        "Regenerated at deploy time by build_micropython_fs.py's write_version_file()\n"
+        "from `git describe`; do not hand-edit GIT_HASH.\n"
+        '"""\n\n'
+        'NAME = "ROTOR"\n'
+        'VERSION = "v1.0"\n'
+        f'GIT_HASH = "{git_hash}"\n'
+    )
+    print(f"  wrote {version_path.relative_to(vsdk_root)} (GIT_HASH={git_hash})")
+
+
 def build_image(vsdk_root, partition_size, output_path, empty=False):
     try:
         from littlefs import LittleFS
@@ -137,6 +168,8 @@ def build_image(vsdk_root, partition_size, output_path, empty=False):
         print(f"Created {output_path}")
         print(f"  0 files (empty), {len(fs.context.buffer):,} bytes ({block_count} blocks × {BLOCK_SIZE})")
         return
+
+    write_version_file(vsdk_root)
 
     for retro_go_dir in ("retro-go", "retro-go/cache", "retro-go/saves", "retro-go/config"):
         print(f"  mkdir /{retro_go_dir}")
