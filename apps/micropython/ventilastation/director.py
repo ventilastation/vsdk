@@ -385,27 +385,35 @@ class Director:
             stripes[filename.decode("utf-8")] = n
 
     def load_rom(self, filename):
-        # On the board, ROMs are stored gzip-compressed as "<name>.rom.gz" in the
-        # LittleFS image to save flash (see build_micropython_fs.py). If that file
-        # exists, inflate the whole ROM into RAM via the `deflate` module and parse
-        # it in memory. Otherwise fall through to loading the uncompressed
-        # "<name>.rom" (e.g. the desktop emulator reading straight from the repo).
-        gz_filename = filename + ".gz"
+        # On the board, ROMs are stored gzip-compressed as "<name>.romz" in the
+        # LittleFS image to save flash (see build_micropython_fs.py): a
+        # little-endian uint32 uncompressed size followed by the gzip data.
+        # Knowing the size upfront lets the whole ROM be inflated into one
+        # preallocated buffer via readinto() -- like the uncompressed
+        # codepath below -- instead of DeflateIO.read()'s unsized read, which
+        # reallocates and copies repeatedly as the result grows. Otherwise
+        # fall through to loading the uncompressed "<name>.rom" (e.g. the
+        # desktop emulator reading straight from the repo).
+        romz_filename = filename + "z"
         try:
-            uos.stat(gz_filename)
+            uos.stat(romz_filename)
         except OSError:
             pass
         else:
             import deflate
-            romfile = open(gz_filename, "rb")
+            romfile = open(romz_filename, "rb")
             try:
+                romlength = struct.unpack("<I", romfile.read(4))[0]
+                rombuffer = bytearray(romlength)
+                romview = memoryview(rombuffer)
                 stream = deflate.DeflateIO(romfile, deflate.GZIP)
                 try:
-                    self.romdata = memoryview(stream.read())
+                    stream.readinto(romview)
                 finally:
                     stream.close()
             finally:
                 romfile.close()
+            self.romdata = romview
             self._parse_rom_memory()
             return
 

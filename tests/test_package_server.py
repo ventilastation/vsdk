@@ -2,6 +2,7 @@ import gzip
 import io
 import json
 import pathlib
+import struct
 import sys
 import tempfile
 import unittest
@@ -41,6 +42,43 @@ def make_package_bytes(slug=SLUG, code=b"def main():\n    return None\n",
         for member, data in extra_members:
             archive.writestr(member, data)
     return out.getvalue()
+
+
+class DevicePathTests(unittest.TestCase):
+    """upgrade_server's _device_path()/_file_entry() drive the system OTA
+    manifest; a sprite rom must get the same length-prefixed ".romz" form
+    build_micropython_fs.py flashes, so a dev-loop OTA and a fresh flash
+    agree byte-for-byte. MSX cartridge/BIOS dumps keep the old bare-gzip
+    ".rom.gz" form, since fMSX reads those directly via zlib's gzFile."""
+
+    def test_sprite_rom_gets_length_prefixed_romz(self):
+        rom = build_rom([("ship.png", 8, 8, 2, 0, 5)], [build_palette(20)])
+        with tempfile.TemporaryDirectory() as tmp:
+            rom_path = pathlib.Path(tmp) / "alecu.testgame.rom"
+            rom_path.write_bytes(rom)
+
+            remote_path = "roms/alecu.testgame.rom"
+            device_path = upgrade_server._device_path(remote_path)
+            self.assertEqual(device_path, "roms/alecu.testgame.romz")
+
+            entry = upgrade_server._file_entry(device_path, remote_path, rom_path)
+            self.assertIsNotNone(entry["gz"])
+            size = struct.unpack("<I", entry["gz"][:4])[0]
+            self.assertEqual(size, len(rom))
+            self.assertEqual(gzip.decompress(entry["gz"][4:]), rom)
+            self.assertEqual(entry["size"], len(entry["gz"]))
+
+    def test_msx_rom_keeps_bare_gzip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rom_path = pathlib.Path(tmp) / "game.rom"
+            rom_path.write_bytes(b"fake msx cartridge dump")
+
+            remote_path = "roms/msx/game.rom"
+            device_path = upgrade_server._device_path(remote_path)
+            self.assertEqual(device_path, "roms/msx/game.rom.gz")
+
+            entry = upgrade_server._file_entry(device_path, remote_path, rom_path)
+            self.assertEqual(gzip.decompress(entry["gz"]), b"fake msx cartridge dump")
 
 
 class PackageServerTests(unittest.TestCase):
@@ -129,14 +167,16 @@ class PackageServerTests(unittest.TestCase):
                 "games/alecu/testgame/code/testgame.py",
                 "games/alecu/testgame/meta.json",
                 "menu-icon.rom",
-                "roms/%s.rom.gz" % SLUG,
+                "roms/%s.romz" % SLUG,
             ])
-            rom_info = stripped.getinfo("roms/%s.rom.gz" % SLUG)
+            rom_info = stripped.getinfo("roms/%s.romz" % SLUG)
             self.assertEqual(rom_info.compress_type, zipfile.ZIP_STORED)
             original_rom = build_rom([("ship.png", 8, 8, 2, 0, 5)],
                                      [build_palette(20)])
-            self.assertEqual(
-                gzip.decompress(stripped.read(rom_info)), original_rom)
+            payload = stripped.read(rom_info)
+            size = struct.unpack("<I", payload[:4])[0]
+            self.assertEqual(size, len(original_rom))
+            self.assertEqual(gzip.decompress(payload[4:]), original_rom)
 
         # Serving the board file marks the install as being fetched.
         self.assertEqual(package_manager.get_install_status(SLUG)["state"],

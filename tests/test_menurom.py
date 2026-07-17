@@ -1,5 +1,6 @@
 import gzip
 import os
+import struct
 import sys
 import tempfile
 import unittest
@@ -111,8 +112,8 @@ class MenuRomFileTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _write_gz(self, data):
-        with open(os.path.join(self.roms_dir, "menu.rom.gz"), "wb") as f:
-            f.write(gzip.compress(data, 9, mtime=0))
+        with open(os.path.join(self.roms_dir, "menu.romz"), "wb") as f:
+            f.write(struct.pack("<I", len(data)) + gzip.compress(data, 9, mtime=0))
 
     def _write_plain(self, data):
         with open(os.path.join(self.roms_dir, "menu.rom"), "wb") as f:
@@ -131,7 +132,7 @@ class MenuRomFileTests(unittest.TestCase):
     def test_merge_into_gz_writes_plain_and_drops_gz(self):
         self._write_gz(menu_fixture())
         menurom.merge_icon_into_menu(icon_fixture(), roms_dir=self.roms_dir)
-        self.assertFalse(os.path.exists(os.path.join(self.roms_dir, "menu.rom.gz")))
+        self.assertFalse(os.path.exists(os.path.join(self.roms_dir, "menu.romz")))
         strips, _ = inventory(self._read_plain())
         self.assertEqual(len(strips), 3)
 
@@ -150,7 +151,7 @@ class MenuRomFileTests(unittest.TestCase):
             packages_dir=self.packages_dir, roms_dir=self.roms_dir)
 
         self.assertTrue(refreshed)
-        self.assertFalse(os.path.exists(os.path.join(self.roms_dir, "menu.rom.gz")))
+        self.assertFalse(os.path.exists(os.path.join(self.roms_dir, "menu.romz")))
         strips, _ = inventory(self._read_plain())
         self.assertEqual(len(strips), 3)
 
@@ -163,7 +164,7 @@ class MenuRomFileTests(unittest.TestCase):
         self.assertFalse(menurom.refresh_from_packages(
             packages_dir=self.packages_dir, roms_dir=self.roms_dir))
         # No packages stored: the tree .gz stays authoritative.
-        self.assertTrue(os.path.exists(os.path.join(self.roms_dir, "menu.rom.gz")))
+        self.assertTrue(os.path.exists(os.path.join(self.roms_dir, "menu.romz")))
 
 
 if __name__ == "__main__":

@@ -115,9 +115,9 @@ def _check_install_boot():
 
 _check_install_boot()
 
-# A system OTA restores the tree's roms/menu.rom.gz, which shadows the merged
+# A system OTA restores the tree's roms/menu.romz, which shadows the merged
 # plain menu rom carrying installed packages' icons (director.load_rom prefers
-# the .gz). Re-merge the stored packages' icons when that happened; on a
+# the .romz). Re-merge the stored packages' icons when that happened; on a
 # normal boot this is just two stats.
 try:
     from ventilastation import menurom as _menurom

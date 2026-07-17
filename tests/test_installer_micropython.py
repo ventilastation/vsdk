@@ -37,32 +37,33 @@ ZIP_FIXTURE = binascii.a2b_base64(
     b"wQEAAHNvdW5kcy9yYXcubXAzUEsFBgAAAAADAAMArAAAAP0BAAAAAA=="
 )
 
-# gzip of a menu rom holding strips "menu.png" + "alecu/vyruss_vs2/menu.png"
-# sharing one palette (what a tree OTA would restore as roms/menu.rom.gz)
-MENU_GZ_FIXTURE = binascii.a2b_base64(
-    b"H4sIAAAAAAAC/+3YQQpAQACF4Tez0qxmyUI5AWXrMJJkwyTTKKfHxiX4v/rfIZ6VkZdU"
-    b"PtPlUrZOIdVbmL33MgAAAAAA4POKYZnG1BznnmLsj9g27ztQVVYWAAD8zuWcI6J/dgMV"
-    b"ynHsOxwAAA=="
+# menu rom holding strips "menu.png" + "alecu/vyruss_vs2/menu.png" sharing
+# one palette, as ".romz" (uint32 LE uncompressed size + gzip data -- what a
+# tree OTA would restore as roms/menu.romz; see build_micropython_fs.py)
+MENU_ROMZ_FIXTURE = binascii.a2b_base64(
+    b"OxwAAB+LCAAAAAAAAv/t2EEKQEAAheE3s9KsZslCOQFl6zCSZMMk0yinx8Yl+L/63yGe"
+    b"lZGXVD7T5VK2TiHVW5i99zIAAAAAAODzimGZxtQc555i7I/YNu87UFVWFgAA/M7lnCOi"
+    b"f3YDFcpx7DscAAA="
 )
 
 # stripped package (.no-sound.vs2) for games/alecu/newgame: meta + code
-# (DEFLATE), roms/alecu.newgame.rom.gz (STORE, 1177-byte rom inside),
-# menu-icon.rom (strip "alecu/newgame/menu.png" + own palette)
+# (DEFLATE), roms/alecu.newgame.romz (STORE, uint32 LE size + gzip of the
+# 1177-byte rom), menu-icon.rom (strip "alecu/newgame/menu.png" + own palette)
 STRIPPED_FIXTURE = binascii.a2b_base64(
     b"UEsDBBQAAAAIAAAAIQAR1m/fGgAAABoAAAAdAAAAZ2FtZXMvYWxlY3UvbmV3Z2FtZS9t"
     b"ZXRhLmpzb26rVkosyFSyUlAqKzZS0lFQyi9KSS0C8s1rAVBLAwQUAAAACAAAACEA8FPT"
     b"RxwAAAAcAAAAIwAAAGdhbWVzL2FsZWN1L25ld2dhbWUvY29kZS9uZXdnYW1lLnB5S0lN"
-    b"U8hNzMzT0LTiUgCCotSS0qI8Bb/8vFQuAFBLAwQUAAAAAAAAACEAlUfzhjoAAAA6AAAA"
-    b"GQAAAHJvbXMvYWxlY3UubmV3Z2FtZS5yb20uZ3ofiwgAAAAAAAL/Y2RgZOBhYGCYCcQc"
-    b"xRmZBXoFeekcHEwMrAMM/ouIiIziUTyKRyYGABJtWoOZBAAAUEsDBBQAAAAIAAAAIQDQ"
-    b"oSLVQwAAACcUAAANAAAAbWVudS1pY29uLnJvbe3DMQqAMBBFwR+0tLCyTmdnzhSWJY1Z"
-    b"bILH13voG5ikpEXSvkpbPd1GCb9b7V66xziuaDnPmgAAAAAAwOc9Zkbyn19QSwECFAMU"
-    b"AAAACAAAACEAEdZv3xoAAAAaAAAAHQAAAAAAAAAAAAAAgAEAAAAAZ2FtZXMvYWxlY3Uv"
-    b"bmV3Z2FtZS9tZXRhLmpzb25QSwECFAMUAAAACAAAACEA8FPTRxwAAAAcAAAAIwAAAAAA"
-    b"AAAAAAAAgAFVAAAAZ2FtZXMvYWxlY3UvbmV3Z2FtZS9jb2RlL25ld2dhbWUucHlQSwEC"
-    b"FAMUAAAAAAAAACEAlUfzhjoAAAA6AAAAGQAAAAAAAAAAAAAAgAGyAAAAcm9tcy9hbGVj"
-    b"dS5uZXdnYW1lLnJvbS5nelBLAQIUAxQAAAAIAAAAIQDQoSLVQwAAACcUAAANAAAAAAAA"
-    b"AAAAAACAASMBAABtZW51LWljb24ucm9tUEsFBgAAAAAEAAQAHgEAAJEBAAAAAA=="
+    b"U8hNzMzT0LTiUgCCotSS0qI8Bb/8vFQuAFBLAwQUAAAAAAAAACEAEkOhHj4AAAA+AAAA"
+    b"FwAAAHJvbXMvYWxlY3UubmV3Z2FtZS5yb216mQQAAB+LCAAAAAAAAv9jZGBk4GFgYJgJ"
+    b"xBzFGZkFegV56RwcTAysAwz+i4iIjOJRPIpHJgYAEm1ag5kEAABQSwMEFAAAAAgAAAAh"
+    b"ANChItVDAAAAJxQAAA0AAABtZW51LWljb24ucm9t7cMxCoAwEEXBH7S0sLJOZ2fOFJYl"
+    b"jVlsgsfXe+gbmKSkRdK+Sls93UYJv1vtXrrHOK5oOc+aAAAAAADA5z1mRvKfX1BLAQIU"
+    b"AxQAAAAIAAAAIQAR1m/fGgAAABoAAAAdAAAAAAAAAAAAAACAAQAAAABnYW1lcy9hbGVj"
+    b"dS9uZXdnYW1lL21ldGEuanNvblBLAQIUAxQAAAAIAAAAIQDwU9NHHAAAABwAAAAjAAAA"
+    b"AAAAAAAAAACAAVUAAABnYW1lcy9hbGVjdS9uZXdnYW1lL2NvZGUvbmV3Z2FtZS5weVBL"
+    b"AQIUAxQAAAAAAAAAIQASQ6EePgAAAD4AAAAXAAAAAAAAAAAAAACAAbIAAAByb21zL2Fs"
+    b"ZWN1Lm5ld2dhbWUucm9telBLAQIUAxQAAAAIAAAAIQDQoSLVQwAAACcUAAANAAAAAAAA"
+    b"AAAAAACAASUBAABtZW51LWljb24ucm9tUEsFBgAAAAAEAAQAHAEAAJMBAAAAAA=="
 )
 
 ROOT_DIR = "build/test_mp_root"
@@ -111,7 +112,7 @@ def test_vszip_reads_store_and_deflate():
 
 def test_install_from_stripped_package():
     _reset_root()
-    _write(ROOT_DIR + "/roms/menu.rom.gz", MENU_GZ_FIXTURE)
+    _write(ROOT_DIR + "/roms/menu.romz", MENU_ROMZ_FIXTURE)
     package_path = ROOT_DIR + "/alecu.newgame.no-sound.vs2"
     _write(package_path, STRIPPED_FIXTURE)
 
@@ -120,9 +121,9 @@ def test_install_from_stripped_package():
     assert slug == "alecu.newgame", slug
     assert _read(ROOT_DIR + "/games/alecu/newgame/meta.json") == b'{"api": "vs2", "order": 7}'
     assert _read(ROOT_DIR + "/games/alecu/newgame/code/newgame.py").startswith(b"def main()")
-    assert _exists(ROOT_DIR + "/roms/alecu.newgame.rom.gz")
-    # Icon merged: plain menu rom written, the shadowing .gz dropped.
-    assert not _exists(ROOT_DIR + "/roms/menu.rom.gz")
+    assert _exists(ROOT_DIR + "/roms/alecu.newgame.romz")
+    # Icon merged: plain menu rom written, the shadowing .romz dropped.
+    assert not _exists(ROOT_DIR + "/roms/menu.romz")
     menu = _read(ROOT_DIR + "/roms/menu.rom")
     strips, palettes = menurom.parse(menu)
     names = [strip[0] for strip in strips]

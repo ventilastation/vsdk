@@ -62,7 +62,24 @@ conventionally magenta and unused because index 0xFF means transparent.
 
 ## On-flash variant
 
-The LittleFS image stores ROMs gzip-compressed as `<name>.rom.gz`
-(hardware/rotor/build_micropython_fs.py); `director.load_rom()` looks for
-the `.gz` first and inflates it in memory. The uncompressed container is
-identical.
+The LittleFS image stores ROMs compressed as `<name>.romz`
+(`hardware/rotor/build_micropython_fs.py`'s `compress_sprite_rom()`):
+
+```
++--------------------------------------------------+
+| u32 uncompressed_size                             |
+| gzip data (the container above, compressed)       |
++--------------------------------------------------+
+```
+
+`director.load_rom()` looks for the `.romz` first, reads the size, and
+inflates directly into one preallocated buffer via
+`deflate.DeflateIO.readinto()` -- knowing the size upfront avoids
+`DeflateIO.read()`'s unsized read, which reallocates and copies repeatedly
+as the result grows. `menurom.py`'s `roms/menu.romz` uses the same format.
+The uncompressed container is otherwise identical.
+
+MSX cartridge/BIOS dumps (`roms/msx/*.rom`, `retro-go/bios/msx/*.rom`) are
+a separate case: fMSX reads those directly as a bare gzip stream (via
+zlib's `gzFile`), so they keep the old plain-gzip `.rom.gz` form with no
+size prefix -- see `build_micropython_fs.py`'s `is_sprite_rom_path()`.

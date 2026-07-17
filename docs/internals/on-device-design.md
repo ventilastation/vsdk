@@ -163,9 +163,12 @@ Boy from one 0.92 MB app. NES sets `app->frameskip = 0`
 
 MicroPython sprite ROMs (`apps/micropython/roms/*.rom`, generated from PNGs by
 `tools/generate_roms.py`) are palette-indexed image data and compress ~85% with
-deflate. `build_micropython_fs.py` stores each as **`<name>.rom.gz`** (gzip) in
-the vfs image; `director.py` finds the `.gz` file and inflates it with the
-board's `deflate` module, parsing it in RAM. Repo `.rom` files stay
+deflate. `build_micropython_fs.py` stores each as **`<name>.romz`** (a
+little-endian uint32 uncompressed size followed by gzip data) in the vfs
+image; `director.py` finds the `.romz` file, reads the size, and inflates
+it directly into one preallocated buffer via the board's `deflate` module's
+`readinto()` — knowing the size upfront avoids the unsized `.read()`'s
+repeated reallocation/copying as the result grows. Repo `.rom` files stay
 uncompressed, so the desktop/web emulators are unaffected. This freed ~2.4 MB of
 the vfs partition — leaving room for the fMSX app partition and console ROMs.
 

@@ -7,11 +7,11 @@ package would have no icon. Each package ships a one-strip menu-icon.rom
 install time, replacing the strip when a game is re-installed.
 
 The board cannot gzip-compress, so the merged rom is written as a plain
-roms/menu.rom and the tree's roms/menu.rom.gz is deleted afterwards --
-director.load_rom() prefers the .gz, so leaving it would shadow the merge.
+roms/menu.rom and the tree's roms/menu.romz is deleted afterwards --
+director.load_rom() prefers the .romz, so leaving it would shadow the merge.
 That preference is also the staleness signal: a system OTA restores
-menu.rom.gz, and refresh_from_packages() (run at boot) notices it, re-merges
-every stored package's icon into the fresh tree rom, and drops the .gz
+menu.romz, and refresh_from_packages() (run at boot) notices it, re-merges
+every stored package's icon into the fresh tree rom, and drops the .romz
 again. No network involved: the icon roms live in /packages.
 
 Container layout per docs/internals/rom-format.md.
@@ -116,17 +116,24 @@ def merge_icon(menu_data, icon_data):
 
 
 def _gunzip_file(path):
+    """Inflate a ".romz" file: a little-endian uint32 uncompressed size
+    followed by gzip data (see build_micropython_fs.py). Knowing the size
+    upfront lets this read into one preallocated buffer via readinto()
+    instead of DeflateIO.read()'s unsized read."""
     with open(path, "rb") as f:
+        size = struct.unpack("<I", f.read(4))[0]
         try:
             import deflate
-            stream = deflate.DeflateIO(f, deflate.GZIP)
-            try:
-                return stream.read()
-            finally:
-                stream.close()
         except ImportError:
             import zlib
             return zlib.decompress(f.read(), 47)
+        buffer = bytearray(size)
+        stream = deflate.DeflateIO(f, deflate.GZIP)
+        try:
+            stream.readinto(buffer)
+        finally:
+            stream.close()
+        return buffer
 
 
 def _exists(path):
@@ -138,37 +145,37 @@ def _exists(path):
 
 
 def load_menu_rom(roms_dir=ROMS_DIR):
-    """Current menu rom bytes, preferring the tree's .gz like the director
-    does. Returns (data, from_gz)."""
-    gz_path = roms_dir + "/menu.rom.gz"
-    if _exists(gz_path):
-        return _gunzip_file(gz_path), True
+    """Current menu rom bytes, preferring the tree's .romz like the director
+    does. Returns (data, from_romz)."""
+    romz_path = roms_dir + "/menu.romz"
+    if _exists(romz_path):
+        return _gunzip_file(romz_path), True
     with open(roms_dir + "/menu.rom", "rb") as f:
         return f.read(), False
 
 
-def _write_menu_rom(data, roms_dir, drop_gz):
+def _write_menu_rom(data, roms_dir, drop_romz):
     tmp_path = roms_dir + "/menu.rom.tmp"
     with open(tmp_path, "wb") as f:
         f.write(data)
     os.rename(tmp_path, roms_dir + "/menu.rom")
-    if drop_gz:
+    if drop_romz:
         try:
-            os.remove(roms_dir + "/menu.rom.gz")
+            os.remove(roms_dir + "/menu.romz")
         except OSError:
             pass
 
 
 def merge_icon_into_menu(icon_data, roms_dir=ROMS_DIR):
-    menu_data, from_gz = load_menu_rom(roms_dir)
-    _write_menu_rom(merge_icon(menu_data, icon_data), roms_dir, drop_gz=from_gz)
+    menu_data, from_romz = load_menu_rom(roms_dir)
+    _write_menu_rom(merge_icon(menu_data, icon_data), roms_dir, drop_romz=from_romz)
 
 
 def refresh_from_packages(packages_dir=PACKAGES_DIR, roms_dir=ROMS_DIR):
     """Re-merge stored package icons after a system OTA restored
-    roms/menu.rom.gz. Cheap no-op (two stats) on a normal boot. Returns True
+    roms/menu.romz. Cheap no-op (two stats) on a normal boot. Returns True
     when a re-merge happened."""
-    if not _exists(roms_dir + "/menu.rom.gz"):
+    if not _exists(roms_dir + "/menu.romz"):
         return False
     try:
         packages = [
@@ -180,7 +187,7 @@ def refresh_from_packages(packages_dir=PACKAGES_DIR, roms_dir=ROMS_DIR):
     if not packages:
         return False
 
-    menu_data = _gunzip_file(roms_dir + "/menu.rom.gz")
+    menu_data = _gunzip_file(roms_dir + "/menu.romz")
     for name in sorted(packages):
         try:
             with vszip.ZipReader(packages_dir + "/" + name) as package:
@@ -188,5 +195,5 @@ def refresh_from_packages(packages_dir=PACKAGES_DIR, roms_dir=ROMS_DIR):
                     menu_data = merge_icon(menu_data, package.read(ICON_MEMBER))
         except Exception as e:
             print("menurom: skipping icon from", name, ":", e)
-    _write_menu_rom(menu_data, roms_dir, drop_gz=True)
+    _write_menu_rom(menu_data, roms_dir, drop_romz=True)
     return True

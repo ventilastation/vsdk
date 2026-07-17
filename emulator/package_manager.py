@@ -14,7 +14,8 @@ Stripped .no-sound.vs2 members are device paths (minus the leading "/"),
 except menu-icon.rom which the board merges into its menu rom instead of
 extracting:
     games/<group>/<name>/meta.json, games/<group>/<name>/code/**.py,
-    roms/<slug>.rom.gz (STORE, pre-gzipped), menu-icon.rom
+    roms/<slug>.romz (STORE, pre-gzipped, uint32-length-prefixed --
+    see hardware/rotor/build_micropython_fs.py), menu-icon.rom
 
 Everything here is import-light (stdlib only) so the standalone
 upgrade_server keeps working without the emulator's dependencies.
@@ -26,6 +27,7 @@ import io
 import json
 import pathlib
 import re
+import struct
 import threading
 import zipfile
 
@@ -210,11 +212,16 @@ def _build_board_file(slug, source_path):
                     member.startswith("code/") and member.endswith(".py")):
                 add(device_prefix + member, source.read(member))
             elif member == "roms/%s.rom" % slug:
-                # Pre-gzipped like the flashed image (the board can't
-                # compress); already-compressed data is STOREd in the zip.
-                payload = gzip.compress(source.read(member),
-                                        compresslevel=9, mtime=0)
-                add(member + ".gz", payload, zipfile.ZIP_STORED)
+                # Pre-compressed like the flashed image (the board can't
+                # compress): uint32 LE uncompressed size + gzip data, so
+                # director.load_rom() can preallocate and readinto() it
+                # directly -- see build_micropython_fs.py's
+                # compress_sprite_rom(). Already-compressed data is STOREd
+                # in the zip.
+                rom = source.read(member)
+                payload = struct.pack("<I", len(rom)) + gzip.compress(
+                    rom, compresslevel=9, mtime=0)
+                add(member + "z", payload, zipfile.ZIP_STORED)
             elif member == "menu-icon.rom":
                 add(member, source.read(member))
             # menu.png and sounds/* stay on the base.

@@ -30,7 +30,7 @@ merger rather than extracted:
 | Member | Zip method |
 |---|---|
 | `games/<g>/<n>/meta.json`, `games/<g>/<n>/code/**.py` | DEFLATE |
-| `roms/<slug>.rom.gz` (gzip -9, mtime 0 — the board cannot compress) | STORE |
+| `roms/<slug>.romz` (uint32 LE size + gzip -9, mtime 0 — see [rom-format.md](rom-format.md#on-flash-variant); the board cannot compress) | STORE |
 | `menu-icon.rom` | DEFLATE |
 
 ## Flow
@@ -74,9 +74,9 @@ The launcher renders all icons from one monolithic rom and
 games' icons must live inside `roms/menu.rom`. `ventilastation/menurom.py`
 splices each package's icon strip + palette in (replace-by-name on
 re-install, unreferenced palettes garbage-collected). Because the board
-cannot gzip and `director.load_rom()` prefers `menu.rom.gz`, the merged rom
-is written plain and the `.gz` is deleted — and the `.gz` reappearing after
-a system OTA is exactly the re-merge signal: `main.py` calls
+cannot gzip and `director.load_rom()` prefers `menu.romz`, the merged rom
+is written plain and the `.romz` is deleted — and the `.romz` reappearing
+after a system OTA is exactly the re-merge signal: `main.py` calls
 `menurom.refresh_from_packages()` at boot, which rebuilds the merged rom
 from the icon roms stored in `/packages/*.no-sound.vs2` (no network
 needed). `ventilastation/menu.py` falls back to a generic strip if an icon
@@ -151,8 +151,8 @@ NVS (`make wifi-provision`), repo on `feature/game-packages` with `.venv`.
    The board reboots twice (into install mode, then after install).
    - Menu must still show Vyruss VS2 with its icon (the merged menu rom).
    - `mpremote fs ls :/packages` shows `alecu.vyruss_vs2.no-sound.vs2`;
-     `:/roms` has `alecu.vyruss_vs2.rom.gz` and a plain `menu.rom` (no
-     `menu.rom.gz` anymore).
+     `:/roms` has `alecu.vyruss_vs2.romz` and a plain `menu.rom` (no
+     `menu.romz` anymore).
    - Game plays; shoot/explosion sounds come from the base ("Loaded N
      sounds from package ..." in the emulator log after upload).
    - This exercises LittleFS **directory rename** (staging → final). If
@@ -162,7 +162,7 @@ NVS (`make wifi-provision`), repo on `feature/game-packages` with `.venv`.
    copy `games/alecu/mapdemo` to `games/alecu/mapdemo2`, `package_game
    alecu/mapdemo2`, delete the copy) and install it: a brand-new
    `/games/alecu/mapdemo2` must appear in the menu with its icon.
-4. **OTA re-merge.** Ctrl-U again (tree OTA restores `roms/menu.rom.gz`).
+4. **OTA re-merge.** Ctrl-U again (tree OTA restores `roms/menu.romz`).
    After the post-OTA reboot the console must print
    `main: menu rom re-merged from installed packages` and installed icons
    must still render. Note vyruss_vs2's `code/` is re-synced from the tree

@@ -5,6 +5,7 @@ import argparse
 import gzip
 import os
 import pathlib
+import struct
 import subprocess
 import sys
 
@@ -45,6 +46,26 @@ ROM_SUFFIXES = {
     ".rom", ".mx1", ".mx2", ".dsk", ".cas", ".fdi", ".gz",
 }
 EMU_ROM_ROOTS = {"roms/nes", "roms/sms", "roms/gb", "roms/msx"}
+
+# Paths under EMU_ROM_ROOTS that end in ".rom" (MSX cartridge/BIOS dumps) are
+# read directly by fMSX via zlib's gzFile (see MSX.c's fread->gzread remap),
+# which expects a bare gzip stream -- so they keep the old plain-gzip,
+# ".rom.gz" on-flash form. Sprite ROMs (ventilastation's own image format,
+# read by director.load_rom()/menurom.py) get the length-prefixed ".romz"
+# form instead; see compress_sprite_rom() and docs/internals/rom-format.md.
+_NON_SPRITE_ROM_PREFIXES = ("roms/msx/", "retro-go/bios/msx/")
+
+
+def is_sprite_rom_path(remote_path):
+    return remote_path.endswith(".rom") and not remote_path.startswith(_NON_SPRITE_ROM_PREFIXES)
+
+
+def compress_sprite_rom(data):
+    """<uint32 LE uncompressed size><gzip data>. The size lets director.py
+    preallocate one exact-sized buffer and deflate.DeflateIO.readinto() it
+    directly, instead of DeflateIO.read()'s unsized read -- which reallocates
+    and copies repeatedly as it grows, the slow path this format replaces."""
+    return struct.pack("<I", len(data)) + gzip.compress(data, compresslevel=9, mtime=0)
 
 
 def iter_copy_jobs(vsdk_root):
@@ -163,11 +184,18 @@ def build_image(vsdk_root, partition_size, output_path, empty=False):
             with open(local_path, "rb") as f_in:
                 data = f_in.read()
             # Sprite ROMs are palette-indexed image data and compress ~85% with
-            # deflate. Store them gzip-compressed under a ".rom.gz" name (so they
-            # are not confused with raw ROMs) to save flash; director.py finds the
-            # ".gz" file and inflates it via the `deflate` module. mtime=0 keeps
-            # the image reproducible.
-            if lfs_path.endswith(".rom"):
+            # deflate. Store them length-prefixed-gzip-compressed under a
+            # ".romz" name (so they are not confused with raw ROMs) to save
+            # flash; director.py/menurom.py find the ".romz" file and inflate
+            # it via the `deflate` module.
+            if is_sprite_rom_path(remote_path):
+                payload = compress_sprite_rom(data)
+                lfs_path += "z"
+                print(f"  add   {lfs_path}  ({len(data):,} -> {len(payload):,} incl. header, gzip)")
+                data = payload
+            elif lfs_path.endswith(".rom"):
+                # MSX cartridge/BIOS dumps: fMSX reads these as a bare gzip
+                # stream (see is_sprite_rom_path()), so no length header.
                 compressed = gzip.compress(data, compresslevel=9, mtime=0)
                 lfs_path += ".gz"
                 print(f"  add   {lfs_path}  ({len(data):,} -> {len(compressed):,} gzip)")
