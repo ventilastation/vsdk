@@ -245,7 +245,7 @@ overlay_title_label = pyglet.text.Label(
     color=(241, 245, 255, 255),
 )
 overlay_body_label = pyglet.text.Label(
-    "", font_name="Arial", font_size=12, anchor_y="top", multiline=True,
+    "", width=1, font_name="Arial", font_size=12, anchor_y="top", multiline=True,
     color=(210, 220, 234, 255),
 )
 overlay_close_label = pyglet.text.Label(
