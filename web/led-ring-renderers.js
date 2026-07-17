@@ -157,10 +157,13 @@ class LedRingWebGLRenderer {
       null,
     );
 
-    this.sceneCompositor = this.isWebGL2
-      ? new LedSceneWebGLCompositor(gl, this.ledColorTexture)
-      : null;
-    this.sceneAvailable = Boolean(this.sceneCompositor?.available);
+    // Compiling the full scene compositor is expensive and, on a few GPU
+    // drivers, can disrupt the first paint. The normal emulator path remains
+    // the existing CPU compositor, so defer shader program creation until the
+    // user selects it (or explicitly runs the comparison).
+    this.sceneCompositor = null;
+    this.sceneInitializationAttempted = false;
+    this.sceneError = null;
 
     this.attribs = {
       position: gl.getAttribLocation(this.program, "a_position"),
@@ -294,6 +297,9 @@ class LedRingWebGLRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, width, height);
     gl.enable(gl.BLEND);
+    gl.uniform2f(this.uniforms.resolution, width, height);
+    gl.uniform2f(this.uniforms.center, width * 0.5, height * 0.5);
+    gl.uniform1f(this.uniforms.scale, Math.min(width, height) / 200);
     gl.drawArrays(gl.TRIANGLES, 0, this.geometry.vertexCount);
     const finishedAt = performance.now();
     this.lastProfile = {
@@ -311,7 +317,7 @@ class LedRingWebGLRenderer {
   }
 
   renderScene(sceneInput) {
-    if (!this.available || !this.sceneAvailable) {
+    if (!this.available || !this.ensureSceneCompositor()) {
       this.lastProfile = null;
       return false;
     }
@@ -350,6 +356,25 @@ class LedRingWebGLRenderer {
 
   readScenePaletteEntry(paletteIndex, colorIndex) {
     return this.sceneCompositor?.readPaletteEntry(paletteIndex, colorIndex) || null;
+  }
+
+  get sceneAvailable() {
+    // Before the first GPU-scene request, WebGL2 support is the useful answer
+    // for the options UI. Once initialization was attempted, expose the real
+    // compositor result so failed compilation falls straight back to CPU.
+    return this.isWebGL2 && (!this.sceneInitializationAttempted || Boolean(this.sceneCompositor?.available));
+  }
+
+  ensureSceneCompositor() {
+    if (!this.isWebGL2) {
+      return false;
+    }
+    if (!this.sceneInitializationAttempted) {
+      this.sceneInitializationAttempted = true;
+      this.sceneCompositor = new LedSceneWebGLCompositor(this.gl, this.ledColorTexture);
+      this.sceneError = this.sceneCompositor.error || null;
+    }
+    return Boolean(this.sceneCompositor?.available);
   }
 }
 

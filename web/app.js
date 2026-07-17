@@ -40,7 +40,7 @@ import {
 } from "./app-support.js?v=20260717b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260717e";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260717f";
 
 
 class FailedRuntimeAdapter {
