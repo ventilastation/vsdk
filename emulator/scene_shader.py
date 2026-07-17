@@ -301,7 +301,7 @@ class DesktopSceneCompositor:
 
         self.gl = {
             name: value for name, value in locals().items()
-            if name.startswith("GL_") or name.startswith("gl") or name == "GLuint"
+            if name.startswith("GL_") or name.startswith("gl") or name in ("GLint", "GLuint")
         }
         self.program = ShaderProgram(
             Shader(scene_vertex_source(), "vertex"),
