@@ -22,6 +22,7 @@ publish script replaces the symlinks with real copies.
 | `app.js` | `BrowserHostApp`: UI, input, frame loop, inspectors |
 | `app-support.js` | shared constants + small helpers |
 | `led-ring-renderers.js` | WebGL renderer and 2D-canvas fallback |
+| `scene-webgl-compositor.js`, `scene-shader-core.js` | WebGL2 whole-frame compositor and its shared raw-scene/GLSL definition |
 | `audio-host.js` | plays the `sound`/`music`/`notes` commands |
 | `led-render-core.js` | polar frame math shared with the render parity test |
 | `micropython-bridge.js`, `wasm-worker.js`, `wasm-adapter.js` | browser⇄worker⇄WASM bridge (pointer-based frame transport; see ../docs/internals/web-emulator-architecture.md) |
@@ -46,6 +47,28 @@ IDEs and parent shells:
 This lets an embedded editor write files directly into the worker-hosted
 MicroPython filesystem and restart the runtime without rebuilding
 `runtime-bundle.json` on every save.
+
+## Comparing the CPU and shader compositors
+
+Open **Options → Renderer** in the emulator and select either **CPU
+(existing)** or **GPU shader (WebGL2)**. The shader path consumes the raw
+`sprites` or `vs2_scene` frame payload, maps strip and palette data through
+GPU textures, and renders the complete 256×54 LED frame before the radial
+preview pass; it never calls the JavaScript per-column compositor.
+
+**Compare CPU / shader** warms both full paths and then times 24 synchronized
+frames with `gl.finish()` so the result includes GPU work rather than only
+command submission. It also reads back the shader LED texture once and reports
+pixel parity against the CPU compositor. This makes the same control useful for
+collecting comparable results on desktop and mobile browsers. The GPU option
+falls back to the CPU path on WebGL1-only devices, while strips are still
+loading, and for raw RGB-frame games.
+
+The core packer/software-parity checks run without a browser:
+
+```sh
+node tests/test_scene_shader_core.mjs
+```
 
 ## Development notes
 

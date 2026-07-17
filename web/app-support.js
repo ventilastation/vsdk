@@ -216,6 +216,7 @@ const INSPECTOR_OPEN_STORAGE_KEY = "ventilastation.inspectorOpen.v2";
 const EDITOR_OPEN_STORAGE_KEY = "ventilastation.editorOpen.v1";
 const RENDERER_PROFILING_STORAGE_KEY = "ventilastation.rendererProfiling.v1";
 const WEBGL_RESOLUTION_SCALE_STORAGE_KEY = "ventilastation.webglResolutionScale.v1";
+const SCENE_RENDERER_STORAGE_KEY = "ventilastation.sceneRenderer.v1";
 const SCENE_STEP_MS = 30;
 const MAX_CATCH_UP_STEPS = 6;
 const MAX_TICK_BACKLOG_MS = SCENE_STEP_MS * MAX_CATCH_UP_STEPS;
@@ -315,12 +316,17 @@ function buildRenderProfileSnapshot(samples) {
     totalMs: summarizeProfileValues(samples, "totalMs"),
     computePixelsMs: summarizeProfileValues(samples, "computePixelsMs"),
     rendererMs: summarizeProfileValues(samples, "rendererMs"),
-    detail: latest.renderer === "webgl" ? {
+    detail: latest.renderer === "webgl" || latest.renderer === "scene-webgl" ? {
       resizeMs: summarizeProfileValues(samples, "rendererDetail.resizeMs"),
       clearMs: summarizeProfileValues(samples, "rendererDetail.clearMs"),
       colorExpandMs: summarizeProfileValues(samples, "rendererDetail.colorExpandMs"),
       uploadMs: summarizeProfileValues(samples, "rendererDetail.uploadMs"),
       drawSubmitMs: summarizeProfileValues(samples, "rendererDetail.drawSubmitMs"),
+      sceneMs: summarizeProfileValues(samples, "rendererDetail.sceneMs"),
+      scenePackMs: summarizeProfileValues(samples, "rendererDetail.sceneDetail.packMs"),
+      sceneDynamicUploadMs: summarizeProfileValues(samples, "rendererDetail.sceneDetail.dynamicUploadMs"),
+      sceneDrawSubmitMs: summarizeProfileValues(samples, "rendererDetail.sceneDetail.drawSubmitMs"),
+      ringDrawSubmitMs: summarizeProfileValues(samples, "rendererDetail.ringDrawSubmitMs"),
       colorBytes: latest.rendererDetail?.colorBytes ?? null,
       vertexCount: latest.rendererDetail?.vertexCount ?? null,
       resolutionScale: latest.rendererDetail?.resolutionScale ?? null,
@@ -419,6 +425,7 @@ export {
   EDITOR_OPEN_STORAGE_KEY,
   RENDERER_PROFILING_STORAGE_KEY,
   WEBGL_RESOLUTION_SCALE_STORAGE_KEY,
+  SCENE_RENDERER_STORAGE_KEY,
   SCENE_STEP_MS,
   MAX_CATCH_UP_STEPS,
   MAX_TICK_BACKLOG_MS,

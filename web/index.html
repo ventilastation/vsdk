@@ -177,10 +177,19 @@
 
         <div class="inspector-block settings-block">
           <h2>Renderer</h2>
+          <label class="settings-option settings-option-select" for="scene-renderer-mode">
+            <span>Scene compositor</span>
+            <select id="scene-renderer-mode">
+              <option value="cpu">CPU (existing)</option>
+              <option value="shader">GPU shader (WebGL2)</option>
+            </select>
+          </label>
           <label class="settings-option">
             <input type="checkbox" id="enable-renderer-profiling">
             Enable renderer profiling
           </label>
+          <button type="button" id="run-renderer-comparison">Compare CPU / shader</button>
+          <div class="debug-meta" id="renderer-comparison" aria-live="polite"></div>
           <div class="debug-meta">
             <span><strong>Canvas</strong> WebGL radial preview</span>
           </div>
@@ -195,6 +204,7 @@
             <span class="status-pill" id="button-mask">Buttons 0x00</span>
             <span class="status-pill" id="gamepad-status">Gamepad none</span>
             <span class="status-pill" id="webgl-scale-status">Scale Auto 100%</span>
+            <span class="status-pill" id="scene-renderer-status">Compositor CPU</span>
           </div>
           <div id="runtime-summary" class="summary-grid"></div>
         </div>
@@ -222,7 +232,7 @@
   <script src="./led-render-core.js?v=20260716a"></script>
   <script src="./rom-builder-core.js?v=20260622c"></script>
   <script src="./rom-builder-browser.js?v=20260622c"></script>
-  <script type="module" src="./app.js?v=20260714c"></script>
+  <script type="module" src="./app.js?v=20260717h"></script>
   <script type="module" src="./monaco-ide.js?v=20260715a"></script>
 </body>
 </html>
