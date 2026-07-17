@@ -130,11 +130,12 @@ def _lfs_files():
             yield remote_path, local_path
 
 
-def _file_entry(device_path, local_path):
+def _file_entry(device_path, remote_path, local_path):
     """Return the cached {sha256, size, gz} entry for one file, refreshing
-    it when the source file changed. Sprite ROMs are stored gzip-compressed
-    on device (see build_micropython_fs.py), so they are hashed and served
-    in their compressed form under a ".rom.gz" device path."""
+    it when the source file changed. Sprite ROMs and MSX cartridge/BIOS
+    dumps are stored gzip-compressed on device (see build_micropython_fs.py),
+    so they are hashed and served in their compressed form under a ".romz"
+    or ".rom.gz" device path respectively."""
     stat = local_path.stat()
     key = (stat.st_mtime_ns, stat.st_size)
     with _cache_lock:
@@ -143,7 +144,10 @@ def _file_entry(device_path, local_path):
             return entry
     data = local_path.read_bytes()
     gz = None
-    if device_path.endswith(".rom.gz"):
+    if _build_fs.is_sprite_rom_path(remote_path):
+        gz = _build_fs.compress_sprite_rom(data)
+        data = gz
+    elif device_path.endswith(".rom.gz"):
         # mtime=0 keeps the output deterministic, matching the flashed image.
         gz = gzip.compress(data, compresslevel=9, mtime=0)
         data = gz
@@ -167,6 +171,8 @@ def _sha256_file(path):
 
 
 def _device_path(remote_path):
+    if _build_fs.is_sprite_rom_path(remote_path):
+        return remote_path + "z"
     return remote_path + ".gz" if remote_path.endswith(".rom") else remote_path
 
 
@@ -176,7 +182,7 @@ def _build_manifest():
         if not local_path.is_file():
             continue
         device_path = _device_path(remote_path)
-        entry = _file_entry(device_path, local_path)
+        entry = _file_entry(device_path, remote_path, local_path)
         files.append({
             "path": device_path,
             "size": entry["size"],
@@ -203,7 +209,7 @@ def _read_device_file(rel):
             continue
         if not local_path.is_file():
             return None
-        entry = _file_entry(rel, local_path)
+        entry = _file_entry(rel, remote_path, local_path)
         if entry["gz"] is not None:
             return entry["gz"]
         return local_path.read_bytes()

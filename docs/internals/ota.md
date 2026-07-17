@@ -204,14 +204,16 @@ The file manifest reuses `hardware/rotor/build_micropython_fs.py`'s
 image — so OTA and USB deploys can never drift apart. It covers `main.py`,
 `ventilastation/`, sprite ROMs, Doom WADs, console ROMs, `games/` and
 `system/`, with the same skip rules. Sprite `.rom` files get the same
-deterministic gzip transform as the image and appear as `.rom.gz`.
+deterministic length-prefixed-gzip transform as the image and appear as
+`.romz` (see [rom-format.md](rom-format.md#on-flash-variant)); MSX
+cartridge/BIOS `.rom` files keep the older bare-gzip `.rom.gz` form.
 
 ```json
 {
   "files": [
     {"path": "ventilastation/director.py", "size": 4120, "sha256": "aabbcc..."},
     {"path": "games/alecu/vyruss/code/__init__.py", "size": 9311, "sha256": "..."},
-    {"path": "roms/menu.rom.gz", "size": 68210, "sha256": "..."}
+    {"path": "roms/menu.romz", "size": 68214, "sha256": "..."}
   ],
   "partitions": {
     "prboom-go":   {"size": 1245184, "sha256": "...", "url": "/partitions/prboom-go"},

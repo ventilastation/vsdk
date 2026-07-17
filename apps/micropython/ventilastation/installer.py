@@ -185,9 +185,9 @@ def install_from_file(package_path, root=""):
         os.rename(staging, old_game_dir)
         for tmp_path, final in rom_renames:
             # A previous install may have left the other on-flash variant
-            # (plain .rom vs .rom.gz); director.load_rom() prefers the .gz,
+            # (plain .rom vs .romz); director.load_rom() prefers the .romz,
             # so a stale sibling would shadow the fresh rom.
-            sibling = final[:-3] if final.endswith(".rom.gz") else final + ".gz"
+            sibling = final[:-1] if final.endswith(".romz") else final + "z"
             try:
                 os.remove(sibling)
             except OSError:

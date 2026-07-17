@@ -1,5 +1,6 @@
 import gzip
 import os
+import struct
 import sys
 import tempfile
 import unittest
@@ -17,9 +18,9 @@ SLUG = "alecu.testgame"
 PREFIX = "games/alecu/testgame"
 
 
-def game_rom_gz():
+def game_rom_z():
     rom = build_rom([("ship.png", 8, 8, 2, 0, 5)], [build_palette(20)])
-    return gzip.compress(rom, 9, mtime=0)
+    return struct.pack("<I", len(rom)) + gzip.compress(rom, 9, mtime=0)
 
 
 def write_stripped_package(path, extra_members=(), icon=True):
@@ -27,9 +28,9 @@ def write_stripped_package(path, extra_members=(), icon=True):
         archive.writestr(PREFIX + "/meta.json", b'{"api": "vs2", "order": 5}')
         archive.writestr(PREFIX + "/code/testgame.py", b"def main():\n    return None\n")
         archive.writestr(PREFIX + "/code/helpers/util.py", b"VALUE = 1\n")
-        info = zipfile.ZipInfo("roms/%s.rom.gz" % SLUG)
+        info = zipfile.ZipInfo("roms/%s.romz" % SLUG)
         info.compress_type = zipfile.ZIP_STORED
-        archive.writestr(info, game_rom_gz())
+        archive.writestr(info, game_rom_z())
         if icon:
             archive.writestr("menu-icon.rom", icon_fixture(name="alecu/testgame/menu.png"))
         for name, data in extra_members:
@@ -61,7 +62,7 @@ class InstallFromFileTests(unittest.TestCase):
         self.assertEqual(self._read(PREFIX + "/meta.json"),
                          b'{"api": "vs2", "order": 5}')
         self.assertEqual(self._read(PREFIX + "/code/helpers/util.py"), b"VALUE = 1\n")
-        self.assertEqual(self._read("roms/%s.rom.gz" % SLUG), game_rom_gz())
+        self.assertEqual(self._read("roms/%s.romz" % SLUG), game_rom_z())
         strip_names = [s[0] for s in inventory(self._read("roms/menu.rom"))[0]]
         self.assertIn("alecu/testgame/menu.png", strip_names)
         # No staging leftovers where the catalog could discover them.
@@ -74,7 +75,7 @@ class InstallFromFileTests(unittest.TestCase):
         with open(os.path.join(old_dir, "code", "stale.py"), "w") as f:
             f.write("OLD = True\n")
         # A previous scheme left a plain rom; it would shadow nothing itself,
-        # but the fresh .rom.gz must not coexist with a stale sibling.
+        # but the fresh .romz must not coexist with a stale sibling.
         with open(os.path.join(self.root, "roms", "%s.rom" % SLUG), "wb") as f:
             f.write(b"stale plain rom")
 
@@ -82,7 +83,7 @@ class InstallFromFileTests(unittest.TestCase):
 
         self.assertFalse(os.path.exists(os.path.join(old_dir, "code", "stale.py")))
         self.assertFalse(os.path.exists(os.path.join(self.root, "roms", "%s.rom" % SLUG)))
-        self.assertTrue(os.path.exists(os.path.join(self.root, "roms", "%s.rom.gz" % SLUG)))
+        self.assertTrue(os.path.exists(os.path.join(self.root, "roms", "%s.romz" % SLUG)))
         self.assertEqual(self._read(PREFIX + "/code/testgame.py"),
                          b"def main():\n    return None\n")
 
