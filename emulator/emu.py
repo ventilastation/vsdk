@@ -30,6 +30,8 @@ def parse_args(argv=None):
                         help="USB serial transport port (default: autodetect)")
     parser.add_argument("--no-ota-server", dest="ota_server", action="store_false", default=True,
                         help="do not serve OTA upgrades locally; use another ventilastation-base.local server")
+    parser.add_argument("--scene-renderer", choices=("cpu", "shader"), default="cpu",
+                        help="desktop Pyglet 2 renderer (F2 switches live; default: cpu)")
     return parser.parse_args(argv)
 
 

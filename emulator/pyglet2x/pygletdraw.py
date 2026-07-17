@@ -18,6 +18,7 @@ from pyglet.gl import (
     glEnable,
     glBlendFunc,
     glDisable,
+    glFinish,
     glTexSubImage2D,
     GL_TEXTURE0,
     GL_TEXTURE1,
@@ -37,7 +38,10 @@ import numpy as np
 
 import comms
 import config
-from povrender import COLUMNS, render_frame, snapshot_vs2_scene
+from povrender import (
+    COLUMNS, render_frame, snapshot_scene_shader_input, snapshot_vs2_scene,
+)
+from scene_shader import DesktopSceneCompositor
 
 display_enabled = config.DISPLAY_ENABLED
 pyglet.options['vsync'] = display_enabled
@@ -168,6 +172,10 @@ window.set_icon(logo)
 window.set_caption("Ventilastation Emulator")
 fps_display = pyglet.window.FPSDisplay(window)
 help_label = pyglet.text.Label("ⓘ help goes here", font_name="Arial", font_size=12, y=5, x=window.width-5, color=(128, 128, 128, 255), anchor_x="right")
+scene_renderer_label = pyglet.text.Label(
+    "", font_name="Arial", font_size=11, x=8, y=window.height - 7,
+    color=(150, 190, 255, 255), anchor_y="top",
+)
 batch = pyglet.graphics.Batch()
 
 
@@ -191,6 +199,119 @@ group = RenderGroup(texture, led_color_texture, shader_program)
 shader_program.use()
 shader_program["led_colors"] = 1
 shader_program.stop()
+
+# The conventional/native frame compositor remains the default.  The shader
+# is instantiated only when selected so a normal emulator startup never pays
+# a compilation cost (and so a driver without integer textures has a clean
+# CPU fallback).
+scene_renderer = config.SCENE_RENDERER
+scene_compositor = None
+scene_renderer_status = "F2 switches CPU/shader · F3 measures this scene"
+
+
+def _update_scene_renderer_label():
+    scene_renderer_label.text = "Scene renderer: %s  |  %s" % (
+        "GPU shader" if scene_renderer == "shader" else "CPU",
+        scene_renderer_status,
+    )
+
+
+def _ensure_scene_compositor():
+    global scene_compositor
+    if scene_compositor is None:
+        scene_compositor = DesktopSceneCompositor()
+    return scene_compositor
+
+
+def set_scene_renderer(renderer):
+    """Select ``cpu`` or the raw-scene OpenGL compositor (Pyglet 2 only)."""
+    global scene_renderer, scene_renderer_status
+    if renderer not in ("cpu", "shader"):
+        raise ValueError("unknown scene renderer: %s" % renderer)
+    if renderer == "shader":
+        try:
+            _ensure_scene_compositor()
+        except Exception as error:
+            scene_renderer = "cpu"
+            scene_renderer_status = "shader unavailable: %s" % error
+            _update_scene_renderer_label()
+            print("Scene shader disabled:", error)
+            return scene_renderer
+    scene_renderer = renderer
+    scene_renderer_status = "F2 switches CPU/shader · F3 measures this scene"
+    _update_scene_renderer_label()
+    return scene_renderer
+
+
+def toggle_scene_renderer():
+    return set_scene_renderer("cpu" if scene_renderer == "shader" else "shader")
+
+
+def _upload_cpu_frame(pixels):
+    """Upload the established CPU/native compositor result to the LED texture."""
+    image = np.ascontiguousarray(pixels.reshape(COLUMNS, led_count).T)
+    glBindTexture(GL_TEXTURE_2D, led_color_texture.id)
+    glTexSubImage2D(
+        GL_TEXTURE_2D, 0, 0, 0, COLUMNS, led_count,
+        GL_RGBA, GL_UNSIGNED_BYTE,
+        image.ctypes.data_as(ctypes.c_void_p),
+    )
+
+
+def compare_scene_renderers(samples=12):
+    """Benchmark current scene once through both paths and verify pixels.
+
+    The CPU timing includes native/Python full-frame composition and its LED
+    texture upload.  The GPU timing includes scene packing, texture uploads,
+    and a ``glFinish`` so it measures completed work rather than merely queued
+    commands.  This makes the F3 readout useful across desktops with very
+    different graphics drivers.
+    """
+    global scene_renderer_status
+    scene_input = snapshot_scene_shader_input()
+    if scene_input is None:
+        scene_renderer_status = "comparison needs sprites or a VS2 scene (not a captured frame)"
+        _update_scene_renderer_label()
+        return scene_renderer_status
+    try:
+        compositor = _ensure_scene_compositor()
+        vs2_scene = snapshot_vs2_scene()
+        # Warm up allocations/program state outside the measurement loop.
+        compositor.render(scene_input, led_color_texture)
+        glFinish()
+        _upload_cpu_frame(render_frame(vs2_scene))
+        glFinish()
+
+        cpu_start = time.perf_counter()
+        cpu_pixels = None
+        for _ in range(samples):
+            cpu_pixels = render_frame(vs2_scene)
+            _upload_cpu_frame(cpu_pixels)
+        glFinish()
+        cpu_ms = (time.perf_counter() - cpu_start) * 1000 / samples
+
+        gpu_start = time.perf_counter()
+        for _ in range(samples):
+            compositor.render(scene_input, led_color_texture)
+        glFinish()
+        gpu_ms = (time.perf_counter() - gpu_start) * 1000 / samples
+
+        gpu_rgba = compositor.read_pixels()
+        cpu_rgba = np.ascontiguousarray(cpu_pixels.view(np.uint8).reshape(-1, 4))
+        equal = np.array_equal(gpu_rgba, cpu_rgba)
+        ratio = cpu_ms / gpu_ms if gpu_ms else float("inf")
+        scene_renderer_status = "CPU %.2f ms | shader %.2f ms | %.1fx | %s" % (
+            cpu_ms, gpu_ms, ratio, "pixels match" if equal else "PIXELS DIFFER",
+        )
+    except Exception as error:
+        scene_renderer_status = "comparison failed: %s" % error
+        traceback.print_exc()
+    _update_scene_renderer_label()
+    print("Scene renderer:", scene_renderer_status)
+    return scene_renderer_status
+
+
+_update_scene_renderer_label()
 
 def display_init(led_count):
     """Build the LED quad geometry as an indexed vertex list.
@@ -562,10 +683,13 @@ def draw_base_preview():
     base_preview_batch.draw()
 
 def display_draw():
+    global scene_compositor, scene_renderer, scene_renderer_status
     window.clear()
     fps_display.draw()
     help_label.x = window.width - 5
     help_label.draw()
+    scene_renderer_label.y = window.height - 7
+    scene_renderer_label.draw()
 
     smaller_dimension = min(window.width, window.height)
     x_half = window.width / smaller_dimension * 100
@@ -575,19 +699,24 @@ def display_draw():
     window.projection = pm.Mat4.orthogonal_projection(-x_half, x_half, -y_half, y_half, -100, 100)
 
     try:
-        vs2_scene = snapshot_vs2_scene()
-        pixels = render_frame(vs2_scene)  # numpy uint32[COLUMNS*led_count], 0xAABBGGRR == RGBA bytes
-
-        # One texel per LED instead of a per-vertex attribute repeated 4x:
-        # rows are LEDs (height=led_count), columns are POV columns
-        # (width=COLUMNS), matching led_color_texture's shape.
-        image = np.ascontiguousarray(pixels.reshape(COLUMNS, led_count).T)
-        glBindTexture(GL_TEXTURE_2D, led_color_texture.id)
-        glTexSubImage2D(
-            GL_TEXTURE_2D, 0, 0, 0, COLUMNS, led_count,
-            GL_RGBA, GL_UNSIGNED_BYTE,
-            image.ctypes.data_as(ctypes.c_void_p),
-        )
+        scene_input = snapshot_scene_shader_input()
+        rendered_by_shader = False
+        if scene_renderer == "shader" and scene_input is not None:
+            try:
+                _ensure_scene_compositor().render(scene_input, led_color_texture)
+                rendered_by_shader = True
+            except Exception as error:
+                # Keep the image visible even if a driver rejects the scene
+                # program after it was selected.  The next F2 can retry.
+                scene_renderer = "cpu"
+                scene_compositor = None
+                scene_renderer_status = "shader failed; using CPU: %s" % error
+                _update_scene_renderer_label()
+                traceback.print_exc()
+        if not rendered_by_shader:
+            vs2_scene = snapshot_vs2_scene()
+            pixels = render_frame(vs2_scene)  # uint32[COLUMNS*led_count], 0xAABBGGRR == RGBA bytes
+            _upload_cpu_frame(pixels)
         batch.draw()
     except Exception as e:
         traceback.print_exc()

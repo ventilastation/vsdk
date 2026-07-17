@@ -29,6 +29,19 @@ guides are in [docs/](docs/README.md). There is also a browser-based
 emulator with a built-in code editor and sprite editor, served from
 `web/` (see [docs/internals/deploying-web-emulator.md](docs/internals/deploying-web-emulator.md)).
 
+### Desktop scene-renderer comparison
+
+The Pyglet 2 desktop emulator can compose raw `sprites` or `VS2` scene bytes
+in a single OpenGL 3.3 pass instead of the usual CPU/native full-frame path.
+Start directly in that mode with `./vs-emu.sh --scene-renderer shader`, or
+press **F2** in the emulator to switch between **CPU** and **GPU shader**.
+Press **F3** with a game/menu scene visible to measure both complete paths
+(including their texture uploads) and check their rendered RGBA pixels match.
+The result stays in the upper-left status line, making it easy to record the
+same comparison on different machines. Captured `frame_rgb`/`frame_apa102`
+frames remain on the established CPU upload path because they are already
+final LED pixels.
+
 ## Repo layout
 
 - `games/<group>/<name>/` — one folder per game: `code`, `images`,

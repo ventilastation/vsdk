@@ -5,7 +5,9 @@ import comms
 from inputs_common import (
     keyboard_state, keyboard_v2_state, ota_shortcut_pressed, pack_controllers,
 )
-from pyglet2x.pygletdraw import window, help_label
+from pyglet2x.pygletdraw import (
+    compare_scene_renderers, help_label, toggle_scene_renderer, window,
+)
 
 keys = key.KeyStateHandler()
 
@@ -26,7 +28,7 @@ def refresh_controllers():
     controllers = connected
 
 def update_label():
-    help_label.text = ("joy or " if controllers else "") + "keys: arrows/WASD Space O P Y PgUp/PgDn HJKL Z/X/C/V Home/End Ctrl/⌘-U Esc Q"
+    help_label.text = ("joy or " if controllers else "") + "keys: arrows/WASD Space O P Y PgUp/PgDn HJKL Z/X/C/V Home/End Ctrl/⌘-U Esc Q · F2 renderer · F3 compare"
 
 @controller_man.event
 def on_connect(ctrl):
@@ -49,6 +51,12 @@ def on_key_press(symbol, modifiers):
         return pyglet.event.EVENT_HANDLED
     if symbol == pyglet.window.key.Q:
         pyglet.app.exit()
+    if symbol == pyglet.window.key.F2:
+        toggle_scene_renderer()
+        return pyglet.event.EVENT_HANDLED
+    if symbol == pyglet.window.key.F3:
+        compare_scene_renderers()
+        return pyglet.event.EVENT_HANDLED
     if ota_shortcut_pressed(symbol, modifiers):
         comms.trigger_ota()
         return pyglet.event.EVENT_HANDLED
