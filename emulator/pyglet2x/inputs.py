@@ -15,6 +15,7 @@ keys = key.KeyStateHandler()
 def init_inputs():
     window.push_handlers(keys)
 
+pyglet.input.controller.add_mappings_from_file("gamecontrollerdb.txt")
 controller_man = pyglet.input.ControllerManager()
 controllers = []
 
