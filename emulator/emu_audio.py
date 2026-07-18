@@ -42,6 +42,8 @@ _ROMS_ROOT = os.path.join(_EMULATOR_DIR, "..", "apps", "retro-go", "roms")
 GENESIS_SAMPLE_RATE = 53267
 SMS_SAMPLE_RATE = 32000
 NES_SAMPLE_RATE = 32000
+GB_SAMPLE_RATE = 32000
+MSX_SAMPLE_RATE = 32000
 
 
 def _lib_ext():
@@ -153,6 +155,10 @@ _SYNTH_FACTORIES = {
     b"nes-pal": lambda: _Synth("libnessynth." + _lib_ext(),
                                "nes_synth_reset_pal", "nes_synth_render",
                                load_rom_fn="nes_synth_load_rom"),
+    b"gb": lambda: _Synth("libgbsynth." + _lib_ext(),
+                          "gb_synth_reset", "gb_synth_render"),
+    b"msx": lambda: _Synth("libmsxsynth." + _lib_ext(),
+                           "msx_synth_reset", "msx_synth_render"),
 }
 
 _SYSTEM_RATE = {
@@ -161,6 +167,8 @@ _SYSTEM_RATE = {
     b"sms-pal": SMS_SAMPLE_RATE,
     b"nes-ntsc": NES_SAMPLE_RATE,
     b"nes-pal": NES_SAMPLE_RATE,
+    b"gb": GB_SAMPLE_RATE,
+    b"msx": MSX_SAMPLE_RATE,
 }
 
 
