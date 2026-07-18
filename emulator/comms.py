@@ -364,7 +364,14 @@ def dispatch_command(conn, command, args):
 
     elif command == b"achip":
         # Emulator started on the board: reset the matching host synth.
-        emu_audio.start(args[0] if args else b"unknown")
+        # "achip <system> [<nbytes>]" + optional <nbytes> ROM filename payload
+        # (cores whose fidelity needs actual ROM bytes, e.g. NES DMC).
+        system = args[0] if args else b"unknown"
+        rom_name = b""
+        if len(args) > 1:
+            nbytes = int(args[1])
+            rom_name = conn.read(nbytes) if nbytes else b""
+        emu_audio.start(system, rom_name)
 
     elif command == b"aframe":
         # One emulated video frame of sound-chip register writes.

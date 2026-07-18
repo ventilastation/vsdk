@@ -22,7 +22,8 @@ endif
 
 GEN_LIB := libgenesissynth.$(LIBEXT)
 SMS_LIB := libsmssynth.$(LIBEXT)
-LIBS    := $(GEN_LIB) $(SMS_LIB)
+NES_LIB := libnessynth.$(LIBEXT)
+LIBS    := $(GEN_LIB) $(SMS_LIB) $(NES_LIB)
 
 INC_GEN := -I. -I$(GW_SRC)/sound -I$(GW_SRC)/bus -I$(GW_SRC)/savestate -I$(RG_COMP)
 SRC_GEN := host_chip.c \
@@ -33,6 +34,11 @@ SMS_SRC_ROOT := $(RETROGO)/retro-core/components/smsplus
 INC_SMS := -I. -I$(SMS_SRC_ROOT) -I$(SMS_SRC_ROOT)/cpu -I$(SMS_SRC_ROOT)/sound -I$(RG_COMP)
 SRC_SMS := host_sms.c \
            $(SMS_SRC_ROOT)/sound/sn76489.c
+
+NES_SRC_ROOT := $(RETROGO)/retro-core/components/nofrendo
+INC_NES := -I. -I$(NES_SRC_ROOT) -I$(NES_SRC_ROOT)/nes -I$(RG_COMP)
+SRC_NES := host_nes.c \
+           $(NES_SRC_ROOT)/nes/apu.c
 
 # The cores assume the device build's char/pointer leniency; quiet those
 # warnings rather than patch vendored code.
@@ -45,6 +51,9 @@ $(GEN_LIB): $(SRC_GEN)
 
 $(SMS_LIB): $(SRC_SMS)
 	$(CC) $(SHFLAG) $(CFLAGS) $(INC_SMS) -o $@ $(SRC_SMS)
+
+$(NES_LIB): $(SRC_NES)
+	$(CC) $(SHFLAG) $(CFLAGS) $(INC_NES) -o $@ $(SRC_NES)
 
 clean:
 	rm -f $(LIBS)
