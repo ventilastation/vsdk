@@ -6,16 +6,13 @@ desktop/web emulators (no hardware needed) see the setup guides in
 
 ## Prerequisites
 
-The rotor firmware is made of **two builds that need two different ESP-IDF
-versions**:
+The rotor firmware is made of two builds -- MicroPython
+(`hardware/rotor/micropython` + `hardware/rotor/modules`) and the Retro-Go
+apps (`apps/retro-go` submodule, `voom`/prboom-go, launcher, retro-core,
+fmsx) -- and, since both now target the same ESP-IDF release (5.5.x), so
+does the workbench. One checkout covers everything.
 
-| What | Source | ESP-IDF | Makefile variable |
-|---|---|---|---|
-| MicroPython (menu + Python games + POV C modules) | `hardware/rotor/micropython` + `hardware/rotor/modules` | 5.5.x | `VSDK_IDF_PATH` |
-| Retro-Go apps (`voom`/prboom-go, launcher, retro-core) | `apps/retro-go` submodule | 5.0.x | `RETRO_GO_IDF_PATH` |
-
-1. Install both ESP-IDF versions (each in its own directory, with
-   `install.sh` run so `export.sh` works).
+1. Install ESP-IDF 5.5.x (`install.sh`, so `export.sh` works).
 2. Clone MicroPython where the build expects it (the path is gitignored):
 
    ```sh
@@ -24,29 +21,50 @@ versions**:
 
 3. Initialize the Retro-Go submodule: `git submodule update --init apps/retro-go`
 
-The Makefile defaults assume the IDF trees live at
-`../../esp-idf/esp-5.5.2` and `../../esp-idf/esp-5.0.4` relative to this
-repo. Override per invocation or in your environment when yours live
-elsewhere:
+**Source the environment once per shell session, before running `make`:**
 
 ```sh
-make vsdk VSDK_IDF_PATH=~/esp/esp-idf-v5.5 RETRO_GO_IDF_PATH=~/esp/esp-idf-v5.0.4
+source ../../esp-idf/esp-5.5.2/export.sh   # or wherever your checkout lives
 ```
+
+The Makefile deliberately does *not* do this for you per target -- that used
+to happen on every single step (build, flash, provision, ...) via a wrapping
+login shell, and re-running `export.sh` that often adds real seconds to each
+one. Instead it just checks that `$IDF_PATH` is already set (which
+`export.sh` does) and fails fast with a reminder if you forgot:
+
+```
+$ make voom
+Makefile:92: *** ESP-IDF environment not active in this shell. Run 'source ../../esp-idf/esp-5.5.2/export.sh' once per session ... Stop.
+```
+
+The environment stays active for the rest of the shell session -- source it
+once, then run as many `make` targets as you like.
 
 ## Selecting a board
 
-The two boards use the same ESP32-S3 USB descriptor, so
-`tools/find_board.py` asks each firmware which kind of board it is. Targets
-select the board type they need automatically:
+The two boards use the same ESP32-S3 USB descriptor, so telling them apart
+by port name alone doesn't work. `tools/find_board.py` instead keeps a small
+local registry mapping each board's USB serial number (its factory MAC, so
+it's stable across reflashes) to a kind, at a per-OS path (`~/Library/Application
+Support/vsdk/boards.json` on macOS, `$XDG_CONFIG_HOME/vsdk/boards.json` —
+usually `~/.config/vsdk/boards.json` — on Linux). Register each board once:
 
 ```sh
-make initial-flash    # selects the unique Ventilastation rotor board
-make workbench-flash  # selects the unique workbench board
-make list-boards      # show ports, board types and USB-JTAG serials
+make register-rotor       # only one board attached: no PORT needed
+make register-workbench   # several attached: pass PORT=... to say which one
+make register-base
 ```
 
-If more than one board of the requested type is connected, pass `PORT=...` to
-choose one. An explicit `PORT` always overrides automatic selection. `MAC=...`
+After that, `make initial-flash`, `make workbench-flash`, `make list-boards`,
+and friends all select or list boards with a plain USB-descriptor lookup —
+no serial I/O, no per-invocation wait, ever (there's no probing fallback
+anymore; see [input-protocol-v2.md](input-protocol-v2.md#resync--device-identification)
+for why). If the requested kind isn't registered, a flash/provision target
+fails fast and tells you to register it (or pass `PORT=...` to bypass
+selection entirely); `make list-boards` just shows it as `unknown`.
+
+An explicit `PORT` always overrides selection (registered or not). `MAC=...`
 can also select a USB-JTAG serial where the host exposes it (including Linux
 `/dev/serial/by-id` names). Flash commands are serialized through a host-side
 lock so parallel invocations cannot corrupt a transfer.

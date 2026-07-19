@@ -14,7 +14,7 @@ shape and the rules that keep biting.
    ESP32-S3 is partitioned: MicroPython + retro-go apps sharing one flash,
    how each is launched. The mental model everything else hangs off.
 2. **[building.md](building.md)** — building and flashing firmware; the
-   two-ESP-IDF setup, board selection, Makefile targets.
+   ESP-IDF setup, board selection, Makefile targets.
 3. **[web-emulator-architecture.md](web-emulator-architecture.md)** — the
    browser emulator: worker/WASM layering, frame flow, and the
    pointer-posting memory rule you must not break.

@@ -7,28 +7,14 @@ import subprocess
 import sys
 
 
-def shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-
 def run(cmd, cwd=None):
     print("$", " ".join(str(c) for c in cmd))
     subprocess.run(cmd, cwd=cwd, check=True)
 
 
-def run_in_idf_env(idf_path, command, cwd=None):
-    cmd = [
-        "/bin/zsh",
-        "-lc",
-        f"source {shell_quote(str(idf_path / 'export.sh'))} >/dev/null && {' '.join(shell_quote(part) for part in command)}",
-    ]
-    run(cmd, cwd=cwd)
-
-
 def main():
     script_path = pathlib.Path(__file__).resolve()
     vsdk_root = script_path.parents[2]
-    ventilastation_root = vsdk_root.parents[1]
     build_dir = vsdk_root / "hardware/rotor/build"
     vfs_bin = build_dir / "vfs.bin"
     build_fs_script = vsdk_root / "hardware/rotor/build_micropython_fs.py"
@@ -48,15 +34,8 @@ def main():
         default=0x8C0000,
         help="VFS partition size in bytes (default: 0x8c0000, matches partitions-ventilastation.csv)",
     )
-    parser.add_argument(
-        "--idf-path",
-        type=pathlib.Path,
-        default=ventilastation_root / "esp-idf/esp-5.5.2",
-    )
     parser.add_argument("--skip-build", action="store_true", help="Flash existing vfs.bin without rebuilding")
     args = parser.parse_args()
-
-    args.idf_path = args.idf_path.resolve()
 
     if not args.skip_build:
         run([
@@ -83,7 +62,7 @@ def main():
         hex(args.vfs_offset),
         str(vfs_bin),
     ]
-    run_in_idf_env(args.idf_path, command)
+    run(command)
 
 
 if __name__ == "__main__":

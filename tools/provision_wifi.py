@@ -18,6 +18,7 @@ Usage (or `make wifi-provision PORT=... WIFI_SSID=... WIFI_PASS=...`):
 """
 
 import argparse
+import os
 import pathlib
 import sys
 
@@ -32,19 +33,21 @@ NVS_SIZE = 0x4000
 
 
 def main():
-    ventilastation_root = pathlib.Path(__file__).resolve().parents[3]
-
     parser = argparse.ArgumentParser(description="Write WiFi credentials to the board's NVS")
     parser.add_argument("--port", "-p", required=True, help="Serial port, e.g. /dev/cu.usbmodemXXXX")
     parser.add_argument("--baud", type=int, default=460800)
     parser.add_argument(
         "--idf-path",
         type=pathlib.Path,
-        default=ventilastation_root / "esp-idf/esp-5.5.2",
+        default=os.environ.get("IDF_PATH"),
+        help="Defaults to $IDF_PATH -- source esp-idf's export.sh first",
     )
     parser.add_argument("--wifi-ssid", "-s", required=True, help="WiFi network name")
     parser.add_argument("--wifi-password", "-w", required=True, help="WiFi password")
     args = parser.parse_args()
+
+    if not args.idf_path:
+        sys.exit("IDF_PATH is not set -- source esp-idf's export.sh first (see docs/internals/building.md)")
 
     updates = {
         (NVS_NAMESPACE, "ssid"): args.wifi_ssid,

@@ -9,27 +9,15 @@ waiting on WiFi/OTA.
 """
 
 import argparse
+import os
 import pathlib
 import subprocess
 import sys
 
 
-def shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-
 def run(cmd, cwd=None):
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, cwd=cwd, check=True)
-
-
-def run_in_idf_env(idf_path, command, cwd):
-    cmd = [
-        "/bin/zsh",
-        "-lc",
-        f"source {shell_quote(str(idf_path / 'export.sh'))} >/dev/null && {' '.join(shell_quote(part) for part in command)}",
-    ]
-    run(cmd, cwd=cwd)
 
 
 def find_parent_root(script_path):
@@ -111,12 +99,12 @@ def flash_images(args, bootloader_path, partition_table_path, micropython_path, 
         VFS_OFFSET,
         str(vfs_image_path),
     ]
-    run_in_idf_env(args.idf_path, command, cwd=micropython_path.parent)
+    run(command, cwd=micropython_path.parent)
 
 
 def main():
     script_path = pathlib.Path(__file__).resolve()
-    vsdk_root, ventilastation_root = find_parent_root(script_path)
+    vsdk_root, _ = find_parent_root(script_path)
     default_build_dir = vsdk_root / "hardware/rotor/build"
 
     parser = argparse.ArgumentParser(description="Flash MicroPython with the Ventilastation partition table")
@@ -125,7 +113,8 @@ def main():
     parser.add_argument(
         "--idf-path",
         type=pathlib.Path,
-        default=ventilastation_root / "esp-idf/esp-5.5.2",
+        default=os.environ.get("IDF_PATH"),
+        help="Defaults to $IDF_PATH -- source esp-idf's export.sh first",
     )
     parser.add_argument(
         "--partition-csv",
@@ -151,6 +140,9 @@ def main():
         default=default_build_dir,
     )
     args = parser.parse_args()
+
+    if not args.idf_path:
+        sys.exit("IDF_PATH is not set -- source esp-idf's export.sh first (see docs/internals/building.md)")
 
     args.idf_path = args.idf_path.resolve()
     args.partition_csv = args.partition_csv.resolve()

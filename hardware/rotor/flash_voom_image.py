@@ -1,27 +1,15 @@
 #!/usr/bin/env python3
 
 import argparse
+import os
 import pathlib
 import subprocess
 import sys
 
 
-def shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-
 def run(cmd, cwd=None):
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, cwd=cwd, check=True)
-
-
-def run_in_idf_env(idf_path, command, cwd):
-    cmd = [
-        "/bin/zsh",
-        "-lc",
-        f"source {shell_quote(str(idf_path / 'export.sh'))} >/dev/null && {' '.join(shell_quote(part) for part in command)}",
-    ]
-    run(cmd, cwd=cwd)
 
 
 def find_parent_root(script_path):
@@ -40,11 +28,7 @@ def maybe_build(args, vsdk_root):
         return
 
     build_script = vsdk_root / "hardware/rotor/build_voom_image.py"
-    command = ["python3", str(build_script)]
-    if args.micropython_idf_path:
-        command.extend(["--micropython-idf-path", str(args.micropython_idf_path)])
-    if args.retro_go_idf_path:
-        command.extend(["--retro-go-idf-path", str(args.retro_go_idf_path)])
+    command = ["python3", str(build_script), "--idf-path", str(args.idf_path)]
     run(command, cwd=vsdk_root)
 
 
@@ -72,12 +56,12 @@ def flash_image(args, image_path):
         "0x0",
         str(image_path),
     ]
-    run_in_idf_env(args.idf_path, command, cwd=image_path.parent)
+    run(command, cwd=image_path.parent)
 
 
 def main():
     script_path = pathlib.Path(__file__).resolve()
-    vsdk_root, ventilastation_root = find_parent_root(script_path)
+    vsdk_root, _ = find_parent_root(script_path)
     default_image = vsdk_root / "hardware/rotor/build/vsdk-voom-esp32s3.bin"
 
     parser = argparse.ArgumentParser(description="Flash the combined vsdk + voom ESP32 image")
@@ -93,27 +77,16 @@ def main():
     parser.add_argument(
         "--idf-path",
         type=pathlib.Path,
-        default=ventilastation_root / "esp-idf/esp-5.5.2",
-        help="ESP-IDF used to provide esptool and flash helpers",
-    )
-    parser.add_argument(
-        "--micropython-idf-path",
-        type=pathlib.Path,
-        help="Optional override passed through when --build is used",
-    )
-    parser.add_argument(
-        "--retro-go-idf-path",
-        type=pathlib.Path,
-        help="Optional override passed through when --build is used",
+        default=os.environ.get("IDF_PATH"),
+        help="Defaults to $IDF_PATH -- source esp-idf's export.sh first",
     )
     args = parser.parse_args()
 
+    if not args.idf_path:
+        sys.exit("IDF_PATH is not set -- source esp-idf's export.sh first (see docs/internals/building.md)")
+
     args.image = args.image.resolve()
     args.idf_path = args.idf_path.resolve()
-    if args.micropython_idf_path:
-        args.micropython_idf_path = args.micropython_idf_path.resolve()
-    if args.retro_go_idf_path:
-        args.retro_go_idf_path = args.retro_go_idf_path.resolve()
 
     maybe_build(args, vsdk_root)
     ensure_file(args.image, "Combined image")

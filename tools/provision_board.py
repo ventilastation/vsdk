@@ -12,6 +12,7 @@ disturbs other NVS namespaces (e.g. vsdk_ota's stored OTA hashes).
 """
 
 import argparse
+import os
 import pathlib
 import sys
 
@@ -39,19 +40,21 @@ NVS_SIZE = 0x4000
 
 
 def main():
-    ventilastation_root = pathlib.Path(__file__).resolve().parents[3]
-
     parser = argparse.ArgumentParser(description="Write main-board wiring to NVS")
     parser.add_argument("--port", "-p", required=True, help="Serial port, e.g. /dev/cu.usbmodemXXXX")
     parser.add_argument("--baud", type=int, default=460800)
     parser.add_argument(
         "--idf-path",
         type=pathlib.Path,
-        default=ventilastation_root / "esp-idf/esp-5.5.2",
+        default=os.environ.get("IDF_PATH"),
+        help="Defaults to $IDF_PATH -- source esp-idf's export.sh first",
     )
     for key in NVS_KEYS:
         parser.add_argument("--" + key.replace("_", "-"), type=int, required=True)
     args = parser.parse_args()
+
+    if not args.idf_path:
+        sys.exit("IDF_PATH is not set -- source esp-idf's export.sh first (see docs/internals/building.md)")
 
     updates = {(NVS_NAMESPACE, key): getattr(args, key) for key in NVS_KEYS}
     nvs_partition.provision(
