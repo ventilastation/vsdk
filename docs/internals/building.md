@@ -56,15 +56,13 @@ make register-workbench   # several attached: pass PORT=... to say which one
 make register-base
 ```
 
-After that, `make initial-flash`, `make workbench-flash`, and friends select
-their board with a plain USB-descriptor lookup — no serial I/O, no
-multi-second wait. If the requested kind isn't registered, the target fails
-fast and tells you to register it (or pass `PORT=...` to bypass selection
-entirely). `make list-boards` shows every candidate port; for anything not
-in the registry it falls back to a RESYNC probe (see
-[input-protocol-v2.md](input-protocol-v2.md#resync--device-identification))
-to identify what's plugged in, which is where the multi-second cost still
-lives — worth it there since it's a one-off diagnostic, not a hot path.
+After that, `make initial-flash`, `make workbench-flash`, `make list-boards`,
+and friends all select or list boards with a plain USB-descriptor lookup —
+no serial I/O, no per-invocation wait, ever (there's no probing fallback
+anymore; see [input-protocol-v2.md](input-protocol-v2.md#resync--device-identification)
+for why). If the requested kind isn't registered, a flash/provision target
+fails fast and tells you to register it (or pass `PORT=...` to bypass
+selection entirely); `make list-boards` just shows it as `unknown`.
 
 An explicit `PORT` always overrides selection (registered or not). `MAC=...`
 can also select a USB-JTAG serial where the host exposes it (including Linux

@@ -5,26 +5,14 @@ Board selection (--board) is a registry lookup: a one-time `--register`
 records a board's USB serial number (its factory MAC -- see normalize_mac())
 against a kind in a small local file (see registry_path()), and from then on
 selecting that kind is pure USB-descriptor enumeration -- no serial I/O, no
-multi-second wait. `make register-rotor` / `register-workbench` /
-`register-base` populate it.
-
-Boards that aren't registered fall back to the RESYNC protocol (see
-docs/internals/input-protocol-v2.md#resync--device-identification): all
-three Ventilastation devices answer the same marker the same way -- stop,
-reset, and print ``VENTILASTATION <NAME> <version> <githash>`` as the first
-thing after that reset. This is a uniform, always-recognized probe that
-works regardless of what a device happens to be doing (including a rotor
-running a native retro-go app instead of MicroPython, or a wedged device of
-any kind), but it costs a per-port round trip -- seconds, not
-milliseconds -- so `--board` only falls back to it when asked
-(probe_unknown); `--list` always does, to fully identify whatever's plugged
-in.
-
-The rotor and workbench both expose ESP32-S3 native USB-Serial-JTAG (baud
-rate is effectively ignored by that USB-CDC interface); the base Arduino is
-a real UART at 57600 baud, typically reached via its own USB-to-serial
-adapter during bench testing. Each port is probed at 115200 first, then
-57600 if nothing answered.
+per-invocation wait. `make register-rotor` / `register-workbench` /
+`register-base` populate it; `--list` shows anything not yet registered as
+`unknown` rather than probing for it (see
+docs/internals/input-protocol-v2.md#resync--device-identification for the
+RESYNC protocol this used to probe with, and why it was dropped here -- the
+per-port round trip made every board-selecting Makefile target pay seconds
+it didn't need to. RESYNC itself hasn't gone anywhere; it's just no longer
+how this tool identifies a board).
 
 Only Python's standard library is used, so this works before an ESP-IDF
 virtualenv (and pyserial) is active.
@@ -38,23 +26,10 @@ import json
 import os
 import pathlib
 import re
-import select
 import shutil
 import subprocess
 import sys
-import termios
-import time
 from dataclasses import dataclass
-
-
-RESYNC = b"\n\n\xd2ESYNC\n"
-ID_PREFIX = b"VENTILASTATION "
-BOARD_KIND_BY_NAME = {
-    b"WORKBENCH": "workbench",
-    b"ROTOR": "ventilastation",  # kept as the existing --board value
-    b"BASE": "base",
-}
-PROBE_BAUD_RATES = (115200, 57600)
 
 
 @dataclass
@@ -153,116 +128,11 @@ def linux_port_mac(port: str) -> str | None:
     return match.group(1) if match else None
 
 
-def read_available(fd: int) -> bytes:
-    chunks: list[bytes] = []
-    while True:
-        try:
-            chunk = os.read(fd, 4096)
-        except (BlockingIOError, OSError):
-            break
-        if not chunk:
-            break
-        chunks.append(chunk)
-    return b"".join(chunks)
-
-
-def read_for(fd: int, seconds: float) -> bytes:
-    end = time.monotonic() + seconds
-    data = bytearray()
-    while time.monotonic() < end:
-        remaining = max(0.0, end - time.monotonic())
-        try:
-            readable, _, _ = select.select([fd], [], [], min(0.05, remaining))
-        except (OSError, ValueError):
-            break
-        if readable:
-            data.extend(read_available(fd))
-    return bytes(data)
-
-
-def write_all(fd: int, data: bytes) -> None:
-    offset = 0
-    while offset < len(data):
-        try:
-            offset += os.write(fd, data[offset:])
-        except BlockingIOError:
-            time.sleep(0.01)
-
-
-_BAUD_CONSTANTS = {115200: termios.B115200, 57600: termios.B57600}
-
-
-def configure_serial(fd: int, baud: int) -> list:
-    saved = termios.tcgetattr(fd)
-    attrs = termios.tcgetattr(fd)
-    attrs[0] = 0
-    attrs[1] = 0
-    attrs[2] = termios.CLOCAL | termios.CREAD | termios.CS8
-    attrs[3] = 0
-    attrs[4] = _BAUD_CONSTANTS[baud]
-    attrs[5] = _BAUD_CONSTANTS[baud]
-    attrs[6][termios.VMIN] = 0
-    attrs[6][termios.VTIME] = 1
-    termios.tcsetattr(fd, termios.TCSANOW, attrs)
-    return saved
-
-
-def restore_serial(fd: int, saved: list) -> None:
-    try:
-        termios.tcsetattr(fd, termios.TCSANOW, saved)
-    except (OSError, termios.error):
-        pass
-
-
-def parse_identification(response: bytes) -> str | None:
-    """Extract the board kind from a RESYNC identification line, if present."""
-    index = response.find(ID_PREFIX)
-    if index == -1:
-        return None
-    rest = response[index + len(ID_PREFIX):]
-    name = rest.split(b" ", 1)[0].split(b"\n", 1)[0].split(b"\r", 1)[0]
-    return BOARD_KIND_BY_NAME.get(name)
-
-
-def probe_port_at_baud(fd: int, baud: int) -> str | None:
-    saved = configure_serial(fd, baud)
-    try:
-        read_for(fd, 0.15)  # drain whatever was already buffered
-        write_all(fd, RESYNC)
-        # Generous window: every device actually resets (the base Arduino
-        # reinitializes in place instead, but the window doesn't need to
-        # distinguish the two) before printing its identification line.
-        response = read_for(fd, 2.5)
-        return parse_identification(response)
-    finally:
-        restore_serial(fd, saved)
-
-
-def probe_port(port: str) -> tuple[str | None, str]:
-    """Return (board kind, evidence) for one port."""
-    try:
-        fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
-    except OSError as exc:
-        return None, f"cannot open: {exc}"
-
-    try:
-        for baud in PROBE_BAUD_RATES:
-            kind = probe_port_at_baud(fd, baud)
-            if kind:
-                return kind, f"RESYNC identification at {baud} baud"
-        return None, "no recognized board response"
-    except (OSError, termios.error) as exc:
-        return None, f"probe failed: {exc}"
-    finally:
-        os.close(fd)
-
-
-def inspect_ports(probe_unknown: bool = True) -> list[Board]:
-    """Return one Board per candidate port. A port whose USB id is in the
-    registry resolves instantly from there (no serial I/O). A port that
-    isn't registered falls back to the RESYNC probe when probe_unknown is
-    set; otherwise it's reported unresolved rather than paying the probe's
-    multi-second worst case."""
+def inspect_ports() -> list[Board]:
+    """Return one Board per candidate port, resolved from the registry (pure
+    USB-descriptor enumeration -- no serial I/O). A port whose id isn't in
+    the registry comes back with kind=None; register it with `make
+    register-rotor`/`register-workbench`/`register-base` to identify it."""
     macs = macos_port_macs()
     registry = load_registry()
     boards: list[Board] = []
@@ -279,23 +149,17 @@ def inspect_ports(probe_unknown: bool = True) -> list[Board]:
     for port in ports:
         mac = macs.get(port) or linux_port_mac(port)
         kind = registry.get(normalize_mac(mac)) if mac else None
-        if kind:
-            boards.append(Board(port=port, kind=kind, mac=mac, detail="registry"))
-            continue
-        if probe_unknown:
-            kind, detail = probe_port(port)
-        else:
-            kind, detail = None, "not registered (see 'make register-rotor/workbench/base')"
+        detail = "registry" if kind else "not registered (see 'make register-rotor/workbench/base')"
         boards.append(Board(port=port, kind=kind, mac=mac, detail=detail))
     return boards
 
 
 def register_board(kind: str, port: str | None) -> None:
     """Remember the connected board's USB id as `kind` in the registry, so
-    future --board selection skips probing it entirely. Trusts the caller:
-    with exactly one candidate port attached its id is used as-is; with
-    several, `port` must say which one (no RESYNC verification either way --
-    registration is a deliberate, one-time, human-driven action)."""
+    future --board selection can find it. Trusts the caller: with exactly
+    one candidate port attached its id is used as-is; with several, `port`
+    must say which one (registration is a deliberate, one-time, human-driven
+    action, not something to auto-verify)."""
     macs = macos_port_macs()
     ports = candidate_ports()
     if sys.platform == "darwin":
@@ -355,7 +219,7 @@ def choose(boards: list[Board], requested: str, mac: str | None) -> Board:
     else:
         print(
             f"no registered {requested} board attached; run 'make {_REGISTER_TARGET[requested]}' "
-            "(or 'make list-boards' to probe what's connected)",
+            "(or 'make list-boards' to see what's connected)",
             file=sys.stderr,
         )
     raise SystemExit(2)
@@ -378,8 +242,8 @@ def main() -> int:
         register_board(args.register, args.port)
         return 0
 
+    boards = inspect_ports()
     if args.list:
-        boards = inspect_ports()
         if boards:
             for board in boards:
                 print(format_board(board))
@@ -389,10 +253,6 @@ def main() -> int:
     if not args.board:
         parser.error("one of --board, --list or --register is required")
 
-    # No RESYNC fallback here: --board is the hot path every flash/provision
-    # target goes through, and a registered board should never pay for a
-    # multi-second probe just to find its own port again.
-    boards = inspect_ports(probe_unknown=False)
     print(choose(boards, args.board, args.mac).port)
     return 0
 

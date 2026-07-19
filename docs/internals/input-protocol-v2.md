@@ -165,10 +165,9 @@ mid-command from blocking the state machine indefinitely.
 Three separate devices speak this byte-level protocol to a host: the
 workbench board, the Base Arduino, and the rotor board (either running
 MicroPython or a native retro-go app, depending on which OTA partition is
-currently active). Tooling (the emulator, `tools/find_board.py`, and
-whatever Makefile targets pick a serial port) needs a reliable way to ask
-"what are you?" that works regardless of what the device happens to be
-doing — including if it's wedged.
+currently active). It's a reliable way to ask a device "what are you?"
+regardless of what it happens to be doing -- including if it's wedged --
+without depending on it already being in some known-good state.
 
 RESYNC is a 9-byte marker recognized unconditionally, in any parser state:
 
@@ -211,22 +210,19 @@ before parsing the rest of the line, since a port might have unrelated
 hardware on it that never answers this protocol at all. `<githash>` is
 `unknown` on builds that don't have one (see per-firmware notes).
 
-This protocol is the canonical way to identify a *connected but unknown*
-device; prefer it over ad hoc heuristics (port-name pattern matching,
-hardcoded device paths, REPL interruption) wherever a caller needs to know
-what's on the other end of a serial port. Both current callers,
-`tools/find_board.py` and `emulator/comms.py`, now use it only as a
-fallback: day-to-day board selection goes through a local USB-id registry
-first (`make register-rotor` etc., see
-[building.md](building.md#selecting-a-board)) precisely to avoid paying
-this protocol's per-port round trip on every single invocation --
-`comms.py` shells out to `find_board.py --board <kind>` for the registry
-lookup rather than importing it directly, since `find_board.py` is
-POSIX-only (it imports `termios`) and `comms.py` still needs to run on
-Windows. RESYNC is still what `--list`, and either caller's fallback path,
-use to identify a board that isn't in the registry yet (registration
-itself doesn't probe at all -- it trusts whichever single board is
-attached, or `PORT=...` when several are).
+Every device still answers this protocol -- it's unchanged on the firmware
+side. What changed is who *asks*: `tools/find_board.py` and
+`emulator/comms.py` used to RESYNC-probe every candidate serial port to
+figure out which one was the board they wanted, at a real per-port cost
+(a full stop-and-reset round trip, up to a few seconds, on *every*
+board-selecting Makefile target and every emulator startup). Both now
+resolve a board's port from a local USB-id registry instead -- a one-time
+`make register-rotor`/`register-workbench`/`register-base` records the
+board's USB serial number against its kind, and from then on selection is
+a plain USB-descriptor lookup with no serial I/O at all (see
+[building.md](building.md#selecting-a-board)). A board that isn't
+registered simply shows up as `unknown` in `make list-boards` and isn't
+auto-selected; there's no probing fallback anymore.
 
 The rotor board exposes two physically separate serial interfaces: the
 dedicated base-station UART (`input_parser.py`'s usual command channel) and
@@ -234,9 +230,10 @@ the native USB-Serial-JTAG/UART0 console (the REPL wire). RESYNC is
 recognized on *either* one independently (`input_parser.py` for the former,
 `console_resync.py` for the latter), and the identification banner is
 always printed to both regardless of which interface the marker arrived
-on — so a prober connected only to the console (as `tools/find_board.py`
-and the emulator normally are) still gets a reliable answer without
-needing a wire into the base-station UART.
+on. This still matters for anything that talks to the device directly over
+one of these interfaces (see `console_resync.py`'s own callers) -- it's
+specifically the *host-side board-selection* use that moved to the
+registry.
 
 ---
 
