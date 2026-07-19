@@ -63,15 +63,6 @@ endif
 
 SERIAL_LOCK_FILE ?= /tmp/vsdk-serial.lock
 
-# ESP-IDF checkouts. MicroPython and Retro-Go need different IDF versions;
-# see docs/internals/building.md. Override these when your SDKs live elsewhere, e.g.:
-#   make vsdk VSDK_IDF_PATH=~/esp/esp-idf-5.5
-VSDK_IDF_PATH ?= ../../esp-idf/esp-5.5.2
-RETRO_GO_IDF_PATH ?= ../../esp-idf/esp-5.0.4
-# Backward-compatible aliases (the old variable names):
-VOOM_MICROPYTHON_IDF_PATH ?= $(VSDK_IDF_PATH)
-VOOM_RETRO_GO_IDF_PATH ?= $(RETRO_GO_IDF_PATH)
-
 VSDK_BOARD ?= VENTILASTATION
 VSDK_BOARD_VARIANT ?= SPIRAM_OCT
 VSDK_BOARD_DIR := $(abspath ./hardware/rotor/boards/VENTILASTATION)
@@ -88,11 +79,19 @@ RETRO_GO_DIR := ./apps/retro-go
 # Fall back to no locking rather than failing if neither is present.
 SERIAL_LOCK := $(shell if command -v lockf >/dev/null 2>&1; then echo lockf $(SERIAL_LOCK_FILE); elif command -v flock >/dev/null 2>&1; then echo flock $(SERIAL_LOCK_FILE); fi)
 
-# Run $(2) inside the ESP-IDF environment at $(1). A login shell so that
-# export.sh sees the user's usual PATH (python3, git) even from GUI contexts;
-# bash is available on both Linux and macOS (override IDF_SHELL if needed).
-IDF_SHELL ?= bash -lc
-idf-env = $(IDF_SHELL) 'source "$(1)/export.sh" >/dev/null && $(2)'
+# ESP-IDF: MicroPython, Retro-Go and the workbench all build against one
+# version now. The Makefile does NOT source export.sh for you -- that used to
+# happen per target (via a wrapping login shell) and added seconds to every
+# single step. Instead, source it once yourself before running make; it
+# stays active for the rest of the shell session. See docs/internals/building.md.
+IDF_SOURCE_HINT := source ../../esp-idf/esp-5.5.2/export.sh
+NO_IDF_TARGETS := list-boards micropython-webassembly web-runtime-bundle web-emulator-bundle run-emulator voom-sounds generate-roms build-fs base-monitor
+IDF_GOALS := $(filter-out $(NO_IDF_TARGETS),$(MAKECMDGOALS))
+ifneq ($(strip $(IDF_GOALS)),)
+ifeq ($(strip $(IDF_PATH)),)
+$(error ESP-IDF environment not active in this shell. Run '$(IDF_SOURCE_HINT)' once per session (see docs/internals/building.md) before make $(firstword $(IDF_GOALS)))
+endif
+endif
 
 # The port drops and re-enumerates for a couple of seconds after every
 # flash's hard reset, so a target that runs right after another one (e.g.
@@ -104,8 +103,8 @@ WAIT_FOR_PORT := $(abspath tools/wait_for_port.py)
 wait-port = python3 "$(WAIT_FOR_PORT)" --port "$(PORT)"
 
 # Build/flash one Retro-Go app ($(1) = app name, e.g. prboom-go).
-rg-build = $(call idf-env,$(RETRO_GO_IDF_PATH),cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation build $(1))
-rg-flash = $(SERIAL_LOCK) $(call idf-env,$(RETRO_GO_IDF_PATH),$(wait-port) && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash $(1))
+rg-build = cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation build $(1)
+rg-flash = $(SERIAL_LOCK) bash -c '$(wait-port) && cd "$(RETRO_GO_DIR)" && python3 rg_tool.py --target=ventilastation --port="$(PORT)" --baud="$(BAUD)" flash $(1)'
 
 # Targets that talk to a board need PORT (auto-selected above); targets that
 # provision WiFi also need credentials. Checked at parse time so the failure
@@ -135,7 +134,7 @@ web-emulator-bundle:
 	./tools/build-web-emulator-bundle.sh
 
 vsdk:
-	$(call idf-env,$(VSDK_IDF_PATH),$(MAKE) -C "$(MICROPYTHON_PORT_DIR)" V=1 BOARD="$(VSDK_BOARD)" BOARD_DIR="$(VSDK_BOARD_DIR)" BOARD_VARIANT="$(VSDK_BOARD_VARIANT)" USER_C_MODULES="$(VSDK_MODULES)" FROZEN_MANIFEST="$(VSDK_FROZEN_MANIFEST)" all)
+	$(MAKE) -C "$(MICROPYTHON_PORT_DIR)" V=1 BOARD="$(VSDK_BOARD)" BOARD_DIR="$(VSDK_BOARD_DIR)" BOARD_VARIANT="$(VSDK_BOARD_VARIANT)" USER_C_MODULES="$(VSDK_MODULES)" FROZEN_MANIFEST="$(VSDK_FROZEN_MANIFEST)" all
 
 # initial-flash is a bench-dev convenience: it writes MicroPython to both the
 # factory slot and the micropython (ota_2) slot over USB, plus an empty
@@ -143,7 +142,7 @@ vsdk:
 # without waiting on WiFi/OTA. It is NOT the bring-up procedure for a new
 # board -- use flash-recovery for that (see docs/internals/ota.md).
 initial-flash: vsdk
-	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_vsdk_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VSDK_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"'
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_vsdk_image.py --port "$(PORT)" --baud "$(BAUD)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"'
 
 # flash-recovery is the bring-up procedure for a new (or fully-erased) board:
 # USB-flashes only the `factory` partition (the permanent recovery
@@ -154,7 +153,7 @@ initial-flash: vsdk
 # also provision devel_wifi in the same step.
 FORCE ?=
 flash-recovery: vsdk
-	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_recovery_image.py --port "$(PORT)" --baud "$(BAUD)" --idf-path "$(VSDK_IDF_PATH)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)" $(if $(FORCE),--force,) $(if $(WIFI_SSID),--wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)",)'
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_recovery_image.py --port "$(PORT)" --baud "$(BAUD)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)" $(if $(FORCE),--force,) $(if $(WIFI_SSID),--wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)",)'
 
 voom:
 	$(call rg-build,prboom-go)
@@ -211,7 +210,7 @@ SERIAL_RX ?= 6
 SERIAL_BAUD ?= 115200
 
 configure-board:
-	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./tools/provision_board.py --port "$(PORT)" --idf-path "$(VSDK_IDF_PATH)" \
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./tools/provision_board.py --port "$(PORT)" \
 		--hall-gpio "$(HALL_GPIO)" --irdiode-gpio "$(IRDIODE_GPIO)" \
 		--led-spi-host "$(LED_SPI_HOST)" --led-clk "$(LED_CLK)" \
 		--led-mosi "$(LED_MOSI)" --led-cs "$(LED_CS)" --led-freq "$(LED_FREQ)" \
@@ -237,7 +236,7 @@ BOARD_IP ?=
 
 wifi-provision:
 	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./tools/provision_wifi.py \
-		--port "$(PORT)" --idf-path "$(VSDK_IDF_PATH)" \
+		--port "$(PORT)" \
 		--wifi-ssid "$(WIFI_SSID)" \
 		--wifi-password "$(WIFI_PASS)"'
 
@@ -255,19 +254,18 @@ wifi-provision:
 # reflashing firmware. Reset the workbench afterwards — it logs its IP and
 # mDNS name over its USB port.
 WORKBENCH_DIR := hardware/workbench/workbench_esp32s3
-WORKBENCH_IDF_PATH ?= $(VSDK_IDF_PATH)
 
 workbench-build:
-	$(call idf-env,$(WORKBENCH_IDF_PATH),cd "$(WORKBENCH_DIR)" && idf.py build)
+	cd "$(WORKBENCH_DIR)" && idf.py build
 
 workbench-flash: workbench-build
-	$(SERIAL_LOCK) $(call idf-env,$(WORKBENCH_IDF_PATH),cd "$(WORKBENCH_DIR)" && idf.py -p "$(PORT)" -b "$(BAUD)" flash)
+	$(SERIAL_LOCK) bash -c 'cd "$(WORKBENCH_DIR)" && idf.py -p "$(PORT)" -b "$(BAUD)" flash'
 
 workbench-monitor:
-	$(call idf-env,$(WORKBENCH_IDF_PATH),cd "$(WORKBENCH_DIR)" && idf.py -p "$(PORT)" monitor)
+	cd "$(WORKBENCH_DIR)" && idf.py -p "$(PORT)" monitor
 
 workbench-wifi-provision:
-	$(SERIAL_LOCK) $(call idf-env,$(WORKBENCH_IDF_PATH),python3 "$(WORKBENCH_DIR)/tools/provision_wifi.py" --port "$(PORT)" --wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)")
+	$(SERIAL_LOCK) python3 "$(WORKBENCH_DIR)/tools/provision_wifi.py" --port "$(PORT)" --wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)"
 
 # --- Base Arduino (buttons/servo/dial relay; see docs/internals/base-control-api.md) ---
 # Not an ESP-IDF project, so there's no build/flash target here (use the

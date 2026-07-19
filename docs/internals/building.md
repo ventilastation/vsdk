@@ -6,16 +6,13 @@ desktop/web emulators (no hardware needed) see the setup guides in
 
 ## Prerequisites
 
-The rotor firmware is made of **two builds that need two different ESP-IDF
-versions**:
+The rotor firmware is made of two builds -- MicroPython
+(`hardware/rotor/micropython` + `hardware/rotor/modules`) and the Retro-Go
+apps (`apps/retro-go` submodule, `voom`/prboom-go, launcher, retro-core,
+fmsx) -- and, since both now target the same ESP-IDF release (5.5.x), so
+does the workbench. One checkout covers everything.
 
-| What | Source | ESP-IDF | Makefile variable |
-|---|---|---|---|
-| MicroPython (menu + Python games + POV C modules) | `hardware/rotor/micropython` + `hardware/rotor/modules` | 5.5.x | `VSDK_IDF_PATH` |
-| Retro-Go apps (`voom`/prboom-go, launcher, retro-core) | `apps/retro-go` submodule | 5.0.x | `RETRO_GO_IDF_PATH` |
-
-1. Install both ESP-IDF versions (each in its own directory, with
-   `install.sh` run so `export.sh` works).
+1. Install ESP-IDF 5.5.x (`install.sh`, so `export.sh` works).
 2. Clone MicroPython where the build expects it (the path is gitignored):
 
    ```sh
@@ -24,14 +21,25 @@ versions**:
 
 3. Initialize the Retro-Go submodule: `git submodule update --init apps/retro-go`
 
-The Makefile defaults assume the IDF trees live at
-`../../esp-idf/esp-5.5.2` and `../../esp-idf/esp-5.0.4` relative to this
-repo. Override per invocation or in your environment when yours live
-elsewhere:
+**Source the environment once per shell session, before running `make`:**
 
 ```sh
-make vsdk VSDK_IDF_PATH=~/esp/esp-idf-v5.5 RETRO_GO_IDF_PATH=~/esp/esp-idf-v5.0.4
+source ../../esp-idf/esp-5.5.2/export.sh   # or wherever your checkout lives
 ```
+
+The Makefile deliberately does *not* do this for you per target -- that used
+to happen on every single step (build, flash, provision, ...) via a wrapping
+login shell, and re-running `export.sh` that often adds real seconds to each
+one. Instead it just checks that `$IDF_PATH` is already set (which
+`export.sh` does) and fails fast with a reminder if you forgot:
+
+```
+$ make voom
+Makefile:92: *** ESP-IDF environment not active in this shell. Run 'source ../../esp-idf/esp-5.5.2/export.sh' once per session ... Stop.
+```
+
+The environment stays active for the rest of the shell session -- source it
+once, then run as many `make` targets as you like.
 
 ## Selecting a board
 

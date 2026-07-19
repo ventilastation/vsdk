@@ -13,8 +13,10 @@ nvs_partition_gen.py, and write it back over esptool. The NVS binary format
 itself is never hand-parsed here -- both directions are delegated to
 Espressif's own bundled tools.
 
-Requires an ESP-IDF environment (for esptool and the nvs_partition_gen
-package installed alongside idf.py).
+Requires an ESP-IDF environment already sourced in this shell (for esptool
+and the nvs_partition_gen package installed alongside idf.py) -- callers
+resolve idf_path from $IDF_PATH, so run `source .../export.sh` once before
+using any of this.
 """
 
 import csv
@@ -25,23 +27,9 @@ import subprocess
 import tempfile
 
 
-def shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-
 def _run(cmd, capture=False):
     print("$", " ".join(str(c) for c in cmd))
     return subprocess.run(cmd, check=True, capture_output=capture, text=capture)
-
-
-def _run_in_idf_env(idf_path, command, capture=False):
-    cmd = [
-        "/bin/zsh",
-        "-lc",
-        f"source {shell_quote(str(pathlib.Path(idf_path) / 'export.sh'))} >/dev/null && "
-        f"{' '.join(shell_quote(str(part)) for part in command)}",
-    ]
-    return _run(cmd, capture=capture)
 
 
 # nvs_tool.py's decoded type name -> nvs_partition_gen.py's CSV encoding.
@@ -65,7 +53,7 @@ def dump(idf_path, port, offset, size, baud=460800):
     import os
     os.close(fd)
     dump_path = pathlib.Path(path)
-    _run_in_idf_env(idf_path, [
+    _run([
         "python3", "-m", "esptool",
         "--chip", "esp32s3",
         "-p", port,
@@ -130,9 +118,9 @@ def write(idf_path, port, offset, size, entries, baud=460800):
         csv_path.write_text(_build_csv(entries))
 
         gen_script = pathlib.Path(idf_path) / "components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
-        _run_in_idf_env(idf_path, ["python3", str(gen_script), "generate", str(csv_path), str(bin_path), hex(size)])
+        _run(["python3", str(gen_script), "generate", str(csv_path), str(bin_path), hex(size)])
 
-        _run_in_idf_env(idf_path, [
+        _run([
             "python3", "-m", "esptool",
             "--chip", "esp32s3",
             "-p", port,

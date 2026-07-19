@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+import os
 import pathlib
 import subprocess
 import sys
@@ -10,19 +11,6 @@ import sys
 def run(cmd, cwd=None, env=None):
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, cwd=cwd, env=env, check=True)
-
-
-def run_in_idf_env(idf_path, command, cwd):
-    cmd = [
-        "/bin/zsh",
-        "-lc",
-        f"source {shell_quote(str(idf_path / 'export.sh'))} >/dev/null && {' '.join(shell_quote(part) for part in command)}",
-    ]
-    run(cmd, cwd=cwd)
-
-
-def shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
 def parse_partition_table(csv_path):
@@ -63,7 +51,7 @@ def build_micropython(args, vsdk_root):
         f"FROZEN_MANIFEST={vsdk_root / 'apps/micropython/manifest.py'}",
         "all",
     ]
-    run_in_idf_env(args.micropython_idf_path, command, args.micropython_root / "ports/esp32")
+    run(command, cwd=args.micropython_root / "ports/esp32")
 
 
 def build_retro_go(args):
@@ -75,13 +63,13 @@ def build_retro_go(args):
         "launcher",
         "prboom-go",
     ]
-    run_in_idf_env(args.retro_go_idf_path, command, args.retro_go_root)
+    run(command, cwd=args.retro_go_root)
 
 
 def generate_partition_table(args, output_path):
     command = [
         "python3",
-        str(args.micropython_idf_path / "components/partition_table/gen_esp32part.py"),
+        str(args.idf_path / "components/partition_table/gen_esp32part.py"),
         str(args.partition_csv),
         str(output_path),
     ]
@@ -137,19 +125,15 @@ def create_image(image_path, bootloader_path, partition_table_path, micropython_
 
 def main():
     script_path = pathlib.Path(__file__).resolve()
-    rotor_root, vsdk_root, ventilastation_root = find_parent_root(script_path)
+    rotor_root, vsdk_root, _ = find_parent_root(script_path)
     default_build_dir = vsdk_root / "hardware/rotor/build"
 
     parser = argparse.ArgumentParser(description="Build a combined vsdk + voom ESP32 image")
     parser.add_argument(
-        "--micropython-idf-path",
+        "--idf-path",
         type=pathlib.Path,
-        default=ventilastation_root / "esp-idf/esp-5.5.2",
-    )
-    parser.add_argument(
-        "--retro-go-idf-path",
-        type=pathlib.Path,
-        default=ventilastation_root / "esp-idf/esp-5.0.4",
+        default=os.environ.get("IDF_PATH"),
+        help="Defaults to $IDF_PATH -- source esp-idf's export.sh first",
     )
     parser.add_argument("--micropython-root", type=pathlib.Path, default=rotor_root / "micropython")
     parser.add_argument("--retro-go-root", type=pathlib.Path, default=vsdk_root / "apps/retro-go")
@@ -172,8 +156,10 @@ def main():
     parser.add_argument("--prboom-bin", type=pathlib.Path)
     args = parser.parse_args()
 
-    args.micropython_idf_path = args.micropython_idf_path.resolve()
-    args.retro_go_idf_path = args.retro_go_idf_path.resolve()
+    if not args.idf_path:
+        sys.exit("IDF_PATH is not set -- source esp-idf's export.sh first (see docs/internals/building.md)")
+
+    args.idf_path = args.idf_path.resolve()
     args.micropython_root = args.micropython_root.resolve()
     args.retro_go_root = args.retro_go_root.resolve()
     args.partition_csv = args.partition_csv.resolve()

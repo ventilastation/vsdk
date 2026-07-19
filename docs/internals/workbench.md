@@ -259,7 +259,7 @@ must survive; the workbench's `nvs` partition holds only `devel_wifi`, so it
 can overwrite the whole partition directly:
 
 ```bash
-source /path/to/esp-idf/esp-5.5.2/export.sh
+source /path/to/esp-idf/esp-5.5.2/export.sh   # once per session
 make workbench-wifi-provision PORT=/dev/cu.usbmodemXXXX \
     WIFI_SSID=mywifi WIFI_PASS=mypassword
 ```
@@ -401,12 +401,11 @@ Otherwise the DUT behaves exactly as in normal operation:
 Workbench firmware: [`hardware/workbench/workbench_esp32s3/`](hardware/workbench/workbench_esp32s3/).
 
 It's a plain ESP-IDF project (`idf.py` / CMake, C, no Arduino layer),
-built against **the same ESP-IDF release used to build the DUT's
-MicroPython firmware** — `esp-idf` `v5.5.2`, per
-[`Makefile`](Makefile)'s `VOOM_MICROPYTHON_IDF_PATH`. Matching that
-version matters here because the SPI slave capture in `led_capture.c`
-leans on driver internals (`trans_len`, DMA-buffer requirements) that have
-shifted across ESP-IDF releases.
+built against the same ESP-IDF release as everything else in this repo —
+`esp-idf` `v5.5.2` (see [building.md](building.md)). Matching that version
+matters here because the SPI slave capture in `led_capture.c` leans on
+driver internals (`trans_len`, DMA-buffer requirements) that have shifted
+across ESP-IDF releases.
 
 ```bash
 # once, to point the environment at the same IDF tree the DUT uses:

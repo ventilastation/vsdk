@@ -25,6 +25,7 @@ that isn't running yet. Only the final reset still goes over mpremote.
 """
 
 import argparse
+import os
 import pathlib
 import subprocess
 import sys
@@ -48,22 +49,9 @@ def run_mpremote(argv):
     return result
 
 
-def shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-
 def run(cmd, cwd=None):
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, cwd=cwd, check=True)
-
-
-def run_in_idf_env(idf_path, command, cwd):
-    cmd = [
-        "/bin/zsh",
-        "-lc",
-        f"source {shell_quote(str(idf_path / 'export.sh'))} >/dev/null && {' '.join(shell_quote(part) for part in command)}",
-    ]
-    run(cmd, cwd=cwd)
 
 
 def find_parent_root(script_path):
@@ -118,7 +106,7 @@ def flash_factory_only(args, bootloader_path, partition_table_path, micropython_
         "0x10000",
         str(micropython_path),
     ]
-    run_in_idf_env(args.idf_path, command, cwd=micropython_path.parent)
+    run(command, cwd=micropython_path.parent)
 
 
 _BOARD_KEYS = (
@@ -140,7 +128,6 @@ def _provision_board(vsdk_root, args):
         "python3", str(vsdk_root / "tools" / "provision_board.py"),
         "--port", args.port,
         "--baud", str(args.baud),
-        "--idf-path", str(args.idf_path),
         "--hall-gpio", str(args.hall_gpio),
         "--irdiode-gpio", str(args.irdiode_gpio),
         "--led-spi-host", str(args.led_spi_host),
@@ -166,7 +153,6 @@ def _provision_wifi(vsdk_root, args):
         "python3", str(vsdk_root / "tools" / "provision_wifi.py"),
         "--port", args.port,
         "--baud", str(args.baud),
-        "--idf-path", str(args.idf_path),
         "--wifi-ssid", args.wifi_ssid,
         "--wifi-password", args.wifi_password,
     ])
@@ -186,7 +172,7 @@ def _reset_board(port):
 
 def main():
     script_path = pathlib.Path(__file__).resolve()
-    vsdk_root, ventilastation_root = find_parent_root(script_path)
+    vsdk_root, _ = find_parent_root(script_path)
     default_build_dir = vsdk_root / "hardware/rotor/build"
 
     parser = argparse.ArgumentParser(description="Flash factory + NVS only (streamlined bring-up)")
@@ -195,7 +181,8 @@ def main():
     parser.add_argument(
         "--idf-path",
         type=pathlib.Path,
-        default=ventilastation_root / "esp-idf/esp-5.5.2",
+        default=os.environ.get("IDF_PATH"),
+        help="Defaults to $IDF_PATH -- source esp-idf's export.sh first",
     )
     parser.add_argument(
         "--partition-csv",
@@ -234,6 +221,9 @@ def main():
     parser.add_argument("--wifi-password", default="")
 
     args = parser.parse_args()
+
+    if not args.idf_path:
+        sys.exit("IDF_PATH is not set -- source esp-idf's export.sh first (see docs/internals/building.md)")
 
     args.idf_path = args.idf_path.resolve()
     args.partition_csv = args.partition_csv.resolve()
