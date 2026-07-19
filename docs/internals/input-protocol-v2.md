@@ -214,15 +214,19 @@ hardware on it that never answers this protocol at all. `<githash>` is
 This protocol is the canonical way to identify a *connected but unknown*
 device; prefer it over ad hoc heuristics (port-name pattern matching,
 hardcoded device paths, REPL interruption) wherever a caller needs to know
-what's on the other end of a serial port. `emulator/comms.py` always uses
-it. `tools/find_board.py` uses it too, but only as a fallback: day-to-day
-board selection (`--board`, used by every flash/provision Makefile target)
-goes through a local USB-id registry instead (`make register-rotor` etc.,
-see [building.md](building.md#selecting-a-board)) precisely to avoid
-paying this protocol's per-port round trip on every single invocation.
-RESYNC is still what `--list` uses to identify a board that isn't in the
-registry yet (registration itself doesn't probe at all -- it trusts
-whichever single board is attached, or `PORT=...` when several are).
+what's on the other end of a serial port. Both current callers,
+`tools/find_board.py` and `emulator/comms.py`, now use it only as a
+fallback: day-to-day board selection goes through a local USB-id registry
+first (`make register-rotor` etc., see
+[building.md](building.md#selecting-a-board)) precisely to avoid paying
+this protocol's per-port round trip on every single invocation --
+`comms.py` shells out to `find_board.py --board <kind>` for the registry
+lookup rather than importing it directly, since `find_board.py` is
+POSIX-only (it imports `termios`) and `comms.py` still needs to run on
+Windows. RESYNC is still what `--list`, and either caller's fallback path,
+use to identify a board that isn't in the registry yet (registration
+itself doesn't probe at all -- it trusts whichever single board is
+attached, or `PORT=...` when several are).
 
 The rotor board exposes two physically separate serial interfaces: the
 dedicated base-station UART (`input_parser.py`'s usual command channel) and

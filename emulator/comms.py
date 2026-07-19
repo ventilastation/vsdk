@@ -7,7 +7,10 @@ created at import time: emu.py calls start() once configuration is done.
 """
 
 import os
+import pathlib
 import platform
+import subprocess
+import sys
 import time
 import traceback
 
@@ -35,9 +38,12 @@ import upgrade_server
 
 # --- RESYNC device identification (see
 # docs/internals/input-protocol-v2.md#resync--device-identification) ---
-# tools/find_board.py does the same probe for Makefile targets, using raw
-# termios instead of pyserial (which comms.py already depends on for its
-# actual connections, and which works on Windows too).
+# Fallback only: _autodetect() below tries the USB-id registry first (see
+# _registry_lookup()) and only probes with RESYNC for a board that isn't
+# registered. tools/find_board.py does the same probe for Makefile targets
+# in the same role, using raw termios instead of pyserial (which comms.py
+# already depends on for its actual connections, and which works on
+# Windows too).
 RESYNC = b"\n\n\xd2ESYNC\n"
 _RESYNC_ID_PREFIX = b"VENTILASTATION "
 _RESYNC_KIND_BY_NAME = {
@@ -82,6 +88,28 @@ def _probe_serial_kind(port, baud):
             return None
     except (OSError, serial.SerialException):
         return None
+
+
+_REGISTER_TARGET = {"ventilastation": "register-rotor", "workbench": "register-workbench", "base": "register-base"}
+
+
+def _registry_lookup(expected_kind):
+    """Fast path: ask tools/find_board.py's USB-id registry (see
+    docs/internals/building.md#selecting-a-board) for the port, instead of
+    RESYNC-probing every candidate. Shelled out to rather than imported --
+    find_board.py unconditionally imports termios (POSIX-only) for its own
+    RESYNC probing, which would break this module's Windows support at
+    import time; a subprocess failure here (including "no such command" on
+    Windows) just falls through to the RESYNC probe below instead."""
+    script = pathlib.Path(__file__).resolve().parents[1] / "tools" / "find_board.py"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script), "--board", expected_kind],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 def _find_serial_port_for_kind(expected_kind, candidates, bauds=(115200, 57600)):
@@ -171,7 +199,15 @@ class ConnSerial(ConnectionBase):
         except ImportError:
             pass
 
+        if expected_kind:
+            port = _registry_lookup(expected_kind)
+            if port:
+                return port
+
         if expected_kind and candidates:
+            register_target = _REGISTER_TARGET.get(expected_kind)
+            hint = f" (register it with 'make {register_target}' to skip this next time)" if register_target else ""
+            print(f"comms: {expected_kind} not in the USB-id registry{hint}; probing via RESYNC instead")
             port = _find_serial_port_for_kind(expected_kind, sorted(candidates))
             if port:
                 return port
