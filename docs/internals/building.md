@@ -43,18 +43,30 @@ once, then run as many `make` targets as you like.
 
 ## Selecting a board
 
-The two boards use the same ESP32-S3 USB descriptor, so
-`tools/find_board.py` asks each firmware which kind of board it is. Targets
-select the board type they need automatically:
+The two boards use the same ESP32-S3 USB descriptor, so telling them apart
+by port name alone doesn't work. `tools/find_board.py` instead keeps a small
+local registry mapping each board's USB serial number (its factory MAC, so
+it's stable across reflashes) to a kind, at a per-OS path (`~/Library/Application
+Support/vsdk/boards.json` on macOS, `$XDG_CONFIG_HOME/vsdk/boards.json` —
+usually `~/.config/vsdk/boards.json` — on Linux). Register each board once:
 
 ```sh
-make initial-flash    # selects the unique Ventilastation rotor board
-make workbench-flash  # selects the unique workbench board
-make list-boards      # show ports, board types and USB-JTAG serials
+make register-rotor       # only one board attached: no PORT needed
+make register-workbench   # several attached: pass PORT=... to say which one
+make register-base
 ```
 
-If more than one board of the requested type is connected, pass `PORT=...` to
-choose one. An explicit `PORT` always overrides automatic selection. `MAC=...`
+After that, `make initial-flash`, `make workbench-flash`, and friends select
+their board with a plain USB-descriptor lookup — no serial I/O, no
+multi-second wait. If the requested kind isn't registered, the target fails
+fast and tells you to register it (or pass `PORT=...` to bypass selection
+entirely). `make list-boards` shows every candidate port; for anything not
+in the registry it falls back to a RESYNC probe (see
+[input-protocol-v2.md](input-protocol-v2.md#resync--device-identification))
+to identify what's plugged in, which is where the multi-second cost still
+lives — worth it there since it's a one-off diagnostic, not a hot path.
+
+An explicit `PORT` always overrides selection (registered or not). `MAC=...`
 can also select a USB-JTAG serial where the host exposes it (including Linux
 `/dev/serial/by-id` names). Flash commands are serialized through a host-side
 lock so parallel invocations cannot corrupt a transfer.

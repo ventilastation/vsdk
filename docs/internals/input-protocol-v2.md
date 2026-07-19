@@ -211,11 +211,18 @@ before parsing the rest of the line, since a port might have unrelated
 hardware on it that never answers this protocol at all. `<githash>` is
 `unknown` on builds that don't have one (see per-firmware notes).
 
-This protocol is the canonical way to identify a connected device; prefer
-it over ad hoc heuristics (port-name pattern matching, hardcoded device
-paths, REPL interruption) wherever a caller needs to know what's on the
-other end of a serial port. See `tools/find_board.py` and
-`emulator/comms.py` for the two current callers.
+This protocol is the canonical way to identify a *connected but unknown*
+device; prefer it over ad hoc heuristics (port-name pattern matching,
+hardcoded device paths, REPL interruption) wherever a caller needs to know
+what's on the other end of a serial port. `emulator/comms.py` always uses
+it. `tools/find_board.py` uses it too, but only as a fallback: day-to-day
+board selection (`--board`, used by every flash/provision Makefile target)
+goes through a local USB-id registry instead (`make register-rotor` etc.,
+see [building.md](building.md#selecting-a-board)) precisely to avoid
+paying this protocol's per-port round trip on every single invocation.
+RESYNC is still what `--list` uses to identify a board that isn't in the
+registry yet (registration itself doesn't probe at all -- it trusts
+whichever single board is attached, or `PORT=...` when several are).
 
 The rotor board exposes two physically separate serial interfaces: the
 dedicated base-station UART (`input_parser.py`'s usual command channel) and

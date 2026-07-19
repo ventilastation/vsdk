@@ -39,10 +39,12 @@ index.
   with mpy-cross (CI checks this).
 - Flash only through the Makefile targets — they serialize the serial port
   so concurrent flashes can't corrupt each other. Board-specific targets
-  auto-select the unique matching board; use `make list-boards` to inspect
-  the USB mapping and `PORT=...` when several are attached or a specific board
-  must be forced. Source ESP-IDF's `export.sh` once per shell session before
-  running make — it does not do this per target (docs/internals/building.md).
+  auto-select the unique matching board from a local USB-id registry (`make
+  register-rotor`/`register-workbench`/`register-base`, one-time per board);
+  use `make list-boards` to inspect the USB mapping and `PORT=...` when
+  several are attached or a specific board must be forced. Source ESP-IDF's
+  `export.sh` once per shell session before running make — it does not do
+  this per target (docs/internals/building.md).
 - Scene lifecycle errors must surface: the director reports tracebacks
   over comms; don't swallow exceptions when changing scene handling.
 
