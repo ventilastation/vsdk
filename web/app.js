@@ -844,9 +844,6 @@ class BrowserHostApp {
       return;
     }
     stick.addEventListener("pointerdown", (event) => {
-      if (event.pointerType === "mouse") {
-        return;
-      }
       event.preventDefault();
       this.audio.enable();
       this.touchStickPointerId = event.pointerId;
