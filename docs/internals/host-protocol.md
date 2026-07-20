@@ -33,7 +33,15 @@ are logged and ignored — hosts must tolerate commands they don't handle.
 | `imagestrip <slot> <nbytes>` | `<nbytes>` | one image strip: 4-byte header (w, h, frames, palette) + pixels, same encoding as a ROM strip entry |
 | `palette <n> <version>` | `n × 1024` bytes | palette block, `n` palettes of 256 × 4-byte entries ([rom-format.md](rom-format.md)) |
 | `frame_rgb` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED); used by full-frame renderers such as the Ventilagon port |
-| `frame_apa102` | 256 × 54 × 4 bytes | raw spatial APA102 POV frame. Every cell is the unmodified LED datum `[0xe0 \| GB, B, G, R]`; the desktop emulator decodes its light output. Sent by workbench LED-bus capture. |
+| `frame_apa102` † | 256 × 54 × 4 bytes | raw spatial APA102 POV frame. Every cell is the unmodified LED datum `[0xe0 \| GB, B, G, R]`; the desktop emulator decodes its light output. |
+
+† `frame_apa102` is the one exception to the framing described above: the
+workbench's LED-bus capture (its only sender) does *not* send it as a single
+line-framed message over a byte stream. It's chunked over its own small UDP
+protocol instead, specifically so a lost network packet can't stall or
+desync the rest of the stream the way it could over TCP — see
+[workbench.md#why-udp-not-tcp](workbench.md#why-udp-not-tcp) for the wire
+format and reasoning.
 
 `vs2_scene` is intentionally separate from the legacy 500-byte `sprites`
 command. The first payload version has this little-endian layout:
@@ -90,10 +98,11 @@ visible; `0x02` and `0x04` are `flip_x` and `flip_y`.
 
 - **Desktop emulator, local simulation**: TCP to the MicroPython process
   (port 5005); named pipe on Windows.
-- **Desktop emulator, hardware mode**: `frame_apa102` over TCP from the
-  workbench's LED-bus capture; audio/system commands over the workbench's
-  USB serial bridge. The dispatcher is shared, so every command is
-  understood on either link.
+- **Desktop emulator, hardware mode**: `frame_apa102` over its own UDP
+  protocol from the workbench's LED-bus capture (see the † note above and
+  [workbench.md](workbench.md#why-udp-not-tcp)); audio/system commands over
+  the workbench's USB serial bridge, using the shared dispatcher like every
+  other transport in this table.
 - **Web emulator**: the same commands cross the WASM bridge as pointer +
   length calls (`post_command_ptr`) rather than a socket — see
   [web-emulator-architecture.md](web-emulator-architecture.md).

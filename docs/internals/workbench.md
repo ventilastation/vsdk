@@ -15,9 +15,11 @@ It plays three roles at once:
 2. **LED bus spy** — taps the DUT's LED SPI bus (clock + data only, no CS,
    no MISO) as a passive SPI slave, decodes the APA102-style frames the DUT
    is already driving out to its physical LED strips, and re-streams them
-   over Wi-Fi to a desktop `vsdk/emulator` (pyglet) instance using the exact
-   same wire protocol the DUT itself would use if it opened that link
-   directly.
+   over Wi-Fi to a desktop `vsdk/emulator` (pyglet) instance using its own
+   UDP telemetry protocol (see [Why UDP](#why-udp-not-tcp)) — deliberately
+   not the wire protocol the DUT itself would use if it opened a display
+   link directly, since a live LED preview tolerates loss far better than
+   it tolerates the stalls TCP's guarantees would otherwise impose.
 3. **Serial bridge** — bridges the DUT's UART link (used today for
    base/rotor and multi-unit sync traffic — buttons in, sound/music
    requests out) to the workbench's USB port, so the pyglet emulator can
@@ -44,9 +46,9 @@ Firmware for the workbench itself lives in
                     |            vsdk/emulator (pyglet)         |
                     |  python emu.py --remote                   |
                     |  ------------------------------------      |
-                    |  display_conn (Wi-Fi, TCP :5005):           |
-                    |    <- "frame_apa102\n" + 55296 bytes         |
-                    |    -> "reset\n" / "rpm <n>\n"                 |
+                    |  display_conn (Wi-Fi, UDP :5005):            |
+                    |    <- chunked frame_apa102 datagrams          |
+                    |    -> "reset\n" / "rpm <n>\n" / "hello\n"       |
                     |    (RPM slider + reset button in the UI)       |
                     |  workbench_conn (USB serial):                   |
                     |    -> button-state byte                          |
@@ -58,7 +60,7 @@ Firmware for the workbench itself lives in
                               |                          |
                     +---------+--------------------------+-------------+
                     |                Workbench ESP32-S3                 |
-                    |  - Wi-Fi STA + mDNS + TCP server (display/control)  |
+                    |  - Wi-Fi STA + mDNS + UDP telemetry (display/control) |
                     |  - SPI slave (LED bus spy)                           |
                     |  - hall pulse generator (0-700 RPM, remote-settable)  |
                     |  - reset driver (remote-triggerable)                   |
@@ -131,11 +133,13 @@ the octal-PSRAM pins used on `N16R8`-style modules (35-37); swap them in
    LED SPI bus as if it were spinning on a real fan.
 4. Whenever a PC on the same Wi-Fi network runs the desktop emulator in
    hardware mode (`cd vsdk && python emulator/emu.py --remote`), it resolves
-   `ventilastation-workbench.local` over mDNS and opens a TCP connection to
-   port 5005. From then on the workbench streams `frame_apa102` frames it has
-   reconstructed from the spied LED bus, and accepts `reset`/`rpm <n>`
-   commands from the emulator's RPM slider and reset button (see
-   [RPM and reset control](#rpm-and-reset-control)).
+   `ventilastation-workbench.local` over mDNS and starts sending it UDP
+   datagrams on port 5005 -- there's no connection to open (see
+   [Why UDP](#why-udp-not-tcp)). The workbench starts streaming chunked
+   `frame_apa102` telemetry it has reconstructed from the spied LED bus to
+   whichever address most recently sent it a datagram, and accepts
+   `reset`/`rpm <n>` commands from the emulator's RPM slider and reset button
+   (see [RPM and reset control](#rpm-and-reset-control)).
 5. The same emulator process also opens the workbench's USB serial port,
    over which it sends button-state bytes toward the DUT and receives
    sound/music requests from it — see
@@ -190,12 +194,14 @@ decoded into the frame buffer. Verified end-to-end on hardware at 600 RPM:
 
 ## Column tracking and frame reassembly
 
-The pyglet emulator (`vsdk/emulator/comms.py` `dispatch_command()`) expects a
-`frame_apa102` command over the TCP link followed by exactly
-`256 * 54 * 4 = 55296` raw bytes: 256 angular columns, 54 LEDs each, with
-each four-byte cell copied from the LED bus as `[0xe0 | GB, B, G, R]`.
-`frame_rgb` remains a separate three-byte format for software full-frame
-renderers; it is not used for workbench capture.
+The reconstructed telemetry is conceptually a `256 * 54 * 4 = 55296`-byte
+buffer: 256 angular columns, 54 LEDs each, with each four-byte cell copied
+from the LED bus as `[0xe0 | GB, B, G, R]`. On the wire it's never sent as
+one contiguous message (see [Why UDP](#why-udp-not-tcp)) -- the emulator's
+`WorkbenchTelemetryConn` (`vsdk/emulator/comms.py`) reassembles it from
+small per-chunk datagrams instead. `frame_rgb` remains a separate
+three-byte-per-LED format for software full-frame renderers over the
+regular TCP-framed protocol; it is not used for workbench capture.
 
 Since the workbench is also the thing generating the hall pulses, it
 already knows the current rotation phase precisely — no need to infer it
@@ -230,10 +236,60 @@ pipeline delay versus the DUT's true state (the real firmware sends the
 visualization tool.
 
 The assembled 256×54×4 buffer is snapshotted from the capture double buffer
-and sent as one `frame_apa102` message roughly every 33 ms
-(`WB_TELEMETRY_FRAME_INTERVAL_MS`) to whichever client is currently connected.
-The workbench doesn't emit `sprites`/`palette`/`sound`/etc. telemetry, since
-none of that is observable from the LED bus alone.
+roughly every 33 ms (`WB_TELEMETRY_FRAME_INTERVAL_MS`) and sent as
+`WB_NUM_CHUNKS` (64) UDP datagrams to whichever client has most recently sent
+the workbench a datagram (see [Why UDP](#why-udp-not-tcp) for the wire
+format). The workbench doesn't emit `sprites`/`palette`/`sound`/etc.
+telemetry, since none of that is observable from the LED bus alone.
+
+## Why UDP, not TCP
+
+`frame_apa102` telemetry used to be a single TCP-framed message (a
+`"frame_apa102\n"` line plus the raw 55296-byte payload), matching the
+shared wire protocol every other transport in this codebase speaks
+([host-protocol.md](host-protocol.md)). That was a poor fit for what this
+link actually is: a live "whatever's most current wins" preview, not
+data that needs to arrive complete or in order. TCP's guarantees actively
+worked against it -- a single lost segment head-of-line-blocks everything
+queued behind it until retransmitted, which on a lossy Wi-Fi link turned
+one dropped packet into a multi-second visible stall or, if a send timeout
+was added to bound that stall, complicated failure modes around partial
+sends (see the git history of `telemetry.c`'s TCP-era `send_all()` for what
+that cost to get right). None of that is worth paying for a stream where a
+client that missed a frame should just wait for the next one.
+
+The workbench now speaks a small custom UDP protocol instead. Wire format,
+workbench → client, one datagram per column-chunk
+(`hardware/workbench/workbench_esp32s3/main/telemetry.c`):
+
+| Bytes | Field | Notes |
+|---:|---|---|
+| 0 | magic | `WB_CHUNK_MAGIC` (`0xA1`) |
+| 1-4 | `frame_seq` | `uint32`, little-endian. Increments once per `led_capture_snapshot()` call, not once per revolution -- decoupled from `led_capture.c`'s own half-turn buffer flips. |
+| 5 | `chunk_index` | `0..WB_NUM_CHUNKS-1` (`0..63`) |
+| 6.. | payload | `WB_CHUNK_PAYLOAD_BYTES` (864) raw APA102 bytes for columns `[chunk_index*WB_COLUMNS_PER_CHUNK, +WB_COLUMNS_PER_CHUNK)` (`WB_COLUMNS_PER_CHUNK` = 4) |
+
+No `chunk_count` field -- both ends know `WB_NUM_CHUNKS` at compile time.
+Each datagram is 870 bytes total, deliberately small enough that IP never
+has to fragment it (a lost IP fragment would take the whole datagram with
+it, defeating the point). A lost datagram just leaves those four columns
+showing whatever they last successfully received; `WorkbenchTelemetryConn`
+tracks a per-chunk `frame_seq` so a stale, reordered datagram can't stomp
+fresher data that already arrived for the same columns.
+
+Client → workbench control is still plain text lines, matching the
+pre-UDP protocol, plus one addition:
+
+- `"reset\n"` -- pulse the DUT's reset line
+- `"rpm <n>\n"` -- set the simulated hall RPM
+- `"hello\n"` -- no-op, sent by the client once a second purely to keep its
+  subscription alive
+
+UDP has no `accept()`, so "the current client" is simply whoever's datagram
+arrived most recently -- any of the three lines above count, which is why
+the client sends `hello` even when the user isn't touching the RPM slider
+or reset button. The workbench stops streaming to a client after
+`WB_TELEMETRY_CLIENT_TIMEOUT_MS` (5000 ms) of silence from it.
 
 ## Wi-Fi provisioning and mDNS discovery
 
@@ -284,7 +340,7 @@ machine, pass the workbench's IP explicitly instead (see below).
 
 **macOS gotcha:** if `.local` resolution hangs/fails for the emulator
 specifically even though `ping ventilastation-workbench.local` and
-`dns-sd -B _ventilastation-wb._tcp` both work fine, check
+`dns-sd -B _ventilastation-wb._udp` both work fine, check
 System Settings → Privacy & Security → Local Network, and make sure the
 Python interpreter running the emulator (Terminal, or the specific
 python3/venv binary) is allowed there. Without it, macOS silently drops
@@ -292,21 +348,21 @@ the mDNS traffic for that process — no error, it just never resolves.
 
 ## RPM and reset control
 
-Once connected, the same TCP link that streams `frame_apa102` also accepts
-simple line commands from the client (`telemetry.c`'s
-`poll_client_commands()`/`handle_client_line()`):
+Any datagram from the client to the workbench's UDP telemetry port also
+accepts simple line commands (`telemetry.c`'s `handle_client_line()`):
 
 - `reset\n` — pulses the DUT's reset line (`reset_ctl_pulse()`), exactly
   like the boot-time reset.
 - `rpm <n>\n` — sets the simulated hall RPM at runtime
   (`hall_sim_set_rpm()`), clamped to `[0, 700]`.
+- `hello\n` — no-op keepalive (see [Why UDP](#why-udp-not-tcp)).
 
 The pyglet emulator's window (`emulator/pyglet2x/pygletdraw.py`) draws an
 RPM slider (0-700, default 600) and a RESET button in the bottom-left
 corner when running against real hardware; dragging the slider sends
 `rpm <n>` (only when the rounded value changes), and clicking RESET sends
 `reset`. Both go out via `comms.send_workbench()`, which writes directly to
-the Wi-Fi connection — harmless no-ops if the workbench isn't connected.
+the Wi-Fi connection — harmless no-ops if the workbench isn't reachable.
 
 ## Pyglet emulator transport split
 
@@ -315,21 +371,26 @@ the Wi-Fi connection — harmless no-ops if the workbench isn't connected.
 Against a real workbench (`python emu.py --remote` or `--no-display`) it
 instead opens two:
 
-- `display_conn` (Wi-Fi, TCP `:5005`) — `frame_apa102` in, `reset`/`rpm` out.
-  Everything covered above.
+- `display_conn` (Wi-Fi, UDP `:5005`) — a `WorkbenchTelemetryConn`
+  instance: `frame_apa102` chunks in, `reset`/`rpm`/`hello` out. Everything
+  covered above and in [Why UDP](#why-udp-not-tcp). Unlike every other
+  transport in this codebase, this one does *not* run through the shared
+  `comms.dispatch_command()` line dispatcher -- it's message-oriented UDP
+  carrying exactly one payload type, so `WorkbenchTelemetryConn` gets its
+  own minimal receive loop instead (see `comms.py`).
 - `workbench_conn` (USB serial, via the workbench's UART bridge) — button
   state out, sound/music/notes/etc. requests in. This is exactly the
   traffic that would normally cross the DUT<->base UART link (see
   `hardware/base/README.md`: "the code running on the base gathers
   joystick movement and button presses... the cpu sends back requests for
   music and sounds"); the emulator, connected through the workbench's
-  serial passthrough, is simply standing in for the base.
+  serial passthrough, is simply standing in for the base. This link *does*
+  still use the shared `comms.dispatch_command()`.
 
-Both connections share the same command dispatcher
-(`comms.dispatch_command()`), so nothing needs to know in advance which
-transport a given command arrives on — in local-simulation mode (no
-workbench involved) everything, including audio, still arrives on
-`display_conn` exactly as before this change.
+In local-simulation mode (no workbench involved), `display_conn` is a
+regular TCP loopback connection and everything, including audio, still
+arrives on it through `comms.dispatch_command()` exactly as before UDP
+telemetry existed -- the split above only applies in hardware mode.
 
 The workbench's serial port is auto-detected (matching common USB-serial
 device names on macOS/Linux) or can be set explicitly with
@@ -439,10 +500,14 @@ pinned by `dependencies.lock`; `idf.py build` fetches it into
 - Only `frame_apa102` telemetry is reproduced; no sprite/palette telemetry
   over Wi-Fi (audio telemetry is covered separately, over serial — see
   [Pyglet emulator transport split](#pyglet-emulator-transport-split)).
-- Single Wi-Fi client at a time.
-- The `reset`/`rpm` control channel is plain, unauthenticated TCP on the
-  local network — acceptable for a bench tool, not something to expose
-  beyond the local Wi-Fi network.
+- Single Wi-Fi client at a time -- "the current client" is whoever's
+  datagram the workbench saw most recently (see [Why UDP](#why-udp-not-tcp)).
+- The telemetry/control channel is plain, unauthenticated UDP on the local
+  network — acceptable for a bench tool, not something to expose beyond
+  the local Wi-Fi network. UDP also means there's no built-in delivery
+  guarantee at all (by design -- see [Why UDP](#why-udp-not-tcp)), so a bad
+  enough link can still mean a visibly stale/choppy preview; it just can't
+  desync or stall the whole stream the way the earlier TCP transport could.
 - `.local` mDNS resolution depends on OS support (built into macOS; needs
   `avahi`/`nss-mdns` on Linux, Bonjour on Windows) and, on macOS, the
   Local Network permission for whichever process is running the emulator
