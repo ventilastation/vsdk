@@ -27,6 +27,7 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "mdns.h"
@@ -39,6 +40,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/time.h>
 
 static const char *TAG = "telemetry";
 
@@ -166,6 +168,40 @@ static void handle_client_line(char *line) {
     }
 }
 
+// Sends exactly `len` bytes, resuming from wherever a partial send left off.
+// This matters because client_sock has SO_SNDTIMEO set: once that timeout is
+// armed, a send() that can't complete within the window returns however many
+// bytes it *did* manage rather than -1 -- treating that as an error (or,
+// worse, ignoring it) silently drops the tail of whatever was being sent and
+// permanently desyncs the client's framing for the rest of the connection,
+// since TCP has no message boundaries to resynchronize on.
+//
+// The deadline check must happen unconditionally at the top of every
+// iteration, not just after an EAGAIN: a struggling link can make small
+// nonzero progress on every single SO_SNDTIMEO-bounded send() call (n > 0
+// each time, just far short of len) without ever hitting EAGAIN, and an
+// earlier version of this function only checked the deadline in the EAGAIN
+// branch -- that let a single frame's send retry, "successfully" a few bytes
+// at a time, for many seconds before the caller ever heard about it.
+static bool send_all(int sock, const uint8_t *buf, size_t len, int64_t overall_deadline_us) {
+    size_t sent = 0;
+    while (sent < len) {
+        if (esp_timer_get_time() >= overall_deadline_us) {
+            return false;
+        }
+        int n = send(sock, buf + sent, len - sent, 0);
+        if (n > 0) {
+            sent += (size_t)n;
+            continue;
+        }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            continue;  // bounded by the deadline check at the top of the loop
+        }
+        return false;  // hard error or EOF (n == 0)
+    }
+    return true;
+}
+
 #define CMD_BUF_SIZE 64
 
 // Drains whatever the client has sent so far (non-blocking) and dispatches
@@ -232,18 +268,48 @@ static void telemetry_task(void *arg) {
         }
         ESP_LOGI(TAG, "emulator connected");
 
+        // Nagle would otherwise hold the 13-byte "frame_apa102\n" header
+        // back waiting to coalesce it with the payload send that follows a
+        // few instructions later, adding avoidable latency to every frame.
+        int nodelay = 1;
+        setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+        // Bound how long a stuck/congested link can wedge this loop: without
+        // this, a blocking send() on a stalled connection can hang far
+        // longer than one frame interval (lwIP's own retransmit timeout),
+        // during which the client sees nothing but silence instead of a
+        // clean disconnect-and-retry.
+        struct timeval snd_timeout = {.tv_sec = 0, .tv_usec = 200000};
+        setsockopt(client_sock, SOL_SOCKET, SO_SNDTIMEO, &snd_timeout, sizeof(snd_timeout));
+
         char cmd_buf[CMD_BUF_SIZE];
         size_t cmd_len = 0;
 
         while (1) {
             poll_client_commands(client_sock, cmd_buf, &cmd_len);
 
+            int64_t frame_start = esp_timer_get_time();
+
             led_capture_snapshot(s_frame_buf);
-            if (send(client_sock, "frame_apa102\n", sizeof("frame_apa102\n") - 1, 0) < 0 ||
-                send(client_sock, s_frame_buf, sizeof(s_frame_buf), 0) < 0) {
+            // A generous overall budget (well beyond one frame interval) for
+            // *this frame's* combined header+payload send: send_all() already
+            // retries through any number of 200ms SO_SNDTIMEO expirations
+            // that make progress, so this only fires for a link that's
+            // genuinely wedged, not one that's merely slow.
+            int64_t deadline = esp_timer_get_time() + 1000000;
+            if (!send_all(client_sock, (const uint8_t *)"frame_apa102\n", sizeof("frame_apa102\n") - 1, deadline) ||
+                !send_all(client_sock, s_frame_buf, sizeof(s_frame_buf), deadline)) {
                 break;
             }
-            vTaskDelay(pdMS_TO_TICKS(WB_TELEMETRY_FRAME_INTERVAL_MS));
+
+            // Pace off how long this frame actually took to send instead of
+            // always sleeping the full interval: a slow/congested send would
+            // otherwise push every subsequent frame later and later, turning
+            // one hiccup into a growing backlog the client sees as a burst
+            // followed by a stall rather than a single, brief slowdown.
+            int64_t elapsed_ms = (esp_timer_get_time() - frame_start) / 1000;
+            if (elapsed_ms < WB_TELEMETRY_FRAME_INTERVAL_MS) {
+                vTaskDelay(pdMS_TO_TICKS(WB_TELEMETRY_FRAME_INTERVAL_MS - elapsed_ms));
+            }
         }
 
         ESP_LOGI(TAG, "emulator disconnected");
