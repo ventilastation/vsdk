@@ -2530,7 +2530,9 @@ class BrowserHostApp {
       ["Events", frame.events.length],
       ["Column Offset", frame.column_offset],
       ["Gamma", frame.gamma_mode],
-      ["Buttons", `0x${frame.buttons.toString(16).padStart(2, "0")}`],
+      // RGB-only remote frames do not carry the local-runtime button field.
+      // Show the browser's canonical input state in that case.
+      ["Buttons", `0x${(Number.isInteger(frame.buttons) ? frame.buttons : this.currentButtons).toString(16).padStart(2, "0")}`],
       ["Gamepad", this.activeGamepadIndex === null
         ? "None"
         : this.connectedGamepadCount > 1
