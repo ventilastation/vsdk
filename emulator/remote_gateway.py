@@ -594,6 +594,7 @@ class BrowserSession:
     principal: Principal
     frame_queue: asyncio.Queue[bytes] = field(default_factory=lambda: asyncio.Queue(maxsize=MAX_FRAME_QUEUE))
     exit_pressed: bool = False
+    last_audited_input: tuple[int, int, int, bool] | None = None
     last_ack_sequence: int = 0
     sender_task: asyncio.Task[Any] | None = None
 
@@ -803,6 +804,15 @@ if (window.opener) {
             self.core.leases.validate(self.config.board, session.session_id, generation)
             await asyncio.to_thread(self._serial.write, bytes((0x2A, joy1, joy2, extra)))
             exit_edge = bool(flags & INPUT_EXIT_EDGE)
+            input_state = (joy1, joy2, extra, exit_edge)
+            if input_state != session.last_audited_input:
+                self.store.audit(
+                    self.config.board,
+                    session.principal.email,
+                    "input",
+                    "%02x,%02x,%02x,exit=%d" % (joy1, joy2, extra, exit_edge),
+                )
+                session.last_audited_input = input_state
             if exit_edge and not session.exit_pressed:
                 await asyncio.to_thread(self._serial.write, b"exit\n")
             session.exit_pressed = exit_edge
@@ -971,6 +981,8 @@ if (window.opener) {
         # browser implementation declares support in a later protocol version.
         if event.command in {"achip", "aframe", "amap", "astop"}:
             return
+        for email in {session.principal.email for session in self.sessions.values()}:
+            self.store.audit(self.config.board, email, "host_event", event.command)
         name = event.command.encode("ascii")
         arguments = _json_bytes(list(event.args))
         payload = struct.pack("<BHI", len(name), len(arguments), len(event.payload)) + name + arguments + event.payload
