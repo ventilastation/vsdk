@@ -40,3 +40,21 @@ CONFIG_GPIO_CTRL_FUNC_IN_IRAM=y
 # (ESP_WIFI_TASK_PINNED_TO_CORE_0) and where serial_bridge/telemetry are now
 # explicitly pinned too.
 CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+
+# Tried raising the default 5760-byte TCP send/receive window (up to one full
+# frame_apa102 payload, 57600, and smaller intermediate steps down to 11520)
+# to cut the ~10 ACK round trips/frame the default forces at this network's
+# measured ~10ms RTT (window/RTT puts the ceiling around 5Mbps, matching the
+# ~80ms/frame measured on real hardware at the default). Every value above
+# 5760 was unreliable on real hardware, including 11520 on a repeat run after
+# an earlier run at that same value worked cleanly for 20s/379 frames: send()
+# started returning small nonzero counts on nearly every SO_SNDTIMEO-bounded
+# attempt instead of completing, eventually tripping send_all()'s overall
+# deadline and disconnecting. Consistent with lwIP running short of
+# pbuf/segment pool capacity to actually back a larger window (which doesn't
+# auto-scale with TCP_SND_BUF/TCP_WND on this build) -- but reproducing
+# inconsistently even at the smaller sizes means it's not simply "bigger
+# window = worse"; something about accumulated connection state may also be
+# involved. Left at the stock default: reliable beats marginally faster but
+# flaky. Revisit only alongside the matching MEMP_NUM_TCP_SEG/pbuf pool
+# sizing and real headroom testing, not another blind bump.
