@@ -20,6 +20,7 @@
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -48,33 +49,71 @@ static void forward_to_dut(const uint8_t *buf, size_t len) {
     }
 }
 
-// Keep the RESYNC marker out of the DUT UART. All other bytes remain
-// byte-for-byte transparent for the emulator's normal bridge traffic -- a
-// partial/failed match is replayed to the DUT exactly as received, so this
-// never eats bytes the DUT was supposed to see.
-static void handle_host_bytes(const uint8_t *buf, size_t len) {
-    static uint8_t candidate[sizeof(RESYNC_SEQUENCE)];
-    static size_t candidate_len;
+// A byte that's part of a still-possible RESYNC match can't be forwarded
+// immediately -- unlike input_parser.py's equivalent tracking on the DUT
+// side, which can freely feed a not-yet-disproven byte through its own
+// internal state machine because that's reversible (an abandoned partial
+// command just gets discarded from a buffer), forwarding to the DUT's UART
+// is a real, external, irreversible side effect. So a byte matching
+// RESYNC_SEQUENCE[candidate_len] has to sit in `candidate` until something
+// either completes the match (and it's correctly discarded, per this
+// function's whole purpose) or disproves it (and it's flushed to the DUT
+// exactly as received).
+//
+// RESYNC_SEQUENCE starts with '\n' -- the same byte that terminates every
+// ordinary text command this bridge carries ("exit\n", "reset\n",
+// "rpm <n>\n") -- so that disproving byte is not guaranteed to arrive
+// promptly: if the command's trailing '\n' is the last byte in its USB
+// write and nothing else arrives on this link for a while, the DUT's
+// command parser (which needs to see that '\n' before it'll act at all)
+// just doesn't -- until whatever byte arrives next, e.g. the *next*
+// button/joystick event, incidentally disproves the stale match and
+// flushes it. That's exactly what caused the reported "ESC needs pressing
+// twice" bug: the first "exit\n"'s terminator sat here until the second
+// "exit\n" attempt's leading 'e' flushed it.
+//
+// flush_stale_candidate(), called from bridge_task()'s loop, bounds this:
+// a genuine RESYNC burst is one atomic write from a well-behaved prober and
+// completes over USB in far less than CANDIDATE_FLUSH_TIMEOUT_US regardless
+// of baud rate, so the timeout can't misidentify a real resync attempt as
+// stale traffic.
+static uint8_t s_candidate[sizeof(RESYNC_SEQUENCE)];
+static size_t s_candidate_len;
+static int64_t s_candidate_started_us;
 
+#define CANDIDATE_FLUSH_TIMEOUT_US 5000
+
+static void flush_stale_candidate(void) {
+    if (s_candidate_len > 0 && esp_timer_get_time() - s_candidate_started_us > CANDIDATE_FLUSH_TIMEOUT_US) {
+        forward_to_dut(s_candidate, s_candidate_len);
+        s_candidate_len = 0;
+    }
+}
+
+static void handle_host_bytes(const uint8_t *buf, size_t len) {
     for (size_t i = 0; i < len; i++) {
         uint8_t byte = buf[i];
-        if (byte == RESYNC_SEQUENCE[candidate_len]) {
-            candidate[candidate_len++] = byte;
-            if (candidate_len == sizeof(RESYNC_SEQUENCE)) {
+        if (byte == RESYNC_SEQUENCE[s_candidate_len]) {
+            if (s_candidate_len == 0) {
+                s_candidate_started_us = esp_timer_get_time();
+            }
+            s_candidate[s_candidate_len++] = byte;
+            if (s_candidate_len == sizeof(RESYNC_SEQUENCE)) {
                 // esp_restart() never returns in practice (immediate
                 // reboot); resetting candidate_len first is just defensive
                 // in case that assumption ever changes, matching the same
                 // precaution in vs_host_bridge.c.
-                candidate_len = 0;
+                s_candidate_len = 0;
                 esp_restart(); // identification banner is printed on next boot
             }
             continue;
         }
 
-        forward_to_dut(candidate, candidate_len);
-        candidate_len = 0;
+        forward_to_dut(s_candidate, s_candidate_len);
+        s_candidate_len = 0;
         if (byte == RESYNC_SEQUENCE[0]) {
-            candidate[candidate_len++] = byte;
+            s_candidate[s_candidate_len++] = byte;
+            s_candidate_started_us = esp_timer_get_time();
         } else {
             forward_to_dut(&byte, 1);
         }
@@ -98,6 +137,12 @@ static void bridge_task(void *arg) {
         if (n > 0) {
             handle_host_bytes(buf, n);
         }
+
+        // Bounds how long a partial RESYNC match (see handle_host_bytes())
+        // can withhold bytes from the DUT when nothing further arrives to
+        // confirm or disprove it -- also covers the case where this whole
+        // iteration's usb_serial_jtag_read_bytes() returned nothing at all.
+        flush_stale_candidate();
     }
 }
 
