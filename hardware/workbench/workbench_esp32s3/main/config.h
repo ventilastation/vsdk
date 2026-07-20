@@ -31,6 +31,18 @@
 #define WB_APA102_LED_FRAME_BYTES 4
 #define WB_FRAME_BYTES (WB_COLUMNS * WB_NUM_LEDS * WB_APA102_LED_FRAME_BYTES)
 
+// ---- UDP telemetry chunking (see telemetry.c) ----
+// Each datagram carries WB_COLUMNS_PER_CHUNK columns' worth of raw APA102
+// data, well under any realistic MTU: 4 divides WB_COLUMNS evenly (no
+// ragged final chunk) and keeps each packet's payload at 4*54*4=864 bytes
+// (870 with the header), far under the ~1470-byte usable payload of a
+// standard 1500-byte-MTU link -- deliberately small enough that IP never
+// has to fragment a datagram, since a lost IP fragment takes the whole
+// datagram with it.
+#define WB_COLUMNS_PER_CHUNK    4
+#define WB_NUM_CHUNKS           (WB_COLUMNS / WB_COLUMNS_PER_CHUNK)
+#define WB_CHUNK_PAYLOAD_BYTES  (WB_COLUMNS_PER_CHUNK * WB_NUM_LEDS * WB_APA102_LED_FRAME_BYTES)
+
 // ---- DUT UART bridge ----
 #define WB_UART_TX_PIN  6   // -> DUT serial_rx
 #define WB_UART_RX_PIN  5   // <- DUT serial_tx
@@ -54,8 +66,17 @@
 #define WB_MDNS_HOSTNAME      "ventilastation-workbench"
 #define WB_MDNS_INSTANCE_NAME "Ventilastation Workbench"
 #define WB_MDNS_SERVICE_TYPE  "_ventilastation-wb"
-#define WB_MDNS_SERVICE_PROTO "_tcp"
+#define WB_MDNS_SERVICE_PROTO "_udp"
 
 // ---- Wi-Fi telemetry link (pyglet emulator) ----
+// UDP, not TCP: frame_apa102 is a live "latest wins" preview, and TCP's
+// in-order/retransmit guarantees actively hurt that -- one lost segment
+// stalls delivery of everything queued behind it (head-of-line blocking)
+// until it's retransmitted, turning a single dropped packet into a visible
+// freeze instead of a few stale columns. See telemetry.c.
 #define WB_TELEMETRY_PORT               5005
 #define WB_TELEMETRY_FRAME_INTERVAL_MS  33
+// How long without any datagram from the client (hello/reset/rpm) before
+// the workbench stops streaming to it -- avoids blasting UDP frames at a
+// vanished/crashed emulator forever.
+#define WB_TELEMETRY_CLIENT_TIMEOUT_MS  5000

@@ -1,8 +1,32 @@
-// Speaks the same wire protocol vsdk/apps/micropython/ventilastation/comms.py
-// uses on real hardware: a line command ("frame_apa102\n") followed directly
-// by the binary payload, over a plain TCP socket. See
-// vsdk/emulator/comms.py receive_loop() for the client side that consumes
-// this.
+// UDP telemetry link to vsdk/emulator/comms.py's workbench receiver (see
+// WorkbenchTelemetryConn there for the client side). Deliberately NOT the
+// TCP-framed wire protocol the rest of the codebase speaks
+// (vsdk/apps/micropython/ventilastation/comms.py, host-protocol.md): TCP's
+// in-order/retransmit guarantee is the wrong fit for a live "latest frame
+// wins" preview -- one lost segment head-of-line-blocks everything queued
+// behind it until retransmitted, turning a single dropped packet into a
+// visible stall instead of a few stale columns. UDP has no such queue: a
+// lost datagram just leaves those columns showing last frame's data.
+//
+// Wire format, workbench -> client, one UDP datagram per column-chunk:
+//   byte 0:     WB_CHUNK_MAGIC
+//   bytes 1-4:  frame_seq, uint32 little-endian. Increments once per
+//               led_capture_snapshot() call, not once per revolution --
+//               decoupled from led_capture.c's own half-turn buffer flips.
+//   byte 5:     chunk_index, 0..WB_NUM_CHUNKS-1
+//   bytes 6..:  WB_CHUNK_PAYLOAD_BYTES of raw APA102 data for columns
+//               [chunk_index*WB_COLUMNS_PER_CHUNK, +WB_COLUMNS_PER_CHUNK)
+// No chunk_count field: both ends know WB_NUM_CHUNKS at compile time.
+//
+// Client -> workbench, plain text lines (same as before), used both for
+// their own effect and as the only signal the workbench has of who to
+// stream to -- UDP has no accept(), so "the current client" is just
+// whoever's datagram arrived most recently, aged out after
+// WB_TELEMETRY_CLIENT_TIMEOUT_MS of silence:
+//   "reset\n"    -> pulse the DUT's reset line
+//   "rpm <n>\n"  -> change the simulated hall RPM
+//   "hello\n"    -> no-op, sent periodically by the client purely to keep
+//                   its subscription (and NAT/firewall mapping) alive
 //
 // The workbench joins an existing Wi-Fi network (station mode) rather than
 // running its own AP, so the PC running the pyglet emulator keeps normal
@@ -11,11 +35,6 @@
 // same NVS namespace/keys for credentials. It advertises itself over mDNS
 // (WB_MDNS_HOSTNAME + ".local") so the emulator doesn't need to know its
 // DHCP-assigned IP.
-//
-// Besides pushing frame_apa102, the accepted connection also accepts simple
-// line commands from the client:
-//   "reset\n"    -> pulse the DUT's reset line
-//   "rpm <n>\n"  -> change the simulated hall RPM
 
 #include "telemetry.h"
 #include "config.h"
@@ -163,65 +182,22 @@ static void handle_client_line(char *line) {
         }
         ESP_LOGI(TAG, "client set RPM to %ld", rpm);
         hall_sim_set_rpm((uint32_t)rpm);
+    } else if (strcmp(line, "hello") == 0) {
+        // No-op: receiving *any* datagram is what actually matters (see
+        // telemetry_task's client_addr tracking below) -- "hello" exists
+        // purely so the client has something to send to keep its
+        // subscription alive when the user isn't touching the RPM slider
+        // or reset button.
     } else if (line[0] != '\0') {
         ESP_LOGW(TAG, "unknown command: \"%s\"", line);
     }
 }
 
-// Sends exactly `len` bytes, resuming from wherever a partial send left off.
-// This matters because client_sock has SO_SNDTIMEO set: once that timeout is
-// armed, a send() that can't complete within the window returns however many
-// bytes it *did* manage rather than -1 -- treating that as an error (or,
-// worse, ignoring it) silently drops the tail of whatever was being sent and
-// permanently desyncs the client's framing for the rest of the connection,
-// since TCP has no message boundaries to resynchronize on.
-//
-// The deadline check must happen unconditionally at the top of every
-// iteration, not just after an EAGAIN: a struggling link can make small
-// nonzero progress on every single SO_SNDTIMEO-bounded send() call (n > 0
-// each time, just far short of len) without ever hitting EAGAIN, and an
-// earlier version of this function only checked the deadline in the EAGAIN
-// branch -- that let a single frame's send retry, "successfully" a few bytes
-// at a time, for many seconds before the caller ever heard about it.
-static bool send_all(int sock, const uint8_t *buf, size_t len, int64_t overall_deadline_us) {
-    size_t sent = 0;
-    while (sent < len) {
-        if (esp_timer_get_time() >= overall_deadline_us) {
-            return false;
-        }
-        int n = send(sock, buf + sent, len - sent, 0);
-        if (n > 0) {
-            sent += (size_t)n;
-            continue;
-        }
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            continue;  // bounded by the deadline check at the top of the loop
-        }
-        return false;  // hard error or EOF (n == 0)
-    }
-    return true;
-}
+#define WB_CHUNK_MAGIC          0xA1
+#define WB_CHUNK_HEADER_BYTES   6  // magic(1) + frame_seq(4) + chunk_index(1)
+#define WB_CHUNK_PACKET_BYTES   (WB_CHUNK_HEADER_BYTES + WB_CHUNK_PAYLOAD_BYTES)
 
 #define CMD_BUF_SIZE 64
-
-// Drains whatever the client has sent so far (non-blocking) and dispatches
-// any complete "\n"-terminated command lines found in it.
-static void poll_client_commands(int client_sock, char *cmd_buf, size_t *cmd_len) {
-    char chunk[64];
-    int n;
-    while ((n = recv(client_sock, chunk, sizeof(chunk), MSG_DONTWAIT)) > 0) {
-        for (int i = 0; i < n; i++) {
-            char c = chunk[i];
-            if (c == '\n') {
-                cmd_buf[*cmd_len] = '\0';
-                handle_client_line(cmd_buf);
-                *cmd_len = 0;
-            } else if (c != '\r' && *cmd_len < CMD_BUF_SIZE - 1) {
-                cmd_buf[(*cmd_len)++] = c;
-            }
-        }
-    }
-}
 
 static void telemetry_task(void *arg) {
     esp_err_t ret = nvs_flash_init();
@@ -237,88 +213,127 @@ static void telemetry_task(void *arg) {
         return;
     }
 
-    int listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listen_sock < 0) {
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) {
         ESP_LOGE(TAG, "unable to create socket: errno %d", errno);
         vTaskDelete(NULL);
         return;
     }
 
     int opt = 1;
-    setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     struct sockaddr_in addr = {
         .sin_family = AF_INET,
         .sin_addr.s_addr = htonl(INADDR_ANY),
         .sin_port = htons(WB_TELEMETRY_PORT),
     };
-    if (bind(listen_sock, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
-        listen(listen_sock, 1) != 0) {
-        ESP_LOGE(TAG, "unable to bind/listen on :%d: errno %d", WB_TELEMETRY_PORT, errno);
-        close(listen_sock);
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        ESP_LOGE(TAG, "unable to bind :%d: errno %d", WB_TELEMETRY_PORT, errno);
+        close(sock);
         vTaskDelete(NULL);
         return;
     }
 
+    // This is the loop's tick rate: how promptly it notices "it's time to
+    // send the next frame" even when no client datagram arrives to wake it.
+    // Far below WB_TELEMETRY_FRAME_INTERVAL_MS so frame pacing stays
+    // accurate.
+    struct timeval rcv_timeout = {.tv_sec = 0, .tv_usec = 5000};
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
+
+    // Unlike the old TCP socket's SO_SNDTIMEO, this isn't guarding against a
+    // partial send (sendto() is atomic for UDP -- one call, one whole
+    // datagram, no partial-write concept) -- it bounds how long a single
+    // congested sendto() can block. Without it, a burst of WB_NUM_CHUNKS
+    // blocking sends under a bad enough link stacked up into multiple
+    // seconds inside one loop iteration on real hardware, long enough to
+    // starve the core 0 idle task and trip the watchdog. 20ms per chunk
+    // caps one full frame's worth of sends at ~1.3s worst case, well under
+    // that, while still being generous for a call that normally returns
+    // near-instantly.
+    struct timeval snd_timeout = {.tv_sec = 0, .tv_usec = 20000};
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &snd_timeout, sizeof(snd_timeout));
+
+    ESP_LOGI(TAG, "listening for emulator telemetry on %s.local:%d (UDP)", WB_MDNS_HOSTNAME, WB_TELEMETRY_PORT);
+
+    struct sockaddr_in client_addr = {0};
+    bool have_client = false;
+    int64_t client_last_seen_us = 0;
+    uint32_t frame_seq = 0;
+    int64_t last_frame_us = 0;
+
+    char cmd_buf[CMD_BUF_SIZE];
+    uint8_t packet[WB_CHUNK_PACKET_BYTES];
+
     while (1) {
-        ESP_LOGI(TAG, "waiting for emulator connection on %s.local:%d", WB_MDNS_HOSTNAME, WB_TELEMETRY_PORT);
-        int client_sock = accept(listen_sock, NULL, NULL);
-        if (client_sock < 0) {
-            continue;
+        struct sockaddr_in from_addr;
+        socklen_t from_len = sizeof(from_addr);
+        int n = recvfrom(sock, cmd_buf, sizeof(cmd_buf) - 1, 0, (struct sockaddr *)&from_addr, &from_len);
+        if (n > 0) {
+            // One datagram is one line -- no partial-line buffering needed
+            // here, unlike the old TCP stream parser: recvfrom() already
+            // hands us a complete message. Just trim a trailing \n/\r\n.
+            while (n > 0 && (cmd_buf[n - 1] == '\n' || cmd_buf[n - 1] == '\r')) {
+                n--;
+            }
+            cmd_buf[n] = '\0';
+            handle_client_line(cmd_buf);
+
+            bool same_client = have_client &&
+                                client_addr.sin_addr.s_addr == from_addr.sin_addr.s_addr &&
+                                client_addr.sin_port == from_addr.sin_port;
+            if (!same_client) {
+                ESP_LOGI(TAG, "streaming to new emulator client");
+            }
+            client_addr = from_addr;
+            have_client = true;
+            client_last_seen_us = esp_timer_get_time();
         }
-        ESP_LOGI(TAG, "emulator connected");
 
-        // Nagle would otherwise hold the 13-byte "frame_apa102\n" header
-        // back waiting to coalesce it with the payload send that follows a
-        // few instructions later, adding avoidable latency to every frame.
-        int nodelay = 1;
-        setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
-        // Bound how long a stuck/congested link can wedge this loop: without
-        // this, a blocking send() on a stalled connection can hang far
-        // longer than one frame interval (lwIP's own retransmit timeout),
-        // during which the client sees nothing but silence instead of a
-        // clean disconnect-and-retry.
-        struct timeval snd_timeout = {.tv_sec = 0, .tv_usec = 200000};
-        setsockopt(client_sock, SOL_SOCKET, SO_SNDTIMEO, &snd_timeout, sizeof(snd_timeout));
+        int64_t now = esp_timer_get_time();
 
-        char cmd_buf[CMD_BUF_SIZE];
-        size_t cmd_len = 0;
+        if (have_client && now - client_last_seen_us > (int64_t)WB_TELEMETRY_CLIENT_TIMEOUT_MS * 1000) {
+            ESP_LOGI(TAG, "client timed out (no datagram in %d ms), no longer streaming",
+                     WB_TELEMETRY_CLIENT_TIMEOUT_MS);
+            have_client = false;
+        }
 
-        while (1) {
-            poll_client_commands(client_sock, cmd_buf, &cmd_len);
-
-            int64_t frame_start = esp_timer_get_time();
-
+        if (have_client && now - last_frame_us >= (int64_t)WB_TELEMETRY_FRAME_INTERVAL_MS * 1000) {
+            last_frame_us = now;
             led_capture_snapshot(s_frame_buf);
-            // A generous overall budget (well beyond one frame interval) for
-            // *this frame's* combined header+payload send: send_all() already
-            // retries through any number of 200ms SO_SNDTIMEO expirations
-            // that make progress, so this only fires for a link that's
-            // genuinely wedged, not one that's merely slow.
-            int64_t deadline = esp_timer_get_time() + 1000000;
-            if (!send_all(client_sock, (const uint8_t *)"frame_apa102\n", sizeof("frame_apa102\n") - 1, deadline) ||
-                !send_all(client_sock, s_frame_buf, sizeof(s_frame_buf), deadline)) {
-                break;
-            }
+            frame_seq++;
 
-            // Pace off how long this frame actually took to send instead of
-            // always sleeping the full interval: a slow/congested send would
-            // otherwise push every subsequent frame later and later, turning
-            // one hiccup into a growing backlog the client sees as a burst
-            // followed by a stall rather than a single, brief slowdown.
-            int64_t elapsed_ms = (esp_timer_get_time() - frame_start) / 1000;
-            if (elapsed_ms < WB_TELEMETRY_FRAME_INTERVAL_MS) {
-                vTaskDelay(pdMS_TO_TICKS(WB_TELEMETRY_FRAME_INTERVAL_MS - elapsed_ms));
+            for (int chunk = 0; chunk < WB_NUM_CHUNKS; chunk++) {
+                packet[0] = WB_CHUNK_MAGIC;
+                memcpy(packet + 1, &frame_seq, sizeof(frame_seq));
+                packet[5] = (uint8_t)chunk;
+                memcpy(packet + WB_CHUNK_HEADER_BYTES,
+                       s_frame_buf + chunk * WB_CHUNK_PAYLOAD_BYTES,
+                       WB_CHUNK_PAYLOAD_BYTES);
+                // Fire-and-forget by design: a failed/lost send just leaves
+                // this chunk's columns showing stale data until the next
+                // frame, not a stalled stream (see the file header comment).
+                sendto(sock, packet, sizeof(packet), 0,
+                       (struct sockaddr *)&client_addr, sizeof(client_addr));
             }
         }
 
-        ESP_LOGI(TAG, "emulator disconnected");
-        close(client_sock);
+        // Explicit yield once per loop iteration: recvfrom()'s SO_RCVTIMEO
+        // was not, in practice, a reliable enough yield point on its own --
+        // on real hardware this task starved the core 0 idle task badly
+        // enough to trip its watchdog. A single WB_NUM_CHUNKS burst (worst
+        // case ~WB_NUM_CHUNKS * 20ms if every send hit its SO_SNDTIMEO) is
+        // still comfortably under the watchdog's window, so one guaranteed
+        // yield per outer-loop pass -- not one per chunk, which would cap
+        // throughput at a small fraction of one frame per second -- is
+        // enough.
+        vTaskDelay(1);
     }
 }
 
 void telemetry_begin(void) {
     // Core 1 is reserved for led_capture.c's tasks (SPI-slave capture +
-    // decode); keep the WiFi/TCP telemetry link on core 0.
+    // decode); keep the WiFi/UDP telemetry link on core 0.
     xTaskCreatePinnedToCore(telemetry_task, "telemetry", 4096, NULL, 5, NULL, 0);
 }
