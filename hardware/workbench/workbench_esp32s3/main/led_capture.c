@@ -27,6 +27,12 @@
 // burst landed on, and holds+repaints that colour forward through
 // subsequent columns until a later burst supersedes it. See decode_task,
 // hold_and_advance() and flush_hold().
+//
+// The rotor's two LED arms are physically opposed (180 degrees apart), so
+// arm0's and arm1's sweeps jointly cover all WB_COLUMNS columns twice per
+// mechanical revolution, not once -- decode_task flips the output buffer at
+// each half-revolution instead of waiting a full turn, so the telemetry
+// stream reflects new content roughly twice as often.
 
 #include "led_capture.h"
 #include "config.h"
@@ -41,6 +47,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include <stdbool.h>
 #include <string.h>
 
 static const char *TAG = "led_capture";
@@ -85,8 +92,9 @@ static QueueHandle_t s_capture_queue;
 // Double-buffered instead of a single mutex-guarded frame: decode_task
 // (via write_row(), on every burst it dequeues) writes into s_frame[s_write_buf];
 // led_capture_snapshot() (telemetry_task, every WB_TELEMETRY_FRAME_INTERVAL_MS)
-// reads s_frame[1 - s_write_buf]. decode_task flips s_write_buf once per
-// revolution (see its turn-changed branch), so a snapshot's ~41KB memcpy
+// reads s_frame[1 - s_write_buf]. decode_task flips s_write_buf twice per
+// revolution -- once at the halfway point and once at the turn boundary (see
+// its turn-changed and mid-flip branches) -- so a snapshot's ~41KB memcpy
 // never overlaps a write to the same buffer -- an earlier version shared a
 // mutex between the two instead, which let telemetry's memcpy block
 // whichever task served the SPI queue for its duration (worse, via priority
@@ -226,6 +234,15 @@ static void decode_task(void *arg) {
     led_row_t arm1_row = {0};
     int32_t arm0_last_unwrapped = (int32_t)(WB_COLUMNS / 2) - 1;
     int32_t arm1_last_unwrapped = -1;
+    // The rotor's two arms are opposed (180 degrees apart), so arm1's direct
+    // sweep of the first half-revolution (columns 0..COLUMNS/2-1) and arm0's
+    // offset sweep of that same half (its target is always +COLUMNS/2, so it
+    // covers COLUMNS/2..COLUMNS-1) already jointly cover every column by the
+    // halfway point -- a complete frame is ready twice per revolution, not
+    // once. mid_flipped guards against flipping more than once for the same
+    // half; it's cleared alongside the pen resets at the next full-turn
+    // boundary.
+    bool mid_flipped = false;
     uint32_t bursts_this_turn = 0, bursts_last_turn = 0;
     uint32_t last_turn = hall_sim_turn_count();
     int64_t last_report = esp_timer_get_time();
@@ -255,12 +272,26 @@ static void decode_task(void *arg) {
                 flush_hold(&arm0_last_unwrapped, WB_COLUMNS - 1 + WB_COLUMNS / 2, arm0_row);
 
                 // The buffer we just finished now holds a complete
-                // revolution and becomes the stable snapshot source; start
-                // writing the new revolution into the other one.
-                // led_capture_snapshot() always reads 1 - s_write_buf.
+                // revolution (its second half) and becomes the stable
+                // snapshot source; start writing the new revolution's first
+                // half into the other one. led_capture_snapshot() always
+                // reads 1 - s_write_buf.
                 s_write_buf ^= 1;
                 arm1_last_unwrapped = -1;
                 arm0_last_unwrapped = (int32_t)(WB_COLUMNS / 2) - 1;
+                mid_flipped = false;
+            } else if (!mid_flipped && msg.column >= WB_COLUMNS / 2) {
+                // Halfway through the revolution: arm1 has just finished
+                // covering columns 0..COLUMNS/2-1 and arm0 (always
+                // COLUMNS/2 ahead of arm1's target) has covered the rest.
+                // Finish each pen up to that midpoint and flip now instead
+                // of waiting for the second half, which -- from a "is every
+                // column covered" standpoint -- only re-treads ground the
+                // other arm already covered this revolution.
+                flush_hold(&arm1_last_unwrapped, WB_COLUMNS / 2 - 1, arm1_row);
+                flush_hold(&arm0_last_unwrapped, WB_COLUMNS - 1, arm0_row);
+                s_write_buf ^= 1;
+                mid_flipped = true;
             }
 
             led_row_t new_arm0_row, new_arm1_row;
@@ -329,7 +360,7 @@ void led_capture_begin(void) {
 void led_capture_snapshot(uint8_t *out) {
     // Single-byte read of s_write_buf plus a memcpy from the *other* buffer,
     // no lock: decode_task never touches that buffer again until it flips
-    // s_write_buf back to it a full revolution later (see decode_task),
+    // s_write_buf back to it half a revolution later (see decode_task),
     // which at any plausible RPM is far longer than this memcpy takes.
     uint8_t idx = 1 - s_write_buf;
     memcpy(out, s_frame[idx], sizeof(s_frame[idx]));
