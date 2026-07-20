@@ -22,8 +22,10 @@ than a general public product.
   for the board on port 5005.
 - The public tunnel forwards solely to `127.0.0.1:8765`; the gateway does not
   listen on a LAN or public interface.
-- Google authentication is required before either `/auth/start` or `/ws` can
-  reach the gateway. The gateway then verifies role and controller lease.
+- Google authentication is required before `/auth/start` can reach the
+  gateway. `/ws` reaches it only with the gateway's one-use ticket because
+  browser WebSockets do not reliably send cross-site OAuth session cookies.
+  The gateway then verifies role and controller lease.
 - The normal browser emulator remains available without a login.
 
 ## Architecture
@@ -52,7 +54,7 @@ host events. This prevents the mobile connection from carrying the roughly
 There are three independent decisions:
 
 1. ngrok's Google OAuth identifies the visitor and enforces a small email
-   allowlist before traffic reaches the workbench.
+   allowlist before the ticket-minting path reaches the workbench.
 2. The gateway issues a one-use, short-lived WebSocket ticket only from the
    edge-injected verified email. The browser cannot set this identity.
 3. The gateway ACL assigns a board role. A controller must also acquire the
@@ -107,7 +109,9 @@ must have these operations in this order:
 
 ```yaml
 on_http_request:
-  - actions:
+  - expressions:
+      - 'req.url.path != "/ws"'
+    actions:
       - type: oauth
         config:
           provider: google
@@ -115,10 +119,12 @@ on_http_request:
           idle_session_timeout: 15m
           max_session_duration: 1h
   - expressions:
-      - "!(actions.ngrok.oauth.identity.email in ['allowed@example.com'])"
+      - 'req.url.path != "/ws" && !(actions.ngrok.oauth.identity.email in [''allowed@example.com''])'
     actions:
       - type: deny
-  - actions:
+  - expressions:
+      - 'req.url.path != "/ws"'
+    actions:
       - type: remove-headers
         config:
           headers: [X-Remote-Email, X-Remote-Subject]
