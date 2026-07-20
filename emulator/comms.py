@@ -26,6 +26,8 @@ from povrender import clear_vs2_scene, set_vs2_scene
 from povrender import (
     set_voom_frame_rgb,
     set_voom_frame_apa102,
+    apply_voom_frame_apa102_chunk,
+    decode_voom_frame_apa102,
     set_apa102_profile_payload,
     clear_voom_frame,
 )
@@ -76,6 +78,11 @@ class ConnectionBase:
 class ConnIP(ConnectionBase):
     def setup(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Matches the workbench's own TCP_NODELAY (telemetry.c): this link
+        # also carries small out-of-band "reset"/"rpm <n>" command lines
+        # (see send_workbench()), which Nagle would otherwise hold back
+        # waiting to coalesce with whatever's sent next.
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sock.connect((config.SERVER_IP, config.SERVER_PORT))
         self.sockfile = self.sock.makefile(mode="rb")
 
@@ -212,6 +219,109 @@ class ConnWinNamedPipe(ConnectionBase):
             print(traceback.format_exc())
             print("BUFFER WAS:", self.buffer)
             raise
+
+
+def _seq_ge(a, b):
+    """True if uint32 sequence number a is >= b, tolerating wraparound."""
+    return ((a - b) & 0xFFFFFFFF) < 0x80000000
+
+
+class WorkbenchTelemetryConn:
+    """UDP link to the hardware workbench's frame_apa102 telemetry (see
+    docs/internals/workbench.md and hardware/workbench/workbench_esp32s3/
+    main/telemetry.c for the wire format and the reasoning for UDP over
+    TCP here: a live "latest wins" preview is hurt, not helped, by TCP's
+    in-order/retransmit guarantee -- one lost segment head-of-line-blocks
+    everything behind it instead of just leaving a few columns stale).
+
+    Not a ConnectionBase subclass: the shared dispatch_command()/readline()
+    machinery in this module assumes a byte-stream transport (TCP or
+    serial). UDP is message-oriented and this link only ever carries one
+    thing (frame_apa102 chunks) plus small outgoing control lines, so it
+    gets its own minimal run loop (run(), started as its own thread by
+    start()) instead of hooking into _receive_loop().
+    """
+
+    MAGIC = 0xA1
+    HEADER_BYTES = 6  # magic(1) + frame_seq(4, little-endian) + chunk_index(1)
+    COLUMNS_PER_CHUNK = 4  # must match WB_COLUMNS_PER_CHUNK in config.h
+    NUM_CHUNKS = 256 // COLUMNS_PER_CHUNK  # must match WB_NUM_CHUNKS
+    CHUNK_PAYLOAD_BYTES = COLUMNS_PER_CHUNK * 54 * 4  # columns * led_count * apa102 frame bytes
+    PACKET_BYTES = HEADER_BYTES + CHUNK_PAYLOAD_BYTES
+    HELLO_INTERVAL_S = 1.0  # keeps the workbench streaming to us (see WB_TELEMETRY_CLIENT_TIMEOUT_MS)
+    DECODE_INTERVAL_S = 1 / 30  # decouple decode cost from chunk arrival rate
+
+    def __init__(self):
+        self.sock = None
+        self._last_seq = [0] * self.NUM_CHUNKS
+
+    def setup(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # "Connecting" a UDP socket sends nothing on the wire -- it's a
+        # local-only filter that lets send()/recv() omit the address and
+        # rejects datagrams from any other peer.
+        self.sock.connect((config.SERVER_IP, config.SERVER_PORT))
+        self.sock.settimeout(0.5)
+
+    def send(self, b):
+        if self.sock:
+            try:
+                self.sock.send(b)
+            except (socket.error, OSError) as err:
+                print("comms: workbench-telemetry send failed:", err)
+
+    def close(self):
+        if self.sock:
+            self.sock.close()
+
+    def run(self):
+        """Receive/keepalive loop. Runs in its own daemon thread (see
+        start()) for the lifetime of the process; reconnection isn't
+        meaningful for a connectionless socket, so unlike _receive_loop()
+        there's no waitconnect()/_connect() cycle -- just keep trying."""
+        waitconnect(self, "workbench-telemetry")
+        last_hello = 0.0
+        last_decode = 0.0
+        while looping:
+            try:
+                now = time.time()
+                if now - last_hello >= self.HELLO_INTERVAL_S:
+                    self.send(b"hello\n")
+                    last_hello = now
+
+                try:
+                    data = self.sock.recv(2048)
+                except socket.timeout:
+                    data = None
+                if data:
+                    self._handle_packet(data)
+
+                now = time.time()
+                if now - last_decode >= self.DECODE_INTERVAL_S:
+                    decode_voom_frame_apa102()
+                    last_decode = now
+            except (socket.error, OSError) as err:
+                print("comms: workbench-telemetry:", err)
+                time.sleep(0.2)
+            except Exception:
+                print(traceback.format_exc())
+                time.sleep(0.2)
+
+    def _handle_packet(self, data):
+        if len(data) != self.PACKET_BYTES or data[0] != self.MAGIC:
+            return
+        chunk_index = data[5]
+        if chunk_index >= self.NUM_CHUNKS:
+            return
+        frame_seq = int.from_bytes(data[1:5], "little")
+        # Reject a stale/reordered duplicate rather than let it stomp
+        # fresher data already applied for this chunk slot -- reordering is
+        # rare on a single WiFi hop but this guard is cheap.
+        if not _seq_ge(frame_seq, self._last_seq[chunk_index]):
+            return
+        self._last_seq[chunk_index] = frame_seq
+        start_column = chunk_index * self.COLUMNS_PER_CHUNK
+        apply_voom_frame_apa102_chunk(start_column, data[self.HEADER_BYTES:])
 
 looping = True
 
@@ -485,12 +595,20 @@ def start():
         display_conn = ConnWinNamedPipe()
     elif not config.USE_IP:
         display_conn = ConnSerial(expected_kind="ventilastation")
+    elif config.HARDWARE_MODE:
+        # Real DUT via the workbench: frame_apa102 arrives over UDP (see
+        # WorkbenchTelemetryConn) instead of the shared TCP-framed protocol
+        # every other transport uses.
+        display_conn = WorkbenchTelemetryConn()
     else:
         display_conn = ConnIP()
 
     workbench_conn = ConnSerial(expected_kind="workbench") if (config.HARDWARE_MODE and config.USE_IP) else None
 
-    display_thread = threading.Thread(target=_receive_loop, args=(display_conn, "display"))
+    if isinstance(display_conn, WorkbenchTelemetryConn):
+        display_thread = threading.Thread(target=display_conn.run)
+    else:
+        display_thread = threading.Thread(target=_receive_loop, args=(display_conn, "display"))
     display_thread.daemon = True
     display_thread.start()
 

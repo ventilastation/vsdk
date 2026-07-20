@@ -172,12 +172,12 @@ own display loop and is not represented by these counters.
 ## Workbench and emulator
 
 The workbench reassembles the two physical arms into a spatial image, but does
-not interpret LED values. It streams:
-
-```text
-frame_apa102\n
-256 × 54 × 4 bytes, column-major [GB, B, G, R] values
-```
+not interpret LED values. Conceptually it's a 256 × 54 × 4 byte, column-major
+buffer of `[GB, B, G, R]` values -- on the wire it's chunked over UDP rather
+than sent as one contiguous `frame_apa102` payload (see
+[workbench.md#why-udp-not-tcp](workbench.md#why-udp-not-tcp)), but the
+emulator reassembles it back into exactly that buffer before anything below
+touches it.
 
 This differs from the legacy `frame_rgb` full-frame format, which has only
 three RGB bytes and remains available for synthetic renderers. The workbench
