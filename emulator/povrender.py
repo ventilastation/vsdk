@@ -96,6 +96,32 @@ def set_voom_frame_apa102(data):
     _voom_frame_rgb = None
     _decode_apa102_frame()
 
+def apply_voom_frame_apa102_chunk(start_column, chunk_bytes):
+    """Write one column-range chunk into the persistent raw APA102 buffer.
+
+    Used by the workbench's UDP telemetry transport (comms.py's
+    WorkbenchTelemetryConn), which streams a frame as many small per-chunk
+    datagrams rather than one atomic payload -- UDP was chosen specifically
+    so a lost datagram leaves a few columns stale instead of stalling or
+    corrupting the whole frame (see docs/internals/workbench.md). Does not
+    decode; call decode_voom_frame_apa102() afterward, at a rate decoupled
+    from how often chunks arrive (decode_frame() reprocesses the *entire*
+    buffer every time, so running it once per small chunk would multiply
+    the vectorized decode cost far beyond what a smooth preview needs).
+    """
+    global _voom_frame_apa102_raw, _voom_frame_rgb
+    if not isinstance(_voom_frame_apa102_raw, bytearray):
+        _voom_frame_apa102_raw = bytearray(COLUMNS * led_count * 4)
+    _voom_frame_rgb = None
+    offset = start_column * led_count * 4
+    _voom_frame_apa102_raw[offset:offset + len(chunk_bytes)] = chunk_bytes
+
+def decode_voom_frame_apa102():
+    """Public trigger for callers that update the raw buffer incrementally
+    (apply_voom_frame_apa102_chunk) and need to explicitly request a decode
+    pass on their own schedule, decoupled from chunk arrival."""
+    _decode_apa102_frame()
+
 def set_apa102_profile_payload(payload, schema_version=None, generation=None):
     """Install the board's acknowledged calibration profile for raw preview."""
     profile = ColorProfile.from_bytes(payload, schema_version, generation)
