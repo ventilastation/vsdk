@@ -19,6 +19,7 @@ from remote_gateway import (  # noqa: E402
     ProtocolError,
     RemoteGatewayCore,
     TicketSigner,
+    TrustedProxyIdentityVerifier,
     decode_message,
     encode_message,
 )
@@ -88,6 +89,17 @@ class RemoteGatewayTests(unittest.TestCase):
         manager = LeaseManager()
         with self.assertRaises(AuthorizationError):
             manager.request("workbench-1", Principal("viewer", "viewer@example.com", "viewer"), "session", now=0)
+
+    def test_trusted_proxy_identity_requires_injected_headers(self):
+        verifier = TrustedProxyIdentityVerifier("X-Remote-Email", "X-Remote-Subject")
+        self.assertEqual(
+            verifier.verify({"X-Remote-Email": "Player@Example.com", "X-Remote-Subject": "google-subject"}),
+            ("google-subject", "player@example.com"),
+        )
+        with self.assertRaises(AuthenticationError):
+            verifier.verify({"X-Remote-Email": "player@example.com"})
+        with self.assertRaises(AuthenticationError):
+            verifier.verify({"X-Remote-Subject": "google-subject"})
 
 
 if __name__ == "__main__":

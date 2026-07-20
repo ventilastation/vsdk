@@ -1,12 +1,14 @@
 # Remote physical-workbench access from the web emulator
 
-Status: proposed implementation plan, reconciled with `main` at `29ebd1e`
-(workbench UDP telemetry merge) on 2026-07-20.
+Status: implementation and deployment runbook, reconciled with `main` at
+`eb27744` on 2026-07-20.
 
-Implementation branch status: the shared UDP receiver, incremental serial host
-parser, gateway policy/WSS core, browser adapter, initial mobile controls, and
-focused tests now exist. Cloudflare Access and named-tunnel configuration still
-require the board owner's credentials and domain administration.
+Implementation status: the shared UDP receiver, incremental serial host parser,
+gateway policy/WSS core, browser adapter, initial mobile controls, and focused
+tests exist. Production uses an Oracle Always Free relay, frp reverse tunnel,
+Caddy TLS terminator, and oauth2-proxy with Google sign-in. This avoids a
+Cloudflare account and requires only an Oracle tenancy, a DNS A record, and a
+Google OAuth web client owned by the board administrator.
 
 This document specifies how a browser running the static web emulator from
 GitHub Pages can, after an explicit Google sign-in, display and control the
@@ -146,8 +148,8 @@ joy1, joy2, extra state frame plus the separate Exit command.
                            v
  https://ventilastation-board.protocultura.net/
  +-------------------------+---------------------------+
- | Cloudflare Access + named Cloudflare Tunnel        |
- |  /auth/*: Google login and Access policy           |
+ | Oracle VM: Caddy + oauth2-proxy + frps             |
+ |  /auth/*: Google login and verified proxy headers  |
  |  /ws: gateway-issued ticket required               |
  +-------------------------+---------------------------+
                            | outbound tunnel
@@ -165,37 +167,33 @@ joy1, joy2, extra state frame plus the separate Exit command.
              +-----------------------------------------+
 ```
 
-The tunnel is outbound from this computer. The router has no port forward,
-the gateway listens only on loopback, and the workbench remains reachable
-only on the LAN and over local USB.
-
-Use a named Cloudflare Tunnel for the real service. A Quick Tunnel is useful
-for an unauthenticated smoke test, but its changing hostname cannot support a
-stable Google OAuth/Access configuration. The proposed hostname uses one
-label beneath the managed zone so that normal Cloudflare Universal SSL
-coverage is sufficient.
+The frp client tunnel is outbound from this computer. The router has no port
+forward, the gateway listens only on loopback, and the workbench remains
+reachable only on the LAN and over local USB. Oracle's `frps` binds the
+gateway's returned port to its own loopback; Caddy is therefore the sole
+Internet-facing process and obtains the TLS certificate for the board hostname.
 
 ## Trust boundaries
 
 There are four separate decisions; none may be implied by another:
 
 1. **Google identity** proves who signed in.
-2. **Cloudflare Access policy** determines who may complete the login flow.
+2. **oauth2-proxy/Google sign-in** determines who may complete the login flow.
 3. **Gateway ACL** gives an allowed identity a role for a particular board.
 4. **Controller lease** determines which eligible identity may send input at
    this instant.
 
-Cloudflare protects the public edge and the gateway remains authoritative for
-board roles and live sessions. Identity fields sent by browser messages are
-never trusted. Once a socket is open, its identity and role come only from
-the ticket accepted during that socket's upgrade.
+The self-hosted edge protects the public entry and the gateway remains
+authoritative for board roles and live sessions. Identity fields sent by
+browser messages are never trusted. Once a socket is open, its identity and
+role come only from the ticket accepted during that socket's upgrade.
 
 ## Authentication and connection flow
 
 Browser WebSockets cannot attach an arbitrary `Authorization` header, and a
-cross-origin Access cookie is too brittle to make the application protocol
-depend on it. Authentication therefore has two stages: Cloudflare Access
-validates Google identity, then the gateway exchanges that identity for a
+cross-origin login cookie is too brittle to make the application protocol
+depend on it. Authentication therefore has two stages: oauth2-proxy validates
+Google identity, then the gateway exchanges that verified identity for a
 short-lived, one-use WebSocket ticket.
 
 1. The user opens the GitHub Pages emulator. Local WASM mode starts normally
@@ -204,13 +202,13 @@ short-lived, one-use WebSocket ticket.
    browser audio.
 3. The page opens a popup at
    `https://ventilastation-board.protocultura.net/auth/start`.
-4. Cloudflare Access redirects the popup to Google and applies an Allow policy
-   followed by deny-by-default. Personal Google accounts should be listed by
-   exact email. A Google Workspace identity provider may use organization
-   groups where available, but the design must not assume SCIM group syncing.
-5. At `/auth/start`, the gateway reads `Cf-Access-Jwt-Assertion` and validates
-   its signature, issuer, Access application audience, and expiry against the
-   configured Access public keys. Merely seeing the header is not sufficient.
+4. Caddy delegates the popup to oauth2-proxy, which redirects to Google. The
+   Google OAuth consent screen should list the test users explicitly until the
+   application is published.
+5. On success, oauth2-proxy returns verified user/email response headers.
+   Caddy deletes browser-supplied `X-Remote-*` headers and copies those values
+   to the proxied `/auth/start` request. The gateway accepts this mode only
+   while bound to loopback behind the private frp port.
 6. The gateway extracts the stable subject and normalized email, checks the
    local board ACL, and issues a signed ticket containing `sub`, `email`,
    `role`, `board`, `aud`, `iat`, `exp`, and random `jti` claims.
@@ -227,30 +225,25 @@ short-lived, one-use WebSocket ticket.
 10. The gateway also requires an exact allowed `Origin` header. The origin
     check is defense in depth, not the primary credential.
 
-Configure two path-specific Cloudflare Access applications:
+Configure exactly three public edge paths:
 
-- `/auth/*` requires the Google identity provider and the coarse user Allow
-  policy.
-- `/ws` is Access-bypassed so the browser's cross-origin WebSocket upgrade is
-  not dependent on an Access cookie. It is not anonymously usable: the local
-  gateway rejects the upgrade unless its own cryptographic ticket succeeds.
+- `/oauth2/*` reaches oauth2-proxy without a pre-check so login callbacks work.
+- `/auth/*` gets a Caddy `forward_auth` check and can mint a ticket only after
+  Google sign-in.
+- `/ws` is login-bypassed because it accepts only a gateway-signed, one-use
+  ticket. It is not anonymously usable.
 
-Cloudflare's most specific application path must win, and this routing needs
-an automated deployment smoke test. Rate limits should apply to both paths,
-especially failed ticket upgrades.
-
-If the chosen DNS zone cannot be managed by Cloudflare, keep the same ticket
-and ACL design but replace Access with Google Identity Services plus a small
-Cloudflare Worker auth broker that validates the Google ID token and requests
-the gateway ticket. Directly trusting a Google ID token inside ordinary
-WebSocket messages is not an acceptable fallback.
+The gateway's `trusted-proxy` authentication mode is not safe on a public
+listener. Caddy must strip client copies of the identity headers and frps must
+set `proxyBindAddr = "127.0.0.1"`. Rate limits should apply to failed ticket
+upgrades and login endpoints.
 
 ### Ticket signing and secret storage
 
 For one gateway process, HMAC-SHA-256 with a randomly generated 32-byte key is
 sufficient. Store the key outside the repository with owner-only permissions,
 for example under `~/.config/vsdk/remote-workbench/`. Support a current and
-previous key identifier during rotation. Never put Access credentials, tunnel
+previous key identifier during rotation. Never put OAuth credentials, tunnel
 credentials, tickets, email allowlists, or signing keys in the repository or
 GitHub Pages bundle.
 
@@ -284,7 +277,7 @@ These command names define the intended operator interface; exact argparse
 spelling can change during implementation. A later admin UI may call the same
 service layer, but it must not be required to ship remote play.
 
-Changing the Cloudflare Allow policy prevents the next login but does not
+Changing the oauth2-proxy/Google test-user policy prevents the next login but does not
 close an existing WebSocket. Immediate revocation therefore updates the local
 ACL and causes the gateway to close every matching active socket, neutralize
 its input if necessary, and release its lease.
@@ -326,12 +319,12 @@ controller from taking effect after reassignment.
 Add a standalone, headless gateway, proposed as
 `emulator/remote_gateway.py`. It must not import Pyglet or create a desktop
 window. Run it as an explicit command; remote access is off unless both the
-gateway and named tunnel are running.
+gateway and frp client tunnel are running.
 
 The gateway owns these tasks:
 
-- listen on a loopback HTTP/WebSocket port for the tunnel;
-- validate Access assertions and mint/consume tickets;
+- listen on a loopback HTTP/WebSocket port for the private tunnel;
+- validate the edge-injected identity and mint/consume tickets;
 - maintain the ACL, sessions, roles, lease, and audit log;
 - be the single UDP telemetry client of the workbench;
 - own the workbench USB serial device;
@@ -363,10 +356,10 @@ not authenticate the workbench UDP service or prevent another LAN host from
 taking over, so unexpected chunk starvation/source changes remain an
 operational alert.
 
-The service binds to `127.0.0.1`, not `0.0.0.0`. `cloudflared` forwards the
-public hostname to that loopback address. Startup must fail closed if the
-signing key, Access issuer/audience, allowed Pages origin, board ACL, serial
-device, or board identifier is absent or ambiguous.
+The service binds to `127.0.0.1`, not `0.0.0.0`. `frpc` forwards the Oracle
+VM's private returned port to that loopback address. Startup must fail closed
+if the signing key, trusted-proxy headers, allowed Pages origin, board ACL,
+serial device, or board identifier is absent or ambiguous.
 
 ## Browser integration
 
@@ -571,29 +564,31 @@ frame incidentally flushing it.
   soon as serial reconnects before accepting a controller.
 - **Tunnel loss:** local gateway continues safely but cannot be reached. Do not
   fall back to a public LAN listener.
-- **Access key/JWK refresh failure:** cached keys may be used only until their
-  configured safe expiry. New auth exchanges fail closed.
+- **OAuth proxy failure:** new authentication exchanges fail closed; already
+  issued short-lived tickets still expire and active sessions remain subject to
+  ACL revocation.
 - **Browser backgrounding:** send neutral input and voluntarily release the
   lease after a short grace period. Mobile timer throttling makes client-only
   heartbeat enforcement unsafe, so the server deadline remains authoritative.
 
 ## Security requirements
 
-- TLS terminates through Cloudflare; the named tunnel is the only public path.
+- TLS terminates at Caddy on the Oracle VM; the frp tunnel is the only path to
+  the local gateway.
 - The gateway binds loopback and the workbench stays on private UDP/USB links.
-- Exact Access issuer/audience and exact Pages origins are configured; no
+- Exact trusted identity-header names and exact Pages origins are configured; no
   wildcard origin or email-domain fallback is allowed by default.
 - ACL, role, active board, lease generation, command allowlist, numeric bounds,
   and message size are checked for every privileged message.
 - No WebSocket message can request a shell, filesystem path, serial bytes,
   arbitrary workbench line, OTA action, or arbitrary host command.
-- Tickets expire in 30-to-60 seconds and are single use. Access sessions should
+- Tickets expire in 30-to-60 seconds and are single use. OAuth sessions should
   be 15-to-60 minutes; WebSocket sessions should have a 30-to-60-minute
   maximum and require fresh authentication after expiry.
 - Authentication, upgrade, connection, and operator-command rate limits are
   enforced. Invalid clients are disconnected rather than allowed to consume
   unbounded parsing or compression work.
-- Logs never contain Access JWTs, tickets, cookie values, query strings, raw
+- Logs never contain identity assertions, tickets, cookie values, query strings, raw
   input history, serial binary payloads, or signing keys.
 - Dependencies for JWT, HTTP, WebSocket, and compression handling are pinned
   and included in the normal update review process.
@@ -634,7 +629,7 @@ The expected change set is:
 | `web/index.html`, `web/styles.css` | Connect, identity, lease, Start/Back/Exit, operator controls, and mobile states. |
 | `web/audio-host.js` | Phase A typed remote event handling; later chip-audio AudioWorklet integration. |
 | `tests/` | Parser, auth, ACL, ticket, lease, protocol, frame, input, and failure tests. |
-| `tools/` or service templates | Example `cloudflared` and local service configuration with placeholders only. |
+| `tools/` or service templates | Example frp, Caddy, oauth2-proxy, and local service configuration with placeholders only. |
 
 Keep deploy-time configuration and secrets outside `web/`: anything in the
 Pages bundle is public.
@@ -676,10 +671,10 @@ WSS, including reconnect and forced disconnect.
 
 ### Phase 2: Google authentication and owner ACL
 
-1. Create the named tunnel and DNS route.
-2. Configure Google IdP, `/auth/*` Access application, `/ws` bypass routing,
-   default-deny policy, session duration, and edge rate limits.
-3. Implement Access JWT validation, one-use tickets, SQLite ACL, owner CLI,
+1. Create the Oracle relay, DNS route, frp tunnel, and Caddy TLS endpoint.
+2. Configure Google OAuth, oauth2-proxy, `/auth/*` forward authentication,
+   `/ws` ticket bypass routing, session duration, and edge rate limits.
+3. Implement trusted-proxy identity validation, one-use tickets, SQLite ACL, owner CLI,
    session revocation, and audit.
 4. Enable operator-only reset/RPM after adversarial authorization tests.
 
@@ -705,7 +700,8 @@ measured WSS stalls fail the acceptance criteria.
 
 ### Unit and property tests
 
-- Access JWT issuer, audience, signature, expiry, missing-claim, and key
+- Trusted-proxy missing/malformed identity-header cases, and optional legacy
+  Access JWT issuer, audience, signature, expiry, missing-claim, and key
   rotation cases using local test keys.
 - Ticket expiry, audience/board mismatch, tamper, atomic one-use under
   concurrent upgrades, and redacted logging.
@@ -774,21 +770,26 @@ number.
 
 ## Deployment and operations
 
-1. Install `cloudflared` and create a named tunnel owned by the board operator.
-2. Route `ventilastation-board.protocultura.net` to the tunnel.
-3. Configure the tunnel origin as the gateway's loopback port. Store tunnel
-   credentials outside the repository.
-4. Configure the two Access paths, Google IdP, explicit Allow policy, default
-   deny, and Access audience/issuer values used by the gateway.
-5. Generate the ticket key and initialize the local ACL database; grant the
+1. Create an Oracle Always Free VM and assign its reserved public IP.
+2. Create an A record for `ventilastation-board.protocultura.net` pointing at
+   that address; wait for it to resolve before starting Caddy.
+3. Install `frps`, Caddy, and oauth2-proxy on the VM. Set `proxyBindAddr` to
+   loopback, firewall the returned gateway port, and allow only 22, 80, 443,
+   and the authenticated frp control port as needed.
+4. Create a Google OAuth web client with the exact callback
+   `https://ventilastation-board.protocultura.net/oauth2/callback`; configure
+   oauth2-proxy's client and cookie secrets outside the repository.
+5. Install `frpc` on the workbench computer and configure its local target as
+   the gateway's `127.0.0.1:8765`. Store the frp token outside the repository.
+6. Generate the ticket key and initialize the local ACL database; grant the
    owner admin access locally.
-6. Start the gateway as a user service with restart-on-failure, bounded logs,
+7. Start the gateway as a user service with restart-on-failure, bounded logs,
    a fixed serial selector, and no broad filesystem permissions.
-7. Ensure the desktop hardware emulator is stopped; start the gateway and let
+8. Ensure the desktop hardware emulator is stopped; start the gateway and let
    its one-second `hello` loop become the workbench's sole UDP subscriber.
-8. Start the tunnel only after the gateway health check succeeds.
-9. Deploy the web adapter and UI through the existing GitHub Pages build.
-10. Run the public authentication, ticket replay, lease, neutralization, and
+9. Start frpc only after the gateway health check succeeds.
+10. Deploy the web adapter and UI through the existing GitHub Pages build.
+11. Run the public authentication, ticket replay, lease, neutralization, and
    latency smoke tests after every gateway or Pages deployment.
 
 The operational runbook must include granting/revoking a user, disconnecting
@@ -798,7 +799,7 @@ records, and recovering from USB/tunnel failures.
 
 ## Open decisions
 
-- Final public hostname and Cloudflare zone ownership.
+- DNS-zone credentials for the board hostname and the Oracle home region.
 - Personal-Google exact-email policy versus Google Workspace group policy.
 - Maximum viewer count and outbound bitrate for this computer/uplink.
 - Whether the first controller policy is immediate first-come-first-served or
@@ -810,20 +811,16 @@ records, and recovering from USB/tunnel failures.
   the gateway, especially for NES DMC.
 - Whether WSS meets the measured mobile latency target before adding WebRTC.
 
-None of these decisions changes the main trust model: Google/Access identifies
+None of these decisions changes the main trust model: Google/oauth2-proxy identifies
 the person, the gateway ACL authorizes the board role, and the exclusive lease
 authorizes live input.
 
 ## External references
 
 - [What is GitHub Pages?](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)
-- [Cloudflare Tunnel setup](https://developers.cloudflare.com/tunnel/setup/)
-- [Cloudflare Tunnel WebSocket support](https://developers.cloudflare.com/cloudflare-one/faq/cloudflare-tunnels-faq/)
-- [Cloudflare Access Google identity provider](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/google/)
-- [Cloudflare Access Google Workspace provider](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/google-workspace/)
-- [Cloudflare Access policies](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/)
-- [Cloudflare Access application paths](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/)
-- [Validating an Access JWT](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)
-- [Cross-domain WebSocket authentication](https://developers.cloudflare.com/agents/runtime/operations/cross-domain-authentication/)
+- [Oracle Cloud Free Tier](https://www.oracle.com/cloud/free/)
+- [frp configuration](https://gofrp.org/en/docs/features/common/configure/)
+- [Caddy forward authentication](https://caddyserver.com/docs/caddyfile/directives/forward_auth)
+- [oauth2-proxy Caddy integration](https://oauth2-proxy.github.io/oauth2-proxy/configuration/integration/)
 - [MDN `DecompressionStream`](https://developer.mozilla.org/en-US/docs/Web/API/DecompressionStream/DecompressionStream)
 - [MDN WebSocket client guidance](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_client_applications)

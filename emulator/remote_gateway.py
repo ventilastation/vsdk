@@ -1,9 +1,9 @@
 """Authenticated remote gateway for a physical Ventilastation workbench.
 
-The process is intentionally headless and loopback-only.  Cloudflare Tunnel
-publishes it; Cloudflare Access proves a Google identity at ``/auth/start``;
-the gateway then mints a one-use ticket for the browser WebSocket at ``/ws``.
-The workbench's UDP and USB serial links never leave this computer.
+The process is intentionally headless and loopback-only.  An authenticated
+edge proxy publishes ``/auth/start`` and forwards a verified identity; the
+gateway then mints a one-use ticket for the browser WebSocket at ``/ws``.  The
+workbench's UDP and USB serial links never leave this computer.
 
 Runtime dependencies are deliberately imported at the edges so the policy,
 ticket, lease, and wire-protocol core remains testable with the Python standard
@@ -203,7 +203,7 @@ class TicketClaims:
 
 
 class TicketSigner:
-    """Short-lived HMAC tickets used after Cloudflare Access validation."""
+    """Short-lived HMAC tickets used after edge identity validation."""
 
     def __init__(self, key: bytes, audience: str, board: str):
         if len(key) < 32:
@@ -544,6 +544,29 @@ class CloudflareAccessVerifier:
             raise AuthenticationError("invalid Cloudflare Access assertion") from error
 
 
+class TrustedProxyIdentityVerifier:
+    """Accept an identity injected by the private, authenticated edge proxy.
+
+    This mode is deliberately safe only when the gateway is loopback-only and
+    its sole ingress is a private reverse tunnel from the configured proxy.
+    Caddy removes client-supplied versions of these headers and copies them
+    from oauth2-proxy's authenticated response before forwarding the request.
+    """
+
+    def __init__(self, email_header: str, subject_header: str):
+        self.email_header = email_header
+        self.subject_header = subject_header
+
+    def verify(self, headers: Any) -> tuple[str, str]:
+        email = str(headers.get(self.email_header, "")).strip().casefold()
+        subject = str(headers.get(self.subject_header, "")).strip()
+        if not email or "@" not in email or len(email) > 254:
+            raise AuthenticationError("missing trusted-proxy email")
+        if not subject or len(subject) > 512:
+            raise AuthenticationError("missing trusted-proxy subject")
+        return subject, email
+
+
 def apa102_to_rgb(raw: bytes) -> bytes:
     """Decode calibrated APA102 capture data to RGB888 for the browser."""
     try:
@@ -631,8 +654,11 @@ class GatewayConfig:
     workbench_port: int
     serial_port: str
     allowed_origins: tuple[str, ...]
-    access_team_domain: str
-    access_audience: str
+    auth_mode: str = "cloudflare-access"
+    access_team_domain: str = ""
+    access_audience: str = ""
+    trusted_email_header: str = "X-Remote-Email"
+    trusted_subject_header: str = "X-Remote-Subject"
     bind_host: str = "127.0.0.1"
     bind_port: int = 8765
 
@@ -644,7 +670,12 @@ class RemoteGatewayService:
         self.config = config
         self.store = GatewayStore(config.state_path)
         self.core = RemoteGatewayCore(config.board, config.audience, config.ticket_key, self.store)
-        self.access = CloudflareAccessVerifier(config.access_team_domain, config.access_audience)
+        if config.auth_mode == "cloudflare-access":
+            self.identity = CloudflareAccessVerifier(config.access_team_domain, config.access_audience)
+        elif config.auth_mode == "trusted-proxy":
+            self.identity = TrustedProxyIdentityVerifier(config.trusted_email_header, config.trusted_subject_header)
+        else:
+            raise RuntimeError("unsupported REMOTE_WORKBENCH_AUTH_MODE")
         self.telemetry = WorkbenchTelemetryClient(config.workbench_host, config.workbench_port)
         self.sessions: dict[str, BrowserSession] = {}
         self._sequence = 0
@@ -691,7 +722,10 @@ class RemoteGatewayService:
                 return None
             return HTTPStatus.NOT_FOUND, [("Content-Type", "text/plain")], b"Not found\n"
         try:
-            subject, email = self.access.verify(headers.get("Cf-Access-Jwt-Assertion", ""))
+            if self.config.auth_mode == "cloudflare-access":
+                subject, email = self.identity.verify(headers.get("Cf-Access-Jwt-Assertion", ""))
+            else:
+                subject, email = self.identity.verify(headers)
             ticket = self.core.ticket_for(subject, email)
             body = self._auth_complete_page(ticket)
             return HTTPStatus.OK, [("Content-Type", "text/html; charset=utf-8"), ("Cache-Control", "no-store")], body
@@ -865,7 +899,7 @@ if (window.opener) {
     async def _lease_loop(self) -> None:
         while True:
             await asyncio.sleep(1)
-            # An ACL change is authoritative immediately. Cloudflare Access
+            # An ACL change is authoritative immediately. The edge proxy
             # prevents future login, while this check closes already-open
             # sockets and releases their control lease.
             for session in list(self.sessions.values()):
@@ -966,6 +1000,15 @@ def config_from_environment() -> GatewayConfig:
     if not origins:
         raise RuntimeError("REMOTE_WORKBENCH_ALLOWED_ORIGINS is required")
     key = _read_key(required("REMOTE_WORKBENCH_TICKET_KEY_FILE"))
+    auth_mode = os.environ.get("REMOTE_WORKBENCH_AUTH_MODE", "trusted-proxy").strip()
+    if auth_mode not in {"trusted-proxy", "cloudflare-access"}:
+        raise RuntimeError("REMOTE_WORKBENCH_AUTH_MODE must be trusted-proxy or cloudflare-access")
+    if auth_mode == "cloudflare-access":
+        access_team_domain = required("CF_ACCESS_TEAM_DOMAIN")
+        access_audience = required("CF_ACCESS_AUDIENCE")
+    else:
+        access_team_domain = ""
+        access_audience = ""
     return GatewayConfig(
         board=required("REMOTE_WORKBENCH_BOARD"),
         audience=required("REMOTE_WORKBENCH_TICKET_AUDIENCE"),
@@ -975,8 +1018,11 @@ def config_from_environment() -> GatewayConfig:
         workbench_port=int(os.environ.get("REMOTE_WORKBENCH_PORT", "5005")),
         serial_port=required("REMOTE_WORKBENCH_SERIAL_PORT"),
         allowed_origins=origins,
-        access_team_domain=required("CF_ACCESS_TEAM_DOMAIN"),
-        access_audience=required("CF_ACCESS_AUDIENCE"),
+        auth_mode=auth_mode,
+        access_team_domain=access_team_domain,
+        access_audience=access_audience,
+        trusted_email_header=os.environ.get("REMOTE_WORKBENCH_TRUSTED_EMAIL_HEADER", "X-Remote-Email").strip(),
+        trusted_subject_header=os.environ.get("REMOTE_WORKBENCH_TRUSTED_SUBJECT_HEADER", "X-Remote-Subject").strip(),
         bind_host=os.environ.get("REMOTE_WORKBENCH_BIND", "127.0.0.1"),
         bind_port=int(os.environ.get("REMOTE_WORKBENCH_BIND_PORT", "8765")),
     )
