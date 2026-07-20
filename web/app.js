@@ -890,9 +890,6 @@ class BrowserHostApp {
         this.renderStatus();
       };
       button.addEventListener("pointerdown", (event) => {
-        if (event.pointerType === "mouse") {
-          return;
-        }
         event.preventDefault();
         this.audio.enable();
         button.setPointerCapture(event.pointerId);
