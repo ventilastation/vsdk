@@ -76,6 +76,11 @@ class ConnectionBase:
 class ConnIP(ConnectionBase):
     def setup(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Matches the workbench's own TCP_NODELAY (telemetry.c): this link
+        # also carries small out-of-band "reset"/"rpm <n>" command lines
+        # (see send_workbench()), which Nagle would otherwise hold back
+        # waiting to coalesce with whatever's sent next.
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sock.connect((config.SERVER_IP, config.SERVER_PORT))
         self.sockfile = self.sock.makefile(mode="rb")
 
