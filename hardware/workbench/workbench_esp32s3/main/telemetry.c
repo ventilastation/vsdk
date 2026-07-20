@@ -138,6 +138,14 @@ static bool wifi_sta_init(void) {
     ESP_LOGI(TAG, "connecting to \"%s\"...", ssid);
     xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
 
+    // The default modem-sleep power save mode sleeps the radio between DTIM
+    // beacons, adding tens of ms of latency/jitter to every send -- fine for
+    // a phone checking mail occasionally, bad for this workbench's
+    // continuous ~13 Mbps frame_apa102 stream (55KB every WB_TELEMETRY_FRAME_
+    // INTERVAL_MS). The workbench runs on USB power, so there's no battery
+    // budget to trade off against.
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+
     mdns_start();
     return true;
 }
