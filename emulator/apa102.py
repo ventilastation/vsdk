@@ -2,7 +2,10 @@
 
 import numpy as np
 
-from color_profile import DEFAULT_PROFILE, MATRIX_Q, Q15_ONE, _srgb_encode
+try:  # Package import used by the headless remote gateway.
+    from .color_profile import DEFAULT_PROFILE, MATRIX_Q, Q15_ONE, _srgb_encode
+except ImportError:  # Direct ``python emulator/...`` tools retain their path.
+    from color_profile import DEFAULT_PROFILE, MATRIX_Q, Q15_ONE, _srgb_encode
 
 
 def decode_preview_rgb(global_byte, blue_pwm, green_pwm, red_pwm, profile=None):
