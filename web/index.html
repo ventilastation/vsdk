@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ventilastation Emulator</title>
   <link rel="icon" type="image/png" href="./logo.png">
-  <link rel="stylesheet" href="./styles.css?v=20260622c">
+  <link rel="stylesheet" href="./styles.css?v=20260720a">
 </head>
 <body>
   <main class="app-shell">
@@ -84,6 +84,11 @@
         <div class="stage-primary-actions">
           <button type="button" class="stage-control-button" id="toggle-editor-button" aria-pressed="false">Editor</button>
           <button type="button" class="stage-control-button" id="toggle-inspector-button" aria-expanded="false">Options</button>
+          <button type="button" class="stage-control-button" id="remote-connect-button">Connect board</button>
+          <button type="button" class="stage-control-button" id="remote-control-button" hidden>Request control</button>
+          <button type="button" class="stage-control-button" id="remote-reset-button" hidden>Reset board</button>
+          <label class="remote-rpm-control" id="remote-rpm-control" hidden>RPM <input type="range" id="remote-rpm" min="0" max="700" value="600"></label>
+          <span class="remote-status" id="remote-status" aria-live="polite">Local emulator</span>
         </div>
       </div>
       <div class="stage-display">
@@ -122,10 +127,14 @@
         <div class="mobile-buttons-panel">
           <div class="mobile-control-caption">Buttons</div>
           <div class="mobile-buttons-grid">
-            <button type="button" class="touch-button touch-button-top" data-touch-button="BUTTON_C">C</button>
-            <button type="button" class="touch-button touch-button-left" data-touch-button="BUTTON_B">B</button>
-            <button type="button" class="touch-button touch-button-right" data-touch-button="BUTTON_D">D</button>
-            <button type="button" class="touch-button touch-button-bottom" data-touch-button="BUTTON_A">A</button>
+            <button type="button" class="touch-button touch-button-top" data-touch-button="BUTTON_C" data-touch-channel="joy1" data-touch-bit="64">C</button>
+            <button type="button" class="touch-button touch-button-left" data-touch-button="BUTTON_B" data-touch-channel="joy1" data-touch-bit="32">B</button>
+            <button type="button" class="touch-button touch-button-right" data-touch-button="BUTTON_D" data-touch-channel="extra" data-touch-bit="1">D</button>
+            <button type="button" class="touch-button touch-button-bottom" data-touch-button="BUTTON_A" data-touch-channel="joy1" data-touch-bit="16">A</button>
+          </div>
+          <div class="mobile-meta-buttons">
+            <button type="button" class="touch-meta-button" data-touch-channel="extra" data-touch-bit="4">Start</button>
+            <button type="button" class="touch-meta-button" data-touch-channel="extra" data-touch-bit="8">Back</button>
           </div>
         </div>
       </section>
@@ -232,7 +241,7 @@
   <script src="./led-render-core.js?v=20260716a"></script>
   <script src="./rom-builder-core.js?v=20260622c"></script>
   <script src="./rom-builder-browser.js?v=20260622c"></script>
-  <script type="module" src="./app.js?v=20260717i"></script>
+  <script type="module" src="./app.js?v=20260720a"></script>
   <script type="module" src="./monaco-ide.js?v=20260715a"></script>
 </body>
 </html>

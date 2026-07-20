@@ -42,6 +42,9 @@ shape and the rules that keep biting.
   `vs2` game API, compatibility guard, v2 memory model, and renderer phases.
 - **[workbench.md](workbench.md)** — the second ESP32-S3 that exercises a
   real board: LED-bus capture, hall simulation, UART bridge, telemetry.
+- **[remote-workbench-access.md](remote-workbench-access.md)** — authenticated
+  remote mobile access to a physical workbench: tunnel, Google login, ACL,
+  controller lease, frames, audio, input, deployment, and verification.
 - **[pov-color-pipeline.md](pov-color-pipeline.md)** — calibrated game-RGB
   conversion, shared APA102 encoder, NVS profile format, and calibration
   protocol for MicroPython, Retro-Go, the workbench, and the desktop preview.

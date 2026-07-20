@@ -26,11 +26,10 @@ from povrender import clear_vs2_scene, set_vs2_scene
 from povrender import (
     set_voom_frame_rgb,
     set_voom_frame_apa102,
-    apply_voom_frame_apa102_chunk,
-    decode_voom_frame_apa102,
     set_apa102_profile_payload,
     clear_voom_frame,
 )
+from workbench_telemetry import WorkbenchTelemetryClient
 from audio import playsound, playmusic, playnotes, rescan_package_sounds
 from emu_audio import emu_audio
 from ota_controls import OTA_SERVER_URL, ota_start_command
@@ -221,11 +220,6 @@ class ConnWinNamedPipe(ConnectionBase):
             raise
 
 
-def _seq_ge(a, b):
-    """True if uint32 sequence number a is >= b, tolerating wraparound."""
-    return ((a - b) & 0xFFFFFFFF) < 0x80000000
-
-
 class WorkbenchTelemetryConn:
     """UDP link to the hardware workbench's frame_apa102 telemetry (see
     docs/internals/workbench.md and hardware/workbench/workbench_esp32s3/
@@ -242,37 +236,23 @@ class WorkbenchTelemetryConn:
     start()) instead of hooking into _receive_loop().
     """
 
-    MAGIC = 0xA1
-    HEADER_BYTES = 6  # magic(1) + frame_seq(4, little-endian) + chunk_index(1)
-    COLUMNS_PER_CHUNK = 4  # must match WB_COLUMNS_PER_CHUNK in config.h
-    NUM_CHUNKS = 256 // COLUMNS_PER_CHUNK  # must match WB_NUM_CHUNKS
-    CHUNK_PAYLOAD_BYTES = COLUMNS_PER_CHUNK * 54 * 4  # columns * led_count * apa102 frame bytes
-    PACKET_BYTES = HEADER_BYTES + CHUNK_PAYLOAD_BYTES
-    HELLO_INTERVAL_S = 1.0  # keeps the workbench streaming to us (see WB_TELEMETRY_CLIENT_TIMEOUT_MS)
-    DECODE_INTERVAL_S = 1 / 30  # decouple decode cost from chunk arrival rate
-
     def __init__(self):
+        self.client = WorkbenchTelemetryClient(config.SERVER_IP, config.SERVER_PORT)
         self.sock = None
-        self._last_seq = [0] * self.NUM_CHUNKS
 
     def setup(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # "Connecting" a UDP socket sends nothing on the wire -- it's a
-        # local-only filter that lets send()/recv() omit the address and
-        # rejects datagrams from any other peer.
-        self.sock.connect((config.SERVER_IP, config.SERVER_PORT))
-        self.sock.settimeout(0.5)
+        self.client.setup()
+        self.sock = self.client.sock
 
     def send(self, b):
-        if self.sock:
-            try:
-                self.sock.send(b)
-            except (socket.error, OSError) as err:
-                print("comms: workbench-telemetry send failed:", err)
+        try:
+            self.client.send(b)
+        except (socket.error, OSError) as err:
+            print("comms: workbench-telemetry send failed:", err)
 
     def close(self):
-        if self.sock:
-            self.sock.close()
+        self.client.close()
+        self.sock = None
 
     def run(self):
         """Receive/keepalive loop. Runs in its own daemon thread (see
@@ -280,25 +260,23 @@ class WorkbenchTelemetryConn:
         meaningful for a connectionless socket, so unlike _receive_loop()
         there's no waitconnect()/_connect() cycle -- just keep trying."""
         waitconnect(self, "workbench-telemetry")
-        last_hello = 0.0
         last_decode = 0.0
         while looping:
             try:
                 now = time.time()
-                if now - last_hello >= self.HELLO_INTERVAL_S:
-                    self.send(b"hello\n")
-                    last_hello = now
+                self.client.send_hello_if_due(now)
 
                 try:
-                    data = self.sock.recv(2048)
+                    self.client.receive_once()
                 except socket.timeout:
-                    data = None
-                if data:
-                    self._handle_packet(data)
+                    pass
 
                 now = time.time()
-                if now - last_decode >= self.DECODE_INTERVAL_S:
-                    decode_voom_frame_apa102()
+                if now - last_decode >= 1 / 30:
+                    # Copy and decode at a fixed pace. Missing UDP chunks
+                    # remain stale in the persistent buffer but never block a
+                    # newer preview from being shown.
+                    set_voom_frame_apa102(self.client.snapshot().apa102)
                     last_decode = now
             except (socket.error, OSError) as err:
                 print("comms: workbench-telemetry:", err)
@@ -308,20 +286,7 @@ class WorkbenchTelemetryConn:
                 time.sleep(0.2)
 
     def _handle_packet(self, data):
-        if len(data) != self.PACKET_BYTES or data[0] != self.MAGIC:
-            return
-        chunk_index = data[5]
-        if chunk_index >= self.NUM_CHUNKS:
-            return
-        frame_seq = int.from_bytes(data[1:5], "little")
-        # Reject a stale/reordered duplicate rather than let it stomp
-        # fresher data already applied for this chunk slot -- reordering is
-        # rare on a single WiFi hop but this guard is cheap.
-        if not _seq_ge(frame_seq, self._last_seq[chunk_index]):
-            return
-        self._last_seq[chunk_index] = frame_seq
-        start_column = chunk_index * self.COLUMNS_PER_CHUNK
-        apply_voom_frame_apa102_chunk(start_column, data[self.HEADER_BYTES:])
+        return self.client.receiver.ingest(data)
 
 looping = True
 

@@ -1,0 +1,9 @@
+# Store the populated configuration and tunnel credential outside this repo.
+# The gateway binds loopback-only; cloudflared is the sole public ingress.
+tunnel: replace-with-named-tunnel-uuid
+credentials-file: /Users/you/.cloudflared/replace-with-named-tunnel-uuid.json
+
+ingress:
+  - hostname: ventilastation-board.protocultura.net
+    service: http://127.0.0.1:8765
+  - service: http_status:404

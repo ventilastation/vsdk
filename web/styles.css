@@ -99,6 +99,25 @@ textarea {
   background: rgba(80, 57, 10, 0.24);
 }
 
+.remote-status {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.remote-rpm-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.remote-rpm-control input {
+  width: 86px;
+}
+
 .scene-error-banner {
   display: grid;
   gap: 14px;
@@ -324,6 +343,32 @@ textarea {
   gap: 10px;
   align-items: center;
   justify-items: center;
+}
+
+.mobile-meta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.touch-meta-button {
+  appearance: none;
+  min-width: 72px;
+  padding: 9px 14px;
+  border: 1px solid rgba(119, 176, 231, 0.3);
+  border-radius: 999px;
+  background: rgba(119, 176, 231, 0.12);
+  color: #e5f2ff;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 650;
+  touch-action: none;
+  user-select: none;
+}
+
+.touch-meta-button.is-pressed {
+  transform: scale(0.96);
+  background: rgba(119, 176, 231, 0.3);
 }
 
 .touch-button {

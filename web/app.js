@@ -3,6 +3,7 @@
 
 import {
   BUTTONS,
+  INPUT_EXTRA,
   keyboardInputForCode,
   keyboardInputForCodes,
   EXIT_KEY_CODES,
@@ -41,6 +42,7 @@ import {
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260717f";
+import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260720a";
 
 
 class FailedRuntimeAdapter {
@@ -67,6 +69,7 @@ class BrowserHostApp {
     this.keyboardInput = { joy1: 0, joy2: 0, extra: 0 };
     this.keyboardCodes = new Set();
     this.touchButtons = 0;
+    this.touchInput = { joy1: 0, joy2: 0, extra: 0 };
     this.gamepadInput = { joy1: 0, joy2: 0, extra: 0, exit: false };
     this.currentInput = { joy1: 0, joy2: 0, extra: 0 };
     this.keyboardExitPressed = false;
@@ -154,11 +157,17 @@ class BrowserHostApp {
       toggleEditorButton: document.querySelector("#toggle-editor-button"),
       touchStick: document.querySelector("#touch-stick"),
       touchStickKnob: document.querySelector("#touch-stick-knob"),
-      touchButtons: Array.from(document.querySelectorAll("[data-touch-button]")),
+      touchButtons: Array.from(document.querySelectorAll("[data-touch-channel], [data-touch-button]")),
       runtimeBanner: document.querySelector("#runtime-banner"),
       runtimeMessage: document.querySelector("#runtime-message"),
       inspectorPanel: document.querySelector("#inspector-panel"),
       toggleInspectorButton: document.querySelector("#toggle-inspector-button"),
+      remoteConnectButton: document.querySelector("#remote-connect-button"),
+      remoteControlButton: document.querySelector("#remote-control-button"),
+      remoteResetButton: document.querySelector("#remote-reset-button"),
+      remoteRpmControl: document.querySelector("#remote-rpm-control"),
+      remoteRpm: document.querySelector("#remote-rpm"),
+      remoteStatus: document.querySelector("#remote-status"),
       copyDiagnostics: document.querySelector("#copy-diagnostics"),
       copyDiagnosticsButton: document.querySelector("#copy-diagnostics-button"),
       copyDiagnosticsStatus: document.querySelector("#copy-diagnostics-status"),
@@ -249,6 +258,10 @@ class BrowserHostApp {
         // "music <track> [loop]" — the optional loop flag repeats the track.
         const args = event.args || [];
         this.audio.playMusic(args[0] || "off", args.includes("loop"));
+        continue;
+      }
+      if (event.command === "musicstop") {
+        this.audio.playMusic("off", false);
         continue;
       }
       if (event.command === "notes") {
@@ -404,6 +417,7 @@ class BrowserHostApp {
     });
     this.renderRuntimeStatus();
     this.bindInput();
+    this.bindRemoteControls();
     this.bindVisibility();
     this.bindCopyDiagnostics();
     this.bindDebugControls();
@@ -422,6 +436,13 @@ class BrowserHostApp {
     this.renderCanvasVisibility();
     this.renderSceneError();
     this.renderMemorySummary();
+    if (this.runtime.source === "remote" && typeof this.adapter.onStatus === "function") {
+      this.unsubscribeRemoteStatus = this.adapter.onStatus((status) => this.renderRemoteStatus(status));
+      this.renderRemoteStatus({ state: "connected" });
+    }
+    if (this.runtime.source === "remote" && typeof this.adapter.onHostEvent === "function") {
+      this.unsubscribeRemoteHostEvent = this.adapter.onHostEvent((event) => this.handleRemoteHostEvent(event));
+    }
     if (this.runtime.source === "error") {
       return;
     }
@@ -444,6 +465,92 @@ class BrowserHostApp {
       void this.adapter.startLoop({ full: true });
     } else {
       this.schedulePoll(true);
+    }
+  }
+
+  bindRemoteControls() {
+    const connectButton = this.elements.remoteConnectButton;
+    const controlButton = this.elements.remoteControlButton;
+    if (connectButton) {
+      connectButton.addEventListener("click", async () => {
+        if (this.runtime.source === "remote") {
+          this.adapter.close?.();
+          const next = new URL(window.location.href);
+          next.searchParams.delete("remote");
+          window.location.assign(next.toString());
+          return;
+        }
+        try {
+          connectButton.disabled = true;
+          await RemoteWorkbenchAdapter.requestTicket();
+          const next = new URL(window.location.href);
+          next.searchParams.set("remote", "1");
+          window.location.assign(next.toString());
+        } catch (error) {
+          this.runtime.error = error;
+          this.renderRuntimeStatus();
+        } finally {
+          connectButton.disabled = false;
+        }
+      });
+    }
+    if (controlButton) {
+      controlButton.addEventListener("click", () => {
+        if (this.runtime.source !== "remote") {
+          return;
+        }
+        if (this.adapter.leaseGeneration === null) {
+          this.adapter.requestControl?.();
+        } else {
+          this.adapter.releaseControl?.();
+        }
+      });
+    }
+    this.elements.remoteResetButton?.addEventListener("click", () => this.adapter.resetBoard?.());
+    this.elements.remoteRpm?.addEventListener("change", () => this.adapter.setRpm?.(this.elements.remoteRpm.value));
+  }
+
+  renderRemoteStatus(status = {}) {
+    const connectButton = this.elements.remoteConnectButton;
+    const controlButton = this.elements.remoteControlButton;
+    const statusNode = this.elements.remoteStatus;
+    if (this.runtime.source !== "remote") {
+      if (connectButton) {
+        connectButton.textContent = "Connect board";
+      }
+      if (controlButton) {
+        controlButton.hidden = true;
+      }
+      if (statusNode) {
+        statusNode.textContent = "Local emulator";
+      }
+      return;
+    }
+    if (connectButton) {
+      connectButton.textContent = "Disconnect board";
+    }
+    const controllerEligible = this.adapter.connected && ["controller", "operator", "admin"].includes(this.adapter.role);
+    const operatorActive = this.adapter.connected && ["operator", "admin"].includes(this.adapter.role) && this.adapter.leaseGeneration !== null;
+    if (controlButton) {
+      controlButton.hidden = !controllerEligible;
+      controlButton.textContent = this.adapter.leaseGeneration === null ? "Request control" : "Release control";
+    }
+    if (this.elements.remoteResetButton) {
+      this.elements.remoteResetButton.hidden = !operatorActive;
+    }
+    if (this.elements.remoteRpmControl) {
+      this.elements.remoteRpmControl.hidden = !operatorActive;
+    }
+    if (statusNode) {
+      if (status.state === "disconnected") {
+        statusNode.textContent = "Board disconnected";
+      } else if (this.adapter.leaseGeneration !== null) {
+        statusNode.textContent = `Controlling board as ${this.adapter.role}`;
+      } else if (status.holder) {
+        statusNode.textContent = `Viewing — ${status.holder} controls`;
+      } else {
+        statusNode.textContent = `Viewing board as ${this.adapter.role || "user"}`;
+      }
     }
   }
 
@@ -622,6 +729,7 @@ class BrowserHostApp {
       this.keyboardInput = { joy1: 0, joy2: 0, extra: 0 };
       this.keyboardCodes.clear();
       this.touchButtons = 0;
+      this.touchInput = { joy1: 0, joy2: 0, extra: 0 };
       this.gamepadInput = { joy1: 0, joy2: 0, extra: 0, exit: false };
       this.keyboardExitPressed = false;
       this.touchStickPointerId = null;
@@ -767,15 +875,16 @@ class BrowserHostApp {
   bindTouchButtons() {
     for (const button of this.elements.touchButtons) {
       const buttonName = button.dataset.touchButton;
-      const bit = BUTTONS[buttonName];
-      if (!bit) {
+      const channel = button.dataset.touchChannel || "joy1";
+      const bit = Number(button.dataset.touchBit || BUTTONS[buttonName] || 0);
+      if (!bit || !Object.prototype.hasOwnProperty.call(this.touchInput, channel)) {
         continue;
       }
       const setPressed = (pressed) => {
         if (pressed) {
-          this.touchButtons |= bit;
+          this.touchInput[channel] |= bit;
         } else {
-          this.touchButtons &= ~bit;
+          this.touchInput[channel] &= ~bit;
         }
         this.syncButtons();
         this.renderStatus();
@@ -855,11 +964,12 @@ class BrowserHostApp {
   renderTouchButtons() {
     for (const button of this.elements.touchButtons) {
       const buttonName = button.dataset.touchButton;
-      const bit = BUTTONS[buttonName];
-      if (!bit) {
+      const channel = button.dataset.touchChannel || "joy1";
+      const bit = Number(button.dataset.touchBit || BUTTONS[buttonName] || 0);
+      if (!bit || !Object.prototype.hasOwnProperty.call(this.currentInput, channel)) {
         continue;
       }
-      button.classList.toggle("is-pressed", Boolean(this.currentButtons & bit));
+      button.classList.toggle("is-pressed", Boolean(this.currentInput[channel] & bit));
     }
   }
 
@@ -904,13 +1014,13 @@ class BrowserHostApp {
   }
 
   syncButtons() {
-    const joy1 = (this.keyboardInput.joy1 | this.touchButtons | this.gamepadInput.joy1) & 0x7f;
-    const joy2 = (this.keyboardInput.joy2 | this.gamepadInput.joy2) & 0x7f;
-    const extra = (this.keyboardInput.extra | this.gamepadInput.extra) & 0x7f;
+    const joy1 = (this.keyboardInput.joy1 | this.touchButtons | this.touchInput.joy1 | this.gamepadInput.joy1) & 0x7f;
+    const joy2 = (this.keyboardInput.joy2 | this.touchInput.joy2 | this.gamepadInput.joy2) & 0x7f;
+    const extra = (this.keyboardInput.extra | this.touchInput.extra | this.gamepadInput.extra) & 0x7f;
     const exitPressed = this.keyboardExitPressed || this.gamepadInput.exit;
     const exit = exitPressed && !this.exitPressed;
     this.exitPressed = exitPressed;
-    this.currentButtons = joy1;
+    this.currentButtons = joy1 | ((extra & INPUT_EXTRA.JOY1_Y) ? BUTTONS.BUTTON_D : 0);
     this.currentInput = { joy1, joy2, extra };
     if (typeof this.adapter.setInput === "function") {
       this.adapter.setInput(joy1, joy2, extra, exit);
@@ -1836,6 +1946,18 @@ class BrowserHostApp {
     }
   }
 
+  handleRemoteHostEvent(event) {
+    try {
+      this.processFrameEvents({ events: [event] });
+      this.renderBasePreview();
+    } catch (error) {
+      this.addDiagnostic("remote.host-event.error", {
+        message: error.message || String(error),
+      });
+      console.error("Remote host event failed", error);
+    }
+  }
+
   async pollFrame(full = false) {
     try {
       const gamepadChanged = this.updateGamepadInput();
@@ -2593,6 +2715,16 @@ class BrowserHostApp {
 }
 
 async function resolveRuntime() {
+  if (isRemoteMode()) {
+    try {
+      const remoteAdapter = new RemoteWorkbenchAdapter();
+      await remoteAdapter.init();
+      return { adapter: remoteAdapter, source: "remote" };
+    } catch (error) {
+      console.error("Failed to initialize physical workbench adapter", error);
+      return { adapter: new FailedRuntimeAdapter(), source: "error", error };
+    }
+  }
   const adapter = window.VentilastationRuntimeAdapter;
   if (adapter && (typeof adapter.setInput === "function" || typeof adapter.setButtons === "function") &&
       typeof adapter.exportFrame === "function") {

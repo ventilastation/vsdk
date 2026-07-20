@@ -3,6 +3,8 @@ pyglet<2; "Raspbian" in platform_version
 python-ffmpeg
 gmqtt
 pyserial
+websockets>=12,<13
+PyJWT[crypto]>=2.8,<3
 pillow
 PyYAML
 RPi.GPIO; "Raspbian" in platform_version
