@@ -549,8 +549,11 @@ class TrustedProxyIdentityVerifier:
 
     This mode is deliberately safe only when the gateway is loopback-only and
     its sole ingress is a private reverse tunnel from the configured proxy.
-    Caddy removes client-supplied versions of these headers and copies them
-    from oauth2-proxy's authenticated response before forwarding the request.
+    The edge removes client-supplied versions of these headers and copies them
+    from its authenticated identity before forwarding the request. Some edges
+    (including ngrok's managed Google OAuth action) expose a verified email
+    but no stable subject header; in that case the verified email is used as
+    the ticket subject. The ACL remains keyed by that same verified email.
     """
 
     def __init__(self, email_header: str, subject_header: str):
@@ -562,8 +565,10 @@ class TrustedProxyIdentityVerifier:
         subject = str(headers.get(self.subject_header, "")).strip()
         if not email or "@" not in email or len(email) > 254:
             raise AuthenticationError("missing trusted-proxy email")
-        if not subject or len(subject) > 512:
-            raise AuthenticationError("missing trusted-proxy subject")
+        if subject and len(subject) > 512:
+            raise AuthenticationError("invalid trusted-proxy subject")
+        if not subject:
+            subject = email
         return subject, email
 
 

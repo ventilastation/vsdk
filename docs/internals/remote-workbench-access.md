@@ -86,7 +86,8 @@ required.
 2. The adapter opens `<gateway>/auth/start` in a popup. ngrok requires Google
    sign-in and accepts only the listed emails.
 3. ngrok removes caller-supplied `X-Remote-Email`/`X-Remote-Subject` headers,
-   then injects `X-Remote-Email` from its verified OAuth identity.
+   then injects `X-Remote-Email` from its verified OAuth identity. The gateway
+   uses that email as the ticket subject when the edge has no separate subject.
 4. The loopback gateway checks its ACL and returns a signed, 30--60 second,
    one-use ticket to the opener with `postMessage`.
 5. The adapter opens `wss://<gateway>/ws?ticket=...`. The gateway validates

@@ -96,8 +96,10 @@ class RemoteGatewayTests(unittest.TestCase):
             verifier.verify({"X-Remote-Email": "Player@Example.com", "X-Remote-Subject": "google-subject"}),
             ("google-subject", "player@example.com"),
         )
-        with self.assertRaises(AuthenticationError):
-            verifier.verify({"X-Remote-Email": "player@example.com"})
+        self.assertEqual(
+            verifier.verify({"X-Remote-Email": "Player@Example.com"}),
+            ("player@example.com", "player@example.com"),
+        )
         with self.assertRaises(AuthenticationError):
             verifier.verify({"X-Remote-Subject": "google-subject"})
 
