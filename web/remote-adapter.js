@@ -18,7 +18,9 @@ const TYPES = Object.freeze({
   OPERATOR_COMMAND: 0x14,
 });
 const INPUT_EXIT_EDGE = 0x01;
-const DEFAULT_GATEWAY = "https://ventilastation-board.protocultura.net";
+// This free ngrok development domain is allocated to the workbench account.
+// Operators may override it before loading the emulator for a staged endpoint.
+const DEFAULT_GATEWAY = "https://glutinous-hesitancy-symphonic.ngrok-free.dev";
 
 function gatewayUrl() {
   const configured = window.VENTILASTATION_REMOTE_GATEWAY;
