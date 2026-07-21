@@ -4,6 +4,7 @@ python-ffmpeg
 gmqtt
 pyserial
 websockets>=12,<13
+aiortc>=1.15,<2
 PyJWT[crypto]>=2.8,<3
 pillow
 PyYAML

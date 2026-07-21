@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,6 +21,7 @@ from remote_gateway import (  # noqa: E402
     RemoteGatewayCore,
     TicketSigner,
     TrustedProxyIdentityVerifier,
+    config_from_environment,
     decode_message,
     encode_message,
 )
@@ -102,6 +104,42 @@ class RemoteGatewayTests(unittest.TestCase):
         )
         with self.assertRaises(AuthenticationError):
             verifier.verify({"X-Remote-Subject": "google-subject"})
+
+
+class GatewayConfigurationTests(unittest.TestCase):
+    def required_environment(self, directory):
+        key_path = os.path.join(directory, "ticket.key")
+        with open(key_path, "wb") as key_file:
+            key_file.write(b"t" * 32)
+        return {
+            "REMOTE_WORKBENCH_BOARD": "workbench-1",
+            "REMOTE_WORKBENCH_TICKET_AUDIENCE": "remote-browser",
+            "REMOTE_WORKBENCH_TICKET_KEY_FILE": key_path,
+            "REMOTE_WORKBENCH_STATE_DB": os.path.join(directory, "state.sqlite3"),
+            "REMOTE_WORKBENCH_SERIAL_PORT": "/dev/test-board",
+            "REMOTE_WORKBENCH_ALLOWED_ORIGINS": "https://emulator.example.test",
+            "REMOTE_WORKBENCH_AUTH_MODE": "trusted-proxy",
+        }
+
+    def test_default_ice_configuration_uses_public_stun(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, self.required_environment(directory), clear=True):
+                config = config_from_environment()
+        self.assertEqual(config.ice_servers, ({
+            "urls": ["stun:stun.l.google.com:19302"],
+        },))
+
+    def test_turn_configuration_preserves_credentials_for_authenticated_hello(self):
+        with tempfile.TemporaryDirectory() as directory:
+            environment = self.required_environment(directory)
+            environment["REMOTE_WORKBENCH_ICE_SERVERS_JSON"] = (
+                '[{"urls":"turns:relay.example.test:5349",'
+                '"username":"workbench","credential":"secret"}]'
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                config = config_from_environment()
+        self.assertEqual(config.ice_servers[0]["username"], "workbench")
+        self.assertEqual(config.ice_servers[0]["credential"], "secret")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Remote H.264 texture smoke</title>
+<style>
+  html, body { margin: 0; min-height: 100%; background: #05070b; color: #dce8f5; font: 14px system-ui; }
+  main { display: grid; grid-template-columns: minmax(300px, 640px) 1fr; gap: 20px; padding: 20px; }
+  #ring { width: 640px; height: 640px; max-width: 100%; background: #05070b; }
+  pre { white-space: pre-wrap; }
+</style>
+<main>
+  <canvas id="ring"></canvas>
+  <section>
+    <h1>Remote H.264 texture smoke</h1>
+    <pre id="result">running</pre>
+  </section>
+</main>
+<script src="../../web/led-render-core.js?v=remote-video-smoke"></script>
+<script type="module" src="./remote-video-smoke.js"></script>

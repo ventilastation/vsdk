@@ -1,75 +1,100 @@
 # Remote physical-workbench access from the web emulator
 
-Status: implemented runbook, reconciled with `main` on 2026-07-20.
+Status: WebRTC/H.264 implementation on `codex/remote-workbench`, updated from
+`main` on 2026-07-20.
 
-This document defines the production path from the static GitHub Pages
-emulator to a physical Ventilastation board attached by USB to a developer
-workbench. It is designed for a remote mobile browser: Google sign-in happens
-at the public edge, the browser receives paced display frames and audio host
-commands, and only an authorised controller can send emulated input.
+This document describes the implemented path from the static GitHub Pages
+emulator to a physical Ventilastation board connected by USB to a developer
+workbench. It is intended for a remote mobile browser with Google sign-in,
+default-deny board access, high-frame-rate color display, audio host commands,
+and emulated input returned to the board.
 
-The current deployment uses an ngrok HTTPS endpoint. It replaces the earlier
-Oracle/frp/Caddy proposal: it has no inbound router port, no VPS, and no
-Cloudflare account. The public endpoint is an ngrok free development domain,
-so this deployment is deliberately a test/small-private-group service rather
-than a general public product.
+## Outcome and constraints
 
-## Scope and constraints
-
-- GitHub Pages hosts only the existing static emulator at
+- GitHub Pages hosts the existing static client at
   `https://ventilastation.protocultura.net/emulator/?remote=1`.
-- The workbench computer owns USB serial and is the sole UDP telemetry client
+- The workbench gateway owns USB serial and is the sole UDP telemetry client
   for the board on port 5005.
-- The public tunnel forwards solely to `127.0.0.1:8765`; the gateway does not
-  listen on a LAN or public interface.
-- Google authentication is required before `/auth/start` can reach the
-  gateway. `/ws` reaches it only with the gateway's one-use ticket because
-  browser WebSockets do not reliably send cross-site OAuth session cookies.
-  The gateway then verifies role and controller lease.
-- The normal browser emulator remains available without a login.
+- ngrok exposes only the loopback gateway on `127.0.0.1:8765`. It carries
+  Google authentication, ticket exchange, WebRTC signaling, input, leases,
+  status, and audio commands.
+- Display media uses a peer-to-peer WebRTC H.264 track. It does not traverse
+  ngrok when a direct ICE candidate pair succeeds, which removes the old frame
+  stream from the ngrok bandwidth allowance.
+- If direct ICE fails, a configured TURN server relays media. That consumes
+  TURN bandwidth, not ngrok bandwidth.
+- The local emulator remains available without sign-in. Authentication is
+  requested only when the visitor chooses **Connect physical board**.
 
 ## Architecture
 
 ```text
 GitHub Pages emulator (phone or desktop)
-          |  HTTPS / WSS
-          v
-ngrok edge: Google OAuth + email allowlist + verified identity header
-          |  HTTPS, loopback target only
-          v
-remote_gateway.py on the workbench computer (127.0.0.1:8765)
-   | UDP 5005 telemetry       | USB serial input / host events
-   v                          v
-workbench ESP32-S3        physical DUT
+       | HTTPS/WSS: login, ticket, SDP, input, audio, status
+       v
+ngrok edge: Google OAuth + email allowlist + identity header
+       | loopback-only tunnel
+       v
+remote_gateway.py (127.0.0.1:8765) ---- USB serial ---- physical DUT
+       |                                      ^
+       +---- UDP 5005 APA102 telemetry -------+
+       |
+       +==== WebRTC H.264 / DTLS-SRTP ===== browser
+             direct ICE, or optional TURN
 ```
 
-The workbench's 64 UDP APA102 chunks are not proxied directly. The gateway
-maintains the freshest capture, decodes it, compresses/paces RGB frames for
-the WebSocket client, and forwards sound/music/notes commands as structured
-host events. This prevents the mobile connection from carrying the roughly
-13 Mbit/s raw LAN stream and favours current frames over backlog.
+The gateway continuously assembles the newest complete APA102 capture but
+publishes frames only while at least one authenticated WebRTC peer exists. A
+per-peer video track waits for the newest snapshot; stale frames are replaced,
+not queued. WebRTC supplies congestion control, packet loss recovery, pacing,
+and keyframes. The browser schedules rendering from decoded-frame callbacks,
+so it does not redraw an old frame merely because `requestAnimationFrame`
+fired.
 
-## Trust model and access control
+When the page becomes hidden, the adapter sends `VIDEO_STOP` and closes the
+peer connection. It renegotiates when the emulator loop resumes. This prevents
+background tabs from consuming video bandwidth.
 
-There are three independent decisions:
+## Authentication and authorization
 
-1. ngrok's Google OAuth identifies the visitor and enforces a small email
-   allowlist before the ticket-minting path reaches the workbench.
-2. The gateway issues a one-use, short-lived WebSocket ticket only from the
-   edge-injected verified email. The browser cannot set this identity.
-3. The gateway ACL assigns a board role. A controller must also acquire the
-   exclusive lease before input is forwarded.
+Authentication is deliberately separate from media transport:
 
-Roles are default-deny:
+1. The visitor selects **Connect physical board**. The static client opens
+   `<gateway>/auth/start` in a popup.
+2. ngrok performs Google OAuth and applies its email allowlist before the
+   request reaches the workbench.
+3. The edge removes caller-supplied identity headers and injects the verified
+   Google email as `X-Remote-Email`.
+4. The loopback gateway checks its local board ACL and mints a signed,
+   one-use, 30--60 second ticket. The popup returns it to the exact configured
+   Pages origin with `postMessage`.
+5. The client opens `wss://<gateway>/ws?ticket=...`. The gateway verifies the
+   signature, audience, origin, expiry, unused ticket ID, and current ACL role.
+6. Only after the authenticated WebSocket is established does the gateway
+   advertise ICE configuration and accept a `VIDEO_OFFER`. The offer and
+   resulting H.264 peer are bound to that authenticated browser session.
+7. WebRTC authenticates the negotiated media channel with the DTLS
+   fingerprints in the signed signaling exchange and encrypts media with
+   DTLS-SRTP.
+8. A controller must acquire the exclusive board lease before input is
+   forwarded. Disconnect, lease expiry, release, or ACL revocation sends
+   neutral input before another user can control the board.
+
+Browser WebSockets do not reliably carry a cross-site OAuth cookie, which is
+why the flow uses a one-use query ticket. Tunnel/access logs must redact query
+strings. The ticket contains no reusable Google credential and is atomically
+consumed.
+
+The gateway ACL is default-deny:
 
 | Role | Permission |
 | --- | --- |
-| `viewer` | See status, frames, and audio commands. |
-| `controller` | Viewer permissions and eligibility for the input lease. |
-| `operator` | Controller permissions plus authorised workbench operations. |
-| `admin` | Operator permissions plus ACL/session administration. |
+| `viewer` | View display/status and receive audio commands. |
+| `controller` | Viewer access plus eligibility for the exclusive input lease. |
+| `operator` | Controller access plus approved reset/RPM operations. |
+| `admin` | Operator access plus local ACL/session administration. |
 
-The initial ACL is managed locally, not from the public endpoint:
+Manage it locally, never through the public endpoint:
 
 ```text
 python -m emulator.remote_gateway acl grant person@example.com controller --board workbench-1
@@ -77,144 +102,196 @@ python -m emulator.remote_gateway acl revoke person@example.com --board workbenc
 python -m emulator.remote_gateway sessions list
 ```
 
-Revoking a controller releases its lease and sends neutral input immediately.
-Removing an email from the ngrok policy blocks future sign-ins; remove its
-gateway ACL entry or disconnect its session when immediate loss of access is
-required.
+Removing an email from the ngrok allowlist blocks future login. Revoking the
+local ACL is authoritative for existing sessions: the lease loop notices the
+role change, closes the socket, and neutralizes input.
 
-## Authentication and WebSocket flow
+## Video format and color fidelity
 
-1. A user opens the Pages emulator and chooses **Connect physical board**.
-2. The adapter opens `<gateway>/auth/start` in a popup. ngrok requires Google
-   sign-in and accepts only the listed emails.
-3. ngrok removes caller-supplied `X-Remote-Email`/`X-Remote-Subject` headers,
-   then injects `X-Remote-Email` from its verified OAuth identity. The gateway
-   uses that email as the ticket subject when the edge has no separate subject.
-4. The loopback gateway checks its ACL and returns a signed, 30--60 second,
-   one-use ticket to the opener with `postMessage`.
-5. The adapter opens `wss://<gateway>/ws?ticket=...`. The gateway validates
-   ticket signature, audience, origin, expiry, and unused ticket identifier
-   before accepting the socket.
-6. The browser requests the exclusive controller lease before it sends input.
-   On disconnect/expiry/revocation, the gateway sends neutral input to USB.
+The logical display is **256 rotor columns by 54 LEDs**. In framebuffer byte
+order it is naturally 54 texels wide by 256 rows high. The capture and render
+rate is 30 frames per second.
 
-WebSocket query tickets are unavoidable in this browser flow, so access logs
-must redact them. Tickets contain no reusable Google credential and are
-consumed atomically.
+Sending a literal 54×256 RGB picture through browser-compatible H.264 would
+not preserve the LEDs' colors: H.264 Baseline uses 4:2:0 chroma, so neighbouring
+one-pixel red/green/blue values are averaged. The implemented wire picture is
+therefore 162×256:
 
-## ngrok traffic policy
-
-Keep the live token and policy outside the repository. The installed policy
-must have these operations in this order:
-
-```yaml
-on_http_request:
-  - expressions:
-      - 'req.url.path != "/ws"'
-    actions:
-      - type: oauth
-        config:
-          provider: google
-          auth_id: vsdk-remote-workbench
-          idle_session_timeout: 15m
-          max_session_duration: 1h
-  - expressions:
-      - 'req.url.path != "/ws" && !(actions.ngrok.oauth.identity.email in [''allowed@example.com''])'
-    actions:
-      - type: deny
-  - expressions:
-      - 'req.url.path != "/ws"'
-    actions:
-      - type: remove-headers
-        config:
-          headers: [X-Remote-Email, X-Remote-Subject]
-      - type: add-headers
-        config:
-          headers:
-            X-Remote-Email: "${actions.ngrok.oauth.identity.email}"
+```text
+logical LED 0         logical LED 1
+  R0  G0  B0            R1  G1  B1        (162 luma samples per row)
 ```
 
-The remove-then-add sequence is mandatory. It prevents a visitor from
-smuggling a conflicting identity header to the gateway. This trusted-proxy
-mode is safe only while the gateway is loopback-only and ngrok is its only
-public path.
+Each component value is encoded as a neutral-grey RGB sample. All information
+then lives in the full-resolution luma plane, while the subsampled chroma
+planes remain neutral. A regression test encodes and decodes an adversarial
+saturated pattern through the same H.264 Baseline settings; at 1 Mbit/s it
+requires mean channel error below 0.5 and maximum error no greater than 3.
 
-ngrok free endpoints use an assigned `*.ngrok-free.dev` development domain
-and have a small monthly OAuth identity limit. A team/shared deployment should
-use a paid static domain or a self-hosted tunnel/identity-provider edge before
-expanding the allowlist.
+The browser uploads the decoded `HTMLVideoElement` directly into a 162×256
+WebGL texture with `texSubImage2D`. The ring fragment shader samples the three
+luma positions and reconstructs one RGB LED. There is no canvas, `ImageData`,
+JavaScript RGBA copy, palette, RGB555 conversion, or browser CPU transpose.
+The logical geometry remains exactly 54×256.
+
+The H.264 sender starts at aiortc's 1 Mbit/s target and WebRTC adapts between
+its congestion-control bounds. Inter-frame compression makes normal menu/game
+content substantially smaller than independently deflated RGB frames, while
+30 fps and RGB888 semantics are retained.
+
+## Signaling and control protocol
+
+All WebSocket messages keep the fixed 20-byte `VSRW` version-1 binary header.
+JSON control payloads are bounded to 128 KiB so complete non-trickle SDP can
+carry several ICE candidates.
+
+| Type | Direction | Purpose |
+| --- | --- | --- |
+| `HELLO` | gateway → browser | Role, lease state, H.264 format, ICE servers. |
+| `VIDEO_OFFER` (`0x20`) | browser → gateway | H.264-only WebRTC offer after full ICE gathering. |
+| `VIDEO_ANSWER` (`0x21`) | gateway → browser | H.264 answer and confirmed packed dimensions. |
+| `VIDEO_STATUS` (`0x22`) | both/status | ICE/peer state and transport statistics. |
+| `VIDEO_STOP` (`0x23`) | browser → gateway | Stop media when hidden or disconnected. |
+| `HOST_EVENT` | gateway → browser | Safe sound/music/notes and emulator host events. |
+| `LEASE_REQUEST` / `LEASE` | both | Exclusive controller arbitration. |
+| `INPUT` | browser → gateway | Canonical joystick state plus exit edge. |
+| `HEARTBEAT` | browser → gateway | Renew the currently held lease. |
+
+`HOST_EVENT` permits only the existing browser commands `sound`, `music`,
+`musicstop`, `notes`, `base`, `info`, `traceback`, `achip`, `aframe`, `amap`,
+and `astop`. The public protocol exposes no shell, filesystem, firmware flash,
+arbitrary serial write, or raw UDP command.
+
+## ICE, STUN, and TURN
+
+The default is a public STUN server:
+
+```text
+REMOTE_WORKBENCH_ICE_SERVERS_JSON='[{"urls":["stun:stun.l.google.com:19302"]}]'
+```
+
+STUN discovers public candidate addresses but does not relay media. It usually
+allows a direct UDP path even though both peers are behind NAT. Symmetric NAT,
+some mobile carriers, corporate firewalls, or UDP blocking may require TURN:
+
+```text
+REMOTE_WORKBENCH_ICE_SERVERS_JSON='[
+  {"urls":["stun:stun.l.google.com:19302"]},
+  {"urls":["turns:relay.example.net:5349"],
+   "username":"short-lived-user","credential":"short-lived-secret"}
+]'
+```
+
+ICE configuration is not embedded in GitHub Pages. It is sent in `HELLO` only
+after ticket authentication and ACL approval. Prefer short-lived TURN REST
+credentials. A static TURN password is exposed to every authorized viewer and
+should be used only for a tightly controlled smoke environment. An empty or
+invalid ICE configuration fails gateway startup rather than silently disabling
+connectivity.
+
+## ngrok edge policy
+
+The checked-in example is
+`tools/remote-workbench-ngrok-policy.example.yml`. The deployed policy must:
+
+1. apply Google OAuth to every HTTP path except `/ws`;
+2. deny identities outside the explicit Google email allowlist;
+3. remove caller-controlled `X-Remote-Email` and `X-Remote-Subject` headers;
+4. add `X-Remote-Email` from ngrok's verified OAuth identity.
+
+`/ws` skips the cookie-based OAuth action because it is authenticated with the
+gateway's one-use ticket. The gateway must remain loopback-only; trusted-proxy
+mode is unsafe if another network path can reach it.
+
+The free ngrok domain and OAuth quota are suitable for private testing. After
+this WebRTC change, only small signaling/control/audio messages count against
+ngrok network bandwidth. A TURN relay, if needed, needs a separate bandwidth
+budget.
 
 ## Local configuration and operation
 
-Store all secrets in an owner-only directory outside the repository, for
+Store live secrets in an owner-only directory outside the repository, for
 example `~/.config/vsdk/remote-workbench/`:
 
-- `gateway.env`: board address, serial device, trusted-proxy mode, ACL seed.
-- `ticket.key`: 32-byte ticket-signing key.
-- `ngrok-authtoken` and `ngrok.yml`: ngrok account credential/configuration.
-- `ngrok-policy.yml`: Google OAuth, allowlist, and header sanitisation policy.
+- `gateway.env`: endpoints, serial device, trusted headers, and ICE servers;
+- `ticket.key`: at least 32 random bytes;
+- `ngrok-authtoken`, `ngrok.yml`, and `ngrok-policy.yml`;
+- TURN credentials, if used.
 
-Never commit any of these files, OAuth credentials, tickets, passwords, or
-personal email lists.
+Never commit passwords, personal email allowlists, OAuth credentials, tunnel
+tokens, ticket keys, tickets, or TURN secrets.
 
-Start the gateway with its owner-only environment file and bind it to
-loopback:
+Install and verify the gateway environment:
+
+```text
+python3.12 -m venv .venv312
+.venv312/bin/pip install -r requirements.txt
+set -a; source ~/.config/vsdk/remote-workbench/gateway.env; set +a
+.venv312/bin/python -m emulator.remote_gateway serve --check-config
+```
+
+Run the loopback gateway and tunnel in separate supervised processes:
 
 ```text
 set -a; source ~/.config/vsdk/remote-workbench/gateway.env; set +a
-REMOTE_WORKBENCH_AUTH_MODE=trusted-proxy \
-  python -m emulator.remote_gateway serve
-```
+.venv312/bin/python -m emulator.remote_gateway serve
 
-Start ngrok in a separate supervised terminal:
-
-```text
 ngrok http 127.0.0.1:8765 \
   --config ~/.config/vsdk/remote-workbench/ngrok.yml \
   --traffic-policy-file ~/.config/vsdk/remote-workbench/ngrok-policy.yml
 ```
 
-Set `web/remote-adapter.js` to the assigned HTTPS endpoint and deploy the
-updated static emulator. A temporary staging endpoint can instead set
-`window.VENTILASTATION_REMOTE_GATEWAY` before the page loads.
+The assigned public endpoint is set in `web/remote-adapter.js`. A staging page
+may set `window.VENTILASTATION_REMOTE_GATEWAY` before importing the adapter.
 
-## Protocol and performance targets
+## Verification plan
 
-The remote binary protocol has a fixed `VSRW`/versioned header. The useful
-message classes are `FRAME_RGB`, `HOST_EVENT`, `STATUS`, `LEASE`, `INPUT`,
-`FRAME_ACK`, `HEARTBEAT`, and operator commands. The initial target is 20
-displayed frames per second at 600 RPM. Frames are independently compressed,
-bounded in flight, and replaced by newer frames when a mobile client is slow.
-
-`HOST_EVENT` carries only the existing safe browser host commands: `sound`,
-`music`, `musicstop`, and `notes`. No shell, filesystem, flashing, arbitrary
-serial, or raw UDP command is exposed. `INPUT` carries canonical controller
-state plus a distinct exit edge; the gateway validates length/rate, enforces
-the lease, and converts it to the existing USB input protocol.
-
-## Deployment verification
-
-1. Confirm the board is connected and the gateway reports USB and UDP ready.
-2. Start ngrok. An unauthenticated request to its endpoint must redirect to
-   ngrok Google OAuth rather than reach the gateway.
-3. Load the deployed Pages emulator with `?remote=1`; choose **Connect
-   physical board** and sign in with an allowlisted test identity.
-4. Verify a fresh physical frame appears, then move through a menu with mobile
-   or keyboard controls. Verify the board changes and the browser receives a
-   sound event.
-5. Attempt a second non-controller user: viewing may work if the ACL permits,
-   but input must be denied while the controller lease is held.
-6. Disconnect the controller and verify the gateway writes neutral input.
-
-Focused regression tests are:
+Automated regression tests:
 
 ```text
-python tests/test_remote_gateway.py
-python tests/test_workbench_telemetry.py
+.venv312/bin/python tests/test_remote_video.py
+.venv312/bin/python tests/test_remote_gateway.py
+.venv312/bin/python tests/test_workbench_telemetry.py
 node tests/test_remote_adapter.mjs
 ```
 
-Record only non-secret smoke-test evidence: endpoint domain, login result,
-connected role, frame count, input acknowledgement, and received host-event
-type. Do not record tunnel tokens, tickets, cookies, OAuth tokens, or
-passwords.
+End-to-end smoke test:
+
+1. Confirm the board serial device exists and UDP telemetry receives complete
+   captures.
+2. Start the gateway and ngrok. Confirm an unauthenticated `/auth/start`
+   request is redirected to Google and a direct spoofed identity header is
+   discarded by the edge.
+3. Open the deployed Pages emulator with `?remote=1`, sign in using an
+   allowlisted test Google identity, and confirm the role shown by `HELLO`.
+4. Confirm WebRTC reaches `connected`, negotiated codec is H.264, decoded FPS
+   approaches 30, frames advance, and `bytesReceived` increases without a
+   matching high-volume transfer through ngrok.
+5. Compare an asymmetric saturated board pattern with the physical display to
+   verify orientation and the RGB-luma shader reconstruction.
+6. Acquire the controller lease, move through a menu, and verify joystick
+   input changes the physical board state.
+7. Verify a resulting `sound`, `music`, or `notes` host event is audible in the
+   browser.
+8. Hide the page and verify `VIDEO_STOP`; restore it and verify a new peer is
+   negotiated.
+9. Connect a second viewer and confirm it can see/hear but cannot send input
+   while another session holds the lease.
+10. Disconnect or revoke the controller and confirm neutral USB input is
+    written immediately.
+
+Record only non-secret evidence: endpoint hostname, login result, role, codec,
+ICE candidate type (`host`, `srflx`, or `relay`), decoded FPS, frame count,
+input acknowledgement, and host-event type. Never record OAuth cookies,
+tickets, SDP, TURN passwords, tunnel tokens, or account passwords.
+
+## Known deployment limits
+
+- A STUN-only deployment cannot guarantee connectivity across every NAT or
+  firewall. Configure TURN when the smoke test reports `failed` ICE state.
+- TURN changes the bandwidth cost location; it does not eliminate relay cost.
+- H.264 browser decode and WebGL are mandatory in remote mode. The remote path
+  intentionally has no low-fidelity canvas fallback.
+- The current free ngrok quota must allow the small OAuth and signaling
+  exchange before any public test can begin. An exhausted quota still blocks
+  authentication even though WebRTC would carry the display afterward.

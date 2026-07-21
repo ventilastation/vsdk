@@ -32,7 +32,24 @@ function testRejectsCorruptLength() {
   assert(threw, "corrupt declared length must be rejected");
 }
 
-for (const test of [testRoundTrip, testRejectsCorruptLength]) {
+function testSelectsOnlyH264VideoCodecs() {
+  globalThis.RTCRtpReceiver = {
+    getCapabilities() {
+      return {
+        codecs: [
+          { mimeType: "video/VP8" },
+          { mimeType: "video/H264", sdpFmtpLine: "profile-level-id=42e01f" },
+          { mimeType: "video/rtx" },
+        ],
+      };
+    },
+  };
+  const codecs = REMOTE_PROTOCOL.h264CodecPreferences();
+  assert(codecs.length === 1);
+  assert(codecs[0].mimeType === "video/H264");
+}
+
+for (const test of [testRoundTrip, testRejectsCorruptLength, testSelectsOnlyH264VideoCodecs]) {
   test();
   console.log("ok", test.name);
 }

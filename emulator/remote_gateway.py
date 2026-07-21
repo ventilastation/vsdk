@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from http import HTTPStatus
 import hashlib
 import hmac
@@ -29,7 +29,6 @@ import threading
 import time
 from typing import Any, Callable, Optional
 from urllib.parse import parse_qs, urlparse
-import zlib
 
 try:  # ``python -m emulator.remote_gateway``
     from .host_protocol import HostEvent, HostProtocolError, HostProtocolParser
@@ -40,6 +39,15 @@ try:  # ``python -m emulator.remote_gateway``
         TelemetrySnapshot,
         WorkbenchTelemetryClient,
     )
+    from .remote_video import (
+        DEFAULT_ICE_SERVERS,
+        LatestVideoFrame,
+        VIDEO_CODED_HEIGHT,
+        VIDEO_CODED_WIDTH,
+        VIDEO_PACKING,
+        WebRtcVideoPeer,
+        ice_server_payload,
+    )
 except ImportError:  # direct ``python emulator/remote_gateway.py`` for bench use
     from host_protocol import HostEvent, HostProtocolError, HostProtocolParser
     from workbench_telemetry import (
@@ -49,32 +57,39 @@ except ImportError:  # direct ``python emulator/remote_gateway.py`` for bench us
         TelemetrySnapshot,
         WorkbenchTelemetryClient,
     )
+    from remote_video import (
+        DEFAULT_ICE_SERVERS,
+        LatestVideoFrame,
+        VIDEO_CODED_HEIGHT,
+        VIDEO_CODED_WIDTH,
+        VIDEO_PACKING,
+        WebRtcVideoPeer,
+        ice_server_payload,
+    )
 
 
 PROTOCOL_MAGIC = b"VSRW"
 PROTOCOL_VERSION = 1
 HEADER = struct.Struct("<4sBBHIII")
 MAX_MESSAGE_BYTES = 1024 * 1024
-MAX_CONTROL_BYTES = 16 * 1024
-MAX_FRAME_QUEUE = 1
-MAX_TRANSPORT_BUFFER = 512 * 1024
+MAX_CONTROL_BYTES = 128 * 1024
 
 HELLO = 0x01
-FRAME_RGB = 0x02
 HOST_EVENT = 0x03
 STATUS = 0x04
 ERROR = 0x05
 LEASE = 0x06
 
 INPUT = 0x10
-FRAME_ACK = 0x11
 HEARTBEAT = 0x12
 LEASE_REQUEST = 0x13
 OPERATOR_COMMAND = 0x14
 
-FRAME_FORMAT_RGB888 = 1
-FRAME_CODEC_RAW = 0
-FRAME_CODEC_DEFLATE = 1
+VIDEO_OFFER = 0x20
+VIDEO_ANSWER = 0x21
+VIDEO_STATUS = 0x22
+VIDEO_STOP = 0x23
+
 INPUT_EXIT_EDGE = 0x01
 
 ROLE_VIEWER = "viewer"
@@ -592,11 +607,9 @@ class BrowserSession:
     session_id: str
     websocket: Any
     principal: Principal
-    frame_queue: asyncio.Queue[bytes] = field(default_factory=lambda: asyncio.Queue(maxsize=MAX_FRAME_QUEUE))
     exit_pressed: bool = False
     last_audited_input: tuple[int, int, int, bool] | None = None
-    last_ack_sequence: int = 0
-    sender_task: asyncio.Task[Any] | None = None
+    video_peer: WebRtcVideoPeer | None = None
 
 
 class SerialBridge:
@@ -667,6 +680,7 @@ class GatewayConfig:
     trusted_subject_header: str = "X-Remote-Subject"
     bind_host: str = "127.0.0.1"
     bind_port: int = 8765
+    ice_servers: tuple[dict[str, Any], ...] = DEFAULT_ICE_SERVERS
 
 
 class RemoteGatewayService:
@@ -683,6 +697,7 @@ class RemoteGatewayService:
         else:
             raise RuntimeError("unsupported REMOTE_WORKBENCH_AUTH_MODE")
         self.telemetry = WorkbenchTelemetryClient(config.workbench_host, config.workbench_port)
+        self.video_source = LatestVideoFrame(width=LEDS, height=COLUMNS)
         self.sessions: dict[str, BrowserSession] = {}
         self._sequence = 0
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -717,6 +732,10 @@ class RemoteGatewayService:
             for task in self._tasks:
                 task.cancel()
             await asyncio.gather(*self._tasks, return_exceptions=True)
+            await asyncio.gather(
+                *(self._close_video_peer(session) for session in list(self.sessions.values())),
+                return_exceptions=True,
+            )
             self._serial.close()
             self.telemetry.close()
             self.store.close()
@@ -773,7 +792,6 @@ if (window.opener) {
             return
         session = BrowserSession(secrets.token_urlsafe(18), websocket, principal)
         self.sessions[session.session_id] = session
-        session.sender_task = asyncio.create_task(self._frame_sender(session))
         self.store.audit(self.config.board, principal.email, "connect", principal.role)
         await self._send_status(session, "connected")
         await self._send_hello(session)
@@ -790,8 +808,7 @@ if (window.opener) {
             if released is not None:
                 await self._neutralize(released.email, "disconnect")
                 await self._broadcast_lease()
-            if session.sender_task is not None:
-                session.sender_task.cancel()
+            await self._close_video_peer(session)
             self.store.audit(self.config.board, principal.email, "disconnect", "")
 
     async def _handle_browser_message(self, session: BrowserSession, message: WireMessage) -> None:
@@ -817,10 +834,15 @@ if (window.opener) {
                 await asyncio.to_thread(self._serial.write, b"exit\n")
             session.exit_pressed = exit_edge
             return
-        if message.message_type == FRAME_ACK:
-            if len(message.payload) != 8:
-                raise ProtocolError("invalid frame acknowledgement")
-            session.last_ack_sequence, _display_ms = struct.unpack("<II", message.payload)
+        if message.message_type == VIDEO_OFFER:
+            request = _json_payload(message.payload)
+            await self._start_video_peer(session, request)
+            return
+        if message.message_type == VIDEO_STOP:
+            if message.payload:
+                raise ProtocolError("video stop payload must be empty")
+            await self._close_video_peer(session)
+            await self._send_video_status(session, "stopped")
             return
         if message.message_type == HEARTBEAT:
             if len(message.payload) != 8:
@@ -865,6 +887,72 @@ if (window.opener) {
             return
         raise ProtocolError("unsupported browser message")
 
+    async def _start_video_peer(self, session: BrowserSession, request: dict[str, Any]) -> None:
+        description_type = request.get("type")
+        sdp = request.get("sdp")
+        if description_type != "offer" or not isinstance(sdp, str) or not sdp:
+            raise ProtocolError("invalid WebRTC offer")
+        if len(sdp.encode("utf-8")) > MAX_CONTROL_BYTES:
+            raise ProtocolError("WebRTC offer exceeds limit")
+        await self._close_video_peer(session)
+        peer: WebRtcVideoPeer | None = None
+
+        async def on_state(state: str) -> None:
+            if peer is not None and session.video_peer is peer:
+                self.store.audit(self.config.board, session.principal.email, "video_state", state)
+                await self._send_video_status(session, state)
+
+        try:
+            peer = WebRtcVideoPeer(self.video_source, self.config.ice_servers, on_state=on_state)
+            session.video_peer = peer
+            answer = await peer.accept_offer(sdp, description_type)
+        except Exception as error:
+            if peer is not None:
+                await peer.close()
+            session.video_peer = None
+            raise ProtocolError("could not negotiate H.264 WebRTC video") from error
+        self.store.audit(self.config.board, session.principal.email, "video_offer", "H264")
+        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
+        await session.websocket.send(encode_message(
+            VIDEO_ANSWER,
+            self._sequence,
+            _json_bytes(answer),
+        ))
+        await self._send_video_status(session, "connecting")
+
+    async def _close_video_peer(self, session: BrowserSession) -> None:
+        peer = session.video_peer
+        session.video_peer = None
+        if peer is not None:
+            await peer.close()
+
+    async def _send_video_status(self, session: BrowserSession, state: str) -> None:
+        if session.session_id not in self.sessions:
+            return
+        payload: dict[str, Any] = {
+            "state": state,
+            "codec": "H264",
+            "width": VIDEO_CODED_WIDTH,
+            "height": VIDEO_CODED_HEIGHT,
+            "logicalWidth": LEDS,
+            "logicalHeight": COLUMNS,
+            "packing": VIDEO_PACKING,
+        }
+        if state == "connected" and session.video_peer is not None:
+            try:
+                payload["stats"] = await session.video_peer.stats()
+            except Exception:
+                pass
+        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
+        try:
+            await session.websocket.send(encode_message(
+                VIDEO_STATUS,
+                self._sequence,
+                _json_bytes(payload),
+            ))
+        except Exception:
+            pass
+
     async def _telemetry_loop(self) -> None:
         loop = asyncio.get_running_loop()
         last_snapshot = 0.0
@@ -885,31 +973,11 @@ if (window.opener) {
                 await asyncio.sleep(0.2)
 
     async def _publish_snapshot(self, snapshot: TelemetrySnapshot) -> None:
-        if not self.sessions or snapshot.newest_sequence is None:
+        if not any(session.video_peer is not None for session in self.sessions.values()) or snapshot.newest_sequence is None:
             return
         rgb = await asyncio.to_thread(apa102_to_rgb, snapshot.apa102)
-        compressed = await asyncio.to_thread(zlib.compress, rgb, 1)
-        metadata = struct.pack("<HHBBH", COLUMNS, LEDS, FRAME_FORMAT_RGB888, FRAME_CODEC_DEFLATE, 0)
         self._sequence = (self._sequence + 1) & 0xFFFFFFFF
-        frame = encode_message(FRAME_RGB, self._sequence, metadata + compressed)
-        for session in list(self.sessions.values()):
-            if session.frame_queue.full():
-                try:
-                    session.frame_queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-            try:
-                session.frame_queue.put_nowait(frame)
-            except asyncio.QueueFull:
-                pass
-
-    async def _frame_sender(self, session: BrowserSession) -> None:
-        while True:
-            frame = await session.frame_queue.get()
-            transport = getattr(session.websocket, "transport", None)
-            if transport is not None and transport.get_write_buffer_size() > MAX_TRANSPORT_BUFFER:
-                continue
-            await session.websocket.send(frame)
+        await self.video_source.publish(self._sequence, rgb)
 
     async def _lease_loop(self) -> None:
         while True:
@@ -943,7 +1011,17 @@ if (window.opener) {
             "role": session.principal.role,
             "width": COLUMNS,
             "height": LEDS,
-            "frame_codecs": ["deflate-rgb888", "raw-rgb888"],
+            "video": {
+                "transport": "webrtc",
+                "codec": "H264",
+                "width": VIDEO_CODED_WIDTH,
+                "height": VIDEO_CODED_HEIGHT,
+                "logicalWidth": LEDS,
+                "logicalHeight": COLUMNS,
+                "packing": VIDEO_PACKING,
+                "fps": round(1 / SNAPSHOT_INTERVAL_S),
+                "iceServers": ice_server_payload(self.config.ice_servers),
+            },
             "lease_generation": lease.generation if lease and lease.session_id == session.session_id else None,
             "lease_holder": lease.email if lease else None,
         })
@@ -1026,6 +1104,17 @@ def config_from_environment() -> GatewayConfig:
     else:
         access_team_domain = ""
         access_audience = ""
+    ice_json = os.environ.get(
+        "REMOTE_WORKBENCH_ICE_SERVERS_JSON",
+        json.dumps(DEFAULT_ICE_SERVERS),
+    )
+    try:
+        ice_value = json.loads(ice_json)
+        if not isinstance(ice_value, list):
+            raise ValueError("ICE server configuration must be an array")
+        ice_servers = tuple(ice_server_payload(ice_value))
+    except (json.JSONDecodeError, ValueError) as error:
+        raise RuntimeError("REMOTE_WORKBENCH_ICE_SERVERS_JSON is invalid") from error
     return GatewayConfig(
         board=required("REMOTE_WORKBENCH_BOARD"),
         audience=required("REMOTE_WORKBENCH_TICKET_AUDIENCE"),
@@ -1042,6 +1131,7 @@ def config_from_environment() -> GatewayConfig:
         trusted_subject_header=os.environ.get("REMOTE_WORKBENCH_TRUSTED_SUBJECT_HEADER", "X-Remote-Subject").strip(),
         bind_host=os.environ.get("REMOTE_WORKBENCH_BIND", "127.0.0.1"),
         bind_port=int(os.environ.get("REMOTE_WORKBENCH_BIND_PORT", "8765")),
+        ice_servers=ice_servers,
     )
 
 

@@ -41,8 +41,8 @@ import {
 } from "./app-support.js?v=20260717b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260717f";
-import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260720a";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260720g";
+import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260720b";
 
 
 class FailedRuntimeAdapter {
@@ -112,7 +112,9 @@ class BrowserHostApp {
     this.audio = new BrowserAudioHost({
       readProjectFile: (path, encoding = "utf8") => this.readProjectFile(path, encoding),
     });
-    this.force2dFallback = this.readForce2dPreference();
+    // Remote H.264 frames are decoded straight into the WebGL LED texture;
+    // there is intentionally no JS readback path for the 2D renderer.
+    this.force2dFallback = runtime.source === "remote" ? false : this.readForce2dPreference();
     this.invertGamepadY = this.readInvertGamepadYPreference();
     this.rendererProfiling = this.readRendererProfilingPreference();
     this.sceneRendererMode = this.readSceneRendererPreference();
@@ -1073,6 +1075,7 @@ class BrowserHostApp {
   bindDebugControls() {
     if (this.elements.force2dFallback) {
       this.elements.force2dFallback.checked = this.force2dFallback;
+      this.elements.force2dFallback.disabled = this.runtime.source === "remote";
       this.elements.force2dFallback.addEventListener("change", () => {
         this.force2dFallback = Boolean(this.elements.force2dFallback.checked);
         this.writeForce2dPreference(this.force2dFallback);
@@ -2032,14 +2035,16 @@ class BrowserHostApp {
       return !asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength;
     });
     const sceneInput = this.getSceneRenderInput(frame);
+    const videoFrame = frame.povVideoFrame || null;
     const useSceneShader = this.sceneRendererMode === "shader" &&
       !this.force2dFallback &&
+      !videoFrame &&
       !hasPendingVisibleAsset &&
       Boolean(sceneInput) &&
       this.renderer.sceneAvailable;
     const beforePixelsAt = this.rendererProfiling ? performance.now() : 0;
     let ledPixels = null;
-    if (!useSceneShader) {
+    if (!useSceneShader && !videoFrame) {
       if (frame.povFrameRgb instanceof Uint8Array) {
         // Raw polar framebuffer path (Super Ventilagon / Voom): bypass sprite compositing.
         ledPixels = computeLedFramePixelsFromRgb(frame.povFrameRgb);
@@ -2055,17 +2060,22 @@ class BrowserHostApp {
     }
     this.renderCanvasVisibility();
     const beforeRendererAt = this.rendererProfiling ? performance.now() : 0;
-    let composition = useSceneShader ? "shader" : "cpu";
-    let rendered = useSceneShader
-      ? this.renderer.renderScene(sceneInput)
-      : !this.force2dFallback && this.renderer.render(ledPixels);
+    let composition = videoFrame ? "video-h264" : useSceneShader ? "shader" : "cpu";
+    let rendered = videoFrame
+      ? !this.force2dFallback && this.renderer.renderVideoFrame(videoFrame)
+      : useSceneShader
+        ? this.renderer.renderScene(sceneInput)
+        : !this.force2dFallback && this.renderer.render(ledPixels);
+    if (videoFrame && !rendered) {
+      throw new Error("H.264 remote video requires WebGL and a decoded 162x256 RGB-luma frame");
+    }
     if (!rendered && useSceneShader) {
       composition = "cpu";
       ledPixels = computeLedFramePixels(frame, this.assetIndex, this.palette);
       this.lastRenderedLedPixels = ledPixels;
       rendered = !this.force2dFallback && this.renderer.render(ledPixels);
     }
-    if ((!rendered || this.force2dFallback) && this.fallbackRenderer) {
+    if (!videoFrame && (!rendered || this.force2dFallback) && this.fallbackRenderer) {
       this.fallbackRenderer.render(ledPixels || this.lastRenderedLedPixels || computeLedFramePixels(frame, this.assetIndex, this.palette));
     }
     const afterRendererAt = this.rendererProfiling ? performance.now() : 0;
@@ -2088,7 +2098,7 @@ class BrowserHostApp {
   }
 
   getSceneRenderInput(frame) {
-    if (!frame?.sceneBytes || !frame.sceneKind || frame.povFrameRgb instanceof Uint8Array) {
+    if (!frame?.sceneBytes || !frame.sceneKind || frame.povFrameRgb instanceof Uint8Array || frame.povVideoFrame) {
       return null;
     }
     return {
@@ -2541,6 +2551,14 @@ class BrowserHostApp {
         ? `Auto (${Math.round(this.webglResolutionScale * 100)}%)`
         : `${Math.round(this.webglResolutionScale * 100)}%`],
     ];
+    if (frame.videoMetadata) {
+      summary.push(
+        ["Remote Video", `${frame.videoMetadata.codec || "H264"} ${frame.videoMetadata.width}x${frame.videoMetadata.height}`],
+        ["Decoded FPS", this.adapter.videoStats?.framesPerSecond || "--"],
+        ["Video Bytes", formatBytes(this.adapter.videoStats?.bytesReceived)],
+        ["Video Drops", this.adapter.videoStats?.framesDropped ?? "--"],
+      );
+    }
     if (profile) {
       summary.push(
         ["Profile Samples", profile.sampleCount],
@@ -2626,6 +2644,10 @@ class BrowserHostApp {
       spriteCount: Array.isArray(frame.sprites) ? frame.sprites.length : null,
       assetCount: this.assetIndex.size,
       eventCount: Array.isArray(frame.events) ? frame.events.length : null,
+      remoteVideo: frame.videoMetadata ? {
+        ...frame.videoMetadata,
+        stats: this.adapter.videoStats || null,
+      } : null,
       firstSprite: Array.isArray(frame.sprites) && frame.sprites.length ? frame.sprites[0] : null,
       firstAsset: firstAsset ? {
         ...firstAsset,

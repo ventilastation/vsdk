@@ -6,18 +6,25 @@ const VERSION = 1;
 const HEADER_BYTES = 20;
 const TYPES = Object.freeze({
   HELLO: 0x01,
-  FRAME_RGB: 0x02,
   HOST_EVENT: 0x03,
   STATUS: 0x04,
   ERROR: 0x05,
   LEASE: 0x06,
   INPUT: 0x10,
-  FRAME_ACK: 0x11,
   HEARTBEAT: 0x12,
   LEASE_REQUEST: 0x13,
   OPERATOR_COMMAND: 0x14,
+  VIDEO_OFFER: 0x20,
+  VIDEO_ANSWER: 0x21,
+  VIDEO_STATUS: 0x22,
+  VIDEO_STOP: 0x23,
 });
 const INPUT_EXIT_EDGE = 0x01;
+const VIDEO_WIDTH = 162;
+const VIDEO_HEIGHT = 256;
+const VIDEO_LOGICAL_WIDTH = 54;
+const VIDEO_LOGICAL_HEIGHT = 256;
+const VIDEO_PACKING = "rgb-luma-triplet";
 // This free ngrok development domain is allocated to the workbench account.
 // Operators may override it before loading the emulator for a staged endpoint.
 const DEFAULT_GATEWAY = "https://glutinous-hesitancy-symphonic.ngrok-free.dev";
@@ -75,12 +82,32 @@ function decodeJson(data) {
   return JSON.parse(new TextDecoder().decode(data));
 }
 
-async function inflate(data) {
-  if (typeof DecompressionStream !== "function") {
-    throw new Error("This browser cannot decode compressed remote frames");
+function h264CodecPreferences() {
+  const capabilities = globalThis.RTCRtpReceiver?.getCapabilities?.("video");
+  return (capabilities?.codecs || []).filter((codec) => (
+    String(codec.mimeType || "").toLowerCase() === "video/h264"
+  ));
+}
+
+function waitForIceGatheringComplete(peer, timeoutMs = 10000) {
+  if (peer.iceGatheringState === "complete") {
+    return Promise.resolve();
   }
-  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      peer.removeEventListener("icegatheringstatechange", changed);
+      reject(new Error("Timed out gathering WebRTC candidates"));
+    }, timeoutMs);
+    const changed = () => {
+      if (peer.iceGatheringState !== "complete") {
+        return;
+      }
+      window.clearTimeout(timeout);
+      peer.removeEventListener("icegatheringstatechange", changed);
+      resolve();
+    };
+    peer.addEventListener("icegatheringstatechange", changed);
+  });
 }
 
 function takeTicketFromLocation() {
@@ -142,6 +169,17 @@ export class RemoteWorkbenchAdapter {
     this.inputTimer = null;
     this.heartbeatTimer = null;
     this.decodeChain = Promise.resolve();
+    this.videoConfig = null;
+    this.videoPeer = null;
+    this.videoTransceiver = null;
+    this.videoElement = null;
+    this.videoTrack = null;
+    this.videoState = "stopped";
+    this.videoFrameCallbackId = null;
+    this.videoFrameSequence = 0;
+    this.lastVideoTime = -1;
+    this.videoStats = null;
+    this.videoStatsTimer = null;
   }
 
   async init() {
@@ -174,6 +212,7 @@ export class RemoteWorkbenchAdapter {
         this.connected = false;
         this.leaseGeneration = null;
         this.stopTimers();
+        this.stopVideo(false);
         this.emitStatus({ state: "disconnected" });
         if (!opened) {
           reject(new Error("Physical board connection was rejected"));
@@ -191,12 +230,21 @@ export class RemoteWorkbenchAdapter {
     this.stopTimers();
     this.inputTimer = window.setInterval(() => this.sendInput(), 1000 / 30);
     this.heartbeatTimer = window.setInterval(() => this.sendHeartbeat(), 5000);
+    this.videoStatsTimer = window.setInterval(() => void this.collectVideoStats(), 5000);
     this.sendInput();
+    if (this.videoConfig && !this.videoPeer) {
+      try {
+        await this.startVideo(this.videoConfig);
+      } catch (error) {
+        this.emitError(error);
+      }
+    }
   }
 
   async stopLoop() {
     this.stopTimers();
     this.sendInput(true);
+    this.stopVideo(true);
   }
 
   stopTimers() {
@@ -208,11 +256,16 @@ export class RemoteWorkbenchAdapter {
       window.clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    if (this.videoStatsTimer !== null) {
+      window.clearInterval(this.videoStatsTimer);
+      this.videoStatsTimer = null;
+    }
   }
 
   close() {
     this.stopTimers();
     this.sendInput(true);
+    this.stopVideo(true);
     this.socket?.close();
   }
 
@@ -264,6 +317,215 @@ export class RemoteWorkbenchAdapter {
     return () => this.statusListeners.delete(listener);
   }
 
+  ensureVideoElement() {
+    if (this.videoElement) {
+      return this.videoElement;
+    }
+    const video = document.createElement("video");
+    video.muted = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.setAttribute("aria-hidden", "true");
+    video.style.position = "fixed";
+    video.style.left = "-10000px";
+    video.style.top = "0";
+    video.style.width = `${VIDEO_WIDTH}px`;
+    video.style.height = "256px";
+    video.style.pointerEvents = "none";
+    document.body.append(video);
+    this.videoElement = video;
+    return video;
+  }
+
+  async startVideo(config = this.videoConfig) {
+    if (!config || this.videoPeer || !this.connected) {
+      return;
+    }
+    if (config.transport !== "webrtc" || String(config.codec).toUpperCase() !== "H264") {
+      throw new Error("The remote gateway did not offer H.264 WebRTC video");
+    }
+    if (
+      Number(config.width) !== VIDEO_WIDTH
+      || Number(config.height) !== VIDEO_HEIGHT
+      || Number(config.logicalWidth) !== VIDEO_LOGICAL_WIDTH
+      || Number(config.logicalHeight) !== VIDEO_LOGICAL_HEIGHT
+      || config.packing !== VIDEO_PACKING
+    ) {
+      throw new Error("The remote H.264 video has an unsupported RGB packing");
+    }
+    if (typeof RTCPeerConnection !== "function") {
+      throw new Error("This browser does not support WebRTC video");
+    }
+    const h264 = h264CodecPreferences();
+    if (!h264.length) {
+      throw new Error("This browser has no H.264 WebRTC decoder");
+    }
+    this.videoConfig = config;
+    const peer = new RTCPeerConnection({ iceServers: config.iceServers || [] });
+    this.videoPeer = peer;
+    this.videoState = "signaling";
+    const transceiver = peer.addTransceiver("video", { direction: "recvonly" });
+    transceiver.setCodecPreferences(h264);
+    this.videoTransceiver = transceiver;
+    peer.addEventListener("track", (event) => {
+      void this.attachVideoTrack(event.track).catch((error) => this.emitError(error));
+    }, { once: true });
+    peer.addEventListener("connectionstatechange", () => {
+      if (this.videoPeer !== peer) {
+        return;
+      }
+      this.videoState = peer.connectionState;
+      this.emitStatus({ state: "video", video_state: this.videoState, video_codec: "H264" });
+      if (["failed", "closed"].includes(peer.connectionState)) {
+        this.stopVideo(false);
+      }
+    });
+    try {
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      await waitForIceGatheringComplete(peer);
+      this.send(TYPES.VIDEO_OFFER, jsonPayload({
+        type: peer.localDescription.type,
+        sdp: peer.localDescription.sdp,
+      }));
+    } catch (error) {
+      this.stopVideo(false);
+      throw error;
+    }
+  }
+
+  async finishVideo(answer) {
+    const peer = this.videoPeer;
+    if (!peer || answer?.type !== "answer" || typeof answer.sdp !== "string") {
+      throw new Error("Invalid WebRTC video answer");
+    }
+    if (
+      String(answer.codec).toUpperCase() !== "H264"
+      || Number(answer.width) !== VIDEO_WIDTH
+      || Number(answer.height) !== VIDEO_HEIGHT
+      || Number(answer.logicalWidth) !== VIDEO_LOGICAL_WIDTH
+      || Number(answer.logicalHeight) !== VIDEO_LOGICAL_HEIGHT
+      || answer.packing !== VIDEO_PACKING
+    ) {
+      throw new Error("The gateway negotiated an unsupported video format");
+    }
+    await peer.setRemoteDescription({ type: answer.type, sdp: answer.sdp });
+  }
+
+  async attachVideoTrack(track) {
+    if (track.kind !== "video" || !this.videoPeer) {
+      return;
+    }
+    this.videoTrack = track;
+    const video = this.ensureVideoElement();
+    video.srcObject = new MediaStream([track]);
+    await video.play();
+    this.scheduleVideoFrame();
+  }
+
+  scheduleVideoFrame() {
+    const video = this.videoElement;
+    if (!video || !this.videoPeer || this.videoFrameCallbackId !== null) {
+      return;
+    }
+    const emit = (_now, metadata = {}) => {
+      this.videoFrameCallbackId = null;
+      if (!this.videoPeer || !this.videoElement || this.videoElement.readyState < 2) {
+        return;
+      }
+      this.videoFrameSequence = (this.videoFrameSequence + 1) >>> 0;
+      const frame = {
+        frame: Number(metadata.presentedFrames) || this.videoFrameSequence,
+        povVideoFrame: this.videoElement,
+        videoMetadata: {
+          codec: "H264",
+          width: Number(metadata.width) || this.videoElement.videoWidth,
+          height: Number(metadata.height) || this.videoElement.videoHeight,
+          mediaTime: Number(metadata.mediaTime) || this.videoElement.currentTime,
+          processingDuration: Number(metadata.processingDuration) || 0,
+        },
+        events: [],
+        sprites: [],
+        assets: [],
+      };
+      for (const listener of this.frameListeners) {
+        listener(frame);
+      }
+      this.scheduleVideoFrame();
+    };
+    if (typeof video.requestVideoFrameCallback === "function") {
+      this.videoFrameCallbackId = video.requestVideoFrameCallback(emit);
+      return;
+    }
+    this.videoFrameCallbackId = window.requestAnimationFrame((now) => {
+      if (video.currentTime === this.lastVideoTime) {
+        this.videoFrameCallbackId = null;
+        this.scheduleVideoFrame();
+        return;
+      }
+      this.lastVideoTime = video.currentTime;
+      emit(now);
+    });
+  }
+
+  stopVideo(signalGateway = false) {
+    if (signalGateway) {
+      this.send(TYPES.VIDEO_STOP, new Uint8Array());
+    }
+    const video = this.videoElement;
+    if (video && this.videoFrameCallbackId !== null) {
+      if (typeof video.cancelVideoFrameCallback === "function") {
+        video.cancelVideoFrameCallback(this.videoFrameCallbackId);
+      } else {
+        window.cancelAnimationFrame(this.videoFrameCallbackId);
+      }
+    }
+    this.videoFrameCallbackId = null;
+    this.videoTrack = null;
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+    }
+    const peer = this.videoPeer;
+    this.videoPeer = null;
+    this.videoTransceiver = null;
+    peer?.close();
+    this.videoState = "stopped";
+    this.videoStats = null;
+  }
+
+  async collectVideoStats() {
+    const peer = this.videoPeer;
+    if (!peer) {
+      return;
+    }
+    let report;
+    try {
+      report = await peer.getStats();
+    } catch (error) {
+      if (this.videoPeer === peer) {
+        this.emitError(error);
+      }
+      return;
+    }
+    const stats = { codec: "H264", state: peer.connectionState };
+    for (const item of report.values()) {
+      if (item.type === "inbound-rtp" && item.kind === "video") {
+        Object.assign(stats, {
+          bytesReceived: Number(item.bytesReceived) || 0,
+          packetsReceived: Number(item.packetsReceived) || 0,
+          packetsLost: Number(item.packetsLost) || 0,
+          framesDecoded: Number(item.framesDecoded) || 0,
+          framesDropped: Number(item.framesDropped) || 0,
+          framesPerSecond: Number(item.framesPerSecond) || 0,
+          jitter: Number(item.jitter) || 0,
+        });
+      }
+    }
+    this.videoStats = stats;
+    this.emitStatus({ state: "video", video_state: this.videoState, video_stats: stats });
+  }
+
   sendInput(forceNeutral = false) {
     if (this.leaseGeneration === null) {
       return;
@@ -304,7 +566,9 @@ export class RemoteWorkbenchAdapter {
         this.role = status.role || null;
         this.email = status.email || null;
         this.leaseGeneration = status.lease_generation ?? null;
+        this.videoConfig = status.video || null;
         this.emitStatus(status);
+        await this.startVideo(this.videoConfig);
         return;
       }
       if (message.type === TYPES.STATUS || message.type === TYPES.LEASE) {
@@ -324,41 +588,22 @@ export class RemoteWorkbenchAdapter {
         this.emitHostEvent(message);
         return;
       }
-      if (message.type === TYPES.FRAME_RGB) {
-        await this.emitFrame(message);
+      if (message.type === TYPES.VIDEO_ANSWER) {
+        await this.finishVideo(decodeJson(message.payload));
+        return;
+      }
+      if (message.type === TYPES.VIDEO_STATUS) {
+        const status = decodeJson(message.payload);
+        this.videoState = status.state || this.videoState;
+        this.emitStatus({
+          state: "video",
+          video_state: this.videoState,
+          video_codec: status.codec || "H264",
+          video_stats: status.stats || null,
+        });
+        return;
       }
     }).catch((error) => this.emitError(error));
-  }
-
-  async emitFrame(message) {
-    const view = new DataView(message.payload.buffer, message.payload.byteOffset, message.payload.byteLength);
-    if (message.payload.length < 8 || view.getUint16(0, true) !== 256 || view.getUint16(2, true) !== 54 || view.getUint8(4) !== 1) {
-      throw new Error("Unsupported physical-board frame format");
-    }
-    const codec = view.getUint8(5);
-    let rgb = message.payload.slice(8);
-    if (codec === 1) {
-      rgb = await inflate(rgb);
-    } else if (codec !== 0) {
-      throw new Error("Unsupported physical-board frame codec");
-    }
-    if (rgb.length !== 256 * 54 * 3) {
-      throw new Error("Physical-board frame has an invalid RGB length");
-    }
-    const frame = {
-      frame: message.sequence,
-      events: [{ command: "frame_rgb", args: [], data: rgb }],
-      sprites: [],
-      assets: [],
-    };
-    for (const listener of this.frameListeners) {
-      listener(frame);
-    }
-    const ack = new Uint8Array(8);
-    const ackView = new DataView(ack.buffer);
-    ackView.setUint32(0, message.sequence, true);
-    ackView.setUint32(4, 0, true);
-    this.send(TYPES.FRAME_ACK, ack);
   }
 
   emitHostEvent(message) {
@@ -405,4 +650,5 @@ export const REMOTE_PROTOCOL = Object.freeze({
   TYPES,
   encodeMessage,
   decodeMessage,
+  h264CodecPreferences,
 });
