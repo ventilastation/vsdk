@@ -68,13 +68,24 @@ class UnpluggedFrameTests(unittest.TestCase):
         second = stream.next_frame(100.5)
         self.assertIsNotNone(second)
         self.assertNotEqual(first, second)
-        black = stream.next_frame(160.0)
-        self.assertEqual(black, bytes(COLUMNS * LEDS * 3))
+        final = stream.next_frame(160.0)
+        self.assertEqual(final, render_unplugged_frame(from_outermost_led=True))
+        self.assertNotEqual(final, bytes(COLUMNS * LEDS * 3))
         self.assertIsNone(stream.next_frame(160.1))
         self.assertTrue(stream.set_connected(True, 170.0))
         self.assertIsNone(stream.next_frame(170.0))
         self.assertTrue(stream.set_connected(False, 200.0))
         self.assertEqual(stream.next_frame(200.0), first)
+
+    def test_final_message_starts_at_outermost_led(self):
+        frame = render_unplugged_frame(from_outermost_led=True)
+        outermost_led = LEDS - 1
+        self.assertTrue(any(
+            frame[(column * LEDS + outermost_led) * 3:
+                  (column * LEDS + outermost_led) * 3 + 3]
+            == bytes(MESSAGE_COLOR)
+            for column in range(COLUMNS)
+        ))
 
 
 class _FakeSerial:

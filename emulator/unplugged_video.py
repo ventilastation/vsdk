@@ -39,18 +39,24 @@ TINY_FONT = {
 }
 
 
-def render_unplugged_frame(y_offset: int = 0) -> bytes:
+def render_unplugged_frame(
+    y_offset: int = 0,
+    *,
+    from_outermost_led: bool = False,
+) -> bytes:
     """Render the warning in native column-major ``[angle][LED][RGB]`` order."""
     frame = bytearray(COLUMNS * LEDS * 3)
     angle_start = -(len(MESSAGE) * CHAR_STEP) // 2
     # This is native-dialog row zero: the outermost, most legible radial row.
-    row_base_led = LEDS - ROW_STEP + y_offset
+    row_base_led = (
+        LEDS - 1 if from_outermost_led else LEDS - ROW_STEP + y_offset
+    )
     for index, character in enumerate(MESSAGE):
         # Both character order and each glyph's x axis are mirrored exactly as
         # in retro-go's ventilastation_pov.c hardware-confirmed mapping.
         glyph_angle = angle_start + (len(MESSAGE) - 1 - index) * CHAR_STEP
         for row, bits in enumerate(TINY_FONT[character]):
-            led = row_base_led + row
+            led = row_base_led - row if from_outermost_led else row_base_led + row
             if not 0 <= led < LEDS:
                 continue
             for glyph_x in range(GLYPH_WIDTH):
@@ -76,7 +82,7 @@ class UnpluggedFrameStream:
         self.disconnected_at: float | None = None
         self._last_phase: int | None = None
         self._frames = (render_unplugged_frame(0), render_unplugged_frame(-1))
-        self._black_frame = bytes(COLUMNS * LEDS * 3)
+        self._final_frame = render_unplugged_frame(from_outermost_led=True)
 
     def set_connected(self, connected: bool, now: float) -> bool:
         connected = bool(connected)
@@ -92,12 +98,12 @@ class UnpluggedFrameStream:
             return None
         elapsed = max(0.0, now - self.disconnected_at)
         if elapsed >= self.duration_s:
-            # Publish one terminal black frame so existing and later viewers
-            # do not retain a cached warning after its bandwidth window.
+            # Publish one terminal warning at the physical outer edge. The
+            # latest-frame cache keeps it visible without continuing traffic.
             if self._last_phase == -1:
                 return None
             self._last_phase = -1
-            return self._black_frame
+            return self._final_frame
         phase = int(elapsed / self.interval_s)
         if phase == self._last_phase:
             return None

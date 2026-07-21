@@ -111,10 +111,10 @@ native Ventilastation dialogs. The red warning sits in the readable bottom
 wedge near the outer rim and moves one LED inward/outward every 500 ms.
 
 Only two frames per second are published while disconnected. After 60 seconds
-the gateway publishes one black frame and stops producing video frames, so an
-idle unplugged workbench consumes no continuing media bandwidth. Reconnecting
-immediately restores real captures. A later disconnect starts a fresh one
-minute warning window.
+the gateway publishes one final warning starting at the outermost LED and stops
+producing video frames. The cached error stays visible without continuing media
+bandwidth. Reconnecting immediately restores real captures. A later disconnect
+starts a fresh one minute warning window.
 
 Control remains available for end-to-end testing while unplugged: input is
 validated and audited but not claimed as delivered to hardware. A non-neutral
@@ -353,7 +353,8 @@ End-to-end smoke test:
 10. Disconnect or revoke the controller and confirm neutral USB input is
     written immediately.
 11. Unplug USB and confirm the red compact-font warning moves every 500 ms,
-    then goes black and stops sending frames after one minute.
+    then settles at the outermost LED and stops sending new frames after one
+    minute.
 12. Reconnect USB during and after that minute and confirm real capture and
     input resume without restarting any process.
 
