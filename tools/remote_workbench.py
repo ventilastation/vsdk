@@ -73,7 +73,7 @@ def find_serial_port(explicit: str = "auto") -> str:
     if len(matches) == 1:
         return matches[0]
     if not matches:
-        raise RuntimeError("no USB serial board found; reconnect it or pass --serial-port")
+        return "auto"
     raise RuntimeError("multiple USB serial devices found; pass --serial-port: %s" % ", ".join(matches))
 
 
@@ -174,7 +174,11 @@ def setup(args: argparse.Namespace) -> int:
     config_dir = args.config_dir.expanduser().resolve()
     email = validate_email(args.email)
     auth_id = validate_auth_id(args.ngrok_auth_id)
-    serial_port = find_serial_port(args.serial_port)
+    existing_environment = config_dir / "gateway.env"
+    if args.serial_port == "auto" and existing_environment.exists() and not args.force:
+        serial_port = load_environment(existing_environment)["REMOTE_WORKBENCH_SERIAL_PORT"]
+    else:
+        serial_port = find_serial_port(args.serial_port)
     config_dir.mkdir(parents=True, exist_ok=True)
     config_dir.chmod(0o700)
 
@@ -227,9 +231,9 @@ def doctor(config_dir: Path, quiet: bool = False) -> dict[str, str]:
     python = venv_python(config_dir)
     if not python.exists():
         raise RuntimeError("gateway environment is missing; rerun remote-workbench-setup")
-    serial_port = Path(environment["REMOTE_WORKBENCH_SERIAL_PORT"])
-    if not serial_port.exists():
-        raise RuntimeError("USB board is not present at %s" % serial_port)
+    serial_setting = environment["REMOTE_WORKBENCH_SERIAL_PORT"]
+    serial_port = Path(serial_setting)
+    serial_present = serial_setting != "auto" and serial_port.exists()
     if shutil.which("ngrok") is None:
         raise RuntimeError("ngrok is not installed or not on PATH")
     result = subprocess.run(
@@ -243,7 +247,10 @@ def doctor(config_dir: Path, quiet: bool = False) -> dict[str, str]:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "gateway configuration failed")
     if not quiet:
         print("✓ configuration")
-        print("✓ USB board", serial_port)
+        if serial_present:
+            print("✓ USB board", serial_port)
+        else:
+            print("⚠ USB board absent at %s; synthetic display mode will be used" % serial_setting)
         print("✓ gateway dependencies")
         print("✓ ngrok")
     return environment

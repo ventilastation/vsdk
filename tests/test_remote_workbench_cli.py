@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -11,6 +12,10 @@ import remote_workbench as cli  # noqa: E402
 
 
 class RemoteWorkbenchCliTests(unittest.TestCase):
+    def test_absent_serial_device_keeps_auto_detection_enabled(self):
+        with mock.patch.object(cli.glob, "glob", return_value=[]):
+            self.assertEqual(cli.find_serial_port(), "auto")
+
     def test_environment_round_trip(self):
         with tempfile.TemporaryDirectory() as temporary:
             config_dir = Path(temporary) / "private config"

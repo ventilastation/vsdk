@@ -177,6 +177,7 @@ export class RemoteWorkbenchAdapter {
     this.leaseGeneration = null;
     this.role = null;
     this.email = null;
+    this.boardConnected = null;
     this.connected = false;
     this.inputTimer = null;
     this.heartbeatTimer = null;
@@ -577,6 +578,7 @@ export class RemoteWorkbenchAdapter {
         const status = decodeJson(message.payload);
         this.role = status.role || null;
         this.email = status.email || null;
+        this.boardConnected = status.board_connected ?? this.boardConnected;
         this.leaseGeneration = status.lease_generation ?? null;
         this.videoConfig = status.video || null;
         this.emitStatus(status);
@@ -585,9 +587,12 @@ export class RemoteWorkbenchAdapter {
       }
       if (message.type === TYPES.STATUS || message.type === TYPES.LEASE) {
         const status = decodeJson(message.payload);
-        this.leaseGeneration = status.holder && status.holder === this.email
-          ? (status.generation ?? null)
-          : null;
+        this.boardConnected = status.board_connected ?? this.boardConnected;
+        if (message.type === TYPES.LEASE || Object.hasOwn(status, "holder")) {
+          this.leaseGeneration = status.holder && status.holder === this.email
+            ? (status.generation ?? null)
+            : null;
+        }
         this.emitStatus(status);
         return;
       }

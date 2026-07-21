@@ -33,6 +33,11 @@ joystick, and change a menu item. The smoke command passes after observing
 login, connected H.264 video, a control lease, joystick input, and an audio
 command in the gateway audit database.
 
+The USB board is optional at gateway startup. If it is absent, the same smoke
+path uses the synthetic disconnected display described below. `doctor` reports
+a warning instead of failing, and the gateway keeps retrying the configured
+serial device until it appears.
+
 Useful variants:
 
 ```text
@@ -91,6 +96,30 @@ fired.
 When the page becomes hidden, the adapter sends `VIDEO_STOP` and closes the
 peer connection. It renegotiates when the emulator loop resumes. This prevents
 background tabs from consuming video bandwidth.
+
+## USB disconnect fallback
+
+USB serial is hot-pluggable. Startup and runtime I/O failures switch the
+gateway to a synthetic frame source; a reconnect switches it back to the most
+recent real UDP capture without restarting the gateway, tunnel, or browser.
+
+The fallback draws **board unplugged** directly in the native 256-column by
+54-LED polar framebuffer. It uses the MicroPython ROM-selection menu's exact
+4x6 `tinyfont_menu.png` glyphs, three lit columns plus a one-column gap, and
+the same hardware-confirmed mirrored angle/radius placement used by retro-go's
+native Ventilastation dialogs. The red warning sits in the readable bottom
+wedge near the outer rim and moves one LED inward/outward every 500 ms.
+
+Only two frames per second are published while disconnected. After 60 seconds
+the gateway publishes one black frame and stops producing video frames, so an
+idle unplugged workbench consumes no continuing media bandwidth. Reconnecting
+immediately restores real captures. A later disconnect starts a fresh one
+minute warning window.
+
+Control remains available for end-to-end testing while unplugged: input is
+validated and audited but not claimed as delivered to hardware. A non-neutral
+input emits the ROM menu's normal movement sound, allowing the automated smoke
+test to cover video, lease, input, and browser audio without a board.
 
 ## Authentication and authorization
 
@@ -323,6 +352,10 @@ End-to-end smoke test:
    while another session holds the lease.
 10. Disconnect or revoke the controller and confirm neutral USB input is
     written immediately.
+11. Unplug USB and confirm the red compact-font warning moves every 500 ms,
+    then goes black and stops sending frames after one minute.
+12. Reconnect USB during and after that minute and confirm real capture and
+    input resume without restarting any process.
 
 Record only non-secret evidence: endpoint hostname, login result, role, codec,
 ICE candidate type (`host`, `srflx`, or `relay`), decoded FPS, frame count,

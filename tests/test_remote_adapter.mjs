@@ -4,7 +4,7 @@ globalThis.window = { location: { search: "", hash: "", pathname: "/", href: "ht
 globalThis.history = { replaceState() {} };
 globalThis.sessionStorage = { getItem() { return null; }, removeItem() {} };
 
-const { REMOTE_PROTOCOL } = await import(new URL("../web/remote-adapter.js", import.meta.url));
+const { RemoteWorkbenchAdapter, REMOTE_PROTOCOL } = await import(new URL("../web/remote-adapter.js", import.meta.url));
 
 function assert(value, message = "assertion failed") {
   if (!value) {
@@ -67,13 +67,28 @@ function testRejectsUnsafeGateway() {
   window.location.search = "";
 }
 
+async function testBoardStatusDoesNotClearLease() {
+  const adapter = new RemoteWorkbenchAdapter("ticket");
+  adapter.email = "player@example.com";
+  adapter.leaseGeneration = 7;
+  const payload = new TextEncoder().encode(JSON.stringify({
+    state: "board",
+    board_connected: false,
+  }));
+  adapter.receive(REMOTE_PROTOCOL.encodeMessage(REMOTE_PROTOCOL.TYPES.STATUS, 1, payload));
+  await adapter.decodeChain;
+  assert(adapter.boardConnected === false);
+  assert(adapter.leaseGeneration === 7, "board status must not alter the control lease");
+}
+
 for (const test of [
   testRoundTrip,
   testRejectsCorruptLength,
   testSelectsOnlyH264VideoCodecs,
   testSelectsGatewayFromQuery,
   testRejectsUnsafeGateway,
+  testBoardStatusDoesNotClearLease,
 ]) {
-  test();
+  await test();
   console.log("ok", test.name);
 }

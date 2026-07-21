@@ -42,7 +42,7 @@ import {
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260720g";
-import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260721a";
+import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260721b";
 
 
 class FailedRuntimeAdapter {
@@ -546,6 +546,8 @@ class BrowserHostApp {
     if (statusNode) {
       if (status.state === "disconnected") {
         statusNode.textContent = "Board disconnected";
+      } else if (this.adapter.boardConnected === false) {
+        statusNode.textContent = "Synthetic display — board unplugged";
       } else if (this.adapter.leaseGeneration !== null) {
         statusNode.textContent = `Controlling board as ${this.adapter.role}`;
       } else if (status.holder) {

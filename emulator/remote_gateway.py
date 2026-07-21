@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import base64
 from dataclasses import dataclass
+import glob
 from http import HTTPStatus
 import hashlib
 import hmac
@@ -48,6 +49,7 @@ try:  # ``python -m emulator.remote_gateway``
         WebRtcVideoPeer,
         ice_server_payload,
     )
+    from .unplugged_video import UnpluggedFrameStream
 except ImportError:  # direct ``python emulator/remote_gateway.py`` for bench use
     from host_protocol import HostEvent, HostProtocolError, HostProtocolParser
     from workbench_telemetry import (
@@ -66,6 +68,7 @@ except ImportError:  # direct ``python emulator/remote_gateway.py`` for bench us
         WebRtcVideoPeer,
         ice_server_payload,
     )
+    from unplugged_video import UnpluggedFrameStream
 
 
 PROTOCOL_MAGIC = b"VSRW"
@@ -613,54 +616,135 @@ class BrowserSession:
 
 
 class SerialBridge:
-    """One writer plus a parser thread for the workbench USB serial bridge."""
+    """Reconnectable writer/parser for the hot-pluggable USB workbench."""
 
-    def __init__(self, port: str, on_event: Callable[[HostEvent], None], on_error: Callable[[Exception], None]):
+    def __init__(
+        self,
+        port: str,
+        on_event: Callable[[HostEvent], None],
+        on_error: Callable[[Exception], None],
+        on_connection: Callable[[bool], None],
+        serial_factory: Callable[..., Any] | None = None,
+        retry_interval_s: float = 0.5,
+    ):
         self.port = port
         self.on_event = on_event
         self.on_error = on_error
+        self.on_connection = on_connection
+        self.serial_factory = serial_factory
+        self.retry_interval_s = retry_interval_s
         self._serial = None
         self._stop = threading.Event()
+        self._connected = threading.Event()
+        self._reported_connection: bool | None = None
         self._thread: threading.Thread | None = None
         self._write_lock = threading.Lock()
 
+    @property
+    def connected(self) -> bool:
+        return self._connected.is_set()
+
     def start(self) -> None:
-        try:
-            import serial
-        except ImportError as error:
-            raise RuntimeError("pyserial is required for the workbench serial bridge") from error
-        self._serial = serial.Serial(self.port, 115200, timeout=0.1)
+        if self.serial_factory is None:
+            try:
+                import serial
+            except ImportError as error:
+                raise RuntimeError("pyserial is required for the workbench serial bridge") from error
+            self.serial_factory = serial.Serial
+        self._report_connection(False)
         self._thread = threading.Thread(target=self._reader, name="remote-workbench-serial", daemon=True)
         self._thread.start()
 
     def close(self) -> None:
         self._stop.set()
-        if self._serial is not None:
-            self._serial.close()
+        with self._write_lock:
+            connection = self._serial
+            self._serial = None
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
         if self._thread is not None:
             self._thread.join(timeout=1)
 
     def write(self, payload: bytes) -> None:
-        if self._serial is None:
-            raise OSError("workbench serial is not connected")
+        connection = None
+        try:
+            with self._write_lock:
+                connection = self._serial
+                if connection is None:
+                    raise OSError("workbench serial is not connected")
+                connection.write(payload)
+        except Exception as error:
+            if connection is not None:
+                self._disconnect(connection)
+            if isinstance(error, OSError):
+                raise
+            raise OSError("workbench serial write failed") from error
+
+    def _report_connection(self, connected: bool) -> None:
+        if connected:
+            self._connected.set()
+        else:
+            self._connected.clear()
+        if connected != self._reported_connection:
+            self._reported_connection = connected
+            self.on_connection(connected)
+
+    def _disconnect(self, connection: Any) -> None:
         with self._write_lock:
-            self._serial.write(payload)
+            if self._serial is not connection:
+                return
+            self._serial = None
+        try:
+            connection.close()
+        except Exception:
+            pass
+        self._report_connection(False)
 
     def _reader(self) -> None:
         parser = HostProtocolParser()
         while not self._stop.is_set():
+            connection = self._serial
+            if connection is None:
+                try:
+                    assert self.serial_factory is not None
+                    connection = self.serial_factory(self._resolved_port(), 115200, timeout=0.1)
+                except Exception:
+                    self._report_connection(False)
+                    self._stop.wait(self.retry_interval_s)
+                    continue
+                if self._stop.is_set():
+                    connection.close()
+                    break
+                with self._write_lock:
+                    self._serial = connection
+                parser = HostProtocolParser()
+                self._report_connection(True)
             try:
-                data = self._serial.read(1024)
+                data = connection.read(1024)
                 if not data:
                     continue
                 for event in parser.feed(data):
                     self.on_event(event)
-            except (HostProtocolError, OSError, IOError) as error:
+            except HostProtocolError as error:
                 self.on_error(error)
-                if isinstance(error, HostProtocolError):
-                    parser = HostProtocolParser()
-                else:
-                    break
+                parser = HostProtocolParser()
+            except Exception:
+                self._disconnect(connection)
+                self._stop.wait(self.retry_interval_s)
+
+    def _resolved_port(self) -> str:
+        if self.port != "auto":
+            return self.port
+        matches: list[str] = []
+        for pattern in ("/dev/cu.usbmodem*", "/dev/ttyACM*", "/dev/ttyUSB*"):
+            matches.extend(glob.glob(pattern))
+        matches = sorted(set(matches))
+        if len(matches) != 1:
+            raise OSError("waiting for one USB workbench serial device")
+        return matches[0]
 
 
 @dataclass(frozen=True)
@@ -701,7 +785,13 @@ class RemoteGatewayService:
         self.sessions: dict[str, BrowserSession] = {}
         self._sequence = 0
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._serial = SerialBridge(config.serial_port, self._serial_event, self._serial_error)
+        self._unplugged_video = UnpluggedFrameStream()
+        self._serial = SerialBridge(
+            config.serial_port,
+            self._serial_event,
+            self._serial_error,
+            self._serial_connection,
+        )
         self._tasks: list[asyncio.Task[Any]] = []
 
     async def serve_forever(self) -> None:
@@ -712,6 +802,7 @@ class RemoteGatewayService:
         self._loop = asyncio.get_running_loop()
         self.telemetry.setup(timeout=0.2)
         self.telemetry.sock.setblocking(False)
+        self._unplugged_video.set_connected(False, time.monotonic())
         self._serial.start()
         self._tasks = [
             asyncio.create_task(self._telemetry_loop()),
@@ -819,7 +910,7 @@ if (window.opener) {
             if joy1 & 0x80 or joy2 & 0x80 or extra & 0x80 or flags & ~INPUT_EXIT_EDGE:
                 raise ProtocolError("invalid input bits")
             self.core.leases.validate(self.config.board, session.session_id, generation)
-            await asyncio.to_thread(self._serial.write, bytes((0x2A, joy1, joy2, extra)))
+            delivered = await self._write_serial(bytes((0x2A, joy1, joy2, extra)))
             exit_edge = bool(flags & INPUT_EXIT_EDGE)
             input_state = (joy1, joy2, extra, exit_edge)
             if input_state != session.last_audited_input:
@@ -830,8 +921,14 @@ if (window.opener) {
                     "%02x,%02x,%02x,exit=%d" % (joy1, joy2, extra, exit_edge),
                 )
                 session.last_audited_input = input_state
-            if exit_edge and not session.exit_pressed:
-                await asyncio.to_thread(self._serial.write, b"exit\n")
+                if not delivered and any(input_state):
+                    # Make the disconnected smoke path exercise audible host
+                    # events too, using the ROM menu's normal movement sound.
+                    await self._broadcast_host_event(HostEvent(
+                        "sound", ("alecu.vyruss/shoot3",)
+                    ))
+            if delivered and exit_edge and not session.exit_pressed:
+                await self._write_serial(b"exit\n")
             session.exit_pressed = exit_edge
             return
         if message.message_type == VIDEO_OFFER:
@@ -960,10 +1057,14 @@ if (window.opener) {
             now = time.monotonic()
             try:
                 self.telemetry.send_hello_if_due(now)
-                if now - last_snapshot >= SNAPSHOT_INTERVAL_S:
+                if self._serial.connected and now - last_snapshot >= SNAPSHOT_INTERVAL_S:
                     snapshot = self.telemetry.snapshot()
                     await self._publish_snapshot(snapshot)
                     last_snapshot = now
+                elif not self._serial.connected:
+                    synthetic = self._unplugged_video.next_frame(now)
+                    if synthetic is not None:
+                        await self._publish_rgb(synthetic)
                 try:
                     packet = await asyncio.wait_for(loop.sock_recv(self.telemetry.sock, 2048), timeout=0.02)
                 except asyncio.TimeoutError:
@@ -973,11 +1074,26 @@ if (window.opener) {
                 await asyncio.sleep(0.2)
 
     async def _publish_snapshot(self, snapshot: TelemetrySnapshot) -> None:
-        if not any(session.video_peer is not None for session in self.sessions.values()) or snapshot.newest_sequence is None:
+        if (
+            snapshot.newest_sequence is None
+            or not any(session.video_peer is not None for session in self.sessions.values())
+        ):
             return
         rgb = await asyncio.to_thread(apa102_to_rgb, snapshot.apa102)
+        await self._publish_rgb(rgb)
+
+    async def _publish_rgb(self, rgb: bytes) -> None:
         self._sequence = (self._sequence + 1) & 0xFFFFFFFF
         await self.video_source.publish(self._sequence, rgb)
+
+    async def _write_serial(self, payload: bytes) -> bool:
+        if not self._serial.connected:
+            return False
+        try:
+            await asyncio.to_thread(self._serial.write, payload)
+            return True
+        except OSError:
+            return False
 
     async def _lease_loop(self) -> None:
         while True:
@@ -1007,6 +1123,7 @@ if (window.opener) {
         lease = self.core.leases.current(self.config.board)
         payload = _json_bytes({
             "board": self.config.board,
+            "board_connected": self._serial.connected,
             "email": session.principal.email,
             "role": session.principal.role,
             "width": COLUMNS,
@@ -1050,6 +1167,34 @@ if (window.opener) {
     def _serial_error(self, error: Exception) -> None:
         if self._loop is not None:
             asyncio.run_coroutine_threadsafe(self._broadcast_error("serial", str(error)), self._loop)
+
+    def _serial_connection(self, connected: bool) -> None:
+        if self._loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                self._set_serial_connection(connected), self._loop
+            )
+
+    async def _set_serial_connection(self, connected: bool) -> None:
+        now = time.monotonic()
+        if not self._unplugged_video.set_connected(connected, now):
+            return
+        state = "connected" if connected else "unplugged"
+        for email in {session.principal.email for session in self.sessions.values()}:
+            self.store.audit(self.config.board, email, "board_connection", state)
+        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
+        message = encode_message(STATUS, self._sequence, _json_bytes({
+            "state": "board",
+            "board_connected": connected,
+            "synthetic_seconds": 0 if connected else int(self._unplugged_video.duration_s),
+        }))
+        await asyncio.gather(
+            *(session.websocket.send(message) for session in self.sessions.values()),
+            return_exceptions=True,
+        )
+        if connected:
+            # Replace a synthetic warning immediately when a real capture is
+            # already buffered; fresh UDP chunks will continue replacing it.
+            await self._publish_snapshot(self.telemetry.snapshot())
 
     async def _broadcast_host_event(self, event: HostEvent) -> None:
         allowed = {"sound", "music", "musicstop", "notes", "base", "info", "traceback", "achip", "aframe", "amap", "astop"}
