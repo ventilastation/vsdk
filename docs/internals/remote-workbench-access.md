@@ -9,6 +9,43 @@ workbench. It is intended for a remote mobile browser with Google sign-in,
 default-deny board access, high-frame-rate color display, audio host commands,
 and emulated input returned to the board.
 
+## Quick deployment and smoke test
+
+The operator path is three commands. The first run creates an isolated Python
+environment and all private files under `~/.config/vsdk/remote-workbench`; no
+credentials are written into the repository.
+
+```text
+# Once per computer (after installing ngrok and adding its account token):
+make remote-workbench-setup EMAIL=allowed-google-account@example.com
+
+# Terminal 1: start and supervise both the gateway and ngrok:
+make remote-workbench-run
+
+# Terminal 2: print the phone URL and watch the five end-to-end checks:
+make remote-workbench-smoke
+```
+
+`remote-workbench-run` discovers the current ngrok hostname and prints a Pages
+URL containing it as `?gateway=...`; changing tunnels does not require editing
+or redeploying the website. On the phone, sign in, request control, move the
+joystick, and change a menu item. The smoke command passes after observing
+login, connected H.264 video, a control lease, joystick input, and an audio
+command in the gateway audit database.
+
+Useful variants:
+
+```text
+make remote-workbench-doctor
+make remote-workbench-setup EMAIL=user@example.com REMOTE_WORKBENCH_SERIAL=/dev/cu.usbmodem123
+python3 tools/remote_workbench.py smoke --open --timeout 300
+```
+
+Rerunning setup is safe: it reuses existing private configuration. Pass
+`--force` directly to the Python tool only when intentionally regenerating the
+email policy or endpoint settings. Logs live beside the private configuration
+in `~/.config/vsdk/remote-workbench/logs/`.
+
 ## Outcome and constraints
 
 - GitHub Pages hosts the existing static client at
@@ -97,8 +134,8 @@ The gateway ACL is default-deny:
 Manage it locally, never through the public endpoint:
 
 ```text
-python -m emulator.remote_gateway acl grant person@example.com controller --board workbench-1
-python -m emulator.remote_gateway acl revoke person@example.com --board workbench-1
+python -m emulator.remote_gateway acl grant person@example.com controller
+python -m emulator.remote_gateway acl revoke person@example.com
 python -m emulator.remote_gateway sessions list
 ```
 
@@ -208,7 +245,10 @@ this WebRTC change, only small signaling/control/audio messages count against
 ngrok network bandwidth. A TURN relay, if needed, needs a separate bandwidth
 budget.
 
-## Local configuration and operation
+## Manual configuration and operation
+
+The commands in the quick deployment section automate this section. Use the
+manual procedure only for debugging or a customized installation.
 
 Store live secrets in an owner-only directory outside the repository, for
 example `~/.config/vsdk/remote-workbench/`:
@@ -241,10 +281,14 @@ ngrok http 127.0.0.1:8765 \
   --traffic-policy-file ~/.config/vsdk/remote-workbench/ngrok-policy.yml
 ```
 
-The assigned public endpoint is set in `web/remote-adapter.js`. A staging page
-may set `window.VENTILASTATION_REMOTE_GATEWAY` before importing the adapter.
+The generated test link passes the assigned public endpoint in the `gateway`
+query parameter. A custom host page may instead set
+`window.VENTILASTATION_REMOTE_GATEWAY` before importing the adapter.
 
-## Verification plan
+## Detailed verification
+
+`make remote-workbench-smoke` automates the normal acceptance path. The checks
+below remain useful for regression testing and deeper diagnosis.
 
 Automated regression tests:
 

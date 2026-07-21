@@ -49,7 +49,31 @@ function testSelectsOnlyH264VideoCodecs() {
   assert(codecs[0].mimeType === "video/H264");
 }
 
-for (const test of [testRoundTrip, testRejectsCorruptLength, testSelectsOnlyH264VideoCodecs]) {
+function testSelectsGatewayFromQuery() {
+  window.location.search = "?remote=1&gateway=https%3A%2F%2Ffresh-tunnel.example";
+  assert(REMOTE_PROTOCOL.gatewayUrl() === "https://fresh-tunnel.example");
+  window.location.search = "";
+}
+
+function testRejectsUnsafeGateway() {
+  window.location.search = "?gateway=http%3A%2F%2Fpublic.example";
+  let threw = false;
+  try {
+    REMOTE_PROTOCOL.gatewayUrl();
+  } catch (_error) {
+    threw = true;
+  }
+  assert(threw, "a public plaintext gateway must be rejected");
+  window.location.search = "";
+}
+
+for (const test of [
+  testRoundTrip,
+  testRejectsCorruptLength,
+  testSelectsOnlyH264VideoCodecs,
+  testSelectsGatewayFromQuery,
+  testRejectsUnsafeGateway,
+]) {
   test();
   console.log("ok", test.name);
 }

@@ -30,8 +30,20 @@ const VIDEO_PACKING = "rgb-luma-triplet";
 const DEFAULT_GATEWAY = "https://glutinous-hesitancy-symphonic.ngrok-free.dev";
 
 function gatewayUrl() {
-  const configured = window.VENTILASTATION_REMOTE_GATEWAY;
-  return String(configured || DEFAULT_GATEWAY).replace(/\/$/u, "");
+  const queryGateway = new URLSearchParams(window.location.search).get("gateway");
+  const configured = queryGateway || window.VENTILASTATION_REMOTE_GATEWAY || DEFAULT_GATEWAY;
+  let parsed;
+  try {
+    parsed = new URL(String(configured));
+  } catch (_error) {
+    throw new Error("The remote gateway URL is invalid");
+  }
+  const localHttp = parsed.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  const unsafe = parsed.username || parsed.password || parsed.search || parsed.hash;
+  if (unsafe || (parsed.protocol !== "https:" && !localHttp)) {
+    throw new Error("The remote gateway must be an HTTPS origin");
+  }
+  return parsed.origin;
 }
 
 function socketUrl(base) {
@@ -650,5 +662,6 @@ export const REMOTE_PROTOCOL = Object.freeze({
   TYPES,
   encodeMessage,
   decodeMessage,
+  gatewayUrl,
   h264CodecPreferences,
 });

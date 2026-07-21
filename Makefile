@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle vsdk initial-flash flash-recovery voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision base-monitor list-boards register-rotor register-workbench register-base
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision base-monitor list-boards register-rotor register-workbench register-base
 
 PORT ?=
 MAC ?=
@@ -85,7 +85,7 @@ SERIAL_LOCK := $(shell if command -v lockf >/dev/null 2>&1; then echo lockf $(SE
 # single step. Instead, source it once yourself before running make; it
 # stays active for the rest of the shell session. See docs/internals/building.md.
 IDF_SOURCE_HINT := source ../../esp-idf/esp-5.5.2/export.sh
-NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly web-runtime-bundle web-emulator-bundle run-emulator voom-sounds generate-roms build-fs base-monitor
+NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly web-runtime-bundle web-emulator-bundle remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs base-monitor
 IDF_GOALS := $(filter-out $(NO_IDF_TARGETS),$(MAKECMDGOALS))
 ifneq ($(strip $(IDF_GOALS)),)
 ifeq ($(strip $(IDF_PATH)),)
@@ -147,6 +147,25 @@ web-runtime-bundle:
 
 web-emulator-bundle:
 	./tools/build-web-emulator-bundle.sh
+
+# Remote workbench operator path. Setup is the only command needing options;
+# run and smoke reuse the private config under ~/.config/vsdk/remote-workbench.
+EMAIL ?=
+REMOTE_WORKBENCH_SERIAL ?= auto
+REMOTE_WORKBENCH_HOST ?= 192.168.1.100
+
+remote-workbench-setup:
+	@if [ -z "$(EMAIL)" ]; then echo "Set EMAIL=you@example.com" >&2; exit 2; fi
+	python3 ./tools/remote_workbench.py setup --email "$(EMAIL)" --serial-port "$(REMOTE_WORKBENCH_SERIAL)" --telemetry-host "$(REMOTE_WORKBENCH_HOST)"
+
+remote-workbench-doctor:
+	python3 ./tools/remote_workbench.py doctor
+
+remote-workbench-run:
+	python3 ./tools/remote_workbench.py run
+
+remote-workbench-smoke:
+	python3 ./tools/remote_workbench.py smoke
 
 vsdk:
 	$(MAKE) -C "$(MICROPYTHON_PORT_DIR)" V=1 BOARD="$(VSDK_BOARD)" BOARD_DIR="$(VSDK_BOARD_DIR)" BOARD_VARIANT="$(VSDK_BOARD_VARIANT)" USER_C_MODULES="$(VSDK_MODULES)" FROZEN_MANIFEST="$(VSDK_FROZEN_MANIFEST)" all
