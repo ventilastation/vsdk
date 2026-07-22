@@ -25,9 +25,9 @@ const VIDEO_HEIGHT = 256;
 const VIDEO_LOGICAL_WIDTH = 54;
 const VIDEO_LOGICAL_HEIGHT = 256;
 const VIDEO_PACKING = "rgb-luma-triplet";
-// This free ngrok development domain is allocated to the workbench account.
+// The stable gateway terminates Google OAuth and forwards signaling over FRP.
 // Operators may override it before loading the emulator for a staged endpoint.
-const DEFAULT_GATEWAY = "https://glutinous-hesitancy-symphonic.ngrok-free.dev";
+const DEFAULT_GATEWAY = "https://ventilastation-board.protocultura.net";
 
 function gatewayUrl() {
   const queryGateway = new URLSearchParams(window.location.search).get("gateway");

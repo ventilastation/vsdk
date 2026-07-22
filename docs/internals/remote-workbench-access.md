@@ -11,27 +11,32 @@ and emulated input returned to the board.
 
 ## Quick deployment and smoke test
 
-The operator path is three commands. The first run creates an isolated Python
-environment and all private files under `~/.config/vsdk/remote-workbench`; no
-credentials are written into the repository.
+The day-to-day operator path is two commands. Private configuration and tunnel
+credentials stay under `~/.config/vsdk/remote-workbench`; nothing secret is
+written into the repository.
 
 ```text
-# Once per computer (after installing ngrok and adding its account token):
-make remote-workbench-setup EMAIL=allowed-google-account@example.com
-
-# Terminal 1: start and supervise both the gateway and ngrok:
+# Terminal 1: start and supervise both the gateway and FRP tunnel:
 make remote-workbench-run
 
 # Terminal 2: print the phone URL and watch the five end-to-end checks:
 make remote-workbench-smoke
 ```
 
-`remote-workbench-run` discovers the current ngrok hostname and prints a Pages
-URL containing it as `?gateway=...`; changing tunnels does not require editing
-or redeploying the website. On the phone, sign in, request control, move the
+`remote-workbench-run` auto-selects FRP when `frpc.toml` and `bin/frpc` exist,
+otherwise it falls back to ngrok. The deployed FRP path uses the stable gateway
+`https://ventilastation-board.protocultura.net`; the Pages emulator therefore
+needs only `?remote=1`. On the phone, sign in, request control, move the
 joystick, and change a menu item. The smoke command passes after observing
 login, connected H.264 video, a control lease, joystick input, and an audio
 command in the gateway audit database.
+
+One-time setup on a new workbench computer is:
+
+```text
+make remote-workbench-setup EMAIL=allowed-google-account@example.com
+# Copy the private frpc.toml, frp.token and bin/frpc into the printed config dir.
+```
 
 The USB board is optional at gateway startup. If it is absent, the same smoke
 path uses the synthetic disconnected display described below. `doctor` reports
@@ -44,6 +49,7 @@ Useful variants:
 make remote-workbench-doctor
 make remote-workbench-setup EMAIL=user@example.com REMOTE_WORKBENCH_SERIAL=/dev/cu.usbmodem123
 python3 tools/remote_workbench.py smoke --open --timeout 300
+python3 tools/remote_workbench.py run --transport ngrok  # emergency fallback
 ```
 
 Rerunning setup is safe: it reuses existing private configuration. Pass
@@ -57,12 +63,13 @@ in `~/.config/vsdk/remote-workbench/logs/`.
   `https://ventilastation.protocultura.net/emulator/?remote=1`.
 - The workbench gateway owns USB serial and is the sole UDP telemetry client
   for the board on port 5005.
-- ngrok exposes only the loopback gateway on `127.0.0.1:8765`. It carries
-  Google authentication, ticket exchange, WebRTC signaling, input, leases,
-  status, and audio commands.
+- A small Google Cloud VPS terminates HTTPS and Google OAuth. FRP exposes only
+  the loopback gateway on `127.0.0.1:8765` through an authenticated TLS tunnel.
+  It carries ticket exchange, WebRTC signaling, input, leases, status, and
+  audio commands.
 - Display media uses a peer-to-peer WebRTC H.264 track. It does not traverse
-  ngrok when a direct ICE candidate pair succeeds, which removes the old frame
-  stream from the ngrok bandwidth allowance.
+  the VPS tunnel when a direct ICE candidate pair succeeds, which keeps the
+  high-volume frame stream off the relay.
 - If direct ICE fails, a configured TURN server relays media. That consumes
   TURN bandwidth, not ngrok bandwidth.
 - The local emulator remains available without sign-in. Authentication is
@@ -74,8 +81,8 @@ in `~/.config/vsdk/remote-workbench/logs/`.
 GitHub Pages emulator (phone or desktop)
        | HTTPS/WSS: login, ticket, SDP, input, audio, status
        v
-ngrok edge: Google OAuth + email allowlist + identity header
-       | loopback-only tunnel
+Google Cloud VPS: Caddy TLS + oauth2-proxy Google login
+       | authenticated FRP tunnel to a loopback-only service
        v
 remote_gateway.py (127.0.0.1:8765) ---- USB serial ---- physical DUT
        |                                      ^
@@ -127,8 +134,8 @@ Authentication is deliberately separate from media transport:
 
 1. The visitor selects **Connect physical board**. The static client opens
    `<gateway>/auth/start` in a popup.
-2. ngrok performs Google OAuth and applies its email allowlist before the
-   request reaches the workbench.
+2. oauth2-proxy on the VPS performs Google OAuth and applies its email
+   allowlist before the request reaches the workbench.
 3. The edge removes caller-supplied identity headers and injects the verified
    Google email as `X-Remote-Email`.
 4. The loopback gateway checks its local board ACL and mints a signed,
@@ -168,9 +175,9 @@ python -m emulator.remote_gateway acl revoke person@example.com
 python -m emulator.remote_gateway sessions list
 ```
 
-Removing an email from the ngrok allowlist blocks future login. Revoking the
-local ACL is authoritative for existing sessions: the lease loop notices the
-role change, closes the socket, and neutralizes input.
+Removing an email from oauth2-proxy's allowlist blocks future login. Revoking
+the local ACL is authoritative for existing sessions: the lease loop notices
+the role change, closes the socket, and neutralizes input.
 
 ## Video format and color fidelity
 

@@ -58,6 +58,31 @@ class RemoteWorkbenchCliTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cli.validate_auth_id("unsafe value")
 
+    def test_auto_transport_prefers_configured_frp(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_dir = Path(temporary)
+            (config_dir / "bin").mkdir()
+            (config_dir / "frpc.toml").touch()
+            (config_dir / "bin" / "frpc").touch()
+            self.assertEqual(cli.select_transport(config_dir), "frp")
+
+    def test_auto_transport_falls_back_to_ngrok(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            self.assertEqual(cli.select_transport(Path(temporary)), "ngrok")
+
+    def test_ngrok_discovery_reports_missing_endpoint(self):
+        with self.assertRaisesRegex(RuntimeError, "ngrok did not publish"):
+            cli.discover_ngrok_url(timeout=0)
+
+    def test_public_gateway_requires_an_https_origin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_dir = Path(temporary)
+            self.assertEqual(cli.public_gateway_url(config_dir), cli.DEFAULT_RELAY_GATEWAY)
+            with self.assertRaises(ValueError):
+                cli.public_gateway_url(config_dir, "http://relay.example")
+            with self.assertRaises(ValueError):
+                cli.public_gateway_url(config_dir, "https://relay.example/path")
+
 
 if __name__ == "__main__":
     unittest.main()

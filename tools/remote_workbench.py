@@ -18,7 +18,7 @@ import sys
 import time
 from typing import Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener, urlopen
 import venv
 import webbrowser
@@ -26,6 +26,7 @@ import webbrowser
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ORIGIN = "https://ventilastation.protocultura.net"
+DEFAULT_RELAY_GATEWAY = "https://ventilastation-board.protocultura.net"
 DEFAULT_TELEMETRY_HOST = "192.168.1.100"
 DEFAULT_NGROK_AUTH_ID = "vsdk-remote-workbench"
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$")
@@ -216,14 +217,30 @@ def setup(args: argparse.Namespace) -> int:
     return 0
 
 
-def doctor(config_dir: Path, quiet: bool = False) -> dict[str, str]:
+def select_transport(config_dir: Path, requested: str = "auto") -> str:
+    if requested != "auto":
+        return requested
+    if (config_dir / "frpc.toml").exists() and (config_dir / "bin" / "frpc").exists():
+        return "frp"
+    return "ngrok"
+
+
+def public_gateway_url(config_dir: Path, explicit: str | None = None) -> str:
+    gateway = explicit or os.environ.get("REMOTE_WORKBENCH_PUBLIC_GATEWAY") or DEFAULT_RELAY_GATEWAY
+    parsed = urlsplit(gateway)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("public gateway must be an HTTPS origin")
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise ValueError("public gateway must not include a path, query, or fragment")
+    return gateway.rstrip("/")
+
+
+def doctor(config_dir: Path, quiet: bool = False, transport: str = "auto") -> dict[str, str]:
     config_dir = config_dir.expanduser().resolve()
     env_path = config_dir / "gateway.env"
     if not env_path.exists():
         raise RuntimeError("configuration is missing; run make remote-workbench-setup EMAIL=you@example.com")
-    policy_path = config_dir / "ngrok-policy.yml"
-    if not policy_path.exists():
-        raise RuntimeError("ngrok policy is missing; rerun remote-workbench-setup")
+    transport = select_transport(config_dir, transport)
     environment = process_environment(config_dir)
     missing = [name for name in REQUIRED_ENV if not environment.get(name)]
     if missing:
@@ -234,8 +251,16 @@ def doctor(config_dir: Path, quiet: bool = False) -> dict[str, str]:
     serial_setting = environment["REMOTE_WORKBENCH_SERIAL_PORT"]
     serial_port = Path(serial_setting)
     serial_present = serial_setting != "auto" and serial_port.exists()
-    if shutil.which("ngrok") is None:
-        raise RuntimeError("ngrok is not installed or not on PATH")
+    if transport == "frp":
+        if not (config_dir / "frpc.toml").exists():
+            raise RuntimeError("FRP client configuration is missing: %s" % (config_dir / "frpc.toml"))
+        if not (config_dir / "bin" / "frpc").exists():
+            raise RuntimeError("FRP client binary is missing: %s" % (config_dir / "bin" / "frpc"))
+    else:
+        if not (config_dir / "ngrok-policy.yml").exists():
+            raise RuntimeError("ngrok policy is missing; rerun remote-workbench-setup")
+        if shutil.which("ngrok") is None:
+            raise RuntimeError("ngrok is not installed or not on PATH")
     result = subprocess.run(
         [str(python), "-m", "emulator.remote_gateway", "serve", "--check-config"],
         cwd=ROOT,
@@ -252,12 +277,12 @@ def doctor(config_dir: Path, quiet: bool = False) -> dict[str, str]:
         else:
             print("⚠ USB board absent at %s; synthetic display mode will be used" % serial_setting)
         print("✓ gateway dependencies")
-        print("✓ ngrok")
+        print("✓ %s transport" % transport.upper())
     return environment
 
 
 def doctor_command(args: argparse.Namespace) -> int:
-    doctor(args.config_dir)
+    doctor(args.config_dir, transport=args.transport)
     return 0
 
 
@@ -321,15 +346,16 @@ def _stop_process(process: subprocess.Popen) -> None:
 
 def supervise(args: argparse.Namespace) -> int:
     config_dir = args.config_dir.expanduser().resolve()
-    environment = doctor(config_dir)
+    transport = select_transport(config_dir, args.transport)
+    environment = doctor(config_dir, transport=transport)
     python = venv_python(config_dir)
     bind_port = environment.get("REMOTE_WORKBENCH_BIND_PORT", "8765")
     logs = config_dir / "logs"
     logs.mkdir(exist_ok=True)
     gateway_log_path = logs / "gateway.log"
-    ngrok_log_path = logs / "ngrok.log"
+    transport_log_path = logs / ("frpc.log" if transport == "frp" else "ngrok.log")
     gateway_log = gateway_log_path.open("ab", buffering=0)
-    ngrok_log = ngrok_log_path.open("ab", buffering=0)
+    transport_log = transport_log_path.open("ab", buffering=0)
     gateway = subprocess.Popen(
         [str(python), "-m", "emulator.remote_gateway", "serve"],
         cwd=ROOT,
@@ -337,20 +363,30 @@ def supervise(args: argparse.Namespace) -> int:
         stdout=gateway_log,
         stderr=subprocess.STDOUT,
     )
-    ngrok_command = [
-        "ngrok", "http", "127.0.0.1:%s" % bind_port,
-        "--traffic-policy-file", str(config_dir / "ngrok-policy.yml"),
-    ]
-    if args.ngrok_config:
-        ngrok_command.extend(["--config", str(args.ngrok_config.expanduser())])
-    ngrok = subprocess.Popen(ngrok_command, stdout=ngrok_log, stderr=subprocess.STDOUT)
+    if transport == "frp":
+        transport_command = [str(config_dir / "bin" / "frpc"), "-c", str(config_dir / "frpc.toml")]
+    else:
+        transport_command = [
+            "ngrok", "http", "127.0.0.1:%s" % bind_port,
+            "--traffic-policy-file", str(config_dir / "ngrok-policy.yml"),
+        ]
+        if args.ngrok_config:
+            transport_command.extend(["--config", str(args.ngrok_config.expanduser())])
+    transport_process = subprocess.Popen(
+        transport_command, stdout=transport_log, stderr=subprocess.STDOUT,
+    )
     try:
-        gateway_url = discover_ngrok_url()
+        gateway_url = (
+            public_gateway_url(config_dir, args.gateway)
+            if transport == "frp"
+            else discover_ngrok_url()
+        )
         print("\nServices are running.")
         print("Gateway:", gateway_url)
         print("Open this on the test phone/computer:")
         print(emulator_url(gateway_url, environment["REMOTE_WORKBENCH_ALLOWED_ORIGINS"].split(",")[0]))
-        print("\nLogs:", gateway_log_path, "and", ngrok_log_path)
+        print("Transport:", transport.upper())
+        print("\nLogs:", gateway_log_path, "and", transport_log_path)
         warning = tunnel_warning(gateway_url)
         if warning:
             print("WARNING:", warning, file=sys.stderr)
@@ -358,7 +394,7 @@ def supervise(args: argparse.Namespace) -> int:
         while True:
             for name, process, path in (
                 ("gateway", gateway, gateway_log_path),
-                ("ngrok", ngrok, ngrok_log_path),
+                (transport, transport_process, transport_log_path),
             ):
                 code = process.poll()
                 if code is not None:
@@ -368,10 +404,10 @@ def supervise(args: argparse.Namespace) -> int:
         print("\nStopping remote workbench...")
         return 0
     finally:
-        _stop_process(ngrok)
+        _stop_process(transport_process)
         _stop_process(gateway)
         gateway_log.close()
-        ngrok_log.close()
+        transport_log.close()
 
 
 MILESTONES = (
@@ -401,7 +437,12 @@ def smoke(args: argparse.Namespace) -> int:
     state_path = Path(environment["REMOTE_WORKBENCH_STATE_DB"])
     if not state_path.exists():
         raise RuntimeError("gateway state database does not exist; start remote-workbench-run first")
-    gateway = args.gateway.rstrip("/") if args.gateway else discover_ngrok_url(timeout=2)
+    if args.gateway:
+        gateway = public_gateway_url(config_dir, args.gateway)
+    elif select_transport(config_dir) == "frp":
+        gateway = public_gateway_url(config_dir)
+    else:
+        gateway = discover_ngrok_url(timeout=2)
     url = emulator_url(gateway, environment["REMOTE_WORKBENCH_ALLOWED_ORIGINS"].split(",")[0])
     warning = tunnel_warning(gateway)
     if warning:
@@ -455,10 +496,13 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--skip-install", action="store_true", help=argparse.SUPPRESS)
     setup_parser.set_defaults(handler=setup)
 
-    doctor_parser = subparsers.add_parser("doctor", help="check USB, config, dependencies, and ngrok")
+    doctor_parser = subparsers.add_parser("doctor", help="check USB, config, dependencies, and tunnel")
+    doctor_parser.add_argument("--transport", choices=("auto", "frp", "ngrok"), default="auto")
     doctor_parser.set_defaults(handler=doctor_command)
 
-    run_parser = subparsers.add_parser("run", help="run and supervise the gateway plus ngrok")
+    run_parser = subparsers.add_parser("run", help="run and supervise the gateway plus its tunnel")
+    run_parser.add_argument("--transport", choices=("auto", "frp", "ngrok"), default="auto")
+    run_parser.add_argument("--gateway", help="stable HTTPS gateway when using FRP")
     run_parser.add_argument("--ngrok-config", type=Path)
     run_parser.set_defaults(handler=supervise)
 
