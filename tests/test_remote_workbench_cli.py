@@ -83,6 +83,15 @@ class RemoteWorkbenchCliTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 cli.public_gateway_url(config_dir, "https://relay.example/path")
 
+    def test_frpc_config_uses_a_separate_token_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_dir = Path(temporary)
+            rendered = cli.render_frpc_config(config_dir, "2001:db8::1", 7000, 18765)
+            self.assertIn('serverAddr = "2001:db8::1"', rendered)
+            self.assertIn('tokenSource.type = "file"', rendered)
+            self.assertIn(str(config_dir / "frp.token"), rendered)
+            self.assertNotIn("secret-token", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

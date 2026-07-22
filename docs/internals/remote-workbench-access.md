@@ -31,12 +31,18 @@ joystick, and change a menu item. The smoke command passes after observing
 login, connected H.264 video, a control lease, joystick input, and an audio
 command in the gateway audit database.
 
-One-time setup on a new workbench computer is:
+One-time setup on a new macOS or Linux workbench computer is:
 
 ```text
-make remote-workbench-setup EMAIL=allowed-google-account@example.com
-# Copy the private frpc.toml, frp.token and bin/frpc into the printed config dir.
+make remote-workbench-install EMAIL=allowed-google-account@example.com
+# Paste the private FRP relay token when prompted.
 ```
+
+The installer creates the private config and Python environment, grants the
+email controller access, auto-detects USB, downloads the pinned FRP client, and
+configures the stable relay. Only one computer can claim the shared
+`workbench-gateway` proxy at a time; stop the old runner before starting a new
+one.
 
 The USB board is optional at gateway startup. If it is absent, the same smoke
 path uses the synthetic disconnected display described below. `doctor` reports

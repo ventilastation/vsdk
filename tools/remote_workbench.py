@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+from io import BytesIO
 import glob
+import getpass
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import secrets
 import shlex
@@ -15,6 +18,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tarfile
 import time
 from typing import Iterable
 from urllib.error import HTTPError, URLError
@@ -27,6 +31,10 @@ import webbrowser
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ORIGIN = "https://ventilastation.protocultura.net"
 DEFAULT_RELAY_GATEWAY = "https://ventilastation-board.protocultura.net"
+DEFAULT_FRP_SERVER = "2600:1900:4021:40d:0:1::"
+DEFAULT_FRP_PORT = 7000
+DEFAULT_FRP_REMOTE_PORT = 18765
+FRP_VERSION = "0.69.0"
 DEFAULT_TELEMETRY_HOST = "192.168.1.100"
 DEFAULT_NGROK_AUTH_ID = "vsdk-remote-workbench"
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$")
@@ -88,6 +96,16 @@ def _write_private(path: Path, content: str, overwrite: bool = False) -> None:
     temporary.replace(path)
 
 
+def _write_private_bytes(path: Path, content: bytes, overwrite: bool = False) -> None:
+    if path.exists() and not overwrite:
+        raise FileExistsError("%s already exists (use --force to replace it)" % path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_bytes(content)
+    temporary.chmod(0o700)
+    temporary.replace(path)
+
+
 def _env_line(name: str, value: str | Path | int) -> str:
     return "export %s=%s" % (name, shlex.quote(str(value)))
 
@@ -139,6 +157,63 @@ on_http_request:
           headers:
             X-Remote-Email: "${actions.ngrok.oauth.identity.email}"
 """ % (auth_id, email)
+
+
+def render_frpc_config(config_dir: Path, server: str, server_port: int, remote_port: int) -> str:
+    return """serverAddr = %s
+serverPort = %d
+
+[auth]
+method = "token"
+tokenSource.type = "file"
+tokenSource.file.path = %s
+
+[transport.tls]
+enable = true
+
+[[proxies]]
+name = "workbench-gateway"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8765
+remotePort = %d
+""" % (
+        json.dumps(server),
+        server_port,
+        json.dumps(str(config_dir / "frp.token")),
+        remote_port,
+    )
+
+
+def frpc_release_target() -> tuple[str, str]:
+    operating_system = {"Darwin": "darwin", "Linux": "linux"}.get(platform.system())
+    architecture = {
+        "x86_64": "amd64",
+        "AMD64": "amd64",
+        "arm64": "arm64",
+        "aarch64": "arm64",
+    }.get(platform.machine())
+    if not operating_system or not architecture:
+        raise RuntimeError("automatic FRP installation supports macOS/Linux on x86_64 or arm64")
+    return operating_system, architecture
+
+
+def download_frpc() -> bytes:
+    operating_system, architecture = frpc_release_target()
+    archive_root = "frp_%s_%s_%s" % (FRP_VERSION, operating_system, architecture)
+    filename = archive_root + ".tar.gz"
+    url = "https://github.com/fatedier/frp/releases/download/v%s/%s" % (FRP_VERSION, filename)
+    print("Downloading", url)
+    with urlopen(url, timeout=60) as response:
+        archive_bytes = response.read(64 * 1024 * 1024)
+    with tarfile.open(fileobj=BytesIO(archive_bytes), mode="r:gz") as archive:
+        member = archive.getmember(archive_root + "/frpc")
+        if not member.isfile() or member.size <= 0 or member.size > 64 * 1024 * 1024:
+            raise RuntimeError("FRP release contains an invalid client binary")
+        extracted = archive.extractfile(member)
+        if extracted is None:
+            raise RuntimeError("FRP release is missing its client binary")
+        return extracted.read()
 
 
 def load_environment(path: Path) -> dict[str, str]:
@@ -211,9 +286,53 @@ def setup(args: argparse.Namespace) -> int:
             "acl", "grant", email, "controller",
         ], cwd=ROOT, env=environment)
 
-    print("\nRemote workbench configured.")
-    print("Next: ngrok config add-authtoken <token>")
-    print("Then: make remote-workbench-run")
+    if not getattr(args, "quiet_next", False):
+        print("\nRemote workbench configured.")
+        print("Next: ngrok config add-authtoken <token>")
+        print("Then: make remote-workbench-run")
+    return 0
+
+
+def setup_frp(args: argparse.Namespace) -> int:
+    args.ngrok_auth_id = DEFAULT_NGROK_AUTH_ID
+    args.quiet_next = True
+    setup(args)
+    config_dir = args.config_dir.expanduser().resolve()
+    token_path = config_dir / "frp.token"
+    binary_path = config_dir / "bin" / "frpc"
+    config_path = config_dir / "frpc.toml"
+
+    if args.frp_token_file:
+        token = args.frp_token_file.expanduser().read_text(encoding="utf-8").strip()
+    elif token_path.exists() and not args.force:
+        token = ""
+        print("Reusing", token_path)
+    else:
+        token = getpass.getpass("FRP relay token: ").strip()
+    if token:
+        if len(token) < 32 or any(character.isspace() for character in token):
+            raise ValueError("FRP relay token is invalid")
+        _write_private(token_path, token + "\n", overwrite=args.force)
+    elif not token_path.exists():
+        raise ValueError("FRP relay token is required")
+
+    if binary_path.exists() and not args.force:
+        print("Reusing", binary_path)
+    else:
+        _write_private_bytes(binary_path, download_frpc(), overwrite=args.force)
+    frpc_config = render_frpc_config(
+        config_dir,
+        args.frp_server,
+        args.frp_server_port,
+        args.frp_remote_port,
+    )
+    if config_path.exists() and not args.force:
+        print("Reusing", config_path)
+    else:
+        _write_private(config_path, frpc_config, overwrite=args.force)
+
+    print("\nRemote workbench and FRP are configured.")
+    print("Run: make remote-workbench-run")
     return 0
 
 
@@ -495,6 +614,21 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--force", action="store_true")
     setup_parser.add_argument("--skip-install", action="store_true", help=argparse.SUPPRESS)
     setup_parser.set_defaults(handler=setup)
+
+    frp_setup_parser = subparsers.add_parser(
+        "setup-frp", help="one-command gateway and FRP client installation",
+    )
+    frp_setup_parser.add_argument("--email", required=True)
+    frp_setup_parser.add_argument("--serial-port", default="auto")
+    frp_setup_parser.add_argument("--telemetry-host", default=DEFAULT_TELEMETRY_HOST)
+    frp_setup_parser.add_argument("--origin", default=DEFAULT_ORIGIN)
+    frp_setup_parser.add_argument("--frp-server", default=DEFAULT_FRP_SERVER)
+    frp_setup_parser.add_argument("--frp-server-port", type=int, default=DEFAULT_FRP_PORT)
+    frp_setup_parser.add_argument("--frp-remote-port", type=int, default=DEFAULT_FRP_REMOTE_PORT)
+    frp_setup_parser.add_argument("--frp-token-file", type=Path)
+    frp_setup_parser.add_argument("--force", action="store_true")
+    frp_setup_parser.add_argument("--skip-install", action="store_true", help=argparse.SUPPRESS)
+    frp_setup_parser.set_defaults(handler=setup_frp)
 
     doctor_parser = subparsers.add_parser("doctor", help="check USB, config, dependencies, and tunnel")
     doctor_parser.add_argument("--transport", choices=("auto", "frp", "ngrok"), default="auto")
