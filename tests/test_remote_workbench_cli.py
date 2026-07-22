@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+import argparse
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -29,6 +30,44 @@ class RemoteWorkbenchCliTests(unittest.TestCase):
             self.assertEqual(environment["REMOTE_WORKBENCH_SERIAL_PORT"], "/dev/test board")
             self.assertEqual(environment["REMOTE_WORKBENCH_HOST"], "192.0.2.4")
             self.assertEqual(environment["REMOTE_WORKBENCH_AUTH_MODE"], "trusted-proxy")
+
+    def test_default_telemetry_host_uses_board_mdns_name(self):
+        self.assertEqual(
+            cli.DEFAULT_TELEMETRY_HOST,
+            "ventilastation-workbench.local",
+        )
+
+    def test_setup_migrates_managed_gateway_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_dir = Path(temporary)
+            gateway_environment = config_dir / "gateway.env"
+            gateway_environment.write_text(
+                cli.render_environment(
+                    config_dir,
+                    "/dev/board",
+                    "192.168.1.100",
+                    cli.DEFAULT_ORIGIN,
+                ),
+                encoding="utf-8",
+            )
+            result = cli.setup(argparse.Namespace(
+                config_dir=config_dir,
+                email="player@example.com",
+                ngrok_auth_id=cli.DEFAULT_NGROK_AUTH_ID,
+                serial_port="auto",
+                telemetry_host=cli.DEFAULT_TELEMETRY_HOST,
+                origin=cli.DEFAULT_ORIGIN,
+                force=False,
+                skip_install=True,
+                quiet_next=True,
+            ))
+            self.assertEqual(result, 0)
+            environment = cli.load_environment(gateway_environment)
+            self.assertEqual(environment["REMOTE_WORKBENCH_SERIAL_PORT"], "/dev/board")
+            self.assertEqual(
+                environment["REMOTE_WORKBENCH_HOST"],
+                "ventilastation-workbench.local",
+            )
 
     def test_emulator_url_carries_the_current_tunnel(self):
         url = cli.emulator_url("https://new-tunnel.example/")

@@ -786,6 +786,7 @@ class RemoteGatewayService:
         self._sequence = 0
         self._loop: asyncio.AbstractEventLoop | None = None
         self._unplugged_video = UnpluggedFrameStream()
+        self._last_telemetry_at: float | None = None
         self._serial = SerialBridge(
             config.serial_port,
             self._serial_event,
@@ -1093,7 +1094,7 @@ if (window.opener) {
                 self.telemetry.send_hello_if_due(now)
                 if self._serial.connected and now - last_snapshot >= SNAPSHOT_INTERVAL_S:
                     snapshot = self.telemetry.snapshot()
-                    await self._publish_snapshot(snapshot)
+                    await self._publish_capture_or_fallback(snapshot, now)
                     last_snapshot = now
                 elif not self._serial.connected:
                     synthetic = self._unplugged_video.next_frame(now)
@@ -1103,9 +1104,31 @@ if (window.opener) {
                     packet = await asyncio.wait_for(loop.sock_recv(self.telemetry.sock, 2048), timeout=0.02)
                 except asyncio.TimeoutError:
                     continue
-                self.telemetry.receiver.ingest(packet)
+                if self.telemetry.receiver.ingest(packet):
+                    self._last_telemetry_at = time.monotonic()
             except (OSError, RuntimeError):
                 await asyncio.sleep(0.2)
+
+    def _telemetry_is_live(self, snapshot: TelemetrySnapshot, now: float) -> bool:
+        return (
+            snapshot.newest_sequence is not None
+            and self._last_telemetry_at is not None
+            and now - self._last_telemetry_at <= 2.0
+        )
+
+    async def _publish_capture_or_fallback(
+        self, snapshot: TelemetrySnapshot, now: float
+    ) -> None:
+        if self._telemetry_is_live(snapshot, now):
+            # USB opening only proves that the command channel is present.
+            # A fresh UDP packet proves that the capture channel is live.
+            self._unplugged_video.set_connected(True, now)
+            await self._publish_snapshot(snapshot)
+            return
+        self._unplugged_video.set_connected(False, now)
+        synthetic = self._unplugged_video.next_frame(now)
+        if synthetic is not None:
+            await self._publish_rgb(synthetic)
 
     async def _publish_snapshot(self, snapshot: TelemetrySnapshot) -> None:
         if (
@@ -1210,8 +1233,15 @@ if (window.opener) {
 
     async def _set_serial_connection(self, connected: bool) -> None:
         now = time.monotonic()
-        if not self._unplugged_video.set_connected(connected, now):
-            return
+        snapshot: TelemetrySnapshot | None = None
+        if connected:
+            # Do not clear the fallback merely because the serial device
+            # opened. The board display arrives over a separate UDP channel.
+            snapshot = self.telemetry.snapshot()
+            if self._telemetry_is_live(snapshot, now):
+                self._unplugged_video.set_connected(True, now)
+        else:
+            self._unplugged_video.set_connected(False, now)
         state = "connected" if connected else "unplugged"
         for email in {session.principal.email for session in self.sessions.values()}:
             self.store.audit(self.config.board, email, "board_connection", state)
@@ -1219,16 +1249,19 @@ if (window.opener) {
         message = encode_message(STATUS, self._sequence, _json_bytes({
             "state": "board",
             "board_connected": connected,
-            "synthetic_seconds": 0 if connected else int(self._unplugged_video.duration_s),
+            "synthetic_seconds": (
+                0 if self._unplugged_video.connected
+                else int(self._unplugged_video.duration_s)
+            ),
         }))
         await asyncio.gather(
             *(session.websocket.send(message) for session in self.sessions.values()),
             return_exceptions=True,
         )
-        if connected:
-            # Replace a synthetic warning immediately when a real capture is
-            # already buffered; fresh UDP chunks will continue replacing it.
-            await self._publish_snapshot(self.telemetry.snapshot())
+        if snapshot is not None and self._telemetry_is_live(snapshot, now):
+            # Replace the warning immediately when a real capture is already
+            # buffered; fresh UDP chunks will continue replacing it.
+            await self._publish_snapshot(snapshot)
 
     async def _broadcast_host_event(self, event: HostEvent) -> None:
         allowed = {"sound", "music", "musicstop", "notes", "base", "info", "traceback", "achip", "aframe", "amap", "astop"}

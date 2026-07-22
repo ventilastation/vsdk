@@ -3,9 +3,11 @@
 The physical framebuffer is laid out as 256 consecutive rotor columns, each
 containing 54 RGB LEDs. Browser-compatible H.264 is normally 4:2:0, so sending
 those RGB texels literally would blend the chroma of neighbouring LEDs. The
-encoder instead stores each logical texel as three neutral-luma samples (R,
-G, B). The browser uploads that decoded picture directly to WebGL and the ring
-shader reconstructs the color with three texture samples.
+encoder instead stores the R, G and B components as three contiguous planes of
+neutral-luma samples. Keeping each plane spatially smooth avoids the one-pixel
+high-frequency pattern produced by interleaved components, which browser H.264
+encoders can blur. The browser uploads the decoded picture directly to WebGL
+and the ring shader reconstructs the color with three texture samples.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ VIDEO_HEIGHT = 256
 VIDEO_COMPONENTS = 3
 VIDEO_CODED_WIDTH = VIDEO_WIDTH * VIDEO_COMPONENTS
 VIDEO_CODED_HEIGHT = VIDEO_HEIGHT
-VIDEO_PACKING = "rgb-luma-triplet"
+VIDEO_PACKING = "rgb-luma-planes"
 VIDEO_CLOCK_RATE = 90_000
 VIDEO_TIME_BASE = Fraction(1, VIDEO_CLOCK_RATE)
 DEFAULT_ICE_SERVERS = ({"urls": ["stun:stun.l.google.com:19302"]},)
@@ -141,10 +143,12 @@ class WorkbenchVideoTrack:
                 pixels = numpy.frombuffer(snapshot.rgb, dtype=numpy.uint8).reshape(
                     source.height, source.width, 3
                 )
-                # Reshape RGB components into adjacent luma samples. Repeating
-                # each value across R/G/B makes the H.264 input neutral grey,
-                # avoiding 4:2:0 chroma loss while preserving all 8 bits.
-                components = pixels.reshape(source.height, source.width * VIDEO_COMPONENTS)
+                # Put each component in a contiguous neutral-grey plane. The
+                # planar layout avoids the fragile R/G/B/R/G/B one-pixel luma
+                # pattern while preserving all 8 bits through H.264 4:2:0.
+                components = numpy.concatenate(
+                    (pixels[:, :, 0], pixels[:, :, 1], pixels[:, :, 2]), axis=1
+                )
                 packed = numpy.repeat(components[:, :, None], VIDEO_COMPONENTS, axis=2)
                 frame = av.VideoFrame.from_ndarray(packed, format="rgb24")
                 frame.pts = pts

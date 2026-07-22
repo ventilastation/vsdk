@@ -24,7 +24,7 @@ function paintPackedFrame(canvas) {
       const rgb = colors[(logicalX + Math.floor(y / 32)) % colors.length];
       for (let component = 0; component < 3; component += 1) {
         const value = rgb[component];
-        const offset = (y * CODED_WIDTH + logicalX * 3 + component) * 4;
+        const offset = (y * CODED_WIDTH + component * LOGICAL_WIDTH + logicalX) * 4;
         image.data[offset] = value;
         image.data[offset + 1] = value;
         image.data[offset + 2] = value;

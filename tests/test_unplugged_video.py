@@ -204,6 +204,77 @@ class _FakeWebSocket:
 
 
 class DisconnectedInputTests(unittest.IsolatedAsyncioTestCase):
+    async def test_usb_connection_keeps_warning_until_fresh_telemetry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = RemoteGatewayService(GatewayConfig(
+                board="workbench-1",
+                audience="test",
+                ticket_key=b"k" * 32,
+                state_path=Path(directory) / "state.sqlite3",
+                workbench_host="192.0.2.1",
+                workbench_port=5005,
+                serial_port="/dev/absent",
+                allowed_origins=("https://example.test",),
+                auth_mode="trusted-proxy",
+            ))
+            service._unplugged_video.set_connected(False, time.monotonic())
+            published = []
+
+            async def publish(rgb):
+                published.append(rgb)
+
+            service._publish_rgb = publish
+            service._publish_snapshot = mock.AsyncMock()
+            try:
+                await service._set_serial_connection(True)
+                self.assertFalse(service._unplugged_video.connected)
+
+                await service._publish_capture_or_fallback(
+                    service.telemetry.snapshot(), time.monotonic()
+                )
+                self.assertEqual(published, [render_unplugged_frame(0)])
+
+                packet = (
+                    bytes((0xA1, 1, 0, 0, 0, 0))
+                    + bytes(4 * LEDS * 4)
+                )
+                self.assertTrue(service.telemetry.receiver.ingest(packet))
+                now = time.monotonic()
+                service._last_telemetry_at = now
+                snapshot = service.telemetry.snapshot()
+                self.assertTrue(service._telemetry_is_live(snapshot, now))
+                await service._publish_capture_or_fallback(snapshot, now)
+                self.assertTrue(service._unplugged_video.connected)
+                service._publish_snapshot.assert_awaited_once_with(snapshot)
+            finally:
+                service.store.close()
+
+    async def test_buffered_telemetry_is_not_treated_as_live_forever(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = RemoteGatewayService(GatewayConfig(
+                board="workbench-1",
+                audience="test",
+                ticket_key=b"k" * 32,
+                state_path=Path(directory) / "state.sqlite3",
+                workbench_host="192.0.2.1",
+                workbench_port=5005,
+                serial_port="/dev/absent",
+                allowed_origins=("https://example.test",),
+                auth_mode="trusted-proxy",
+            ))
+            try:
+                packet = (
+                    bytes((0xA1, 1, 0, 0, 0, 0))
+                    + bytes(4 * LEDS * 4)
+                )
+                self.assertTrue(service.telemetry.receiver.ingest(packet))
+                service._last_telemetry_at = 100.0
+                self.assertFalse(
+                    service._telemetry_is_live(service.telemetry.snapshot(), 102.1)
+                )
+            finally:
+                service.store.close()
+
     async def test_control_request_restarts_disconnected_video_immediately(self):
         with tempfile.TemporaryDirectory() as directory:
             service = RemoteGatewayService(GatewayConfig(

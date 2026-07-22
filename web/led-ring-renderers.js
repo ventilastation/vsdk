@@ -78,7 +78,7 @@ class LedRingWebGLRenderer {
         }
       `,
       this.isWebGL2 ? `#version 300 es
-        precision mediump float;
+        precision highp float;
         in vec2 v_texCoord;
         in vec2 v_ledUV;
         uniform sampler2D u_ledColors;
@@ -90,12 +90,13 @@ class LedRingWebGLRenderer {
             return texture(u_ledColors, v_ledUV);
           }
           float logicalX = floor(v_ledUV.x * ${PIXELS.toFixed(1)});
-          float baseX = (logicalX * 3.0 + 0.5) / ${(PIXELS * 3).toFixed(1)};
-          float stepX = 1.0 / ${(PIXELS * 3).toFixed(1)};
+          float redX = (logicalX + 0.5) / ${(PIXELS * 3).toFixed(1)};
+          float greenX = (${PIXELS.toFixed(1)} + logicalX + 0.5) / ${(PIXELS * 3).toFixed(1)};
+          float blueX = (${(PIXELS * 2).toFixed(1)} + logicalX + 0.5) / ${(PIXELS * 3).toFixed(1)};
           return vec4(
-            texture(u_ledColors, vec2(baseX, v_ledUV.y)).r,
-            texture(u_ledColors, vec2(baseX + stepX, v_ledUV.y)).r,
-            texture(u_ledColors, vec2(baseX + 2.0 * stepX, v_ledUV.y)).r,
+            texture(u_ledColors, vec2(redX, v_ledUV.y)).r,
+            texture(u_ledColors, vec2(greenX, v_ledUV.y)).r,
+            texture(u_ledColors, vec2(blueX, v_ledUV.y)).r,
             1.0
           );
         }
@@ -114,7 +115,7 @@ class LedRingWebGLRenderer {
           out_color = ledColor * (pill + glow);
         }
       ` : `
-        precision mediump float;
+        precision highp float;
         varying vec2 v_texCoord;
         varying vec2 v_ledUV;
         uniform sampler2D u_ledColors;
@@ -125,12 +126,13 @@ class LedRingWebGLRenderer {
             return texture2D(u_ledColors, v_ledUV);
           }
           float logicalX = floor(v_ledUV.x * ${PIXELS.toFixed(1)});
-          float baseX = (logicalX * 3.0 + 0.5) / ${(PIXELS * 3).toFixed(1)};
-          float stepX = 1.0 / ${(PIXELS * 3).toFixed(1)};
+          float redX = (logicalX + 0.5) / ${(PIXELS * 3).toFixed(1)};
+          float greenX = (${PIXELS.toFixed(1)} + logicalX + 0.5) / ${(PIXELS * 3).toFixed(1)};
+          float blueX = (${(PIXELS * 2).toFixed(1)} + logicalX + 0.5) / ${(PIXELS * 3).toFixed(1)};
           return vec4(
-            texture2D(u_ledColors, vec2(baseX, v_ledUV.y)).r,
-            texture2D(u_ledColors, vec2(baseX + stepX, v_ledUV.y)).r,
-            texture2D(u_ledColors, vec2(baseX + 2.0 * stepX, v_ledUV.y)).r,
+            texture2D(u_ledColors, vec2(redX, v_ledUV.y)).r,
+            texture2D(u_ledColors, vec2(greenX, v_ledUV.y)).r,
+            texture2D(u_ledColors, vec2(blueX, v_ledUV.y)).r,
             1.0
           );
         }
@@ -393,9 +395,9 @@ class LedRingWebGLRenderer {
     this.ensureLedTextureSize(PIXELS * 3, COLUMNS);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-    // H.264 4:2:0 would blend adjacent one-pixel LED colors. The 162x256
-    // picture stores each logical LED's R/G/B as three neutral-luma samples;
-    // the fragment shader reconstructs them without a browser-side pixel copy.
+    // H.264 4:2:0 would blend literal neighbouring LED colors. The 162x256
+    // picture stores R/G/B in three neutral-luma planes; the fragment shader
+    // reconstructs them without a browser-side pixel copy.
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       0,

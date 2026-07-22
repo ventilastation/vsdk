@@ -113,8 +113,9 @@ background tabs from consuming video bandwidth.
 ## USB disconnect fallback
 
 USB serial is hot-pluggable. Startup and runtime I/O failures switch the
-gateway to a synthetic frame source; a reconnect switches it back to the most
-recent real UDP capture without restarting the gateway, tunnel, or browser.
+gateway to a synthetic frame source. Opening USB does not hide the warning by
+itself: the gateway switches back only after the first valid UDP display
+capture arrives, without restarting the gateway, tunnel, or browser.
 
 The fallback draws **board unplugged** directly in the native 256-column by
 54-LED polar framebuffer. It uses the MicroPython ROM-selection menu's exact
@@ -126,7 +127,7 @@ wedge near the outer rim and moves one LED inward/outward every 500 ms.
 Only two frames per second are published while disconnected. After 60 seconds
 the gateway publishes one final warning starting at the outermost LED and stops
 producing video frames. The cached error stays visible without continuing media
-bandwidth. Reconnecting immediately restores real captures. A later disconnect
+bandwidth. Reconnecting restores real captures as soon as UDP telemetry resumes. A later disconnect
 starts a fresh one minute warning window. Every successful request for control
 also restarts that window while the board is disconnected, so a controller gets
 the full animation period even when the gateway has been idle.
@@ -199,12 +200,12 @@ one-pixel red/green/blue values are averaged. The implemented wire picture is
 therefore 162×256:
 
 ```text
-logical LED 0         logical LED 1
-  R0  G0  B0            R1  G1  B1        (162 luma samples per row)
+R0 ... R53  |  G0 ... G53  |  B0 ... B53  (162 luma samples per row)
 ```
 
-Each component value is encoded as a neutral-grey RGB sample. All information
-then lives in the full-resolution luma plane, while the subsampled chroma
+Each component value is encoded as a neutral-grey RGB sample, with contiguous
+R, G and B planes to avoid a high-frequency interleaved pattern. All
+information then lives in full-resolution luma, while the subsampled chroma
 planes remain neutral. A regression test encodes and decodes an adversarial
 saturated pattern through the same H.264 Baseline settings; at 1 Mbit/s it
 requires mean channel error below 0.5 and maximum error no greater than 3.

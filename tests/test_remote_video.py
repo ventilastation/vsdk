@@ -40,8 +40,11 @@ class LatestVideoFrameTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(frame.width, VIDEO_CODED_WIDTH)
         self.assertEqual(frame.height, VIDEO_CODED_HEIGHT)
-        pixels = numpy.frombuffer(rgb, dtype=numpy.uint8).reshape(VIDEO_HEIGHT, VIDEO_WIDTH * 3)
-        expected = numpy.repeat(pixels[:, :, None], 3, axis=2)
+        pixels = numpy.frombuffer(rgb, dtype=numpy.uint8).reshape(VIDEO_HEIGHT, VIDEO_WIDTH, 3)
+        planes = numpy.concatenate(
+            (pixels[:, :, 0], pixels[:, :, 1], pixels[:, :, 2]), axis=1
+        )
+        expected = numpy.repeat(planes[:, :, None], 3, axis=2)
         numpy.testing.assert_array_equal(frame.to_ndarray(format="rgb24"), expected)
         self.assertEqual(frame.pts, 0)
         track.stop()
@@ -79,8 +82,12 @@ class LatestVideoFrameTests(unittest.IsolatedAsyncioTestCase):
         for packet in packets:
             decoded.extend(decoder.decode(packet))
         decoded.extend(decoder.decode(None))
-        luma_triplets = decoded[-1].to_ndarray(format="rgb24")[:, :, 0]
-        reconstructed = luma_triplets.reshape(VIDEO_HEIGHT, VIDEO_WIDTH, 3)
+        luma_planes = decoded[-1].to_ndarray(format="rgb24")[:, :, 0]
+        reconstructed = numpy.stack((
+            luma_planes[:, :VIDEO_WIDTH],
+            luma_planes[:, VIDEO_WIDTH:VIDEO_WIDTH * 2],
+            luma_planes[:, VIDEO_WIDTH * 2:VIDEO_WIDTH * 3],
+        ), axis=2)
         error = numpy.abs(reconstructed.astype(numpy.int16) - original.astype(numpy.int16))
         self.assertLess(float(error.mean()), 0.5)
         self.assertLessEqual(int(error.max()), 3)

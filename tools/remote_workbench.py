@@ -36,7 +36,7 @@ DEFAULT_FRP_SERVER = "ventilastation-board.protocultura.net"
 DEFAULT_FRP_PORT = 7000
 DEFAULT_FRP_REMOTE_PORT = 18765
 FRP_VERSION = "0.69.0"
-DEFAULT_TELEMETRY_HOST = "192.168.1.100"
+DEFAULT_TELEMETRY_HOST = "ventilastation-workbench.local"
 DEFAULT_NGROK_AUTH_ID = "vsdk-remote-workbench"
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$")
 REQUIRED_ENV = (
@@ -268,10 +268,13 @@ def setup(args: argparse.Namespace) -> int:
         (config_dir / "ngrok-policy.yml", render_ngrok_policy(email, auth_id)),
     )
     for path, content in generated:
-        if path.exists() and not args.force:
-            print("Reusing", path, "(pass --force to regenerate it)")
+        if path.exists() and not args.force and path.read_text(encoding="utf-8") == content:
+            print("Reusing", path)
         else:
-            _write_private(path, content, overwrite=args.force)
+            updating = path.exists()
+            _write_private(path, content, overwrite=updating or args.force)
+            if updating:
+                print("Updated", path)
 
     if not args.skip_install:
         environment_dir = config_dir / "venv"

@@ -152,7 +152,7 @@ web-emulator-bundle:
 # run and smoke reuse the private config under ~/.config/vsdk/remote-workbench.
 EMAIL ?=
 REMOTE_WORKBENCH_SERIAL ?= auto
-REMOTE_WORKBENCH_HOST ?= 192.168.1.100
+REMOTE_WORKBENCH_HOST ?= ventilastation-workbench.local
 
 remote-workbench-install:
 	@if [ -z "$(EMAIL)" ]; then echo "Set EMAIL=you@example.com" >&2; exit 2; fi

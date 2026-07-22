@@ -24,7 +24,7 @@ const VIDEO_WIDTH = 162;
 const VIDEO_HEIGHT = 256;
 const VIDEO_LOGICAL_WIDTH = 54;
 const VIDEO_LOGICAL_HEIGHT = 256;
-const VIDEO_PACKING = "rgb-luma-triplet";
+const VIDEO_PACKING = "rgb-luma-planes";
 // The stable gateway terminates Google OAuth and forwards signaling over FRP.
 // Operators may override it before loading the emulator for a staged endpoint.
 const DEFAULT_GATEWAY = "https://ventilastation-board.protocultura.net";

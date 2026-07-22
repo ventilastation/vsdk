@@ -41,8 +41,8 @@ import {
 } from "./app-support.js?v=20260717b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260720g";
-import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722a";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260722a";
+import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722b";
 
 
 class FailedRuntimeAdapter {
