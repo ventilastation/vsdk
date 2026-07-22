@@ -71,7 +71,7 @@ in `~/.config/vsdk/remote-workbench/logs/`.
   the VPS tunnel when a direct ICE candidate pair succeeds, which keeps the
   high-volume frame stream off the relay.
 - If direct ICE fails, a configured TURN server relays media. That consumes
-  TURN bandwidth, not ngrok bandwidth.
+  TURN bandwidth, not VPS tunnel bandwidth.
 - The local emulator remains available without sign-in. Authentication is
   requested only when the visitor chooses **Connect physical board**.
 
@@ -262,10 +262,23 @@ should be used only for a tightly controlled smoke environment. An empty or
 invalid ICE configuration fails gateway startup rather than silently disabling
 connectivity.
 
-## ngrok edge policy
+## VPS edge and ngrok fallback
 
-The checked-in example is
-`tools/remote-workbench-ngrok-policy.example.yml`. The deployed policy must:
+The deployed edge is an IPv6-only Google Cloud `e2-micro` VM. Caddy owns ports
+80/443 and automatic TLS, oauth2-proxy performs Google sign-in and the email
+allowlist, and FRP carries `/auth/*` plus `/ws` to the loopback gateway. FRP
+uses TLS and a random token; the server binds proxied ports to loopback so the
+gateway cannot be reached directly from the Internet. SSH remains restricted
+to the operator network.
+
+The stable public origin is
+`https://ventilastation-board.protocultura.net`. Caddy removes any incoming
+identity headers and copies oauth2-proxy's verified email/subject headers into
+requests to the gateway. `/ws` bypasses the OAuth cookie check because the
+gateway authenticates it with the signed one-use ticket created by `/auth/start`.
+
+ngrok remains an emergency fallback. Its checked-in example is
+`tools/remote-workbench-ngrok-policy.example.yml`. A fallback deployment must:
 
 1. apply Google OAuth to every HTTP path except `/ws`;
 2. deny identities outside the explicit Google email allowlist;
@@ -276,10 +289,8 @@ The checked-in example is
 gateway's one-use ticket. The gateway must remain loopback-only; trusted-proxy
 mode is unsafe if another network path can reach it.
 
-The free ngrok domain and OAuth quota are suitable for private testing. After
-this WebRTC change, only small signaling/control/audio messages count against
-ngrok network bandwidth. A TURN relay, if needed, needs a separate bandwidth
-budget.
+After the WebRTC change, only small signaling/control/audio messages cross FRP
+or ngrok. A TURN relay, if needed, needs a separate bandwidth budget.
 
 ## Manual configuration and operation
 
@@ -291,7 +302,9 @@ example `~/.config/vsdk/remote-workbench/`:
 
 - `gateway.env`: endpoints, serial device, trusted headers, and ICE servers;
 - `ticket.key`: at least 32 random bytes;
-- `ngrok-authtoken`, `ngrok.yml`, and `ngrok-policy.yml`;
+- `frpc.toml`, `frp.token`, and `bin/frpc`;
+- Google OAuth client/cookie secrets used by oauth2-proxy on the VPS;
+- optional fallback `ngrok-authtoken`, `ngrok.yml`, and `ngrok-policy.yml`;
 - TURN credentials, if used.
 
 Never commit passwords, personal email allowlists, OAuth credentials, tunnel
@@ -311,14 +324,12 @@ Run the loopback gateway and tunnel in separate supervised processes:
 ```text
 set -a; source ~/.config/vsdk/remote-workbench/gateway.env; set +a
 .venv312/bin/python -m emulator.remote_gateway serve
-
-ngrok http 127.0.0.1:8765 \
-  --config ~/.config/vsdk/remote-workbench/ngrok.yml \
-  --traffic-policy-file ~/.config/vsdk/remote-workbench/ngrok-policy.yml
+~/.config/vsdk/remote-workbench/bin/frpc \
+  -c ~/.config/vsdk/remote-workbench/frpc.toml
 ```
 
-The generated test link passes the assigned public endpoint in the `gateway`
-query parameter. A custom host page may instead set
+The checked-in default uses the stable VPS origin. A staged endpoint may be
+passed in the `gateway` query parameter, or a custom host page may set
 `window.VENTILASTATION_REMOTE_GATEWAY` before importing the adapter.
 
 ## Detailed verification
@@ -339,14 +350,14 @@ End-to-end smoke test:
 
 1. Confirm the board serial device exists and UDP telemetry receives complete
    captures.
-2. Start the gateway and ngrok. Confirm an unauthenticated `/auth/start`
+2. Start the gateway and FRP. Confirm an unauthenticated `/auth/start`
    request is redirected to Google and a direct spoofed identity header is
    discarded by the edge.
 3. Open the deployed Pages emulator with `?remote=1`, sign in using an
    allowlisted test Google identity, and confirm the role shown by `HELLO`.
 4. Confirm WebRTC reaches `connected`, negotiated codec is H.264, decoded FPS
    approaches 30, frames advance, and `bytesReceived` increases without a
-   matching high-volume transfer through ngrok.
+   matching high-volume transfer through the VPS tunnel.
 5. Compare an asymmetric saturated board pattern with the physical display to
    verify orientation and the RGB-luma shader reconstruction.
 6. Acquire the controller lease, move through a menu, and verify joystick
@@ -377,6 +388,8 @@ tickets, SDP, TURN passwords, tunnel tokens, or account passwords.
 - TURN changes the bandwidth cost location; it does not eliminate relay cost.
 - H.264 browser decode and WebGL are mandatory in remote mode. The remote path
   intentionally has no low-fidelity canvas fallback.
-- The current free ngrok quota must allow the small OAuth and signaling
-  exchange before any public test can begin. An exhausted quota still blocks
-  authentication even though WebRTC would carry the display afterward.
+- The current free VPS is IPv6-only. A browser network without IPv6 needs a
+  billable public IPv4 address or another dual-stack HTTPS edge.
+- The ngrok fallback still depends on its account quota for OAuth and
+  signaling; an exhausted quota blocks authentication even though WebRTC would
+  carry the display afterward.
