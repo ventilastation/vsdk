@@ -109,3 +109,13 @@ class UnpluggedFrameStream:
             return None
         self._last_phase = phase
         return self._frames[phase % len(self._frames)]
+
+    def current_frame(self, now: float) -> bytes | None:
+        """Return the frame a late viewer should see without restarting output."""
+        if self.connected or self.disconnected_at is None:
+            return None
+        elapsed = max(0.0, now - self.disconnected_at)
+        if elapsed >= self.duration_s:
+            return self._final_frame
+        phase = int(elapsed / self.interval_s)
+        return self._frames[phase % len(self._frames)]

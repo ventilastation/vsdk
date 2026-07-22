@@ -992,6 +992,13 @@ if (window.opener) {
         if len(sdp.encode("utf-8")) > MAX_CONTROL_BYTES:
             raise ProtocolError("WebRTC offer exceeds limit")
         await self._close_video_peer(session)
+        if not self._serial.connected:
+            # The one-minute unplugged stream may have stopped long before a
+            # viewer arrives. Refresh its cached terminal warning immediately
+            # so the new track starts with a current timestamp.
+            bootstrap = self._unplugged_video.current_frame(time.monotonic())
+            if bootstrap is not None:
+                await self._publish_rgb(bootstrap)
         peer: WebRtcVideoPeer | None = None
 
         async def on_state(state: str) -> None:
@@ -1016,6 +1023,26 @@ if (window.opener) {
             _json_bytes(answer),
         ))
         await self._send_video_status(session, "connecting")
+        if not self._serial.connected:
+            assert peer is not None
+            self._tasks.append(asyncio.create_task(
+                self._bootstrap_unplugged_peer(session, peer)
+            ))
+
+    async def _bootstrap_unplugged_peer(
+        self,
+        session: BrowserSession,
+        peer: WebRtcVideoPeer,
+    ) -> None:
+        """Send enough cached frames for a late-joining decoder to present one."""
+        for _attempt in range(2):
+            await asyncio.sleep(0.1)
+            if self._serial.connected or session.video_peer is not peer:
+                return
+            frame = self._unplugged_video.current_frame(time.monotonic())
+            if frame is None:
+                return
+            await self._publish_rgb(frame)
 
     async def _close_video_peer(self, session: BrowserSession) -> None:
         peer = session.video_peer
