@@ -17,6 +17,7 @@ from remote_gateway import (  # noqa: E402
     BrowserSession,
     GatewayConfig,
     INPUT,
+    LEASE_REQUEST,
     Principal,
     RemoteGatewayService,
     SerialBridge,
@@ -89,6 +90,24 @@ class UnpluggedFrameTests(unittest.TestCase):
             == bytes(MESSAGE_COLOR)
             for column in range(COLUMNS)
         ))
+
+    def test_control_request_restart_starts_a_fresh_minute(self):
+        stream = UnpluggedFrameStream()
+        stream.set_connected(False, 100.0)
+        stream.next_frame(160.0)
+        self.assertIsNone(stream.next_frame(160.1))
+
+        self.assertTrue(stream.restart(200.0))
+        self.assertEqual(stream.next_frame(200.0), render_unplugged_frame(0))
+        self.assertIsNotNone(stream.next_frame(259.5))
+        self.assertEqual(
+            stream.next_frame(260.0),
+            render_unplugged_frame(from_outermost_led=True),
+        )
+
+        stream.set_connected(True, 300.0)
+        self.assertFalse(stream.restart(301.0))
+        self.assertIsNone(stream.next_frame(301.0))
 
 
 class _FakeSerial:
@@ -185,6 +204,55 @@ class _FakeWebSocket:
 
 
 class DisconnectedInputTests(unittest.IsolatedAsyncioTestCase):
+    async def test_control_request_restarts_disconnected_video_immediately(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = RemoteGatewayService(GatewayConfig(
+                board="workbench-1",
+                audience="test",
+                ticket_key=b"k" * 32,
+                state_path=Path(directory) / "state.sqlite3",
+                workbench_host="192.0.2.1",
+                workbench_port=5005,
+                serial_port="/dev/absent",
+                allowed_origins=("https://example.test",),
+                auth_mode="trusted-proxy",
+            ))
+            websocket = _FakeWebSocket()
+            principal = Principal("subject", "player@example.com", "controller")
+            session = BrowserSession("session", websocket, principal)
+            service.sessions[session.session_id] = session
+            service._unplugged_video.set_connected(False, time.monotonic() - 61.0)
+            service._unplugged_video.next_frame(time.monotonic())
+            published = []
+
+            async def publish(rgb):
+                published.append(rgb)
+
+            service._publish_rgb = publish
+            try:
+                before_request = time.monotonic()
+                await service._handle_browser_message(
+                    session,
+                    decode_message(encode_message(
+                        LEASE_REQUEST,
+                        1,
+                        b'{"action":"request"}',
+                    )),
+                )
+                after_request = time.monotonic()
+            finally:
+                service.store.close()
+
+            self.assertEqual(published, [render_unplugged_frame(0)])
+            self.assertGreaterEqual(
+                service._unplugged_video.disconnected_at,
+                before_request,
+            )
+            self.assertLessEqual(
+                service._unplugged_video.disconnected_at,
+                after_request,
+            )
+
     async def test_non_neutral_input_is_audited_and_generates_menu_sound(self):
         with tempfile.TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.sqlite3"

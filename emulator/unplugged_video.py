@@ -93,6 +93,14 @@ class UnpluggedFrameStream:
         self.disconnected_at = None if connected else now
         return True
 
+    def restart(self, now: float) -> bool:
+        """Restart the warning window while the board remains disconnected."""
+        if self.connected:
+            return False
+        self.disconnected_at = now
+        self._last_phase = None
+        return True
+
     def next_frame(self, now: float) -> bytes | None:
         if self.connected or self.disconnected_at is None:
             return None

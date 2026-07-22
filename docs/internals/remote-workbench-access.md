@@ -127,7 +127,9 @@ Only two frames per second are published while disconnected. After 60 seconds
 the gateway publishes one final warning starting at the outermost LED and stops
 producing video frames. The cached error stays visible without continuing media
 bandwidth. Reconnecting immediately restores real captures. A later disconnect
-starts a fresh one minute warning window.
+starts a fresh one minute warning window. Every successful request for control
+also restarts that window while the board is disconnected, so a controller gets
+the full animation period even when the gateway has been idle.
 
 Control remains available for end-to-end testing while unplugged: input is
 validated and audited but not claimed as delivered to hardware. A non-neutral

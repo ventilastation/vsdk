@@ -953,6 +953,13 @@ if (window.opener) {
             if action == "request":
                 lease = self.core.leases.request(self.config.board, session.principal, session.session_id)
                 self.store.audit(self.config.board, session.principal.email, "lease_grant", str(lease.generation))
+                now = time.monotonic()
+                if self._unplugged_video.restart(now):
+                    # A controller is actively trying the disconnected smoke
+                    # path, so give them a fresh one-minute animation window.
+                    synthetic = self._unplugged_video.next_frame(now)
+                    if synthetic is not None:
+                        await self._publish_rgb(synthetic)
                 await self._broadcast_lease()
             elif action == "release":
                 lease = self.core.leases.release(self.config.board, session.session_id)
