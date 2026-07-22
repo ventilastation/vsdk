@@ -50,7 +50,7 @@ function testSelectsOnlyH264VideoCodecs() {
 }
 
 function testPackingRevisionRejectsStaleLayouts() {
-  assert(REMOTE_PROTOCOL.VIDEO_PACKING === "rgb-luma-planes-v2");
+  assert(REMOTE_PROTOCOL.VIDEO_PACKING === "rgb-luma-guarded-planes-v3");
 }
 
 function testSelectsGatewayFromQuery() {

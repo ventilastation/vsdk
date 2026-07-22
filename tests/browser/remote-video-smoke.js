@@ -1,6 +1,7 @@
 import { LedRingWebGLRenderer } from "../../web/led-ring-renderers.js?v=remote-video-smoke";
 
-const CODED_WIDTH = 162;
+const PLANE_STRIDE = 56;
+const CODED_WIDTH = 168;
 const CODED_HEIGHT = 256;
 const LOGICAL_WIDTH = 54;
 
@@ -24,7 +25,7 @@ function paintPackedFrame(canvas) {
       const rgb = colors[(logicalX + Math.floor(y / 32)) % colors.length];
       for (let component = 0; component < 3; component += 1) {
         const value = rgb[component];
-        const offset = (y * CODED_WIDTH + component * LOGICAL_WIDTH + logicalX) * 4;
+        const offset = (y * CODED_WIDTH + component * PLANE_STRIDE + logicalX) * 4;
         image.data[offset] = value;
         image.data[offset + 1] = value;
         image.data[offset + 2] = value;

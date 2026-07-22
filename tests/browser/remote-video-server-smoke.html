@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Remote aiortc plane alignment smoke</title>
+<style>
+  body { background: #080b10; color: #eef3ff; font: 16px system-ui; }
+  video, canvas { image-rendering: pixelated; border: 1px solid #607090; margin: 8px; }
+  video { width: 324px; height: 512px; }
+  #ring { width: 600px; height: 600px; }
+</style>
+<h1>Remote aiortc plane alignment smoke</h1>
+<video id="video" autoplay muted playsinline></video>
+<canvas id="decoded" width="168" height="256"></canvas>
+<canvas id="ring" width="600" height="600"></canvas>
+<pre id="result">starting</pre>
+<script src="../../web/led-render-core.js"></script>
+<script type="module" src="./remote-video-server-smoke.js"></script>

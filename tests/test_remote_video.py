@@ -18,6 +18,8 @@ from remote_video import (  # noqa: E402
     VIDEO_CODED_WIDTH,
     VIDEO_HEIGHT,
     VIDEO_PACKING,
+    VIDEO_PLANE_GUARD,
+    VIDEO_PLANE_STRIDE,
     VIDEO_WIDTH,
     WorkbenchVideoTrack,
     WebRtcVideoPeer,
@@ -41,11 +43,18 @@ class LatestVideoFrameTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frame.width, VIDEO_CODED_WIDTH)
         self.assertEqual(frame.height, VIDEO_CODED_HEIGHT)
         pixels = numpy.frombuffer(rgb, dtype=numpy.uint8).reshape(VIDEO_HEIGHT, VIDEO_WIDTH, 3)
-        planes = numpy.concatenate(
-            (pixels[:, :, 0], pixels[:, :, 1], pixels[:, :, 2]), axis=1
-        )
+        planes = numpy.zeros((VIDEO_HEIGHT, VIDEO_CODED_WIDTH), dtype=numpy.uint8)
+        for component in range(3):
+            start = component * VIDEO_PLANE_STRIDE
+            planes[:, start:start + VIDEO_WIDTH] = pixels[:, :, component]
         expected = numpy.repeat(planes[:, :, None], 3, axis=2)
         numpy.testing.assert_array_equal(frame.to_ndarray(format="rgb24"), expected)
+        for component in range(3):
+            guard = planes[:,
+                           component * VIDEO_PLANE_STRIDE + VIDEO_WIDTH:
+                           (component + 1) * VIDEO_PLANE_STRIDE]
+            self.assertEqual(guard.shape[1], VIDEO_PLANE_GUARD)
+            self.assertFalse(guard.any())
         self.assertEqual(frame.pts, 0)
         track.stop()
 
@@ -85,8 +94,8 @@ class LatestVideoFrameTests(unittest.IsolatedAsyncioTestCase):
         luma_planes = decoded[-1].to_ndarray(format="rgb24")[:, :, 0]
         reconstructed = numpy.stack((
             luma_planes[:, :VIDEO_WIDTH],
-            luma_planes[:, VIDEO_WIDTH:VIDEO_WIDTH * 2],
-            luma_planes[:, VIDEO_WIDTH * 2:VIDEO_WIDTH * 3],
+            luma_planes[:, VIDEO_PLANE_STRIDE:VIDEO_PLANE_STRIDE + VIDEO_WIDTH],
+            luma_planes[:, VIDEO_PLANE_STRIDE * 2:VIDEO_PLANE_STRIDE * 2 + VIDEO_WIDTH],
         ), axis=2)
         error = numpy.abs(reconstructed.astype(numpy.int16) - original.astype(numpy.int16))
         self.assertLess(float(error.mean()), 0.5)

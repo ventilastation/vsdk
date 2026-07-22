@@ -3,7 +3,7 @@
 The physical framebuffer is laid out as 256 consecutive rotor columns, each
 containing 54 RGB LEDs. Browser-compatible H.264 is normally 4:2:0, so sending
 those RGB texels literally would blend the chroma of neighbouring LEDs. The
-encoder instead stores the R, G and B components as three contiguous planes of
+encoder instead stores the R, G and B components as three guarded planes of
 neutral-luma samples. Keeping each plane spatially smooth avoids the one-pixel
 high-frequency pattern produced by interleaved components, which browser H.264
 encoders can blur. The browser uploads the decoded picture directly to WebGL
@@ -22,12 +22,20 @@ from typing import Any, Awaitable, Callable, Iterable
 VIDEO_WIDTH = 54
 VIDEO_HEIGHT = 256
 VIDEO_COMPONENTS = 3
-VIDEO_CODED_WIDTH = VIDEO_WIDTH * VIDEO_COMPONENTS
+# Two black luma samples after each component plane make the coded width a
+# format fingerprint as well as a compression guard. The old triplet and the
+# first planar layout were both 162 pixels wide, so mixed gateway files could
+# claim the planar packing while still emitting triplets. A 168-pixel frame
+# cannot be mistaken for either legacy layout, and H.264 already pads both
+# 162 and 168 to the same 16-pixel macroblock width internally.
+VIDEO_PLANE_GUARD = 2
+VIDEO_PLANE_STRIDE = VIDEO_WIDTH + VIDEO_PLANE_GUARD
+VIDEO_CODED_WIDTH = VIDEO_PLANE_STRIDE * VIDEO_COMPONENTS
 VIDEO_CODED_HEIGHT = VIDEO_HEIGHT
 # The suffix is part of the browser/gateway compatibility contract. Bump it
 # whenever the coded texture layout changes so a stale tab fails visibly
 # instead of interpreting one layout with another layout's shader.
-VIDEO_PACKING = "rgb-luma-planes-v2"
+VIDEO_PACKING = "rgb-luma-guarded-planes-v3"
 VIDEO_CLOCK_RATE = 90_000
 VIDEO_TIME_BASE = Fraction(1, VIDEO_CLOCK_RATE)
 DEFAULT_ICE_SERVERS = ({"urls": ["stun:stun.l.google.com:19302"]},)
@@ -146,12 +154,16 @@ class WorkbenchVideoTrack:
                 pixels = numpy.frombuffer(snapshot.rgb, dtype=numpy.uint8).reshape(
                     source.height, source.width, 3
                 )
-                # Put each component in a contiguous neutral-grey plane. The
+                # Put each component in a guarded neutral-grey plane. The
                 # planar layout avoids the fragile R/G/B/R/G/B one-pixel luma
                 # pattern while preserving all 8 bits through H.264 4:2:0.
-                components = numpy.concatenate(
-                    (pixels[:, :, 0], pixels[:, :, 1], pixels[:, :, 2]), axis=1
+                plane_stride = source.width + VIDEO_PLANE_GUARD
+                components = numpy.zeros(
+                    (source.height, plane_stride * VIDEO_COMPONENTS), dtype=numpy.uint8
                 )
+                for component in range(VIDEO_COMPONENTS):
+                    start = component * plane_stride
+                    components[:, start:start + source.width] = pixels[:, :, component]
                 packed = numpy.repeat(components[:, :, None], VIDEO_COMPONENTS, axis=2)
                 frame = av.VideoFrame.from_ndarray(packed, format="rgb24")
                 frame.pts = pts
@@ -214,7 +226,7 @@ class WebRtcVideoPeer:
             "type": self.pc.localDescription.type,
             "sdp": self.pc.localDescription.sdp,
             "codec": "H264",
-            "width": self.source.width * VIDEO_COMPONENTS,
+            "width": (self.source.width + VIDEO_PLANE_GUARD) * VIDEO_COMPONENTS,
             "height": self.source.height,
             "logicalWidth": self.source.width,
             "logicalHeight": self.source.height,
