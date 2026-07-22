@@ -24,7 +24,10 @@ VIDEO_HEIGHT = 256
 VIDEO_COMPONENTS = 3
 VIDEO_CODED_WIDTH = VIDEO_WIDTH * VIDEO_COMPONENTS
 VIDEO_CODED_HEIGHT = VIDEO_HEIGHT
-VIDEO_PACKING = "rgb-luma-planes"
+# The suffix is part of the browser/gateway compatibility contract. Bump it
+# whenever the coded texture layout changes so a stale tab fails visibly
+# instead of interpreting one layout with another layout's shader.
+VIDEO_PACKING = "rgb-luma-planes-v2"
 VIDEO_CLOCK_RATE = 90_000
 VIDEO_TIME_BASE = Fraction(1, VIDEO_CLOCK_RATE)
 DEFAULT_ICE_SERVERS = ({"urls": ["stun:stun.l.google.com:19302"]},)

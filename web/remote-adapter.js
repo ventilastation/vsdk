@@ -24,7 +24,9 @@ const VIDEO_WIDTH = 162;
 const VIDEO_HEIGHT = 256;
 const VIDEO_LOGICAL_WIDTH = 54;
 const VIDEO_LOGICAL_HEIGHT = 256;
-const VIDEO_PACKING = "rgb-luma-planes";
+// This version is deliberately included in signaling. A stale gateway or tab
+// must reject the stream rather than render a different packing as RGB.
+const VIDEO_PACKING = "rgb-luma-planes-v2";
 // The stable gateway terminates Google OAuth and forwards signaling over FRP.
 // Operators may override it before loading the emulator for a staged endpoint.
 const DEFAULT_GATEWAY = "https://ventilastation-board.protocultura.net";
@@ -364,7 +366,9 @@ export class RemoteWorkbenchAdapter {
       || Number(config.logicalHeight) !== VIDEO_LOGICAL_HEIGHT
       || config.packing !== VIDEO_PACKING
     ) {
-      throw new Error("The remote H.264 video has an unsupported RGB packing");
+      throw new Error(
+        `Remote video packing ${config.packing || "missing"} does not match ${VIDEO_PACKING}; reload the emulator and restart the gateway`,
+      );
     }
     if (typeof RTCPeerConnection !== "function") {
       throw new Error("This browser does not support WebRTC video");
@@ -420,7 +424,9 @@ export class RemoteWorkbenchAdapter {
       || Number(answer.logicalHeight) !== VIDEO_LOGICAL_HEIGHT
       || answer.packing !== VIDEO_PACKING
     ) {
-      throw new Error("The gateway negotiated an unsupported video format");
+      throw new Error(
+        `Negotiated video packing ${answer?.packing || "missing"} does not match ${VIDEO_PACKING}; reload the emulator and restart the gateway`,
+      );
     }
     await peer.setRemoteDescription({ type: answer.type, sdp: answer.sdp });
   }
@@ -452,6 +458,7 @@ export class RemoteWorkbenchAdapter {
         povVideoFrame: this.videoElement,
         videoMetadata: {
           codec: "H264",
+          packing: this.videoConfig?.packing || VIDEO_PACKING,
           width: Number(metadata.width) || this.videoElement.videoWidth,
           height: Number(metadata.height) || this.videoElement.videoHeight,
           mediaTime: Number(metadata.mediaTime) || this.videoElement.currentTime,
@@ -616,6 +623,7 @@ export class RemoteWorkbenchAdapter {
           state: "video",
           video_state: this.videoState,
           video_codec: status.codec || "H264",
+          video_packing: status.packing || this.videoConfig?.packing || null,
           video_stats: status.stats || null,
         });
         return;
@@ -669,4 +677,5 @@ export const REMOTE_PROTOCOL = Object.freeze({
   decodeMessage,
   gatewayUrl,
   h264CodecPreferences,
+  VIDEO_PACKING,
 });

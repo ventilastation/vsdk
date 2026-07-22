@@ -41,8 +41,8 @@ import {
 } from "./app-support.js?v=20260717b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260722a";
-import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722b";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260722b";
+import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722c";
 
 
 class FailedRuntimeAdapter {
@@ -2556,6 +2556,7 @@ class BrowserHostApp {
     if (frame.videoMetadata) {
       summary.push(
         ["Remote Video", `${frame.videoMetadata.codec || "H264"} ${frame.videoMetadata.width}x${frame.videoMetadata.height}`],
+        ["Video Packing", frame.videoMetadata.packing || "Unknown"],
         ["Decoded FPS", this.adapter.videoStats?.framesPerSecond || "--"],
         ["Video Bytes", formatBytes(this.adapter.videoStats?.bytesReceived)],
         ["Video Drops", this.adapter.videoStats?.framesDropped ?? "--"],

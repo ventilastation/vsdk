@@ -49,6 +49,10 @@ function testSelectsOnlyH264VideoCodecs() {
   assert(codecs[0].mimeType === "video/H264");
 }
 
+function testPackingRevisionRejectsStaleLayouts() {
+  assert(REMOTE_PROTOCOL.VIDEO_PACKING === "rgb-luma-planes-v2");
+}
+
 function testSelectsGatewayFromQuery() {
   window.location.search = "?remote=1&gateway=https%3A%2F%2Ffresh-tunnel.example";
   assert(REMOTE_PROTOCOL.gatewayUrl() === "https://fresh-tunnel.example");
@@ -85,6 +89,7 @@ for (const test of [
   testRoundTrip,
   testRejectsCorruptLength,
   testSelectsOnlyH264VideoCodecs,
+  testPackingRevisionRejectsStaleLayouts,
   testSelectsGatewayFromQuery,
   testRejectsUnsafeGateway,
   testBoardStatusDoesNotClearLease,
