@@ -28,6 +28,44 @@ PACKET_BYTES = HEADER_BYTES + CHUNK_PAYLOAD_BYTES
 FRAME_BYTES = COLUMNS * LEDS * BYTES_PER_LED
 HELLO_INTERVAL_S = 1.0
 SNAPSHOT_INTERVAL_S = 1 / 30
+WORKBENCH_MDNS_HOST = "ventilastation-workbench.local"
+WORKBENCH_MDNS_SERVICE = "_ventilastation-wb._udp.local."
+WORKBENCH_MDNS_INSTANCE = "Ventilastation Workbench._ventilastation-wb._udp.local."
+
+
+def discover_workbench_ipv4(timeout: float = 1.0) -> str:
+    """Resolve the workbench service without relying on OS ``.local`` NSS."""
+    try:
+        from zeroconf import IPVersion, Zeroconf
+    except ImportError as error:
+        raise OSError(
+            "mDNS resolution needs the 'zeroconf' package; rerun the remote-workbench installer"
+        ) from error
+
+    resolver = Zeroconf(ip_version=IPVersion.V4Only)
+    try:
+        info = resolver.get_service_info(
+            WORKBENCH_MDNS_SERVICE,
+            WORKBENCH_MDNS_INSTANCE,
+            timeout=max(1, int(timeout * 1000)),
+        )
+        addresses = info.parsed_addresses(IPVersion.V4Only) if info is not None else []
+        if not addresses:
+            raise OSError("workbench mDNS service was not found on this network")
+        return addresses[0]
+    finally:
+        resolver.close()
+
+
+def resolve_workbench_ipv4(host: str, port: int, timeout: float = 1.0) -> str:
+    """Resolve IPv4 normally, with a zeroconf fallback for the known board."""
+    try:
+        result = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_DGRAM)
+        return result[0][4][0]
+    except socket.gaierror:
+        if host.rstrip(".").casefold() != WORKBENCH_MDNS_HOST:
+            raise
+        return discover_workbench_ipv4(timeout)
 
 
 def seq_ge(candidate: int, previous: int) -> bool:
@@ -110,22 +148,26 @@ class WorkbenchTelemetryClient:
         self.port = port
         self.receiver = receiver or LatestColumnBuffer()
         self.sock: socket.socket | None = None
+        self.resolved_host: str | None = None
         self.last_hello_at = 0.0
 
     def setup(self, timeout: float = 0.5) -> None:
         self.close()
+        resolved_host = resolve_workbench_ipv4(self.host, self.port, timeout)
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # connect() sends no UDP packet. It records the intended peer and lets
         # recv()/send() filter and use the resolved workbench address.
-        sock.connect((self.host, self.port))
+        sock.connect((resolved_host, self.port))
         sock.settimeout(timeout)
         self.sock = sock
+        self.resolved_host = resolved_host
         self.last_hello_at = 0.0
 
     def close(self) -> None:
         if self.sock is not None:
             self.sock.close()
         self.sock = None
+        self.resolved_host = None
 
     def send(self, payload: bytes) -> None:
         if self.sock is None:

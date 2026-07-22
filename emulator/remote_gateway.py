@@ -794,6 +794,7 @@ class RemoteGatewayService:
             self._serial_connection,
         )
         self._tasks: list[asyncio.Task[Any]] = []
+        self._telemetry_connect_error: str | None = None
 
     async def serve_forever(self) -> None:
         try:
@@ -801,11 +802,10 @@ class RemoteGatewayService:
         except ImportError as error:
             raise RuntimeError("install websockets>=12,<13 to run the remote gateway") from error
         self._loop = asyncio.get_running_loop()
-        self.telemetry.setup(timeout=0.2)
-        self.telemetry.sock.setblocking(False)
         self._unplugged_video.set_connected(False, time.monotonic())
         self._serial.start()
         self._tasks = [
+            asyncio.create_task(self._telemetry_connection_loop()),
             asyncio.create_task(self._telemetry_loop()),
             asyncio.create_task(self._lease_loop()),
         ]
@@ -831,6 +831,32 @@ class RemoteGatewayService:
             self._serial.close()
             self.telemetry.close()
             self.store.close()
+
+    async def _telemetry_connection_loop(self) -> None:
+        """Resolve/reconnect UDP without delaying or terminating the gateway."""
+        while True:
+            if self.telemetry.sock is None:
+                try:
+                    await asyncio.to_thread(self.telemetry.setup, 1.0)
+                    assert self.telemetry.sock is not None
+                    self.telemetry.sock.setblocking(False)
+                    if self._telemetry_connect_error is not None:
+                        print(
+                            "remote gateway: workbench telemetry connected at %s:%d"
+                            % (self.telemetry.resolved_host, self.telemetry.port),
+                            flush=True,
+                        )
+                    self._telemetry_connect_error = None
+                except (OSError, RuntimeError) as error:
+                    message = str(error)
+                    if message != self._telemetry_connect_error:
+                        print(
+                            "remote gateway: workbench telemetry unavailable; "
+                            "using synthetic display: %s" % message,
+                            flush=True,
+                        )
+                    self._telemetry_connect_error = message
+            await asyncio.sleep(1.0)
 
     async def _process_request(self, path: str, headers: Any):
         parsed = urlparse(path)
@@ -1091,6 +1117,13 @@ if (window.opener) {
         while True:
             now = time.monotonic()
             try:
+                if self.telemetry.sock is None:
+                    self._unplugged_video.set_connected(False, now)
+                    synthetic = self._unplugged_video.next_frame(now)
+                    if synthetic is not None:
+                        await self._publish_rgb(synthetic)
+                    await asyncio.sleep(0.02)
+                    continue
                 self.telemetry.send_hello_if_due(now)
                 if self._serial.connected and now - last_snapshot >= SNAPSHOT_INTERVAL_S:
                     snapshot = self.telemetry.snapshot()
@@ -1107,6 +1140,9 @@ if (window.opener) {
                 if self.telemetry.receiver.ingest(packet):
                     self._last_telemetry_at = time.monotonic()
             except (OSError, RuntimeError):
+                self.telemetry.close()
+                self._last_telemetry_at = None
+                self._unplugged_video.set_connected(False, time.monotonic())
                 await asyncio.sleep(0.2)
 
     def _telemetry_is_live(self, snapshot: TelemetrySnapshot, now: float) -> bool:

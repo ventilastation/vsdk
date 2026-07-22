@@ -332,11 +332,13 @@ make workbench-monitor PORT=/dev/cu.usbmodemXXXX
 After provisioning and a reset, the workbench connects, then advertises
 itself over mDNS (`espressif/mdns` managed component) as
 `ventilastation-workbench.local`, so the emulator doesn't need to know its
-DHCP-assigned IP. `.local` resolution is handled by the OS resolver
-(`socket.getaddrinfo()` in `comms.py`'s `ConnIP.setup()`) — built into
-macOS (Bonjour); Linux needs `avahi`/`nss-mdns` installed, Windows needs
-Bonjour (e.g. via iTunes) installed. If mDNS isn't available on a given
-machine, pass the workbench's IP explicitly instead (see below).
+DHCP-assigned IP. The remote-workbench gateway first tries the OS resolver and
+then discovers `_ventilastation-wb._udp.local.` directly with Python's
+`zeroconf` package. Its lookup retries in the background, leaving the gateway
+and synthetic display running while the board is unavailable. The desktop
+emulator still uses the OS resolver: `.local` is built into macOS (Bonjour),
+while Linux needs `avahi`/`nss-mdns` and Windows needs Bonjour (for example via
+iTunes). An explicit workbench IP remains supported on every platform.
 
 **macOS gotcha:** if `.local` resolution hangs/fails for the emulator
 specifically even though `ping ventilastation-workbench.local` and

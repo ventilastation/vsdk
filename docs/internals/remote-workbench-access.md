@@ -116,6 +116,10 @@ USB serial is hot-pluggable. Startup and runtime I/O failures switch the
 gateway to a synthetic frame source. Opening USB does not hide the warning by
 itself: the gateway switches back only after the first valid UDP display
 capture arrives, without restarting the gateway, tunnel, or browser.
+Hostname lookup and UDP setup run in a retrying background task, so a missing
+board or unavailable system `.local` resolver cannot terminate or delay the
+public gateway. For the standard workbench hostname the gateway falls back to
+direct multicast-DNS service discovery via `zeroconf`.
 
 The fallback draws **board unplugged** directly in the native 256-column by
 54-LED polar framebuffer. It uses the MicroPython ROM-selection menu's exact

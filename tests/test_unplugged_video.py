@@ -1,5 +1,6 @@
 """Synthetic disconnected-display and USB hot-plug behavior."""
 
+import asyncio
 from pathlib import Path
 import sqlite3
 import sys
@@ -204,6 +205,30 @@ class _FakeWebSocket:
 
 
 class DisconnectedInputTests(unittest.IsolatedAsyncioTestCase):
+    async def test_telemetry_resolution_failure_does_not_stop_gateway_task(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = RemoteGatewayService(GatewayConfig(
+                board="workbench-1",
+                audience="test",
+                ticket_key=b"k" * 32,
+                state_path=Path(directory) / "state.sqlite3",
+                workbench_host="missing.local",
+                workbench_port=5005,
+                serial_port="/dev/absent",
+                allowed_origins=("https://example.test",),
+                auth_mode="trusted-proxy",
+            ))
+            service.telemetry.setup = mock.Mock(side_effect=OSError("name not known"))
+            task = asyncio.create_task(service._telemetry_connection_loop())
+            try:
+                await asyncio.sleep(0.05)
+                self.assertFalse(task.done())
+                self.assertEqual(service._telemetry_connect_error, "name not known")
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                service.store.close()
+
     async def test_usb_connection_keeps_warning_until_fresh_telemetry(self):
         with tempfile.TemporaryDirectory() as directory:
             service = RemoteGatewayService(GatewayConfig(
