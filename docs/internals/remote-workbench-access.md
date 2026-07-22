@@ -272,12 +272,13 @@ connectivity.
 
 ## VPS edge and ngrok fallback
 
-The deployed edge is an IPv6-only Google Cloud `e2-micro` VM. Caddy owns ports
+The deployed edge is a dual-stack Google Cloud `e2-micro` VM. Caddy owns ports
 80/443 and automatic TLS, oauth2-proxy performs Google sign-in and the email
 allowlist, and FRP carries `/auth/*` plus `/ws` to the loopback gateway. FRP
 uses TLS and a random token; the server binds proxied ports to loopback so the
-gateway cannot be reached directly from the Internet. SSH remains restricted
-to the operator network.
+gateway cannot be reached directly from the Internet. SSH is restricted to
+Google IAP. The stable hostname resolves to the public IPv4 address so
+workbench hosts on networks without IPv6 can reach FRPS.
 
 The stable public origin is
 `https://ventilastation-board.protocultura.net`. Caddy removes any incoming
@@ -396,8 +397,8 @@ tickets, SDP, TURN passwords, tunnel tokens, or account passwords.
 - TURN changes the bandwidth cost location; it does not eliminate relay cost.
 - H.264 browser decode and WebGL are mandatory in remote mode. The remote path
   intentionally has no low-fidelity canvas fallback.
-- The current free VPS is IPv6-only. A browser network without IPv6 needs a
-  billable public IPv4 address or another dual-stack HTTPS edge.
+- The relay's in-use external IPv4 address is billable separately from the
+  free-tier VM. Remove it when the remote workbench is retired.
 - The ngrok fallback still depends on its account quota for OAuth and
   signaling; an exhausted quota blocks authentication even though WebRTC would
   carry the display afterward.

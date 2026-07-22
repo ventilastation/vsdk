@@ -88,9 +88,44 @@ class RemoteWorkbenchCliTests(unittest.TestCase):
             config_dir = Path(temporary)
             rendered = cli.render_frpc_config(config_dir, "2001:db8::1", 7000, 18765)
             self.assertIn('serverAddr = "2001:db8::1"', rendered)
+            self.assertIn("loginFailExit = false", rendered)
             self.assertIn('tokenSource.type = "file"', rendered)
             self.assertIn(str(config_dir / "frp.token"), rendered)
             self.assertNotIn("secret-token", rendered)
+
+    def test_frp_endpoint_and_reachability_check(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_path = Path(temporary) / "frpc.toml"
+            config_path.write_text(
+                cli.render_frpc_config(Path(temporary), "relay.example.test", 7000, 18765),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                cli.frp_endpoint(config_path),
+                ("relay.example.test", 7000),
+            )
+            fake_connection = mock.MagicMock()
+            with mock.patch.object(
+                cli.socket,
+                "create_connection",
+                return_value=fake_connection,
+            ) as create_connection:
+                cli.check_tcp_endpoint("relay.example.test", 7000)
+            create_connection.assert_called_once_with(
+                ("relay.example.test", 7000), timeout=5.0
+            )
+
+    def test_frp_reachability_error_is_actionable(self):
+        with mock.patch.object(
+            cli.socket,
+            "create_connection",
+            side_effect=OSError("no route to host"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "FRP relay relay.example.test:7000 is unreachable: no route to host",
+            ):
+                cli.check_tcp_endpoint("relay.example.test", 7000)
 
 
 if __name__ == "__main__":

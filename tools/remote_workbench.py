@@ -15,6 +15,7 @@ import re
 import secrets
 import shlex
 import shutil
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -31,7 +32,7 @@ import webbrowser
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ORIGIN = "https://ventilastation.protocultura.net"
 DEFAULT_RELAY_GATEWAY = "https://ventilastation-board.protocultura.net"
-DEFAULT_FRP_SERVER = "2600:1900:4021:40d:0:1::"
+DEFAULT_FRP_SERVER = "ventilastation-board.protocultura.net"
 DEFAULT_FRP_PORT = 7000
 DEFAULT_FRP_REMOTE_PORT = 18765
 FRP_VERSION = "0.69.0"
@@ -162,6 +163,7 @@ on_http_request:
 def render_frpc_config(config_dir: Path, server: str, server_port: int, remote_port: int) -> str:
     return """serverAddr = %s
 serverPort = %d
+loginFailExit = false
 
 [auth]
 method = "token"
@@ -327,7 +329,11 @@ def setup_frp(args: argparse.Namespace) -> int:
         args.frp_remote_port,
     )
     if config_path.exists() and not args.force:
-        print("Reusing", config_path)
+        if config_path.read_text(encoding="utf-8") == frpc_config:
+            print("Reusing", config_path)
+        else:
+            _write_private(config_path, frpc_config, overwrite=True)
+            print("Updated", config_path)
     else:
         _write_private(config_path, frpc_config, overwrite=args.force)
 
@@ -342,6 +348,30 @@ def select_transport(config_dir: Path, requested: str = "auto") -> str:
     if (config_dir / "frpc.toml").exists() and (config_dir / "bin" / "frpc").exists():
         return "frp"
     return "ngrok"
+
+
+def frp_endpoint(config_path: Path) -> tuple[str, int]:
+    """Read the generated FRP server endpoint without requiring a TOML parser."""
+    content = config_path.read_text(encoding="utf-8")
+    server_match = re.search(r'^serverAddr\s*=\s*("(?:[^"\\]|\\.)*")\s*$', content, re.MULTILINE)
+    port_match = re.search(r"^serverPort\s*=\s*([0-9]+)\s*$", content, re.MULTILINE)
+    if server_match is None or port_match is None:
+        raise RuntimeError("FRP client configuration has no server endpoint")
+    server = json.loads(server_match.group(1))
+    port = int(port_match.group(1))
+    if not isinstance(server, str) or not server or not 1 <= port <= 65535:
+        raise RuntimeError("FRP client configuration has an invalid server endpoint")
+    return server, port
+
+
+def check_tcp_endpoint(host: str, port: int, timeout_s: float = 5.0) -> None:
+    try:
+        with socket.create_connection((host, port), timeout=timeout_s):
+            pass
+    except OSError as error:
+        raise RuntimeError(
+            "FRP relay %s:%d is unreachable: %s" % (host, port, error)
+        ) from error
 
 
 def public_gateway_url(config_dir: Path, explicit: str | None = None) -> str:
@@ -371,10 +401,13 @@ def doctor(config_dir: Path, quiet: bool = False, transport: str = "auto") -> di
     serial_port = Path(serial_setting)
     serial_present = serial_setting != "auto" and serial_port.exists()
     if transport == "frp":
-        if not (config_dir / "frpc.toml").exists():
-            raise RuntimeError("FRP client configuration is missing: %s" % (config_dir / "frpc.toml"))
+        frpc_config_path = config_dir / "frpc.toml"
+        if not frpc_config_path.exists():
+            raise RuntimeError("FRP client configuration is missing: %s" % frpc_config_path)
         if not (config_dir / "bin" / "frpc").exists():
             raise RuntimeError("FRP client binary is missing: %s" % (config_dir / "bin" / "frpc"))
+        frp_host, frp_port = frp_endpoint(frpc_config_path)
+        check_tcp_endpoint(frp_host, frp_port)
     else:
         if not (config_dir / "ngrok-policy.yml").exists():
             raise RuntimeError("ngrok policy is missing; rerun remote-workbench-setup")
@@ -397,6 +430,8 @@ def doctor(config_dir: Path, quiet: bool = False, transport: str = "auto") -> di
             print("⚠ USB board absent at %s; synthetic display mode will be used" % serial_setting)
         print("✓ gateway dependencies")
         print("✓ %s transport" % transport.upper())
+        if transport == "frp":
+            print("✓ FRP relay %s:%d" % (frp_host, frp_port))
     return environment
 
 
