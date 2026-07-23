@@ -49,6 +49,7 @@ CPYTHON_TESTS = [
     "tests/test_pov_profiling.py",
     "tests/test_povperf_controls.py",
     "tests/test_pov_profile_report.py",
+    "tests/test_pov_screenshot.py",
     "tests/test_tutorial_vs2.py",
     "tests/test_emulator_vs2_render.py",
     "tests/test_mapdemo_vs2.py",
