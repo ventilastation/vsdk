@@ -130,7 +130,10 @@ def render_polar(raw, size=480):
     inside = rr <= radius
     out = np.zeros((size, size, 3), dtype=np.uint8)
     out[inside] = grid[col[inside], led[inside]]
-    return Image.fromarray(out, "RGB")
+    img = Image.fromarray(out, "RGB")
+    # Orient to match how the physical display reads: 90 deg anticlockwise,
+    # then a horizontal flip.
+    return img.transpose(Image.Transpose.ROTATE_90).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
 
 
 def lit_fraction(raw):
