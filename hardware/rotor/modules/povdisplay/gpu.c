@@ -256,17 +256,32 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   int y0 = fixed_floor_to_int(t->y);
   int desde = MAX(y0, 0);
   int hasta = MIN(y0 + viewport_h, ROWS);
+
+  // Walk the visible column of the map one source row at a time. sy advances
+  // by 1 per output row, so the per-row division/modulo and tile lookup of the
+  // naive form are replaced by counters that only touch t->frames (and the
+  // frame's strip base) when crossing a tile boundary -- a big compute cut for
+  // a full-height tilemap like the terrain (up to ~128 rows per column).
+  int sy = viewport_y + (desde - y0);
+  int tile_row = sy / tile_height;
+  int row_in_tile = sy - tile_row * tile_height;
+  int frame = t->frames[tile_row * t->columns + tile_col];
+  int strip_base = frame == VS2_EMPTY_TILE ? -1
+      : source_column * tile_height + (frame % total_frames) * tile_width * tile_height;
   for (int y = desde; y < hasta; y++) {
-    int sy = viewport_y + (y - y0);
-    uint8_t frame = t->frames[(sy / tile_height) * t->columns + tile_col];
-    if (frame == VS2_EMPTY_TILE) {
-      continue;
+    if (strip_base >= 0) {
+      uint8_t color = is->data[strip_base + row_in_tile];
+      if (color != TRANSPARENT) {
+        int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
+        set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
+      }
     }
-    frame %= total_frames;
-    uint8_t color = is->data[source_column * tile_height + frame * tile_width * tile_height + (sy % tile_height)];
-    if (color != TRANSPARENT) {
-      int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
-      set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
+    if (++row_in_tile == tile_height) {
+      row_in_tile = 0;
+      tile_row++;
+      frame = t->frames[tile_row * t->columns + tile_col];
+      strip_base = frame == VS2_EMPTY_TILE ? -1
+          : source_column * tile_height + (frame % total_frames) * tile_width * tile_height;
     }
   }
 }

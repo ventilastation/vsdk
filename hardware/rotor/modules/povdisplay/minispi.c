@@ -300,6 +300,19 @@ void spiWaitComplete() {
     spi_ongoing = false;
 }
 
+// Blocking single-shot transfer. Used by the POV serve path, which has no
+// render to overlap with the transfer, so the interrupt-driven queue/get
+// pair's ~95us per-transaction overhead is pure cost; a polling transmit just
+// clocks the DMA out and returns.
+spi_transaction_t spi_trans_blocking;
+void spiWriteBlocking(const void * data_in, size_t len){
+    spi_trans_blocking.length = len*8;
+    spi_trans_blocking.tx_buffer = data_in;
+    spi_trans_blocking.flags = SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL;
+    esp_err_t ret = spi_device_polling_transmit(spi_handle, &spi_trans_blocking);
+    ESP_ERROR_CHECK(ret);
+}
+
 // we need esp-idf v5.4 or later for this function
 // void* spiAlloc(size_t size) {
 //     return spi_bus_dma_memory_alloc(LEDS_SPI_HOST, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
