@@ -169,16 +169,22 @@ class Director:
             from ventilastation import pov_profiling
             pov_profiling.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
         elif cmd == "launch":
-            # "launch <slug>" -- load a game or native app by its app_loader
-            # slug (e.g. "alecu.vixeous", "native.voom") without menu
-            # navigation. Used by scripted profiling/testing tools.
+            # "launch <slug> [rom_path]" -- load a game or native app by its
+            # app_loader slug (e.g. "alecu.vixeous", "native.voom") without menu
+            # navigation. A native ROM-library app (native.nes/sms/gb/msx) takes
+            # a rom path as the remaining args (it may contain spaces). Used by
+            # scripted profiling/testing tools.
             slug = parts[1] if len(parts) > 1 else ""
+            rom_path = " ".join(parts[2:]) if len(parts) > 2 else None
             if not slug:
                 print("director: launch missing slug")
                 return False
-            from ventilastation import app_loader
+            from ventilastation import app_loader, native_apps
             try:
-                app_loader.load_app(slug)
+                if rom_path and native_apps.is_native_app(slug):
+                    native_apps.launch_native_scene(slug, rom_path)
+                else:
+                    app_loader.load_app(slug)
             except Exception as _e:
                 buf = io.StringIO()
                 sys.print_exception(_e, buf)
