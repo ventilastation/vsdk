@@ -1,0 +1,7 @@
+# Minimal host dependencies for the USB/UDP remote-workbench gateway.
+aiortc>=1.15,<2
+numpy
+pyserial
+websockets>=12,<13
+PyJWT[crypto]>=2.8,<3
+zeroconf>=0.146,<1

@@ -1,0 +1,19 @@
+# Client configuration on the workbench computer. Keep the populated file and
+# frp token outside the repository. The remote port is bound only on the VPS
+# loopback interface, so Caddy is the only public-facing component.
+serverAddr = "oracle-vm-public-ip-or-dns"
+serverPort = 7000
+
+[auth]
+method = "token"
+token = "replace-with-32-or-more-random-bytes"
+
+[transport.tls]
+enable = true
+
+[[proxies]]
+name = "workbench-gateway"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8765
+remotePort = 18765

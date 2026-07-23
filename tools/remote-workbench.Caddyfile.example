@@ -1,0 +1,44 @@
+# Replace the hostname before installing. Caddy obtains and renews the TLS
+# certificate. oauth2-proxy and frps listen only on the Oracle VM loopback.
+ventilastation-board.protocultura.net {
+    encode zstd gzip
+
+    handle /oauth2/* {
+        reverse_proxy 127.0.0.1:4180 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Uri {uri}
+        }
+    }
+
+    handle /auth/* {
+        route {
+            # Never pass a browser-supplied identity to the gateway.
+            request_header -X-Remote-Email
+            request_header -X-Remote-Subject
+            forward_auth 127.0.0.1:4180 {
+                uri /oauth2/auth
+                header_up X-Real-IP {remote_host}
+                copy_headers {
+                    X-Auth-Request-Email>X-Remote-Email
+                    X-Auth-Request-User>X-Remote-Subject
+                }
+                @unauthenticated status 401
+                handle_response @unauthenticated {
+                    redir * /oauth2/sign_in?rd={scheme}://{host}{uri}
+                }
+            }
+            reverse_proxy 127.0.0.1:18765
+        }
+    }
+
+    # WebSocket upgrades use a short-lived, single-use gateway ticket. Identity
+    # headers are irrelevant here and are removed as defense in depth.
+    handle /ws {
+        reverse_proxy 127.0.0.1:18765 {
+            header_up -X-Remote-Email
+            header_up -X-Remote-Subject
+        }
+    }
+
+    respond "Not found" 404
+}

@@ -1,9 +1,9 @@
 """Authenticated remote gateway for a physical Ventilastation workbench.
 
-The process is intentionally headless and loopback-only.  Cloudflare Tunnel
-publishes it; Cloudflare Access proves a Google identity at ``/auth/start``;
-the gateway then mints a one-use ticket for the browser WebSocket at ``/ws``.
-The workbench's UDP and USB serial links never leave this computer.
+The process is intentionally headless and loopback-only.  An authenticated
+edge proxy publishes ``/auth/start`` and forwards a verified identity; the
+gateway then mints a one-use ticket for the browser WebSocket at ``/ws``.  The
+workbench's UDP and USB serial links never leave this computer.
 
 Runtime dependencies are deliberately imported at the edges so the policy,
 ticket, lease, and wire-protocol core remains testable with the Python standard
@@ -15,7 +15,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+import glob
 from http import HTTPStatus
 import hashlib
 import hmac
@@ -29,7 +30,6 @@ import threading
 import time
 from typing import Any, Callable, Optional
 from urllib.parse import parse_qs, urlparse
-import zlib
 
 try:  # ``python -m emulator.remote_gateway``
     from .host_protocol import HostEvent, HostProtocolError, HostProtocolParser
@@ -40,6 +40,16 @@ try:  # ``python -m emulator.remote_gateway``
         TelemetrySnapshot,
         WorkbenchTelemetryClient,
     )
+    from .remote_video import (
+        DEFAULT_ICE_SERVERS,
+        LatestVideoFrame,
+        VIDEO_CODED_HEIGHT,
+        VIDEO_CODED_WIDTH,
+        VIDEO_PACKING,
+        WebRtcVideoPeer,
+        ice_server_payload,
+    )
+    from .unplugged_video import UnpluggedFrameStream
 except ImportError:  # direct ``python emulator/remote_gateway.py`` for bench use
     from host_protocol import HostEvent, HostProtocolError, HostProtocolParser
     from workbench_telemetry import (
@@ -49,32 +59,40 @@ except ImportError:  # direct ``python emulator/remote_gateway.py`` for bench us
         TelemetrySnapshot,
         WorkbenchTelemetryClient,
     )
+    from remote_video import (
+        DEFAULT_ICE_SERVERS,
+        LatestVideoFrame,
+        VIDEO_CODED_HEIGHT,
+        VIDEO_CODED_WIDTH,
+        VIDEO_PACKING,
+        WebRtcVideoPeer,
+        ice_server_payload,
+    )
+    from unplugged_video import UnpluggedFrameStream
 
 
 PROTOCOL_MAGIC = b"VSRW"
 PROTOCOL_VERSION = 1
 HEADER = struct.Struct("<4sBBHIII")
 MAX_MESSAGE_BYTES = 1024 * 1024
-MAX_CONTROL_BYTES = 16 * 1024
-MAX_FRAME_QUEUE = 1
-MAX_TRANSPORT_BUFFER = 512 * 1024
+MAX_CONTROL_BYTES = 128 * 1024
 
 HELLO = 0x01
-FRAME_RGB = 0x02
 HOST_EVENT = 0x03
 STATUS = 0x04
 ERROR = 0x05
 LEASE = 0x06
 
 INPUT = 0x10
-FRAME_ACK = 0x11
 HEARTBEAT = 0x12
 LEASE_REQUEST = 0x13
 OPERATOR_COMMAND = 0x14
 
-FRAME_FORMAT_RGB888 = 1
-FRAME_CODEC_RAW = 0
-FRAME_CODEC_DEFLATE = 1
+VIDEO_OFFER = 0x20
+VIDEO_ANSWER = 0x21
+VIDEO_STATUS = 0x22
+VIDEO_STOP = 0x23
+
 INPUT_EXIT_EDGE = 0x01
 
 ROLE_VIEWER = "viewer"
@@ -203,7 +221,7 @@ class TicketClaims:
 
 
 class TicketSigner:
-    """Short-lived HMAC tickets used after Cloudflare Access validation."""
+    """Short-lived HMAC tickets used after edge identity validation."""
 
     def __init__(self, key: bytes, audience: str, board: str):
         if len(key) < 32:
@@ -544,6 +562,34 @@ class CloudflareAccessVerifier:
             raise AuthenticationError("invalid Cloudflare Access assertion") from error
 
 
+class TrustedProxyIdentityVerifier:
+    """Accept an identity injected by the private, authenticated edge proxy.
+
+    This mode is deliberately safe only when the gateway is loopback-only and
+    its sole ingress is a private reverse tunnel from the configured proxy.
+    The edge removes client-supplied versions of these headers and copies them
+    from its authenticated identity before forwarding the request. Some edges
+    (including ngrok's managed Google OAuth action) expose a verified email
+    but no stable subject header; in that case the verified email is used as
+    the ticket subject. The ACL remains keyed by that same verified email.
+    """
+
+    def __init__(self, email_header: str, subject_header: str):
+        self.email_header = email_header
+        self.subject_header = subject_header
+
+    def verify(self, headers: Any) -> tuple[str, str]:
+        email = str(headers.get(self.email_header, "")).strip().casefold()
+        subject = str(headers.get(self.subject_header, "")).strip()
+        if not email or "@" not in email or len(email) > 254:
+            raise AuthenticationError("missing trusted-proxy email")
+        if subject and len(subject) > 512:
+            raise AuthenticationError("invalid trusted-proxy subject")
+        if not subject:
+            subject = email
+        return subject, email
+
+
 def apa102_to_rgb(raw: bytes) -> bytes:
     """Decode calibrated APA102 capture data to RGB888 for the browser."""
     try:
@@ -564,61 +610,141 @@ class BrowserSession:
     session_id: str
     websocket: Any
     principal: Principal
-    frame_queue: asyncio.Queue[bytes] = field(default_factory=lambda: asyncio.Queue(maxsize=MAX_FRAME_QUEUE))
     exit_pressed: bool = False
-    last_ack_sequence: int = 0
-    sender_task: asyncio.Task[Any] | None = None
+    last_audited_input: tuple[int, int, int, bool] | None = None
+    video_peer: WebRtcVideoPeer | None = None
 
 
 class SerialBridge:
-    """One writer plus a parser thread for the workbench USB serial bridge."""
+    """Reconnectable writer/parser for the hot-pluggable USB workbench."""
 
-    def __init__(self, port: str, on_event: Callable[[HostEvent], None], on_error: Callable[[Exception], None]):
+    def __init__(
+        self,
+        port: str,
+        on_event: Callable[[HostEvent], None],
+        on_error: Callable[[Exception], None],
+        on_connection: Callable[[bool], None],
+        serial_factory: Callable[..., Any] | None = None,
+        retry_interval_s: float = 0.5,
+    ):
         self.port = port
         self.on_event = on_event
         self.on_error = on_error
+        self.on_connection = on_connection
+        self.serial_factory = serial_factory
+        self.retry_interval_s = retry_interval_s
         self._serial = None
         self._stop = threading.Event()
+        self._connected = threading.Event()
+        self._reported_connection: bool | None = None
         self._thread: threading.Thread | None = None
         self._write_lock = threading.Lock()
 
+    @property
+    def connected(self) -> bool:
+        return self._connected.is_set()
+
     def start(self) -> None:
-        try:
-            import serial
-        except ImportError as error:
-            raise RuntimeError("pyserial is required for the workbench serial bridge") from error
-        self._serial = serial.Serial(self.port, 115200, timeout=0.1)
+        if self.serial_factory is None:
+            try:
+                import serial
+            except ImportError as error:
+                raise RuntimeError("pyserial is required for the workbench serial bridge") from error
+            self.serial_factory = serial.Serial
+        self._report_connection(False)
         self._thread = threading.Thread(target=self._reader, name="remote-workbench-serial", daemon=True)
         self._thread.start()
 
     def close(self) -> None:
         self._stop.set()
-        if self._serial is not None:
-            self._serial.close()
+        with self._write_lock:
+            connection = self._serial
+            self._serial = None
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
         if self._thread is not None:
             self._thread.join(timeout=1)
 
     def write(self, payload: bytes) -> None:
-        if self._serial is None:
-            raise OSError("workbench serial is not connected")
+        connection = None
+        try:
+            with self._write_lock:
+                connection = self._serial
+                if connection is None:
+                    raise OSError("workbench serial is not connected")
+                connection.write(payload)
+        except Exception as error:
+            if connection is not None:
+                self._disconnect(connection)
+            if isinstance(error, OSError):
+                raise
+            raise OSError("workbench serial write failed") from error
+
+    def _report_connection(self, connected: bool) -> None:
+        if connected:
+            self._connected.set()
+        else:
+            self._connected.clear()
+        if connected != self._reported_connection:
+            self._reported_connection = connected
+            self.on_connection(connected)
+
+    def _disconnect(self, connection: Any) -> None:
         with self._write_lock:
-            self._serial.write(payload)
+            if self._serial is not connection:
+                return
+            self._serial = None
+        try:
+            connection.close()
+        except Exception:
+            pass
+        self._report_connection(False)
 
     def _reader(self) -> None:
         parser = HostProtocolParser()
         while not self._stop.is_set():
+            connection = self._serial
+            if connection is None:
+                try:
+                    assert self.serial_factory is not None
+                    connection = self.serial_factory(self._resolved_port(), 115200, timeout=0.1)
+                except Exception:
+                    self._report_connection(False)
+                    self._stop.wait(self.retry_interval_s)
+                    continue
+                if self._stop.is_set():
+                    connection.close()
+                    break
+                with self._write_lock:
+                    self._serial = connection
+                parser = HostProtocolParser()
+                self._report_connection(True)
             try:
-                data = self._serial.read(1024)
+                data = connection.read(1024)
                 if not data:
                     continue
                 for event in parser.feed(data):
                     self.on_event(event)
-            except (HostProtocolError, OSError, IOError) as error:
+            except HostProtocolError as error:
                 self.on_error(error)
-                if isinstance(error, HostProtocolError):
-                    parser = HostProtocolParser()
-                else:
-                    break
+                parser = HostProtocolParser()
+            except Exception:
+                self._disconnect(connection)
+                self._stop.wait(self.retry_interval_s)
+
+    def _resolved_port(self) -> str:
+        if self.port != "auto":
+            return self.port
+        matches: list[str] = []
+        for pattern in ("/dev/cu.usbmodem*", "/dev/ttyACM*", "/dev/ttyUSB*"):
+            matches.extend(glob.glob(pattern))
+        matches = sorted(set(matches))
+        if len(matches) != 1:
+            raise OSError("waiting for one USB workbench serial device")
+        return matches[0]
 
 
 @dataclass(frozen=True)
@@ -631,10 +757,14 @@ class GatewayConfig:
     workbench_port: int
     serial_port: str
     allowed_origins: tuple[str, ...]
-    access_team_domain: str
-    access_audience: str
+    auth_mode: str = "cloudflare-access"
+    access_team_domain: str = ""
+    access_audience: str = ""
+    trusted_email_header: str = "X-Remote-Email"
+    trusted_subject_header: str = "X-Remote-Subject"
     bind_host: str = "127.0.0.1"
     bind_port: int = 8765
+    ice_servers: tuple[dict[str, Any], ...] = DEFAULT_ICE_SERVERS
 
 
 class RemoteGatewayService:
@@ -644,13 +774,27 @@ class RemoteGatewayService:
         self.config = config
         self.store = GatewayStore(config.state_path)
         self.core = RemoteGatewayCore(config.board, config.audience, config.ticket_key, self.store)
-        self.access = CloudflareAccessVerifier(config.access_team_domain, config.access_audience)
+        if config.auth_mode == "cloudflare-access":
+            self.identity = CloudflareAccessVerifier(config.access_team_domain, config.access_audience)
+        elif config.auth_mode == "trusted-proxy":
+            self.identity = TrustedProxyIdentityVerifier(config.trusted_email_header, config.trusted_subject_header)
+        else:
+            raise RuntimeError("unsupported REMOTE_WORKBENCH_AUTH_MODE")
         self.telemetry = WorkbenchTelemetryClient(config.workbench_host, config.workbench_port)
+        self.video_source = LatestVideoFrame(width=LEDS, height=COLUMNS)
         self.sessions: dict[str, BrowserSession] = {}
         self._sequence = 0
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._serial = SerialBridge(config.serial_port, self._serial_event, self._serial_error)
+        self._unplugged_video = UnpluggedFrameStream()
+        self._last_telemetry_at: float | None = None
+        self._serial = SerialBridge(
+            config.serial_port,
+            self._serial_event,
+            self._serial_error,
+            self._serial_connection,
+        )
         self._tasks: list[asyncio.Task[Any]] = []
+        self._telemetry_connect_error: str | None = None
 
     async def serve_forever(self) -> None:
         try:
@@ -658,10 +802,10 @@ class RemoteGatewayService:
         except ImportError as error:
             raise RuntimeError("install websockets>=12,<13 to run the remote gateway") from error
         self._loop = asyncio.get_running_loop()
-        self.telemetry.setup(timeout=0.2)
-        self.telemetry.sock.setblocking(False)
+        self._unplugged_video.set_connected(False, time.monotonic())
         self._serial.start()
         self._tasks = [
+            asyncio.create_task(self._telemetry_connection_loop()),
             asyncio.create_task(self._telemetry_loop()),
             asyncio.create_task(self._lease_loop()),
         ]
@@ -680,9 +824,39 @@ class RemoteGatewayService:
             for task in self._tasks:
                 task.cancel()
             await asyncio.gather(*self._tasks, return_exceptions=True)
+            await asyncio.gather(
+                *(self._close_video_peer(session) for session in list(self.sessions.values())),
+                return_exceptions=True,
+            )
             self._serial.close()
             self.telemetry.close()
             self.store.close()
+
+    async def _telemetry_connection_loop(self) -> None:
+        """Resolve/reconnect UDP without delaying or terminating the gateway."""
+        while True:
+            if self.telemetry.sock is None:
+                try:
+                    await asyncio.to_thread(self.telemetry.setup, 1.0)
+                    assert self.telemetry.sock is not None
+                    self.telemetry.sock.setblocking(False)
+                    if self._telemetry_connect_error is not None:
+                        print(
+                            "remote gateway: workbench telemetry connected at %s:%d"
+                            % (self.telemetry.resolved_host, self.telemetry.port),
+                            flush=True,
+                        )
+                    self._telemetry_connect_error = None
+                except (OSError, RuntimeError) as error:
+                    message = str(error)
+                    if message != self._telemetry_connect_error:
+                        print(
+                            "remote gateway: workbench telemetry unavailable; "
+                            "using synthetic display: %s" % message,
+                            flush=True,
+                        )
+                    self._telemetry_connect_error = message
+            await asyncio.sleep(1.0)
 
     async def _process_request(self, path: str, headers: Any):
         parsed = urlparse(path)
@@ -691,7 +865,10 @@ class RemoteGatewayService:
                 return None
             return HTTPStatus.NOT_FOUND, [("Content-Type", "text/plain")], b"Not found\n"
         try:
-            subject, email = self.access.verify(headers.get("Cf-Access-Jwt-Assertion", ""))
+            if self.config.auth_mode == "cloudflare-access":
+                subject, email = self.identity.verify(headers.get("Cf-Access-Jwt-Assertion", ""))
+            else:
+                subject, email = self.identity.verify(headers)
             ticket = self.core.ticket_for(subject, email)
             body = self._auth_complete_page(ticket)
             return HTTPStatus.OK, [("Content-Type", "text/html; charset=utf-8"), ("Cache-Control", "no-store")], body
@@ -733,7 +910,6 @@ if (window.opener) {
             return
         session = BrowserSession(secrets.token_urlsafe(18), websocket, principal)
         self.sessions[session.session_id] = session
-        session.sender_task = asyncio.create_task(self._frame_sender(session))
         self.store.audit(self.config.board, principal.email, "connect", principal.role)
         await self._send_status(session, "connected")
         await self._send_hello(session)
@@ -750,8 +926,7 @@ if (window.opener) {
             if released is not None:
                 await self._neutralize(released.email, "disconnect")
                 await self._broadcast_lease()
-            if session.sender_task is not None:
-                session.sender_task.cancel()
+            await self._close_video_peer(session)
             self.store.audit(self.config.board, principal.email, "disconnect", "")
 
     async def _handle_browser_message(self, session: BrowserSession, message: WireMessage) -> None:
@@ -762,16 +937,36 @@ if (window.opener) {
             if joy1 & 0x80 or joy2 & 0x80 or extra & 0x80 or flags & ~INPUT_EXIT_EDGE:
                 raise ProtocolError("invalid input bits")
             self.core.leases.validate(self.config.board, session.session_id, generation)
-            await asyncio.to_thread(self._serial.write, bytes((0x2A, joy1, joy2, extra)))
+            delivered = await self._write_serial(bytes((0x2A, joy1, joy2, extra)))
             exit_edge = bool(flags & INPUT_EXIT_EDGE)
-            if exit_edge and not session.exit_pressed:
-                await asyncio.to_thread(self._serial.write, b"exit\n")
+            input_state = (joy1, joy2, extra, exit_edge)
+            if input_state != session.last_audited_input:
+                self.store.audit(
+                    self.config.board,
+                    session.principal.email,
+                    "input",
+                    "%02x,%02x,%02x,exit=%d" % (joy1, joy2, extra, exit_edge),
+                )
+                session.last_audited_input = input_state
+                if not delivered and any(input_state):
+                    # Make the disconnected smoke path exercise audible host
+                    # events too, using the ROM menu's normal movement sound.
+                    await self._broadcast_host_event(HostEvent(
+                        "sound", ("alecu.vyruss/shoot3",)
+                    ))
+            if delivered and exit_edge and not session.exit_pressed:
+                await self._write_serial(b"exit\n")
             session.exit_pressed = exit_edge
             return
-        if message.message_type == FRAME_ACK:
-            if len(message.payload) != 8:
-                raise ProtocolError("invalid frame acknowledgement")
-            session.last_ack_sequence, _display_ms = struct.unpack("<II", message.payload)
+        if message.message_type == VIDEO_OFFER:
+            request = _json_payload(message.payload)
+            await self._start_video_peer(session, request)
+            return
+        if message.message_type == VIDEO_STOP:
+            if message.payload:
+                raise ProtocolError("video stop payload must be empty")
+            await self._close_video_peer(session)
+            await self._send_video_status(session, "stopped")
             return
         if message.message_type == HEARTBEAT:
             if len(message.payload) != 8:
@@ -785,6 +980,13 @@ if (window.opener) {
             if action == "request":
                 lease = self.core.leases.request(self.config.board, session.principal, session.session_id)
                 self.store.audit(self.config.board, session.principal.email, "lease_grant", str(lease.generation))
+                now = time.monotonic()
+                if self._unplugged_video.restart(now):
+                    # A controller is actively trying the disconnected smoke
+                    # path, so give them a fresh one-minute animation window.
+                    synthetic = self._unplugged_video.next_frame(now)
+                    if synthetic is not None:
+                        await self._publish_rgb(synthetic)
                 await self._broadcast_lease()
             elif action == "release":
                 lease = self.core.leases.release(self.config.board, session.session_id)
@@ -816,56 +1018,180 @@ if (window.opener) {
             return
         raise ProtocolError("unsupported browser message")
 
+    async def _start_video_peer(self, session: BrowserSession, request: dict[str, Any]) -> None:
+        description_type = request.get("type")
+        sdp = request.get("sdp")
+        if description_type != "offer" or not isinstance(sdp, str) or not sdp:
+            raise ProtocolError("invalid WebRTC offer")
+        if len(sdp.encode("utf-8")) > MAX_CONTROL_BYTES:
+            raise ProtocolError("WebRTC offer exceeds limit")
+        await self._close_video_peer(session)
+        if not self._serial.connected:
+            # The one-minute unplugged stream may have stopped long before a
+            # viewer arrives. Refresh its cached terminal warning immediately
+            # so the new track starts with a current timestamp.
+            bootstrap = self._unplugged_video.current_frame(time.monotonic())
+            if bootstrap is not None:
+                await self._publish_rgb(bootstrap)
+        peer: WebRtcVideoPeer | None = None
+
+        async def on_state(state: str) -> None:
+            if peer is not None and session.video_peer is peer:
+                self.store.audit(self.config.board, session.principal.email, "video_state", state)
+                await self._send_video_status(session, state)
+
+        try:
+            peer = WebRtcVideoPeer(self.video_source, self.config.ice_servers, on_state=on_state)
+            session.video_peer = peer
+            answer = await peer.accept_offer(sdp, description_type)
+        except Exception as error:
+            if peer is not None:
+                await peer.close()
+            session.video_peer = None
+            raise ProtocolError("could not negotiate H.264 WebRTC video") from error
+        self.store.audit(self.config.board, session.principal.email, "video_offer", "H264")
+        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
+        await session.websocket.send(encode_message(
+            VIDEO_ANSWER,
+            self._sequence,
+            _json_bytes(answer),
+        ))
+        await self._send_video_status(session, "connecting")
+        if not self._serial.connected:
+            assert peer is not None
+            self._tasks.append(asyncio.create_task(
+                self._bootstrap_unplugged_peer(session, peer)
+            ))
+
+    async def _bootstrap_unplugged_peer(
+        self,
+        session: BrowserSession,
+        peer: WebRtcVideoPeer,
+    ) -> None:
+        """Send enough cached frames for a late-joining decoder to present one."""
+        for _attempt in range(2):
+            await asyncio.sleep(0.1)
+            if self._serial.connected or session.video_peer is not peer:
+                return
+            frame = self._unplugged_video.current_frame(time.monotonic())
+            if frame is None:
+                return
+            await self._publish_rgb(frame)
+
+    async def _close_video_peer(self, session: BrowserSession) -> None:
+        peer = session.video_peer
+        session.video_peer = None
+        if peer is not None:
+            await peer.close()
+
+    async def _send_video_status(self, session: BrowserSession, state: str) -> None:
+        if session.session_id not in self.sessions:
+            return
+        payload: dict[str, Any] = {
+            "state": state,
+            "codec": "H264",
+            "width": VIDEO_CODED_WIDTH,
+            "height": VIDEO_CODED_HEIGHT,
+            "logicalWidth": LEDS,
+            "logicalHeight": COLUMNS,
+            "packing": VIDEO_PACKING,
+        }
+        if state == "connected" and session.video_peer is not None:
+            try:
+                payload["stats"] = await session.video_peer.stats()
+            except Exception:
+                pass
+        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
+        try:
+            await session.websocket.send(encode_message(
+                VIDEO_STATUS,
+                self._sequence,
+                _json_bytes(payload),
+            ))
+        except Exception:
+            pass
+
     async def _telemetry_loop(self) -> None:
         loop = asyncio.get_running_loop()
         last_snapshot = 0.0
         while True:
             now = time.monotonic()
             try:
+                if self.telemetry.sock is None:
+                    self._unplugged_video.set_connected(False, now)
+                    synthetic = self._unplugged_video.next_frame(now)
+                    if synthetic is not None:
+                        await self._publish_rgb(synthetic)
+                    await asyncio.sleep(0.02)
+                    continue
                 self.telemetry.send_hello_if_due(now)
-                if now - last_snapshot >= SNAPSHOT_INTERVAL_S:
+                if self._serial.connected and now - last_snapshot >= SNAPSHOT_INTERVAL_S:
                     snapshot = self.telemetry.snapshot()
-                    await self._publish_snapshot(snapshot)
+                    await self._publish_capture_or_fallback(snapshot, now)
                     last_snapshot = now
+                elif not self._serial.connected:
+                    synthetic = self._unplugged_video.next_frame(now)
+                    if synthetic is not None:
+                        await self._publish_rgb(synthetic)
                 try:
                     packet = await asyncio.wait_for(loop.sock_recv(self.telemetry.sock, 2048), timeout=0.02)
                 except asyncio.TimeoutError:
                     continue
-                self.telemetry.receiver.ingest(packet)
+                if self.telemetry.receiver.ingest(packet):
+                    self._last_telemetry_at = time.monotonic()
             except (OSError, RuntimeError):
+                self.telemetry.close()
+                self._last_telemetry_at = None
+                self._unplugged_video.set_connected(False, time.monotonic())
                 await asyncio.sleep(0.2)
 
+    def _telemetry_is_live(self, snapshot: TelemetrySnapshot, now: float) -> bool:
+        return (
+            snapshot.newest_sequence is not None
+            and self._last_telemetry_at is not None
+            and now - self._last_telemetry_at <= 2.0
+        )
+
+    async def _publish_capture_or_fallback(
+        self, snapshot: TelemetrySnapshot, now: float
+    ) -> None:
+        if self._telemetry_is_live(snapshot, now):
+            # USB opening only proves that the command channel is present.
+            # A fresh UDP packet proves that the capture channel is live.
+            self._unplugged_video.set_connected(True, now)
+            await self._publish_snapshot(snapshot)
+            return
+        self._unplugged_video.set_connected(False, now)
+        synthetic = self._unplugged_video.next_frame(now)
+        if synthetic is not None:
+            await self._publish_rgb(synthetic)
+
     async def _publish_snapshot(self, snapshot: TelemetrySnapshot) -> None:
-        if not self.sessions or snapshot.newest_sequence is None:
+        if (
+            snapshot.newest_sequence is None
+            or not any(session.video_peer is not None for session in self.sessions.values())
+        ):
             return
         rgb = await asyncio.to_thread(apa102_to_rgb, snapshot.apa102)
-        compressed = await asyncio.to_thread(zlib.compress, rgb, 1)
-        metadata = struct.pack("<HHBBH", COLUMNS, LEDS, FRAME_FORMAT_RGB888, FRAME_CODEC_DEFLATE, 0)
-        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
-        frame = encode_message(FRAME_RGB, self._sequence, metadata + compressed)
-        for session in list(self.sessions.values()):
-            if session.frame_queue.full():
-                try:
-                    session.frame_queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-            try:
-                session.frame_queue.put_nowait(frame)
-            except asyncio.QueueFull:
-                pass
+        await self._publish_rgb(rgb)
 
-    async def _frame_sender(self, session: BrowserSession) -> None:
-        while True:
-            frame = await session.frame_queue.get()
-            transport = getattr(session.websocket, "transport", None)
-            if transport is not None and transport.get_write_buffer_size() > MAX_TRANSPORT_BUFFER:
-                continue
-            await session.websocket.send(frame)
+    async def _publish_rgb(self, rgb: bytes) -> None:
+        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
+        await self.video_source.publish(self._sequence, rgb)
+
+    async def _write_serial(self, payload: bytes) -> bool:
+        if not self._serial.connected:
+            return False
+        try:
+            await asyncio.to_thread(self._serial.write, payload)
+            return True
+        except OSError:
+            return False
 
     async def _lease_loop(self) -> None:
         while True:
             await asyncio.sleep(1)
-            # An ACL change is authoritative immediately. Cloudflare Access
+            # An ACL change is authoritative immediately. The edge proxy
             # prevents future login, while this check closes already-open
             # sockets and releases their control lease.
             for session in list(self.sessions.values()):
@@ -890,11 +1216,22 @@ if (window.opener) {
         lease = self.core.leases.current(self.config.board)
         payload = _json_bytes({
             "board": self.config.board,
+            "board_connected": self._serial.connected,
             "email": session.principal.email,
             "role": session.principal.role,
             "width": COLUMNS,
             "height": LEDS,
-            "frame_codecs": ["deflate-rgb888", "raw-rgb888"],
+            "video": {
+                "transport": "webrtc",
+                "codec": "H264",
+                "width": VIDEO_CODED_WIDTH,
+                "height": VIDEO_CODED_HEIGHT,
+                "logicalWidth": LEDS,
+                "logicalHeight": COLUMNS,
+                "packing": VIDEO_PACKING,
+                "fps": round(1 / SNAPSHOT_INTERVAL_S),
+                "iceServers": ice_server_payload(self.config.ice_servers),
+            },
             "lease_generation": lease.generation if lease and lease.session_id == session.session_id else None,
             "lease_holder": lease.email if lease else None,
         })
@@ -924,6 +1261,44 @@ if (window.opener) {
         if self._loop is not None:
             asyncio.run_coroutine_threadsafe(self._broadcast_error("serial", str(error)), self._loop)
 
+    def _serial_connection(self, connected: bool) -> None:
+        if self._loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                self._set_serial_connection(connected), self._loop
+            )
+
+    async def _set_serial_connection(self, connected: bool) -> None:
+        now = time.monotonic()
+        snapshot: TelemetrySnapshot | None = None
+        if connected:
+            # Do not clear the fallback merely because the serial device
+            # opened. The board display arrives over a separate UDP channel.
+            snapshot = self.telemetry.snapshot()
+            if self._telemetry_is_live(snapshot, now):
+                self._unplugged_video.set_connected(True, now)
+        else:
+            self._unplugged_video.set_connected(False, now)
+        state = "connected" if connected else "unplugged"
+        for email in {session.principal.email for session in self.sessions.values()}:
+            self.store.audit(self.config.board, email, "board_connection", state)
+        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
+        message = encode_message(STATUS, self._sequence, _json_bytes({
+            "state": "board",
+            "board_connected": connected,
+            "synthetic_seconds": (
+                0 if self._unplugged_video.connected
+                else int(self._unplugged_video.duration_s)
+            ),
+        }))
+        await asyncio.gather(
+            *(session.websocket.send(message) for session in self.sessions.values()),
+            return_exceptions=True,
+        )
+        if snapshot is not None and self._telemetry_is_live(snapshot, now):
+            # Replace the warning immediately when a real capture is already
+            # buffered; fresh UDP chunks will continue replacing it.
+            await self._publish_snapshot(snapshot)
+
     async def _broadcast_host_event(self, event: HostEvent) -> None:
         allowed = {"sound", "music", "musicstop", "notes", "base", "info", "traceback", "achip", "aframe", "amap", "astop"}
         if event.command not in allowed:
@@ -932,6 +1307,8 @@ if (window.opener) {
         # browser implementation declares support in a later protocol version.
         if event.command in {"achip", "aframe", "amap", "astop"}:
             return
+        for email in {session.principal.email for session in self.sessions.values()}:
+            self.store.audit(self.config.board, email, "host_event", event.command)
         name = event.command.encode("ascii")
         arguments = _json_bytes(list(event.args))
         payload = struct.pack("<BHI", len(name), len(arguments), len(event.payload)) + name + arguments + event.payload
@@ -966,6 +1343,26 @@ def config_from_environment() -> GatewayConfig:
     if not origins:
         raise RuntimeError("REMOTE_WORKBENCH_ALLOWED_ORIGINS is required")
     key = _read_key(required("REMOTE_WORKBENCH_TICKET_KEY_FILE"))
+    auth_mode = os.environ.get("REMOTE_WORKBENCH_AUTH_MODE", "trusted-proxy").strip()
+    if auth_mode not in {"trusted-proxy", "cloudflare-access"}:
+        raise RuntimeError("REMOTE_WORKBENCH_AUTH_MODE must be trusted-proxy or cloudflare-access")
+    if auth_mode == "cloudflare-access":
+        access_team_domain = required("CF_ACCESS_TEAM_DOMAIN")
+        access_audience = required("CF_ACCESS_AUDIENCE")
+    else:
+        access_team_domain = ""
+        access_audience = ""
+    ice_json = os.environ.get(
+        "REMOTE_WORKBENCH_ICE_SERVERS_JSON",
+        json.dumps(DEFAULT_ICE_SERVERS),
+    )
+    try:
+        ice_value = json.loads(ice_json)
+        if not isinstance(ice_value, list):
+            raise ValueError("ICE server configuration must be an array")
+        ice_servers = tuple(ice_server_payload(ice_value))
+    except (json.JSONDecodeError, ValueError) as error:
+        raise RuntimeError("REMOTE_WORKBENCH_ICE_SERVERS_JSON is invalid") from error
     return GatewayConfig(
         board=required("REMOTE_WORKBENCH_BOARD"),
         audience=required("REMOTE_WORKBENCH_TICKET_AUDIENCE"),
@@ -975,10 +1372,14 @@ def config_from_environment() -> GatewayConfig:
         workbench_port=int(os.environ.get("REMOTE_WORKBENCH_PORT", "5005")),
         serial_port=required("REMOTE_WORKBENCH_SERIAL_PORT"),
         allowed_origins=origins,
-        access_team_domain=required("CF_ACCESS_TEAM_DOMAIN"),
-        access_audience=required("CF_ACCESS_AUDIENCE"),
+        auth_mode=auth_mode,
+        access_team_domain=access_team_domain,
+        access_audience=access_audience,
+        trusted_email_header=os.environ.get("REMOTE_WORKBENCH_TRUSTED_EMAIL_HEADER", "X-Remote-Email").strip(),
+        trusted_subject_header=os.environ.get("REMOTE_WORKBENCH_TRUSTED_SUBJECT_HEADER", "X-Remote-Subject").strip(),
         bind_host=os.environ.get("REMOTE_WORKBENCH_BIND", "127.0.0.1"),
         bind_port=int(os.environ.get("REMOTE_WORKBENCH_BIND_PORT", "8765")),
+        ice_servers=ice_servers,
     )
 
 

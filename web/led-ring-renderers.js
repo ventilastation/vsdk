@@ -9,6 +9,13 @@ import {
 } from "./app-support.js?v=20260717b";
 import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260717e";
 
+const VIDEO_PLANE_GUARD = 2;
+const VIDEO_PLANE_STRIDE = PIXELS + VIDEO_PLANE_GUARD;
+// Keep the visible video width equal to its 16-pixel H.264 macroblock surface.
+// The last eight black texels prevent mobile decoders from exposing an
+// implicit padding crop that shifts the second and third component planes.
+const VIDEO_CODED_WIDTH = 176;
+
 
 class LedRingWebGLRenderer {
   constructor(canvas) {
@@ -78,11 +85,28 @@ class LedRingWebGLRenderer {
         }
       `,
       this.isWebGL2 ? `#version 300 es
-        precision mediump float;
+        precision highp float;
         in vec2 v_texCoord;
         in vec2 v_ledUV;
         uniform sampler2D u_ledColors;
+        uniform float u_videoPacked;
         out vec4 out_color;
+
+        vec4 readLedColor() {
+          if (u_videoPacked < 0.5) {
+            return texture(u_ledColors, v_ledUV);
+          }
+          float logicalX = floor(v_ledUV.x * ${PIXELS.toFixed(1)});
+          float redX = (logicalX + 0.5) / ${VIDEO_CODED_WIDTH.toFixed(1)};
+          float greenX = (${VIDEO_PLANE_STRIDE.toFixed(1)} + logicalX + 0.5) / ${VIDEO_CODED_WIDTH.toFixed(1)};
+          float blueX = (${(VIDEO_PLANE_STRIDE * 2).toFixed(1)} + logicalX + 0.5) / ${VIDEO_CODED_WIDTH.toFixed(1)};
+          return vec4(
+            texture(u_ledColors, vec2(redX, v_ledUV.y)).r,
+            texture(u_ledColors, vec2(greenX, v_ledUV.y)).r,
+            texture(u_ledColors, vec2(blueX, v_ledUV.y)).r,
+            1.0
+          );
+        }
 
         void main() {
           vec2 center = vec2(0.5, 0.5);
@@ -94,14 +118,31 @@ class LedRingWebGLRenderer {
           float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
           float pill = smoothstep(0.01, -0.01, dist);
           float glow = exp(-dist * dist * 10.0) * 0.3;
-          vec4 ledColor = texture(u_ledColors, v_ledUV);
+          vec4 ledColor = readLedColor();
           out_color = ledColor * (pill + glow);
         }
       ` : `
-        precision mediump float;
+        precision highp float;
         varying vec2 v_texCoord;
         varying vec2 v_ledUV;
         uniform sampler2D u_ledColors;
+        uniform float u_videoPacked;
+
+        vec4 readLedColor() {
+          if (u_videoPacked < 0.5) {
+            return texture2D(u_ledColors, v_ledUV);
+          }
+          float logicalX = floor(v_ledUV.x * ${PIXELS.toFixed(1)});
+          float redX = (logicalX + 0.5) / ${VIDEO_CODED_WIDTH.toFixed(1)};
+          float greenX = (${VIDEO_PLANE_STRIDE.toFixed(1)} + logicalX + 0.5) / ${VIDEO_CODED_WIDTH.toFixed(1)};
+          float blueX = (${(VIDEO_PLANE_STRIDE * 2).toFixed(1)} + logicalX + 0.5) / ${VIDEO_CODED_WIDTH.toFixed(1)};
+          return vec4(
+            texture2D(u_ledColors, vec2(redX, v_ledUV.y)).r,
+            texture2D(u_ledColors, vec2(greenX, v_ledUV.y)).r,
+            texture2D(u_ledColors, vec2(blueX, v_ledUV.y)).r,
+            1.0
+          );
+        }
 
         void main() {
           vec2 center = vec2(0.5, 0.5);
@@ -113,7 +154,7 @@ class LedRingWebGLRenderer {
           float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
           float pill = smoothstep(0.01, -0.01, dist);
           float glow = exp(-dist * dist * 10.0) * 0.3;
-          vec4 ledColor = texture2D(u_ledColors, v_ledUV);
+          vec4 ledColor = readLedColor();
           gl_FragColor = ledColor * (pill + glow);
         }
       `
@@ -156,6 +197,8 @@ class LedRingWebGLRenderer {
       gl.UNSIGNED_BYTE,
       null,
     );
+    this.ledTextureWidth = PIXELS;
+    this.ledTextureHeight = COLUMNS;
 
     // Compiling the full scene compositor is expensive and, on a few GPU
     // drivers, can disrupt the first paint. The normal emulator path remains
@@ -175,6 +218,7 @@ class LedRingWebGLRenderer {
       center: gl.getUniformLocation(this.program, "u_center"),
       scale: gl.getUniformLocation(this.program, "u_scale"),
       ledColors: gl.getUniformLocation(this.program, "u_ledColors"),
+      videoPacked: gl.getUniformLocation(this.program, "u_videoPacked"),
     };
 
     gl.enable(gl.BLEND);
@@ -257,7 +301,28 @@ class LedRingWebGLRenderer {
     gl.vertexAttribPointer(this.attribs.ledUV, 2, gl.FLOAT, false, 0, 0);
   }
 
-  drawLedRing(width, height, scale) {
+  ensureLedTextureSize(width, height) {
+    if (this.ledTextureWidth === width && this.ledTextureHeight === height) {
+      return;
+    }
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.ledColorTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      this.isWebGL2 ? gl.RGBA8 : gl.RGBA,
+      width,
+      height,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      null,
+    );
+    this.ledTextureWidth = width;
+    this.ledTextureHeight = height;
+  }
+
+  drawLedRing(width, height, scale, videoPacked = false) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, width, height);
@@ -267,6 +332,7 @@ class LedRingWebGLRenderer {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.ledColorTexture);
     gl.uniform1i(this.uniforms.ledColors, 0);
+    gl.uniform1f(this.uniforms.videoPacked, videoPacked ? 1 : 0);
     gl.uniform2f(this.uniforms.resolution, width, height);
     gl.uniform2f(this.uniforms.center, width * 0.5, height * 0.5);
     gl.uniform1f(this.uniforms.scale, Math.min(width, height) / 200);
@@ -290,8 +356,10 @@ class LedRingWebGLRenderer {
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.ledColorTexture);
+    this.ensureLedTextureSize(PIXELS, COLUMNS);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, PIXELS, COLUMNS, gl.RGBA, gl.UNSIGNED_BYTE, ledPixels);
     gl.uniform1i(this.uniforms.ledColors, 0);
+    gl.uniform1f(this.uniforms.videoPacked, 0);
     const afterUploadAt = performance.now();
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -316,6 +384,54 @@ class LedRingWebGLRenderer {
     return true;
   }
 
+  renderVideoFrame(video) {
+    if (!this.available || !video || video.readyState < 2) {
+      this.lastProfile = null;
+      return false;
+    }
+    if (video.videoWidth !== VIDEO_CODED_WIDTH || video.videoHeight !== COLUMNS) {
+      this.lastProfile = null;
+      return false;
+    }
+    const startedAt = performance.now();
+    const { width, height, scale } = this.resize();
+    const afterResizeAt = performance.now();
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.ledColorTexture);
+    this.ensureLedTextureSize(VIDEO_CODED_WIDTH, COLUMNS);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+    // H.264 4:2:0 would blend literal neighbouring LED colors. The 176x256
+    // macroblock-aligned picture stores R/G/B in guarded neutral-luma planes;
+    // the fragment shader reconstructs them without a browser-side pixel copy.
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      video,
+    );
+    const afterUploadAt = performance.now();
+    this.drawLedRing(width, height, scale, true);
+    const finishedAt = performance.now();
+    this.lastProfile = {
+      resizeMs: afterResizeAt - startedAt,
+      videoUploadMs: afterUploadAt - afterResizeAt,
+      uploadMs: afterUploadAt - afterResizeAt,
+      drawSubmitMs: finishedAt - afterUploadAt,
+      totalMs: finishedAt - startedAt,
+      resolutionScale: scale,
+      vertexCount: this.geometry.vertexCount,
+      colorBytes: 0,
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+    };
+    return true;
+  }
+
   renderScene(sceneInput) {
     if (!this.available || !this.ensureSceneCompositor()) {
       this.lastProfile = null;
@@ -324,6 +440,7 @@ class LedRingWebGLRenderer {
     const startedAt = performance.now();
     const { width, height, scale } = this.resize();
     const afterResizeAt = performance.now();
+    this.ensureLedTextureSize(PIXELS, COLUMNS);
     if (!this.sceneCompositor.render(sceneInput)) {
       this.lastProfile = null;
       return false;

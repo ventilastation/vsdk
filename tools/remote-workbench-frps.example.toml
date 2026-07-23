@@ -1,0 +1,11 @@
+# Server configuration on the Oracle VM. Do not open remotePort 18765 in the
+# OCI security list or host firewall: Caddy reaches it through localhost only.
+bindPort = 7000
+proxyBindAddr = "127.0.0.1"
+
+[auth]
+method = "token"
+token = "replace-with-the-same-32-or-more-random-bytes"
+
+[transport.tls]
+force = true

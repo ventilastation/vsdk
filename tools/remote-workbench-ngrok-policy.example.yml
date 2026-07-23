@@ -1,0 +1,31 @@
+# Copy outside the repository, replace the allowlist, and keep this policy with
+# the private ngrok configuration. The gateway must bind only to 127.0.0.1.
+on_http_request:
+  # `/ws` validates its short-lived gateway ticket. OAuth is applied only to
+  # the ticket-minting path because browser WebSockets omit cross-site OAuth
+  # session cookies.
+  - expressions:
+      - 'req.url.path != "/ws"'
+    actions:
+      - type: oauth
+        config:
+          provider: google
+          auth_id: vsdk-remote-workbench
+          idle_session_timeout: 15m
+          max_session_duration: 1h
+  - expressions:
+      - 'req.url.path != "/ws" && !(actions.ngrok.oauth.identity.email in [''controller@example.com'', ''admin@example.com''])'
+    actions:
+      - type: deny
+  - expressions:
+      - 'req.url.path != "/ws"'
+    actions:
+      - type: remove-headers
+        config:
+          headers:
+            - X-Remote-Email
+            - X-Remote-Subject
+      - type: add-headers
+        config:
+          headers:
+            X-Remote-Email: "${actions.ngrok.oauth.identity.email}"
