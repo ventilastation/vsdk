@@ -22,20 +22,35 @@ from typing import Any, Awaitable, Callable, Iterable
 VIDEO_WIDTH = 54
 VIDEO_HEIGHT = 256
 VIDEO_COMPONENTS = 3
-# Two black luma samples after each component plane make the coded width a
-# format fingerprint as well as a compression guard. The old triplet and the
-# first planar layout were both 162 pixels wide, so mixed gateway files could
-# claim the planar packing while still emitting triplets. A 168-pixel frame
-# cannot be mistaken for either legacy layout, and H.264 already pads both
-# 162 and 168 to the same 16-pixel macroblock width internally.
+VIDEO_MACROBLOCK_WIDTH = 16
+
+
+def _coded_width(logical_width: int) -> int:
+    packed_width = (logical_width + VIDEO_PLANE_GUARD) * VIDEO_COMPONENTS
+    return (
+        (packed_width + VIDEO_MACROBLOCK_WIDTH - 1)
+        // VIDEO_MACROBLOCK_WIDTH
+        * VIDEO_MACROBLOCK_WIDTH
+    )
+
+
+# Two black luma samples after each component plane separate the planes. The
+# three guarded planes occupy 168 samples, followed by eight explicit black
+# samples so the published frame is exactly 176 pixels wide. H.264 otherwise
+# pads a 168-pixel picture to a 176-pixel macroblock surface and signals a
+# crop. Some mobile hardware-decoder/WebGL paths sample that uncropped surface,
+# progressively shifting the green and blue planes. Publishing the full
+# macroblock width leaves no implicit crop for the browser to misapply.
 VIDEO_PLANE_GUARD = 2
 VIDEO_PLANE_STRIDE = VIDEO_WIDTH + VIDEO_PLANE_GUARD
-VIDEO_CODED_WIDTH = VIDEO_PLANE_STRIDE * VIDEO_COMPONENTS
+VIDEO_PACKED_WIDTH = VIDEO_PLANE_STRIDE * VIDEO_COMPONENTS
+VIDEO_CODED_WIDTH = _coded_width(VIDEO_WIDTH)
+VIDEO_TAIL_GUARD = VIDEO_CODED_WIDTH - VIDEO_PACKED_WIDTH
 VIDEO_CODED_HEIGHT = VIDEO_HEIGHT
 # The suffix is part of the browser/gateway compatibility contract. Bump it
 # whenever the coded texture layout changes so a stale tab fails visibly
 # instead of interpreting one layout with another layout's shader.
-VIDEO_PACKING = "rgb-luma-guarded-planes-v3"
+VIDEO_PACKING = "rgb-luma-macroblock-planes-v4"
 VIDEO_CLOCK_RATE = 90_000
 VIDEO_TIME_BASE = Fraction(1, VIDEO_CLOCK_RATE)
 DEFAULT_ICE_SERVERS = ({"urls": ["stun:stun.l.google.com:19302"]},)
@@ -158,8 +173,9 @@ class WorkbenchVideoTrack:
                 # planar layout avoids the fragile R/G/B/R/G/B one-pixel luma
                 # pattern while preserving all 8 bits through H.264 4:2:0.
                 plane_stride = source.width + VIDEO_PLANE_GUARD
+                coded_width = _coded_width(source.width)
                 components = numpy.zeros(
-                    (source.height, plane_stride * VIDEO_COMPONENTS), dtype=numpy.uint8
+                    (source.height, coded_width), dtype=numpy.uint8
                 )
                 for component in range(VIDEO_COMPONENTS):
                     start = component * plane_stride
@@ -226,7 +242,7 @@ class WebRtcVideoPeer:
             "type": self.pc.localDescription.type,
             "sdp": self.pc.localDescription.sdp,
             "codec": "H264",
-            "width": (self.source.width + VIDEO_PLANE_GUARD) * VIDEO_COMPONENTS,
+            "width": _coded_width(self.source.width),
             "height": self.source.height,
             "logicalWidth": self.source.width,
             "logicalHeight": self.source.height,

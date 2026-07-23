@@ -11,7 +11,10 @@ import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260717e
 
 const VIDEO_PLANE_GUARD = 2;
 const VIDEO_PLANE_STRIDE = PIXELS + VIDEO_PLANE_GUARD;
-const VIDEO_CODED_WIDTH = VIDEO_PLANE_STRIDE * 3;
+// Keep the visible video width equal to its 16-pixel H.264 macroblock surface.
+// The last eight black texels prevent mobile decoders from exposing an
+// implicit padding crop that shifts the second and third component planes.
+const VIDEO_CODED_WIDTH = 176;
 
 
 class LedRingWebGLRenderer {
@@ -399,9 +402,9 @@ class LedRingWebGLRenderer {
     this.ensureLedTextureSize(VIDEO_CODED_WIDTH, COLUMNS);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-    // H.264 4:2:0 would blend literal neighbouring LED colors. The 168x256
-    // picture stores R/G/B in guarded neutral-luma planes; the fragment
-    // shader reconstructs them without a browser-side pixel copy.
+    // H.264 4:2:0 would blend literal neighbouring LED colors. The 176x256
+    // macroblock-aligned picture stores R/G/B in guarded neutral-luma planes;
+    // the fragment shader reconstructs them without a browser-side pixel copy.
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       0,

@@ -1,4 +1,6 @@
-import { LedRingWebGLRenderer } from "../../web/led-ring-renderers.js?v=guarded-v3";
+import { LedRingWebGLRenderer } from "../../web/led-ring-renderers.js?v=macroblock-v4";
+
+const CODED_WIDTH = 176;
 
 const video = document.querySelector("#video");
 const decoded = document.querySelector("#decoded");
@@ -27,8 +29,8 @@ function planeError(data, firstPlane, secondPlane) {
   let maximum = 0;
   for (let y = 0; y < 256; y += 1) {
     for (let x = 0; x < 54; x += 1) {
-      const first = data[(y * 168 + firstPlane * 56 + x) * 4];
-      const second = data[(y * 168 + secondPlane * 56 + x) * 4];
+      const first = data[(y * CODED_WIDTH + firstPlane * 56 + x) * 4];
+      const second = data[(y * CODED_WIDTH + secondPlane * 56 + x) * 4];
       const difference = Math.abs(first - second);
       total += difference;
       maximum = Math.max(maximum, difference);
@@ -81,8 +83,8 @@ async function run() {
   await waitForFrame();
   await waitForFrame();
   const context = decoded.getContext("2d", { willReadFrequently: true });
-  context.drawImage(video, 0, 0, 168, 256);
-  const pixels = context.getImageData(0, 0, 168, 256).data;
+  context.drawImage(video, 0, 0, CODED_WIDTH, 256);
+  const pixels = context.getImageData(0, 0, CODED_WIDTH, 256).data;
   const redGreen = planeError(pixels, 0, 1);
   const redBlue = planeError(pixels, 0, 2);
   const renderer = new LedRingWebGLRenderer(ring);

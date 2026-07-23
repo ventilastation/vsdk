@@ -201,24 +201,28 @@ rate is 30 frames per second.
 Sending a literal 54×256 RGB picture through browser-compatible H.264 would
 not preserve the LEDs' colors: H.264 Baseline uses 4:2:0 chroma, so neighbouring
 one-pixel red/green/blue values are averaged. The implemented wire picture is
-therefore 168×256:
+therefore 176×256:
 
 ```text
-R0 ... R53 00 00 | G0 ... G53 00 00 | B0 ... B53 00 00
-                 (168 luma samples per row)
+R0 ... R53 00 00 | G0 ... G53 00 00 | B0 ... B53 00 00 | 00 ... 00
+                 (168 component samples)                         (8 tail)
 ```
 
 Each component value is encoded as a neutral-grey RGB sample, with contiguous
 R, G and B planes to avoid a high-frequency interleaved pattern. Two black
-guard samples separate the planes. Besides preventing boundary bleed, the
-168-pixel width is a format fingerprint: the old 162-pixel triplet and planar
-formats cannot be accepted while claiming this layout. All information then
-lives in full-resolution luma, while the subsampled chroma planes remain
-neutral. A regression test encodes and decodes an adversarial
-saturated pattern through the same H.264 Baseline settings; at 1 Mbit/s it
-requires mean channel error below 0.5 and maximum error no greater than 3.
+guard samples separate the planes. Eight final black samples bring the visible
+width to exactly eleven 16-pixel H.264 macroblocks. This avoids relying on the
+decoder to crop a hidden 176-pixel surface down to 168 pixels; some mobile
+hardware-decoder/WebGL combinations expose that padding in texture sampling,
+which progressively displaces the green and blue planes. The 176-pixel width
+also fingerprints this layout so older formats cannot be accepted while
+claiming it. All information then lives in full-resolution luma, while the
+subsampled chroma planes remain neutral. A regression test encodes and decodes
+an adversarial saturated pattern through the same H.264 Baseline settings; at
+1 Mbit/s it requires mean channel error below 0.5 and maximum error no greater
+than 3.
 
-The browser uploads the decoded `HTMLVideoElement` directly into a 168×256
+The browser uploads the decoded `HTMLVideoElement` directly into a 176×256
 WebGL texture with `texSubImage2D`. The ring fragment shader samples the three
 luma positions and reconstructs one RGB LED. There is no canvas, `ImageData`,
 JavaScript RGBA copy, palette, RGB555 conversion, or browser CPU transpose.

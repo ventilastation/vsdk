@@ -41,8 +41,8 @@ import {
 } from "./app-support.js?v=20260717b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260722c";
-import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722d";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260722d";
+import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722e";
 
 
 class FailedRuntimeAdapter {
@@ -2069,7 +2069,7 @@ class BrowserHostApp {
         ? this.renderer.renderScene(sceneInput)
         : !this.force2dFallback && this.renderer.render(ledPixels);
     if (videoFrame && !rendered) {
-      throw new Error("H.264 remote video requires WebGL and a decoded 168x256 guarded RGB-luma frame");
+      throw new Error("H.264 remote video requires WebGL and a decoded 176x256 macroblock-aligned RGB-luma frame");
     }
     if (!rendered && useSceneShader) {
       composition = "cpu";

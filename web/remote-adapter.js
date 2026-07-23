@@ -20,13 +20,13 @@ const TYPES = Object.freeze({
   VIDEO_STOP: 0x23,
 });
 const INPUT_EXIT_EDGE = 0x01;
-const VIDEO_WIDTH = 168;
+const VIDEO_WIDTH = 176;
 const VIDEO_HEIGHT = 256;
 const VIDEO_LOGICAL_WIDTH = 54;
 const VIDEO_LOGICAL_HEIGHT = 256;
 // This version is deliberately included in signaling. A stale gateway or tab
 // must reject the stream rather than render a different packing as RGB.
-const VIDEO_PACKING = "rgb-luma-guarded-planes-v3";
+const VIDEO_PACKING = "rgb-luma-macroblock-planes-v4";
 // The stable gateway terminates Google OAuth and forwards signaling over FRP.
 // Operators may override it before loading the emulator for a staged endpoint.
 const DEFAULT_GATEWAY = "https://ventilastation-board.protocultura.net";

@@ -18,8 +18,10 @@ from remote_video import (  # noqa: E402
     VIDEO_CODED_WIDTH,
     VIDEO_HEIGHT,
     VIDEO_PACKING,
+    VIDEO_PACKED_WIDTH,
     VIDEO_PLANE_GUARD,
     VIDEO_PLANE_STRIDE,
+    VIDEO_TAIL_GUARD,
     VIDEO_WIDTH,
     WorkbenchVideoTrack,
     WebRtcVideoPeer,
@@ -55,6 +57,10 @@ class LatestVideoFrameTests(unittest.IsolatedAsyncioTestCase):
                            (component + 1) * VIDEO_PLANE_STRIDE]
             self.assertEqual(guard.shape[1], VIDEO_PLANE_GUARD)
             self.assertFalse(guard.any())
+        tail = planes[:, VIDEO_PACKED_WIDTH:]
+        self.assertEqual(tail.shape[1], VIDEO_TAIL_GUARD)
+        self.assertFalse(tail.any())
+        self.assertEqual(VIDEO_CODED_WIDTH % 16, 0)
         self.assertEqual(frame.pts, 0)
         track.stop()
 

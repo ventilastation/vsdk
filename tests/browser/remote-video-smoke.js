@@ -1,7 +1,7 @@
 import { LedRingWebGLRenderer } from "../../web/led-ring-renderers.js?v=remote-video-smoke";
 
 const PLANE_STRIDE = 56;
-const CODED_WIDTH = 168;
+const CODED_WIDTH = 176;
 const CODED_HEIGHT = 256;
 const LOGICAL_WIDTH = 54;
 
