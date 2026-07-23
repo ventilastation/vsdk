@@ -255,56 +255,14 @@ int last_column = 0;
 int column_offset = 0;
 int64_t last_starfield_step = 0;
 
-void spi_write_HSPI_blocking() {
-    spiWriteBlocking(dma_buffer, buf_size);
-}
+static int render_col = 0;
 
-// Render one whole frame (every column) into the back framebuffer, then
-// publish it as the new front. Runs on the render task (core 1) so the heavy,
-// scene-dependent render cost never sits on the per-column serve deadline.
-static void render_frame() {
-    uint32_t* back = fb_back;
-    if (vs2_render_active) {
-        for (int c = 0; c < COLUMNS; c++) {
-            render_vs2(c, back + (size_t)c * num_pixels_g, &vs2_active_scene);
-        }
-    } else {
-        for (int c = 0; c < COLUMNS; c++) {
-            render(c, back + (size_t)c * num_pixels_g);
-        }
-    }
-    // Publish. The store-release pairs with the serve task's load-acquire so
-    // it only ever reads a fully rendered frame.
-    __atomic_store_n(&fb_front, back, __ATOMIC_RELEASE);
-    fb_back = (back == fb_a) ? fb_b : fb_a;
-
-    int64_t now = esp_timer_get_time();
-    if (now > last_starfield_step + 20000) {
-        step_starfield();
-        last_starfield_step = now;
-    }
-}
-
-void renderTask( void * pvParameters ){
-    printf("Render task running on core %d\n", xPortGetCoreID());
-    while (true) {
-        if (ventilagon_active) {
-            // Ventilagon drives the strip itself from the serve loop; the
-            // framebuffer path is idle.
-            vTaskDelay(pdMS_TO_TICKS(10));
-            continue;
-        }
-        render_frame();
-        // Give the scheduler (MicroPython, housekeeping, idle) the core briefly
-        // between frames; MicroPython at a higher priority also preempts freely.
-        vTaskDelay(1);
-    }
-}
-
-// Serve one column: copy its two arms out of the published framebuffer and
-// clock them to the LEDs. Constant cost -- no scene rendering here -- so the
-// per-column deadline is met regardless of how heavy the scene is.
-void gpu_serve() {
+// Serve the column currently under the LEDs, if the fan has advanced to a new
+// one: copy that column's two arms out of the published framebuffer and start
+// the DMA. Cheap and constant-cost -- no scene rendering here -- so it always
+// meets the per-column deadline. The DMA overlaps the projection that
+// project_next_column() does right after, so the wait below is normally ~0.
+static void gpu_serve() {
     int64_t now = esp_timer_get_time();
     uint32_t column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
     if (column != last_column) {
@@ -313,46 +271,70 @@ void gpu_serve() {
         uint32_t column_deadline_us = last_turn_duration > 0
             ? (uint32_t)(last_turn_duration / COLUMNS) : 0;
 
-        uint32_t* fb = __atomic_load_n(&fb_front, __ATOMIC_ACQUIRE);
+        spiWaitComplete();  // wait for the previous DMA (it overlapped the projection)
+        int64_t wait_end = measuring ? esp_timer_get_time() : 0;
+
+        uint32_t* fb = fb_front;
         uint32_t* arm0 = fb + (size_t)((column + COLUMNS/2) % COLUMNS) * num_pixels_g;
         uint32_t* arm1 = fb + (size_t)column * num_pixels_g;
         for (int n = 0; n < num_pixels_g; n++) {
             dma_pixels0[n] = arm0[num_pixels_g - 1 - n];
             dma_pixels1[n] = arm1[n];
         }
-        int64_t copy_end = measuring ? esp_timer_get_time() : 0;
-        spi_write_HSPI_blocking();
-        int64_t spi_end = measuring ? esp_timer_get_time() : 0;
+        spi_write_HSPI();   // queue the DMA (async); it runs during the projection below
+        int64_t queue_end = measuring ? esp_timer_get_time() : 0;
         last_column = column;
         if (measuring) {
             performance_record(column, column_deadline_us,
-                elapsed_us(measurement_start, spi_end),  // total
-                0, 0, 0,                                 // render is off-path now
-                elapsed_us(copy_end, spi_end),           // spi transfer
-                elapsed_us(measurement_start, copy_end));// framebuffer copy
+                elapsed_us(measurement_start, queue_end),  // total
+                0, 0, 0,                                    // projection off-path
+                elapsed_us(measurement_start, wait_end),   // spi wait
+                elapsed_us(wait_end, queue_end));           // framebuffer copy
+        }
+    }
+}
+
+// Render one framebuffer column per call, publishing a fresh double-buffered
+// frame each time the whole ring has been covered. Interleaved with gpu_serve()
+// on this single task (core 0): fb_back is written and fb_front read by the
+// same task, so there is no cross-core framebuffer handoff. Each rendered
+// column's work overlaps the DMA of the column just served, so rendering is off
+// the serve's critical path -- a served column always reads an already-rendered
+// fb entry, and rendering only ever delays the next serve by under a column.
+static void project_next_column() {
+    uint32_t* back = fb_back;
+    if (vs2_render_active) {
+        render_vs2(render_col, back + (size_t)render_col * num_pixels_g, &vs2_active_scene);
+    } else {
+        render(render_col, back + (size_t)render_col * num_pixels_g);
+    }
+    if (++render_col >= COLUMNS) {
+        render_col = 0;
+        fb_front = back;
+        fb_back = (back == fb_a) ? fb_b : fb_a;
+        int64_t now = esp_timer_get_time();
+        if (now > last_starfield_step + 20000) {
+            step_starfield();
+            last_starfield_step = now;
         }
     }
 }
 
 
 void coreTask( void * pvParameters ){
-    printf("GPU serve task running on core %d\n", xPortGetCoreID());
+    printf("GPU task running on core %d\n", xPortGetCoreID());
 
     hall_init();
 
     spiStartBuses(led_spi_host, led_freq, led_clk, led_mosi, led_cs);
     spiAcquire();
 
-    // The heavy render runs on core 1 alongside MicroPython (priority below it,
-    // so it only uses MicroPython's idle slack); this serve task keeps core 0
-    // for the constant-cost per-column output.
-    xTaskCreatePinnedToCore(renderTask, "renderTask", 10000, NULL, 1, NULL, 1);
-
     while(true){
         if (ventilagon_active) {
             ventilagon_loop();
         } else {
             gpu_serve();
+            project_next_column();
         }
     }
     vTaskDelete(NULL);
