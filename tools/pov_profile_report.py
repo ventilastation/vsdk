@@ -34,7 +34,11 @@ from pathlib import Path
 
 VSDK_ROOT = Path(__file__).resolve().parents[1]
 
-DEFAULT_GAMES = ["prboom=native.voom", "vixious=alecu.vixeous"]
+# povstress (games/demos/povstress) is a fixed, reproducible heavy vs2 scene
+# built for profiling -- constant sprite/tilemap load every run, unlike a real
+# game whose load varies with play. Replaces the earlier ad hoc use of Vixeous
+# as the MicroPython profiling subject.
+DEFAULT_GAMES = ["prboom=native.voom", "povstress=demos.povstress"]
 DEFAULT_RPMS = [600, 650, 700]
 WORKBENCH_TELEMETRY_PORT = 5005
 BOOT_BANNER = "VENTILASTATION ROTOR"
