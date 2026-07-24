@@ -338,7 +338,17 @@ def main(launcher_state=None):
 def setup():
     launcher_state = native_apps.consume_native_return()
     launcher = main(launcher_state)
-    launcher.call_later(700, launcher.load_images)
+    # director.push() below calls on_enter() synchronously, which (via
+    # Scene.on_enter()) already runs load_images() once. A second, deferred
+    # load_images() here used to re-run director.load_rom(), allocating a
+    # fresh romdata buffer and overwriting Director._stripe_buffers -- while
+    # the sprites this same on_enter() just created were still holding their
+    # own cached pointers into the *first* buffer, now unreachable. That
+    # buffer sat untouched (MicroPython's GC doesn't compact) until the next
+    # gc.collect() actually reclaimed and reused its memory, at which point
+    # every sprite still pointing at it started rendering whatever new data
+    # landed there -- the menu-sprite-corruption bug. See
+    # docs/internals/menu-sprite-corruption.md.
     director.push(launcher)
     submenu_slug = launcher_state.get("submenu_slug")
     if submenu_slug and native_apps.has_rom_library(submenu_slug):

@@ -1,9 +1,14 @@
 # Main-menu sprite corruption investigation
 
-Status as of 2026-07-24: two real bugs found and fixed by static analysis and
-host-side tests only. **Neither fix has been verified on hardware yet** —
-that's the point of this doc. Written for handoff to a session that has a
-board attached.
+Status as of 2026-07-24 (hardware session): **root cause found and fixed,
+verified on real hardware.** Bugs #1 and #2 below were found by an earlier,
+board-less static-analysis session; both are real and independently worth
+having, but hardware testing showed *neither* was the reported bug — the
+corruption reproduced identically before and after both fixes, on schedule,
+on this board's actual active code path. See "Bug #3" below for what
+actually caused it, confirmed by disabling/re-enabling the real trigger on
+hardware. Kept the original bug #1/#2 writeup below since both fixes are
+still correct and now hardware-verified in their own right.
 
 ## The symptom
 
@@ -147,26 +152,91 @@ branch, i.e. every sprite actually drawn, logging `is->frame_width`/
 `is->frame_height`/`is->palette`) is the fastest way to catch a bad pointer
 live and see what it's pointing at.
 
-## What to do on hardware, in order
+## Bug #3 (the real cause): `setup()` double-loads the menu ROM, orphaning the buffer live sprites still point at
 
-1. Flash this branch (`investigate/menu-sprite-corruption`).
-2. Check whether `/roms/menu.romz` exists on the board's filesystem (see
-   above) — tells you whether bug #2 was even in play.
-3. Reproduce: cold boot, sit on the main menu untouched for 90+ seconds,
-   watch for the corruption.
-4. If fixed: also try forcing a package install (or check if one's already
-   installed) to confirm the streaming path specifically is now clean, since
-   that's the path that had bug #2.
-5. If still broken: enable the `gpu.c` logging described above and capture
-   what a corrupted sprite's `image_strip` pointer/fields actually look like
-   when it happens — that'll tell us whether it's a third bug or a gap in
-   these two fixes.
-6. Also worth trying as a diagnostic (not a fix): does forcing
-   `platform.disable_gc = True` (skips `gc.enable()`/`gc.collect()` in
-   `Director.__init__`, see `platforms/hardware.py`) change the timing or
-   make it disappear? That would isolate whether GC-driven reuse (bug #1's
-   class of problem) is still contributing versus it being purely the
-   pointer-arithmetic bug (#2).
+This board's `/roms/menu.romz` was present and no package had ever been
+installed (see "Which loader path is actually active" above), so the active
+loader was `_parse_rom_memory` — already GC-safe per bug #1's own caveat, and
+never touching bug #2's code at all. Confirmed on hardware: the corruption
+reproduced identically (clean until ~65-85s, then garbage, persisting)
+*before and after* both fixes above. Same active code path, same timing —
+neither fix was the story.
+
+Diagnostic logging added to `gpu.c`'s `render()` (using `mp_printf(&mp_plat_print,
+...)`, **not** `ESP_LOGD`/`ESP_LOGW` — this board's ESP-IDF console is wired
+to UART0, not the USB-Serial-JTAG port the REPL/mpremote actually read, so
+`ESP_LOG*` output is invisible over USB here; that's a real, separate gotcha
+worth remembering for next time) showed something neither bug explains: **a
+given sprite's cached `image_strip` pointer never changed address, but the
+header bytes at that address changed, in two bursts roughly 60 seconds
+apart** (e.g. one strip's fields went from `w=25 h=60` to garbage `w=102
+h=114 pal=109`, at the *same* address, twice, 60s apart).
+
+That 60-second period matches `system/launcher/code/__init__.py`'s
+`GamesMenu`/`SystemMenu` `garbage_collect()`, a `gc.collect()` that
+reschedules itself via `self.call_later(60000, self.garbage_collect)` for as
+long as the menu is up. But `gc.collect()` itself isn't buggy — MicroPython's
+GC is non-compacting, and a retained `memoryview` correctly anchors its
+underlying buffer back through `items` (confirmed in `py/objarray.c`, matching
+the note already in this doc). The real bug is upstream of that: **the menu
+ROM was being loaded twice.**
+
+`Scene.on_enter()` (`ventilastation/scene.py`) already calls
+`self.load_images()` — which calls `director.load_rom(...)` — synchronously,
+and `director.push()` calls `on_enter()` synchronously too. But
+`system/launcher/code/__init__.py`'s `setup()` *also* scheduled
+`launcher.call_later(700, launcher.load_images)` right before that same
+`director.push(launcher)` call (a leftover from before `Scene.on_enter()`
+loaded images automatically, never removed once it did). So `load_rom()` ran
+twice: once synchronously inside `push()`, and again ~700ms later. Each call
+allocates a brand-new `romdata` buffer and overwrites every entry in
+`Director._stripe_buffers` to point at it — but the menu sprites created by
+the *first* call had already cached their own raw pointer into the *first*
+buffer (`sprite_obj_t.image_strip`, set once by `set_strip()`, never
+refreshed). Once the second load ran, that first buffer dropped out of
+`_stripe_buffers`/`romdata` and became unreachable — while every on-screen
+sprite kept pointing at it. Nothing looked wrong yet: MicroPython's GC never
+moves live data, so the orphaned buffer just sat there, unchanged, until the
+periodic `gc.collect()` actually swept it and let something else's allocation
+land on top — at which point every sprite still holding that stale pointer
+started rendering whatever now occupied it. That's the ~65-85s and ~120s
+timing, exactly.
+
+`apps/micropython/ventilastation/browser.py`'s `boot_main()` fallback path had
+the identical pattern (`main_menu.call_later(700, main_menu.load_images)`
+right before `director.push(main_menu)`) and got the same fix.
+
+**Fix:** delete both redundant `call_later(700, ...load_images)` calls; the
+synchronous `on_enter()` load is sufficient and was always the one actually
+used to build the initial sprites anyway.
+
+**Verified on hardware:** with the fix applied and the periodic
+`gc.collect()` left completely intact (not disabled — confirming the real
+fix, not just a workaround that avoids running the collector), the menu
+stayed clean through t=200s, spanning three full 60-second collect cycles.
+Also re-verified bug #2's fix in isolation (forced the streaming path by
+dropping `menu.romz` and pushing a plain `menu.rom`): clean through t=100s,
+so that fix — and the `readinto()` conversion — are both good and worth
+keeping.
+
+## What was done on hardware (completed)
+
+1. Flashed this branch, confirmed `/roms/menu.romz` present and no
+   `/packages` installed — bug #2's path was never active on this board.
+2. Reproduced on the unfixed firmware: clean to ~65s, corrupted by ~85s,
+   persists. Flashed the fix branch (bugs #1+#2) and reproduced again:
+   **identical timing, still broken** — neither fix was responsible.
+3. Added `mp_printf`-based change-gated logging to `gpu.c`'s `render()`,
+   rebuilt/flashed just the `micropython` (ota_2) app slot, captured serial
+   output live through a corruption cycle. Found bug #3 (above): same
+   pointer, changing content, 60s-periodic.
+4. Confirmed causation two ways: (a) disabling the periodic
+   `call_later(60000, garbage_collect)` alone made the corruption disappear
+   through t=170s; (b) the real fix (removing the redundant `load_images()`
+   call) keeps it clean through t=200s with the periodic collect left
+   running normally — this is the one that shipped.
+5. Re-verified bug #2's fix specifically on the forced streaming path: clean
+   through t=100s.
 
 ## Also on this branch: an unrelated readinto() cleanup
 
@@ -177,7 +247,8 @@ scan and per-member decompression in `vszip.py`, used by the package
 installer) to `.readinto()` on a preallocated/reused buffer, per repo
 convention (`.read()` allocates+copies every call; fine for small fixed
 fields, wasteful for anything that scales with file content). This was
-requested independently of the corruption bug and is verified via the host
-test suite (`python3 tests/run_tests.py`) and a couple of throwaway
-MicroPython-unix-port smoke tests (not preserved in the repo), but — like
-everything else in this doc — **not yet run against real hardware.**
+requested independently of the corruption bug, is verified via the host test
+suite (`python3 tests/run_tests.py`), and is now also hardware-verified: both
+loader paths (`_parse_rom_memory` via `menu.romz`, and `_load_rom_streaming`
+via a forced plain `menu.rom`) loaded correctly on real hardware during this
+investigation, exercising the `readinto()` conversion in both.
