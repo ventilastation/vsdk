@@ -6,6 +6,7 @@ target_sources(usermod_povdisplay INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/povdisplay.c
     ${CMAKE_CURRENT_LIST_DIR}/gpu.c
     ${CMAKE_CURRENT_LIST_DIR}/color_pipeline.c
+    ${CMAKE_CURRENT_LIST_DIR}/hall_filter.c
     ${CMAKE_CURRENT_LIST_DIR}/minispi.c
     ${CMAKE_CURRENT_LIST_DIR}/sprites.c
     ${CMAKE_CURRENT_LIST_DIR}/vs2_native.c

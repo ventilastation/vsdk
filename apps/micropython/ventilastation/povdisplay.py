@@ -45,6 +45,14 @@ def get_performance_stats():
     return _display().get_performance_stats()
 
 
+def set_hall_filter_enabled(enabled):
+    return _display().set_hall_filter_enabled(enabled)
+
+
+def get_hall_filter_enabled():
+    return _display().get_hall_filter_enabled()
+
+
 def set_column_offset(offset):
     return _display().set_column_offset(offset)
 

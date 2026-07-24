@@ -659,6 +659,20 @@ def stop_povperf_capture():
     stop_capture(send_command)
 
 
+_hall_filter_enabled = True  # emulator-side assumption; the device's own state is authoritative
+
+
+def toggle_hall_filter():
+    """Flip the POV hall-pulse filter (see hall_filter.c) vs. the pre-filter
+    raw passthrough, live on the connected board -- lets the F5 key A/B
+    compare the two without reflashing. The device echoes back a
+    ``hallfilter_state ...`` line (printed by the generic fallback in
+    dispatch_command()) confirming what actually took effect."""
+    global _hall_filter_enabled
+    _hall_filter_enabled = not _hall_filter_enabled
+    send_command("hallfilter " + ("on" if _hall_filter_enabled else "off"))
+
+
 def trigger_ota():
     """Request an OTA from the mDNS-advertised Ventilastation base server."""
     try:

@@ -168,6 +168,9 @@ class Director:
         elif cmd == "povperf":
             from ventilastation import pov_profiling
             pov_profiling.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
+        elif cmd == "hallfilter":
+            from ventilastation import hall_filter_control
+            hall_filter_control.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
         elif cmd == "launch":
             # "launch <slug> [rom_path]" -- load a game or native app by its
             # app_loader slug (e.g. "alecu.vixeous", "native.voom") without menu
