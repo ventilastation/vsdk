@@ -224,7 +224,11 @@ def boot_main():
     if games_menu_class and menu_options is not None:
         director = __import__("ventilastation.director", None, None, ["director"]).director
         main_menu = games_menu_class(menu_options)
-        main_menu.call_later(700, main_menu.load_images)
+        # See system/launcher/code/__init__.py's setup(): director.push()
+        # already runs load_images() once via on_enter(); a second, deferred
+        # call here is redundant and orphans the first romdata/_stripe_buffers
+        # buffer while sprites still point at it -- see
+        # docs/internals/menu-sprite-corruption.md.
         director.push(main_menu)
 
         # from apps.ventilagon_game import VentilagonIdle

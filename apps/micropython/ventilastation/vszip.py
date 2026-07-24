@@ -39,7 +39,8 @@ class _ZlibStream:
         self._remaining = comp_size
         self._buf = b""
 
-    def read(self, n):
+    def readinto(self, buf):
+        n = len(buf)
         while len(self._buf) < n:
             if not self._remaining:
                 self._buf += self._obj.flush()
@@ -49,9 +50,10 @@ class _ZlibStream:
                 break
             self._remaining -= len(chunk)
             self._buf += self._obj.decompress(chunk)
-        out = self._buf[:n]
-        self._buf = self._buf[n:]
-        return out
+        out_len = min(n, len(self._buf))
+        buf[:out_len] = self._buf[:out_len]
+        self._buf = self._buf[out_len:]
+        return out_len
 
 
 class ZipReader:
@@ -83,7 +85,12 @@ class ZipReader:
         file_size = f.tell()
         tail_len = min(file_size, _EOCD_MAX_SCAN)
         f.seek(file_size - tail_len)
-        tail = f.read(tail_len)
+        # readinto() a preallocated buffer instead of read(n): for a package
+        # small enough to fit inside the scan window (the common case), this
+        # reads the whole file, and read() is slow for that -- see the note
+        # in director.py's _load_rom_streaming.
+        tail = bytearray(tail_len)
+        f.readinto(tail)
         pos = tail.rfind(_EOCD_SIG)
         if pos < 0:
             raise ZipError("end of central directory not found")
@@ -91,7 +98,8 @@ class ZipReader:
         cd_size, cd_offset = struct.unpack_from("<LL", tail, pos + 12)
 
         f.seek(cd_offset)
-        cd = f.read(cd_size)
+        cd = bytearray(cd_size)
+        f.readinto(cd)
         entries = {}
         off = 0
         for _ in range(total_entries):
@@ -130,40 +138,52 @@ class ZipReader:
         f.seek(header_offset + 30 + name_len + extra_len)
         return method, comp_size, uncomp_size
 
-    def _member_chunks(self, name, chunk_size):
+    def _read_chunks(self, name, chunk_size):
+        """Yield successive decompressed chunks of a member, each a
+        memoryview into one scratch buffer reused across iterations (via
+        readinto() rather than read(), which would allocate+copy fresh every
+        call) -- so callers must fully consume each chunk (write it out, copy
+        it into their own destination) before the next iteration, not defer
+        past it (e.g. via bytes.join() on this generator, which pulls every
+        item before touching any of them)."""
         method, comp_size, uncomp_size = self._seek_member_data(name)
+        buf = bytearray(chunk_size)
+        view = memoryview(buf)
         if method == STORED:
             remaining = comp_size
-            while remaining:
-                chunk = self._f.read(min(chunk_size, remaining))
-                if not chunk:
-                    raise ZipError("truncated member %s" % name)
-                remaining -= len(chunk)
-                yield chunk
-            return
-        if _deflate is not None:
-            # wbits must be explicit: for RAW streams MicroPython defaults
-            # to a 256-byte window, far smaller than the 32 KiB window zip
-            # writers deflate with -- a back-reference past the window makes
-            # the read raise EINVAL.
-            stream = _deflate.DeflateIO(self._f, _deflate.RAW, 15)
+            read = self._f.readinto
         else:
-            stream = _ZlibStream(self._f, comp_size)
-        remaining = uncomp_size
+            if _deflate is not None:
+                # wbits must be explicit: for RAW streams MicroPython
+                # defaults to a 256-byte window, far smaller than the 32 KiB
+                # window zip writers deflate with -- a back-reference past
+                # the window makes the read raise EINVAL.
+                stream = _deflate.DeflateIO(self._f, _deflate.RAW, 15)
+            else:
+                stream = _ZlibStream(self._f, comp_size)
+            remaining = uncomp_size
+            read = stream.readinto
         while remaining:
-            chunk = stream.read(min(chunk_size, remaining))
-            if not chunk:
+            n = read(view[:min(chunk_size, remaining)])
+            if not n:
                 raise ZipError("truncated member %s" % name)
-            remaining -= len(chunk)
-            yield chunk
+            remaining -= n
+            yield view[:n]
 
     def read(self, name, chunk_size=4096):
         """Whole member as bytes; suits small members (meta, icon roms)."""
-        return b"".join(self._member_chunks(name, chunk_size))
+        dest = bytearray(self.size(name))
+        view = memoryview(dest)
+        pos = 0
+        for chunk in self._read_chunks(name, chunk_size):
+            n = len(chunk)
+            view[pos:pos + n] = chunk
+            pos += n
+        return dest
 
     def extract(self, name, out_path, chunk_size=4096):
         """Stream a member to out_path (parent dirs must already exist)."""
         with open(out_path, "wb") as out:
-            for chunk in self._member_chunks(name, chunk_size):
+            for chunk in self._read_chunks(name, chunk_size):
                 out.write(chunk)
         return self.entries[name][2]

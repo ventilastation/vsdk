@@ -59,6 +59,12 @@ shape and the rules that keep biting.
 - **[web-ide-integration.md](web-ide-integration.md)** — the browser IDE's
   workspace API hooks.
 
+## Open investigations
+
+- **[menu-sprite-corruption.md](menu-sprite-corruption.md)** — main-menu
+  sprite corruption after ~70-75s idle; two bugs found and fixed by static
+  analysis, neither yet verified on hardware.
+
 ## Where the code lives
 
 | Area | Path |

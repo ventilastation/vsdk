@@ -111,6 +111,16 @@ class Director:
         self.timedout = False
         self.romdata = None
         self.palette_data = None
+        # vshw_sprites.set_imagestrip() (the real hardware backend) only
+        # stores the raw buffer pointer, not the owning Python object -- it
+        # never roots it against the GC. Without a live reference here, the
+        # object backing a strip becomes collectable as soon as the loader's
+        # local variable goes out of scope, and the GC is free to reclaim and
+        # reuse that memory while image_stripes[] still points at it. Keyed by
+        # slot number and never cleared wholesale, so a later ROM with fewer
+        # stripes can't drop a still-referenced slot out from under a sprite
+        # that hasn't been reassigned.
+        self._stripe_buffers = {}
 
         if getattr(platform, "disable_gc", False):
             gc.disable()
@@ -361,28 +371,67 @@ class Director:
         try:
             header = romfile.read(4)
             num_stripes, num_palettes = struct.unpack("<HH", header)
+            # readinto() a preallocated buffer rather than read(n): plain
+            # read() is fine for the few-byte fixed fields above, but this and
+            # the reads below scale with the ROM's content (offset table,
+            # palettes, per-strip pixel data) and read() is slow for that --
+            # it allocates and copies on every call instead of filling a
+            # buffer we already own.
             offsets_size = (num_stripes + num_palettes) * 4
-            offsets_raw = romfile.read(offsets_size)
+            offsets_raw = bytearray(offsets_size)
+            romfile.readinto(offsets_raw)
             offsets = struct.unpack("<%dL%dL" % (num_stripes, num_palettes), offsets_raw)
             stripes_offsets = offsets[:num_stripes]
             palette_offsets = offsets[num_stripes:]
 
             palette_offset = palette_offsets[0]
             romfile.seek(palette_offset)
-            self.palette_data = romfile.read(romlength - palette_offset)
+            # memoryview() for the same reason as the stripmaps below:
+            # vshw_povdisplay.set_palettes() also reads its argument via
+            # memoryview_data(), which needs a real mp_obj_array_t (offset 0),
+            # not a plain bytes object (whose same struct slot holds its
+            # eagerly-computed hash instead).
+            palette_buf = bytearray(romlength - palette_offset)
+            romfile.readinto(palette_buf)
+            self.palette_data = memoryview(palette_buf)
             self._set_streaming_rom_compat(romlength, header, offsets_raw, palette_offset, self.palette_data)
             self.platform.display.set_palettes(self.palette_data)
 
+            # Reused scratch buffer for each stripe's "<name><w><h><frames><pal>"
+            # header: name length is a single byte, so 255 is the largest it
+            # can ever be, plus the 4 fixed attribute bytes. Safe to overwrite
+            # every iteration since everything needed from it is copied out
+            # (the name, and the 4 attribute bytes into the strip's own
+            # buffer) before the next readinto.
+            metadata = bytearray(255 + 4)
             for n, off in enumerate(stripes_offsets):
                 romfile.seek(off)
                 filename_len = struct.unpack("B", romfile.read(1))[0]
-                metadata = romfile.read(filename_len + 4)
-                filename_bytes = metadata[:filename_len]
-                w = metadata[filename_len]
-                h = metadata[filename_len + 1]
-                frames = metadata[filename_len + 2]
+                metadata_view = memoryview(metadata)[:filename_len + 4]
+                romfile.readinto(metadata_view)
+                filename_bytes = bytes(metadata_view[:filename_len])
+                w = metadata_view[filename_len]
+                h = metadata_view[filename_len + 1]
+                frames = metadata_view[filename_len + 2]
                 width = 256 if w == 255 else w
-                stripmap = metadata[filename_len:] + romfile.read(width * h * frames)
+                # memoryview() over a bytearray we build directly, not the
+                # plain bytes `+` concatenation used to produce: both because
+                # of the readinto win above, and because
+                # vshw_sprites.set_imagestrip() reads its argument as an
+                # mp_obj_array_t and does items+free to get the data pointer.
+                # For a real memoryview `free` is a valid element offset (0
+                # here), but for a plain bytes/str object that same struct
+                # slot is its `hash` field -- and MicroPython computes a real
+                # (non-zero) hash for every new bytes object eagerly on
+                # creation (py/objstr.c, mp_obj_new_str_type_from_vstr), so
+                # without this wrapper the native side adds that hash in as a
+                # bogus byte offset and reads pixel/header data from the wrong
+                # address entirely.
+                strip_buf = bytearray(4 + width * h * frames)
+                strip_buf[0:4] = metadata_view[filename_len:filename_len + 4]
+                romfile.readinto(memoryview(strip_buf)[4:])
+                stripmap = memoryview(strip_buf)
+                self._stripe_buffers[n] = stripmap
                 self.platform.sprites.set_imagestrip(n, stripmap)
                 stripes[filename_bytes.decode("utf-8")] = n
         finally:
@@ -408,7 +457,9 @@ class Director:
                 w = 256
 
             image_data = off + 1 + filename_len
-            self.platform.sprites.set_imagestrip(n, self.romdata[image_data:image_data + w * h * frames + 4])
+            strip = self.romdata[image_data:image_data + w * h * frames + 4]
+            self._stripe_buffers[n] = strip
+            self.platform.sprites.set_imagestrip(n, strip)
             stripes[filename.decode("utf-8")] = n
 
     def load_rom(self, filename):
