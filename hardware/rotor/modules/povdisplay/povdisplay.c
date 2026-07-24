@@ -457,7 +457,16 @@ static void project_next_column() {
 // spiWaitComplete() collects it.
 static void gpu_serve() {
     int64_t now = esp_timer_get_time();
-    uint32_t column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
+    // Floor-mod: the C % operator keeps the sign of its dividend, and the
+    // dividend can go negative (a stored negative column_offset, or the hall
+    // ISR updating last_turn between our two reads). A negative value cast to
+    // uint32_t would index far outside fb_front below, so fold it into
+    // [0, COLUMNS) first.
+    int64_t raw_column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
+    if (raw_column < 0) {
+        raw_column += COLUMNS;
+    }
+    uint32_t column = (uint32_t)raw_column;
     if (column != last_column) {
         bool measuring = performance_is_enabled();
         int64_t measurement_start = measuring ? esp_timer_get_time() : 0;
@@ -764,7 +773,10 @@ static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_performance_stats_obj, povdispla
 // ------------------------------
 
 static mp_obj_t povdisplay_set_column_offset(mp_obj_t offset) {
-    column_offset = mp_obj_get_int(offset) % COLUMNS;
+    // Normalize to [0, COLUMNS): the settings scene can step the offset below
+    // zero and the stored NVS value may already be negative. The retro-go
+    // driver normalizes the same value on its side (ventilastation_pov.c).
+    column_offset = ((mp_obj_get_int(offset) % COLUMNS) + COLUMNS) % COLUMNS;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_column_offset_obj, povdisplay_set_column_offset);
