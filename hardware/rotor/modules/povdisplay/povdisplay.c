@@ -17,6 +17,7 @@
 #include "minispi.h"
 #include "gpu.h"
 #include "color_pipeline.h"
+#include "hall_filter.h"
 #include "ventilagon/ventilagon.h"
 
 // Wiring is provided by the NVS-backed MicroPython board configuration at init.
@@ -148,8 +149,28 @@ static uint32_t* volatile fb_back = NULL;
 int buf_size;
 bool ventilagon_active = false;
 
+// Filtered equivalents of the raw hall edge: gpu_serve(), the ventilagon
+// path (display.c) and the win-credits state all read these two globals for
+// their own column/position math, same as before the hall filter existed --
+// only the writer changed (see hall_filter_drain() below).
 volatile int64_t last_turn = 0;
 volatile int64_t last_turn_duration = 1000000;
+
+// hall_neg_sensed() (IRAM_ATTR, must stay division-free) hands raw edges that
+// pass the coarse debounce floor to this single-slot mailbox; hall_filter_drain()
+// -- called from coreTask()'s task-context loop, never from the ISR -- does the
+// real classification, which needs 64-bit division that isn't guaranteed
+// IRAM-safe on this toolchain. See hall_filter.h.
+static portMUX_TYPE hall_lock = portMUX_INITIALIZER_UNLOCKED;
+static volatile int64_t hall_pending_edge = 0;
+static volatile bool hall_pending = false;
+static int64_t hall_raw_last_edge = 0;  // ISR-only: previous edge that passed the coarse floor
+static hall_filter_t hall_filter_state;
+
+// Diagnostic bypass: when false, hall_filter_drain() reproduces the
+// pre-filter behavior exactly (raw carry-forward, no classification) so the
+// two can be A/B compared live -- see povdisplay_set_hall_filter_enabled().
+static volatile bool hall_filter_enabled = true;
 
 extern void render(int n, uint32_t* pixels);
 extern void init_sprites();
@@ -218,10 +239,13 @@ void spi_shutdown() {
 static void IRAM_ATTR hall_neg_sensed(void* arg)
 {
     int64_t this_turn = esp_timer_get_time();
-    int64_t this_turn_duration = this_turn - last_turn;
+    int64_t this_turn_duration = this_turn - hall_raw_last_edge;
     if (this_turn_duration > FASTEST_CREDIBLE_TURN) {
-        last_turn_duration = this_turn_duration;
-        last_turn = this_turn;
+        hall_raw_last_edge = this_turn;
+        portENTER_CRITICAL_ISR(&hall_lock);
+        hall_pending_edge = this_turn;
+        hall_pending = true;
+        portEXIT_CRITICAL_ISR(&hall_lock);
     }
 
 #if DEBUG_ROTATION
@@ -240,6 +264,7 @@ static void IRAM_ATTR hall_any_sensed(void* arg)
 }
 
 void hall_init() {
+    hall_filter_init(&hall_filter_state, last_turn_duration);
     gpio_set_direction(hall_gpio, GPIO_MODE_INPUT);
 #if DEBUG_ROTATION
     for (int n = 0; n<DEBUG_BUFFER_SIZE; n++) {
@@ -252,6 +277,36 @@ void hall_init() {
     gpio_set_intr_type(hall_gpio, GPIO_INTR_NEGEDGE);
     gpio_isr_handler_add(hall_gpio, hall_neg_sensed, (void*) hall_gpio);
 #endif
+}
+
+// Task-context only (never call from an ISR: hall_filter_submit() does 64-bit
+// division). Drains at most one pending edge per call -- coreTask()'s loop
+// iterates far faster than the hall fires, so this always runs well within
+// one column period of the real edge. On acceptance (including the
+// outlier/stall cases, which still move position), republishes into
+// last_turn/last_turn_duration for every existing consumer (gpu_serve(),
+// ventilagon/display.c, ventilagon/state_win_credits.c) to keep reading
+// unchanged.
+static void hall_filter_drain(void) {
+    int64_t edge;
+    bool has_edge;
+    portENTER_CRITICAL(&hall_lock);
+    has_edge = hall_pending;
+    edge = hall_pending_edge;
+    hall_pending = false;
+    portEXIT_CRITICAL(&hall_lock);
+    if (!has_edge) {
+        return;
+    }
+    if (!__atomic_load_n(&hall_filter_enabled, __ATOMIC_ACQUIRE)) {
+        last_turn_duration = edge - last_turn;
+        last_turn = edge;
+        return;
+    }
+    if (hall_filter_submit(&hall_filter_state, edge)) {
+        last_turn = hall_filter_state.last_turn_us;
+        last_turn_duration = hall_filter_state.period_us;
+    }
 }
 
 
@@ -341,6 +396,7 @@ void coreTask( void * pvParameters ){
     spiAcquire();
 
     while(true){
+        hall_filter_drain();
         if (ventilagon_active) {
             ventilagon_loop();
         } else {
@@ -463,6 +519,30 @@ static mp_obj_t povdisplay_reset_performance_stats(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_reset_performance_stats_obj, povdisplay_reset_performance_stats);
 
+// ------------------------------
+
+// Diagnostic A/B toggle between the gated hall-pulse filter and the
+// pre-filter raw passthrough, live and without reflashing -- see
+// hall_filter_enabled / hall_filter_drain() above. Wired to the emulator's F5
+// key (comms.toggle_hall_filter()) via the "hallfilter" wire command.
+static mp_obj_t povdisplay_set_hall_filter_enabled(mp_obj_t enabled) {
+    bool value = mp_obj_is_true(enabled);
+    bool was_enabled = __atomic_load_n(&hall_filter_enabled, __ATOMIC_ACQUIRE);
+    if (value && !was_enabled) {
+        // Reseed so the first edge after re-enabling isn't judged against a
+        // period/jitter estimate that's been frozen since the bypass began.
+        hall_filter_init(&hall_filter_state, last_turn_duration);
+    }
+    __atomic_store_n(&hall_filter_enabled, value, __ATOMIC_RELEASE);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_hall_filter_enabled_obj, povdisplay_set_hall_filter_enabled);
+
+static mp_obj_t povdisplay_get_hall_filter_enabled(void) {
+    return __atomic_load_n(&hall_filter_enabled, __ATOMIC_ACQUIRE) ? mp_const_true : mp_const_false;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_hall_filter_enabled_obj, povdisplay_get_hall_filter_enabled);
+
 static void performance_dict_int(mp_obj_t dict, qstr key, mp_int_t value) {
     mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(key), mp_obj_new_int(value));
 }
@@ -474,7 +554,7 @@ static mp_obj_t povdisplay_get_performance_stats(void) {
     portEXIT_CRITICAL(&performance_lock);
 
     uint32_t samples = snapshot.samples;
-    mp_obj_t dict = mp_obj_new_dict(20);
+    mp_obj_t dict = mp_obj_new_dict(29);
     performance_dict_int(dict, MP_QSTR_enabled, performance_is_enabled());
     performance_dict_int(dict, MP_QSTR_calibrated, color_pipeline_is_active());
     performance_dict_int(dict, MP_QSTR_vs2, vs2_render_active);
@@ -496,6 +576,17 @@ static mp_obj_t povdisplay_get_performance_stats(void) {
     performance_dict_int(dict, MP_QSTR_max_copy_us, snapshot.max_copy_us);
     performance_dict_int(dict, MP_QSTR_worst_slack_us,
         samples ? snapshot.worst_slack_us : 0);
+    performance_dict_int(dict, MP_QSTR_diag_hall_filter_enabled,
+        __atomic_load_n(&hall_filter_enabled, __ATOMIC_ACQUIRE));
+    performance_dict_int(dict, MP_QSTR_diag_hall_period_us, hall_filter_state.period_us);
+    performance_dict_int(dict, MP_QSTR_diag_hall_jitter_us, hall_filter_state.jitter_us);
+    performance_dict_int(dict, MP_QSTR_diag_hall_accepted, hall_filter_state.accepted_count);
+    performance_dict_int(dict, MP_QSTR_diag_hall_spurious, hall_filter_state.spurious_count);
+    performance_dict_int(dict, MP_QSTR_diag_hall_missed, hall_filter_state.missed_count);
+    performance_dict_int(dict, MP_QSTR_diag_hall_missed_pulses, hall_filter_state.missed_pulses_total);
+    performance_dict_int(dict, MP_QSTR_diag_hall_outlier, hall_filter_state.outlier_count);
+    performance_dict_int(dict, MP_QSTR_diag_hall_stall, hall_filter_state.stall_count);
+    performance_dict_int(dict, MP_QSTR_diag_hall_resync, hall_filter_state.resync_count);
     return dict;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_performance_stats_obj, povdisplay_get_performance_stats);
@@ -551,6 +642,8 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_performance_profiling), (mp_obj_t)&povdisplay_set_performance_profiling_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_reset_performance_stats), (mp_obj_t)&povdisplay_reset_performance_stats_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_performance_stats), (mp_obj_t)&povdisplay_get_performance_stats_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_hall_filter_enabled), (mp_obj_t)&povdisplay_set_hall_filter_enabled_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_get_hall_filter_enabled), (mp_obj_t)&povdisplay_get_hall_filter_enabled_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_column_offset), (mp_obj_t)&povdisplay_set_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_column_offset), (mp_obj_t)&povdisplay_get_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },

@@ -270,6 +270,7 @@ Gamepads
 Emulator
   F1 — keyboard help   F4 — settings
   F2 — CPU/GPU renderer   F3 — renderer comparison
+  F5 — toggle POV hall-pulse filter (board)
   Ctrl/⌘-U — send an OTA upgrade   Q — quit
   Esc — close this panel, or send the extra game button"""
 

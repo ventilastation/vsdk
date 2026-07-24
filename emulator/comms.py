@@ -261,6 +261,7 @@ class WorkbenchTelemetryConn:
         there's no waitconnect()/_connect() cycle -- just keep trying."""
         waitconnect(self, "workbench-telemetry")
         last_decode = 0.0
+        announced_failure = False
         while looping:
             try:
                 now = time.time()
@@ -278,8 +279,15 @@ class WorkbenchTelemetryConn:
                     # newer preview from being shown.
                     set_voom_frame_apa102(self.client.snapshot().apa102)
                     last_decode = now
+                announced_failure = False
             except (socket.error, OSError) as err:
-                print("comms: workbench-telemetry:", err)
+                # Announce once per outage, same as waitconnect(): a dropped
+                # workbench otherwise reprints this every 0.2s. Re-arms once
+                # normal operation resumes above, so a later disconnection
+                # still gets its own fresh message.
+                if not announced_failure:
+                    print("comms: workbench-telemetry:", err)
+                    announced_failure = True
                 time.sleep(0.2)
             except Exception:
                 print(traceback.format_exc())
@@ -309,15 +317,20 @@ base_control = BaseControlState()
 povcal_state = PovCalibrationState()
 
 def waitconnect(conn, label):
+    """Retry conn.setup() until it succeeds. Announces the failure once per
+    outage (not on every 0.5s retry -- that spammed two lines/tick while a
+    board was slow to boot or simply off) and always announces success."""
+    announced_failure = False
     while looping:
         try:
             conn.setup()
             print(f"comms: {label} connected")
             return
         except (socket.error, OSError) as err:
-            print(f"comms: {label}: {err}")
+            if not announced_failure:
+                print(f"comms: {label}: {err}")
+                announced_failure = True
             time.sleep(.5)
-            print(f"comms: {label} retry...")
 
 
 def dispatch_command(conn, command, args):
@@ -644,6 +657,20 @@ def stop_povperf_capture():
     lines, which the emulator's regular command receiver prints to stdout.
     """
     stop_capture(send_command)
+
+
+_hall_filter_enabled = True  # emulator-side assumption; the device's own state is authoritative
+
+
+def toggle_hall_filter():
+    """Flip the POV hall-pulse filter (see hall_filter.c) vs. the pre-filter
+    raw passthrough, live on the connected board -- lets the F5 key A/B
+    compare the two without reflashing. The device echoes back a
+    ``hallfilter_state ...`` line (printed by the generic fallback in
+    dispatch_command()) confirming what actually took effect."""
+    global _hall_filter_enabled
+    _hall_filter_enabled = not _hall_filter_enabled
+    send_command("hallfilter " + ("on" if _hall_filter_enabled else "off"))
 
 
 def trigger_ota():

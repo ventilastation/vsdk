@@ -60,6 +60,9 @@ def on_key_press(symbol, modifiers):
     if symbol == pyglet.window.key.F3:
         compare_scene_renderers()
         return pyglet.event.EVENT_HANDLED
+    if symbol == pyglet.window.key.F5:
+        comms.toggle_hall_filter()
+        return pyglet.event.EVENT_HANDLED
     if ota_shortcut_pressed(symbol, modifiers):
         comms.trigger_ota()
         return pyglet.event.EVENT_HANDLED

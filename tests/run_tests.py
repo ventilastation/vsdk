@@ -154,6 +154,13 @@ NATIVE_TESTS = [
             "tests/native/test_color_pipeline.c",
         ],
     ),
+    (
+        "tests/native/test_hall_filter.c",
+        [
+            "hardware/rotor/modules/povdisplay/hall_filter.c",
+            "tests/native/test_hall_filter.c",
+        ],
+    ),
 ]
 
 
