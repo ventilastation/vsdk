@@ -210,6 +210,15 @@ void spi_shutdown() {
     free(fb_b);
 }
 
+// DIAGNOSTIC: counts real hall-validated revolutions and framebuffer
+// publishes, so povperf can report publishes-per-revolution -- a direct,
+// serial-reliable (no Wi-Fi needed) check for whether a render pass is
+// completing faster than one physical revolution (see project_next_column()).
+// Plain word writes/reads: 32-bit and word-aligned, atomic enough on Xtensa
+// for a monotonic counter read as an instantaneous snapshot.
+volatile uint32_t diag_hall_revolutions = 0;
+volatile uint32_t diag_publish_count = 0;
+
 static void IRAM_ATTR hall_neg_sensed(void* arg)
 {
     int64_t this_turn = esp_timer_get_time();
@@ -217,6 +226,7 @@ static void IRAM_ATTR hall_neg_sensed(void* arg)
     if (this_turn_duration > FASTEST_CREDIBLE_TURN) {
         last_turn_duration = this_turn_duration;
         last_turn = this_turn;
+        diag_hall_revolutions++;
     }
 
 #if DEBUG_ROTATION
@@ -257,11 +267,50 @@ int64_t last_starfield_step = 0;
 
 static int render_col = 0;
 
+// Render one framebuffer column into fb_back. Called exactly once per real
+// gpu_serve() tick (see below) -- never faster -- so a full 256-column pass
+// can never complete in less than one physical revolution. That matters:
+// project_next_column() used to be called unconditionally on every spin of
+// coreTask()'s loop, including the many spins where the physical column
+// hadn't advanced yet. Because rendering a column is usually faster than a
+// column's dwell time, that let a render pass lap the fan -- fb_front could
+// flip more than once per revolution, at a wall-clock moment with no relation
+// to where the fan physically was. The columns served after such a flip
+// jumped to a newer content generation than the columns served earlier in
+// the same sweep: a visible seam, landing wherever that revolution's lead
+// happened to cross a full lap, and only guaranteed to heal at the next
+// physical wrap (column 255->0), since that's the next point the ring is
+// guaranteed to be serving one single, fully-published generation throughout.
+// Gating this call under the same condition as the serve (one column
+// rendered per one column served) makes that impossible: render can never
+// get ahead of the physical rotation.
+static void project_next_column() {
+    uint32_t* back = fb_back;
+    if (vs2_render_active) {
+        render_vs2(render_col, back + (size_t)render_col * num_pixels_g, &vs2_active_scene);
+    } else {
+        render(render_col, back + (size_t)render_col * num_pixels_g);
+    }
+    if (++render_col >= COLUMNS) {
+        render_col = 0;
+        fb_front = back;
+        fb_back = (back == fb_a) ? fb_b : fb_a;
+        diag_publish_count++;
+        int64_t now = esp_timer_get_time();
+        if (now > last_starfield_step + 20000) {
+            step_starfield();
+            last_starfield_step = now;
+        }
+    }
+}
+
 // Serve the column currently under the LEDs, if the fan has advanced to a new
 // one: copy that column's two arms out of the published framebuffer and start
 // the DMA. Cheap and constant-cost -- no scene rendering here -- so it always
-// meets the per-column deadline. The DMA overlaps the projection that
-// project_next_column() does right after, so the wait below is normally ~0.
+// meets the per-column deadline. project_next_column() runs right after
+// queuing the (async) DMA, so its render work overlaps that column's transfer
+// instead of sitting in front of the next tick's deadline; the next call's
+// spiWaitComplete() collects it.
 static void gpu_serve() {
     int64_t now = esp_timer_get_time();
     uint32_t column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
@@ -291,32 +340,7 @@ static void gpu_serve() {
                 elapsed_us(measurement_start, wait_end),   // spi wait
                 elapsed_us(wait_end, queue_end));           // framebuffer copy
         }
-    }
-}
-
-// Render one framebuffer column per call, publishing a fresh double-buffered
-// frame each time the whole ring has been covered. Interleaved with gpu_serve()
-// on this single task (core 0): fb_back is written and fb_front read by the
-// same task, so there is no cross-core framebuffer handoff. Each rendered
-// column's work overlaps the DMA of the column just served, so rendering is off
-// the serve's critical path -- a served column always reads an already-rendered
-// fb entry, and rendering only ever delays the next serve by under a column.
-static void project_next_column() {
-    uint32_t* back = fb_back;
-    if (vs2_render_active) {
-        render_vs2(render_col, back + (size_t)render_col * num_pixels_g, &vs2_active_scene);
-    } else {
-        render(render_col, back + (size_t)render_col * num_pixels_g);
-    }
-    if (++render_col >= COLUMNS) {
-        render_col = 0;
-        fb_front = back;
-        fb_back = (back == fb_a) ? fb_b : fb_a;
-        int64_t now = esp_timer_get_time();
-        if (now > last_starfield_step + 20000) {
-            step_starfield();
-            last_starfield_step = now;
-        }
+        project_next_column();  // overlaps the DMA just queued above
     }
 }
 
@@ -334,7 +358,6 @@ void coreTask( void * pvParameters ){
             ventilagon_loop();
         } else {
             gpu_serve();
-            project_next_column();
         }
     }
     vTaskDelete(NULL);
@@ -463,7 +486,7 @@ static mp_obj_t povdisplay_get_performance_stats(void) {
     portEXIT_CRITICAL(&performance_lock);
 
     uint32_t samples = snapshot.samples;
-    mp_obj_t dict = mp_obj_new_dict(20);
+    mp_obj_t dict = mp_obj_new_dict(24);
     performance_dict_int(dict, MP_QSTR_enabled, performance_is_enabled());
     performance_dict_int(dict, MP_QSTR_calibrated, color_pipeline_is_active());
     performance_dict_int(dict, MP_QSTR_vs2, vs2_render_active);
@@ -485,6 +508,8 @@ static mp_obj_t povdisplay_get_performance_stats(void) {
     performance_dict_int(dict, MP_QSTR_max_copy_us, snapshot.max_copy_us);
     performance_dict_int(dict, MP_QSTR_worst_slack_us,
         samples ? snapshot.worst_slack_us : 0);
+    performance_dict_int(dict, MP_QSTR_diag_hall_revolutions, diag_hall_revolutions);
+    performance_dict_int(dict, MP_QSTR_diag_publish_count, diag_publish_count);
     return dict;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_performance_stats_obj, povdisplay_get_performance_stats);

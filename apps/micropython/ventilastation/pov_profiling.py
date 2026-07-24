@@ -21,14 +21,16 @@ def _send_stats(send, display):
     send(("povperf_timing samples=%d deadline_us=%d skipped=%d overruns=%d "
           "avg_total_us=%d max_total_us=%d avg_render_us=%d max_render_us=%d "
           "max_arm_render_us=%d avg_spi_wait_us=%d max_spi_wait_us=%d "
-          "avg_copy_us=%d max_copy_us=%d worst_slack_us=%d" % (
+          "avg_copy_us=%d max_copy_us=%d worst_slack_us=%d "
+          "diag_hall_revolutions=%d diag_publish_count=%d" % (
               samples, stats.get("deadline_us", 0), stats.get("skipped_updates", 0),
               stats.get("deadline_misses", 0), stats.get("avg_total_us", 0),
               stats.get("max_total_us", 0), stats.get("avg_render_us", 0),
               stats.get("max_render_us", 0), stats.get("max_arm_render_us", 0),
               stats.get("avg_spi_wait_us", 0), stats.get("max_spi_wait_us", 0),
               stats.get("avg_copy_us", 0), stats.get("max_copy_us", 0),
-              stats.get("worst_slack_us", 0))).encode())
+              stats.get("worst_slack_us", 0), stats.get("diag_hall_revolutions", 0),
+              stats.get("diag_publish_count", 0))).encode())
 
 
 def _unsupported(send):
