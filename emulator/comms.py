@@ -719,11 +719,13 @@ def send_workbench(line):
 # ConnSerial (register it with `make register-base`).
 ARDUINO_DEVICE = "/dev/ttyAMA0"
 _arduino = None
+# Same "<domain> <verb>" shape as the newer "base ..." protocol -- see
+# docs/internals/base-control-api.md#legacy-super-ventilagon-relay.
 _arduino_commands = {
-    b"start": b"S",
-    b"stop": b"r",
-    b"reset": b"R",
-    b"attract": b"s"
+    b"start": b"ventilagon start\n",
+    b"stop": b"ventilagon stop\n",
+    b"reset": b"ventilagon reset\n",
+    b"attract": b"ventilagon attract\n",
 }
 
 def _find_arduino_port():
@@ -749,6 +751,7 @@ def _arduino_init():
 def arduino_send(command):
     if _arduino is None:
         return
-    # New base commands are complete canonical lines. The one-byte map stays
-    # only for the Super Ventilagon timer compatibility period.
+    # Both protocols are complete canonical lines: "base ..." arrives
+    # already-built from base_control.py, "start"/"stop"/"reset"/"attract"
+    # get mapped to their "ventilagon ..." line here.
     _arduino.write(_arduino_commands.get(command, command if command.startswith(b"base ") else b" "))

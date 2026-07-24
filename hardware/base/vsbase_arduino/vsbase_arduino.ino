@@ -1,5 +1,6 @@
 #include <Servo.h>
 #include <Adafruit_NeoPixel.h>
+#include <limits.h>
 #include <string.h>
 
 // Pin and mechanical calibration are deliberately private to this firmware.
@@ -17,7 +18,7 @@
 // No git-hash injection for this build (no existing Arduino build
 // automation to hook a codegen step into, unlike the two ESP-IDF/CMake
 // firmwares) -- hand-bump FIRMWARE_VERSION when this sketch changes.
-#define FIRMWARE_VERSION "v1.0"
+#define FIRMWARE_VERSION "v1.1"
 #define FIRMWARE_GIT_HASH "unknown"
 
 Adafruit_NeoPixel pixels(NUM_PIXELS, NEO_PIN, NEO_GRB + NEO_KHZ800);
@@ -36,6 +37,39 @@ uint8_t command_length = 0;
 const uint8_t RESYNC_SEQUENCE[] = { '\n', '\n', 0xD2, 'E', 'S', 'Y', 'N', 'C', '\n' };
 const uint8_t RESYNC_LEN = sizeof(RESYNC_SEQUENCE);
 uint8_t resync_match = 0;
+
+// Super Ventilagon's original relay protocol: `ventilagon start`/`stop`/
+// `reset`/`attract` lines (see docs/internals/host-protocol.md's
+// `arduino <cmd>` entry and comms.py's _arduino_commands/arduino_send()),
+// parsed by handle_command() the same way as `base ...` below. This
+// self-contained light+servo show is driven straight off
+// servo_position/button_mask/button_blink_ms (the same state `base servo`/
+// `base buttons` use) to keep one source of truth, but paints the strip
+// with its own untouched colors instead of going through apply_strip()'s
+// gamma table, to reproduce the original show byte-for-byte.
+#define CENTISECONDS (10UL)  // in milliseconds
+unsigned long legacy_section_durations[] = {
+  1325 * CENTISECONDS,
+  1325 * CENTISECONDS,
+  1325 * CENTISECONDS,
+  1325 * CENTISECONDS,
+  1325 * 2 * CENTISECONDS,
+  1325 * 3 * CENTISECONDS,
+  ULONG_MAX,
+};
+uint32_t legacy_colors[] = {
+  0x0000ff,
+  0x00ff00,
+  0xffff00,
+  0x00ffff,
+  0xff00ff,
+  0xff0000,
+  0x000000,
+};
+bool legacy_timer_running = false;
+uint8_t legacy_section = 0;
+unsigned long legacy_section_init_time = 0;
+unsigned long legacy_section_duration = legacy_section_durations[0];
 
 // Doom palette values target a gamma-corrected monitor. WS2812 PWM is close
 // to linear, so use this 2.2 transfer curve before driving the physical strip.
@@ -75,6 +109,74 @@ void apply_servo() {
   servo.write((int)degrees);
 }
 
+void legacy_set_strip_raw(uint32_t color) {
+  for (uint8_t index = 0; index < NUM_PIXELS; ++index) {
+    pixels.setPixelColor(index, color);
+  }
+  pixels.show();
+}
+
+void legacy_buttons_on() {
+  button_mask = 0x03;
+  button_blink_ms = 512;  // matches the original firmware's (millis() >> 8) & 1 blink rate
+}
+
+void legacy_buttons_off() {
+  button_mask = 0;
+  button_blink_ms = 0;
+}
+
+void legacy_update_servo_value(unsigned long value, unsigned long max_val) {
+  servo_position = (uint8_t)map(value, 0, max_val, 0, 255);
+  apply_servo();
+}
+
+void legacy_start_timer() {
+  legacy_timer_running = true;
+  legacy_section = 0;
+  legacy_section_init_time = millis();
+  legacy_section_duration = legacy_section_durations[0];
+  legacy_set_strip_raw(legacy_colors[0]);
+  legacy_buttons_off();
+}
+
+void legacy_stop_timer() {
+  legacy_timer_running = false;
+  legacy_buttons_on();
+}
+
+void legacy_stop_no_leds() {
+  legacy_timer_running = false;
+  legacy_set_strip_raw(0);
+  legacy_buttons_off();
+}
+
+void legacy_reset_all() {
+  legacy_timer_running = false;
+  legacy_set_strip_raw(0);
+  legacy_update_servo_value(0, 255);
+  legacy_section = 0;
+  legacy_buttons_on();
+}
+
+void legacy_advance_section(unsigned long now) {
+  legacy_section++;
+  legacy_section_init_time = now;
+  legacy_section_duration = legacy_section_durations[legacy_section];
+  legacy_set_strip_raw(legacy_colors[legacy_section]);
+}
+
+void legacy_check_timer() {
+  if (!legacy_timer_running) return;
+  unsigned long now = millis();
+  if (now - legacy_section_init_time > legacy_section_duration) {
+    legacy_advance_section(now);
+  }
+  if (legacy_section_duration != ULONG_MAX) {
+    legacy_update_servo_value(now - legacy_section_init_time, legacy_section_duration);
+  }
+}
+
 bool parse_uint(const char *text, unsigned long *value) {
   if (!text || !*text) return false;
   unsigned long result = 0;
@@ -91,7 +193,18 @@ void handle_command(char *line) {
   char *save = NULL;
   char *prefix = strtok_r(line, " ", &save);
   char *kind = strtok_r(NULL, " ", &save);
-  if (!prefix || !kind || strcmp(prefix, "base") != 0) return;
+  if (!prefix || !kind) return;
+
+  if (strcmp(prefix, "ventilagon") == 0) {
+    if (strtok_r(NULL, " ", &save)) return;  // no arguments taken
+    if (strcmp(kind, "start") == 0) legacy_start_timer();
+    else if (strcmp(kind, "stop") == 0) legacy_stop_no_leds();
+    else if (strcmp(kind, "reset") == 0) legacy_reset_all();
+    else if (strcmp(kind, "attract") == 0) legacy_stop_timer();
+    return;
+  }
+
+  if (strcmp(prefix, "base") != 0) return;
 
   if (strcmp(kind, "leds") == 0) {
     char *r = strtok_r(NULL, " ", &save);
@@ -140,6 +253,8 @@ void handle_resync() {
   button_mask = 0;
   button_blink_ms = 0;
   command_length = 0;
+  legacy_timer_running = false;
+  legacy_section = 0;
   apply_strip();
   apply_servo();
   update_buttons();
@@ -199,5 +314,6 @@ void setup() {
 
 void loop() {
   poll_serial();
+  legacy_check_timer();
   update_buttons();
 }

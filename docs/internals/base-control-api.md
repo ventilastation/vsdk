@@ -85,6 +85,19 @@ reinitialization is the full RESYNC response — there is no separate "hard
 reset" path. `<githash>` is `unknown`: the Arduino build has no git-hash
 injection today, unlike the ESP-IDF firmwares.
 
+## Legacy Super Ventilagon relay
+
+The Arduino also still answers Super Ventilagon's older relay protocol
+(`arduino <cmd>` in [host-protocol.md](host-protocol.md), forwarded to the
+Arduino as `ventilagon start`/`stop`/`reset`/`attract` — the same
+newline-terminated "`<domain> <verb>`" shape as `base ...` above, just
+without arguments). This drives a self-contained, on-device light-and-servo
+show (fixed color/duration sections, ending in the strip off) timed entirely
+on the Arduino; the host only starts, stops, or resets it. It shares the
+servo and button-LED state with the `base ...` protocol above, but paints
+the strip with its own untouched colors rather than through the gamma
+table, to keep matching the original show.
+
 ## Emulator preview
 
 Both emulators present a compact, read-only preview at the stage's bottom
