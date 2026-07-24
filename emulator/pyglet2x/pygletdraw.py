@@ -34,8 +34,6 @@ from pyglet.math import Mat4
 from pyglet.graphics import Group
 from pyglet.graphics.shader import Shader, ShaderProgram
 
-import numpy as np
-
 import comms
 import config
 from povrender import (
@@ -399,6 +397,7 @@ def toggle_scene_renderer():
 
 def _upload_cpu_frame(pixels):
     """Upload the established CPU/native compositor result to the LED texture."""
+    import numpy as np
     image = np.ascontiguousarray(pixels.reshape(COLUMNS, led_count).T)
     glBindTexture(GL_TEXTURE_2D, led_color_texture.id)
     glTexSubImage2D(
@@ -417,6 +416,7 @@ def compare_scene_renderers(samples=12):
     commands.  This makes the F3 readout useful across desktops with very
     different graphics drivers.
     """
+    import numpy as np
     global scene_renderer_status
     scene_input = snapshot_scene_shader_input()
     if scene_input is None:

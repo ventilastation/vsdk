@@ -8,11 +8,14 @@ tested C renderer instead, when the shared library has been built. If it's
 missing (not yet built, or a platform without a C toolchain configured), all
 functions here are no-ops / return None and povrender.py falls back to its
 existing Python implementation unchanged.
+
+numpy (for the render_frame()/render_legacy_frame() output buffer) is
+imported lazily, not at module level: this module is on comms.py's
+always-imported path, and the headless Raspberry Pi base -- which never
+renders a frame -- doesn't have numpy installed.
 """
 import ctypes
 import os
-
-import numpy as np
 
 COLUMNS = 256
 PIXELS = 54
@@ -63,10 +66,16 @@ def _load():
 
 _load()
 
-_frame_buffer = np.empty(COLUMNS * PIXELS, dtype=np.uint32) if available else None
-_frame_buffer_ptr = (
-    _frame_buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)) if available else None
-)
+_frame_buffer = None
+_frame_buffer_ptr = None
+
+
+def _ensure_frame_buffer():
+    global _frame_buffer, _frame_buffer_ptr
+    if _frame_buffer is None:
+        import numpy as np
+        _frame_buffer = np.empty(COLUMNS * PIXELS, dtype=np.uint32)
+        _frame_buffer_ptr = _frame_buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
 
 
 def step_starfield():
@@ -115,6 +124,7 @@ def render_frame():
     library isn't built."""
     if not available:
         return None
+    _ensure_frame_buffer()
     _lib.emu_gpu_render_frame(_frame_buffer_ptr)
     return _frame_buffer
 
@@ -131,5 +141,6 @@ def render_legacy_frame():
     a numpy uint32 array (COLUMNS*PIXELS), or None if not built."""
     if not available:
         return None
+    _ensure_frame_buffer()
     _lib.emu_gpu_render_legacy_frame(_frame_buffer_ptr)
     return _frame_buffer

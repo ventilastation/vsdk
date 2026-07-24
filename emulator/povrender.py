@@ -10,8 +10,6 @@ import math
 import threading
 from struct import pack, unpack, unpack_from
 
-import numpy as np
-
 from deepspace import deepspace, PIXELS
 from apa102 import decode_frame
 from color_profile import ColorProfile, DEFAULT_PROFILE
@@ -557,6 +555,10 @@ def render_frame(vs2_scene):
         if native_pixels is not None:
             return native_pixels
 
+    # Imported lazily, not at module level: this module is on comms.py's
+    # always-imported path, and the headless Raspberry Pi base -- which
+    # never renders a frame -- doesn't have numpy installed.
+    import numpy as np
     all_pixels = []
     for column in range(COLUMNS):
         all_pixels.extend(render(column, vs2_scene))

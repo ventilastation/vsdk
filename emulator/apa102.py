@@ -1,6 +1,10 @@
-"""APA102 drive-value decoding for the desktop preview."""
+"""APA102 drive-value decoding for the desktop preview.
 
-import numpy as np
+numpy is imported lazily inside the functions below, not at module level:
+this module (via povrender.py) is on comms.py's always-imported path, and
+the headless Raspberry Pi base -- which never decodes a preview frame --
+doesn't have numpy installed.
+"""
 
 try:  # Package import used by the headless remote gateway.
     from .color_profile import DEFAULT_PROFILE, MATRIX_Q, Q15_ONE, _srgb_encode
@@ -15,12 +19,21 @@ def decode_preview_rgb(global_byte, blue_pwm, green_pwm, red_pwm, profile=None):
 
 _SRGB_LUT_BITS = 12
 _SRGB_LUT_SIZE = 1 << _SRGB_LUT_BITS
-# Quantized linear-light -> sRGB byte table, built once at import time. Avoids
-# a Python-level pow() call per pixel per channel in the vectorized decoder.
-_SRGB_LUT = np.array(
-    [_srgb_encode(i / (_SRGB_LUT_SIZE - 1)) for i in range(_SRGB_LUT_SIZE)],
-    dtype=np.uint8,
-)
+# Quantized linear-light -> sRGB byte table. Avoids a Python-level pow() call
+# per pixel per channel in the vectorized decoder below.
+_srgb_lut_cache = None
+
+
+def _srgb_lut():
+    global _srgb_lut_cache
+    if _srgb_lut_cache is None:
+        import numpy as np
+        _srgb_lut_cache = np.array(
+            [_srgb_encode(i / (_SRGB_LUT_SIZE - 1)) for i in range(_SRGB_LUT_SIZE)],
+            dtype=np.uint8,
+        )
+    return _srgb_lut_cache
+
 
 # Per-profile numpy tables for decode_frame, keyed by profile identity so a
 # calibration update naturally invalidates the cache (profiles are immutable,
@@ -29,6 +42,7 @@ _frame_tables_cache = None
 
 
 def _tables_for_profile(profile):
+    import numpy as np
     global _frame_tables_cache
     if _frame_tables_cache is not None and _frame_tables_cache[0] is profile:
         return _frame_tables_cache[1]
@@ -50,6 +64,7 @@ def decode_frame(raw, profile=None):
     but over the whole frame at once, which is what makes it fast enough to
     run per captured frame instead of per rendered pixel.
     """
+    import numpy as np
     profile = profile or DEFAULT_PROFILE
     pwm_lut, global_response, matrix = _tables_for_profile(profile)
 
@@ -73,7 +88,7 @@ def decode_frame(raw, profile=None):
 
     clamped = np.clip(preview_linear, 0.0, 1.0)
     index = (clamped * (_SRGB_LUT_SIZE - 1) + 0.5).astype(np.int32)
-    channels = _SRGB_LUT[index]  # shape (N, 3): R, G, B bytes
+    channels = _srgb_lut()[index]  # shape (N, 3): R, G, B bytes
 
     r = channels[:, 0].astype(np.uint32)
     g = channels[:, 1].astype(np.uint32)

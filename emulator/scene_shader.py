@@ -8,6 +8,12 @@ typed-array layouts and are covered by ``tests/test_scene_shader_pack.py``.
 
 This module has no pyglet dependency until :class:`DesktopSceneCompositor` is
 constructed, so the packing code remains usable in headless unit tests.
+
+numpy itself is imported lazily inside each function below rather than at
+module level: pygletdraw.py imports this module unconditionally (to reach
+`DesktopSceneCompositor`, only actually built on the F2 shader-renderer
+toggle), and that chain must stay importable on the headless Raspberry Pi
+base, which doesn't have numpy installed and never builds a compositor.
 """
 
 from __future__ import annotations
@@ -16,8 +22,6 @@ import ctypes
 import re
 from pathlib import Path
 from struct import unpack_from
-
-import numpy as np
 
 from deepspace import deepspace
 
@@ -52,6 +56,7 @@ def _as_u32(value):
 
 
 def _push_sprite(packer, *, x, y, strip, frame, mode, flip_x=False, flip_y=False):
+    import numpy as np
     lanes = np.zeros(SCENE_LANES_PER_ENTITY, dtype=np.uint32)
     lanes[0] = _as_u32(x)
     lanes[1] = _as_u32(y)
@@ -64,6 +69,7 @@ def _push_sprite(packer, *, x, y, strip, frame, mode, flip_x=False, flip_y=False
 
 def _push_tilemap(packer, *, x, y, strip, mode, columns, rows, tile_width,
                   tile_height, viewport, frames):
+    import numpy as np
     offset = sum(len(cells) for cells in packer["cells"])
     raw_cells = bytes(frames)
     packer["cells"].append(raw_cells)
@@ -79,6 +85,7 @@ def _push_tilemap(packer, *, x, y, strip, mode, columns, rows, tile_width,
 
 
 def _finish_scene(packer):
+    import numpy as np
     entity_count = len(packer["sprites"]) + len(packer["tilemaps"])
     scene = np.zeros((max(entity_count, 1), SCENE_LANES_PER_ENTITY), dtype=np.uint32)
     for row, lanes in enumerate(packer["sprites"] + packer["tilemaps"]):
@@ -198,6 +205,7 @@ def pack_scene_vs2_bytes(scene_bytes):
 
 def pack_strips(raw_assets):
     """Pack ``{slot: ImageStrip wire blob}`` data into a byte atlas + metadata."""
+    import numpy as np
     meta = np.zeros(256 * 4, dtype=np.uint32)
     chunks = []
     offset = 0
@@ -231,6 +239,7 @@ def pack_strips(raw_assets):
 
 
 def pack_palette(palette_bytes):
+    import numpy as np
     data = bytes(palette_bytes or b"")
     rows = max(1, len(data) // 1024)
     packed = np.zeros(256 * 4 * rows, dtype=np.uint8)
@@ -241,6 +250,7 @@ def pack_palette(palette_bytes):
 
 def pack_stars(positions):
     """Pack the fixed 128-star texture shared with the browser compositor."""
+    import numpy as np
     packed = np.zeros(STARS, dtype=np.uint32)
     count = min(len(positions), STARS)
     for index, (x, y) in enumerate(positions[:count]):
@@ -249,6 +259,7 @@ def pack_stars(positions):
 
 
 def pack_deepspace():
+    import numpy as np
     packed = np.zeros(256 * 2, dtype=np.uint32)
     packed[:ROWS] = deepspace
     lo = [255] * PIXELS
@@ -334,6 +345,7 @@ class DesktopSceneCompositor:
 
     @staticmethod
     def _pointer(data):
+        import numpy as np
         return np.ascontiguousarray(data).ctypes.data_as(ctypes.c_void_p)
 
     def _upload(self, name, data, width, height, internal_format, pixel_format, pixel_type):
@@ -417,6 +429,7 @@ class DesktopSceneCompositor:
     def read_pixels(self):
         """Read back the rendered LED texture as column-major RGBA bytes."""
         from pyglet.gl import GL_FRAMEBUFFER, GL_RGBA, GL_TEXTURE_2D, GL_UNSIGNED_BYTE, glBindFramebuffer, glReadPixels
+        import numpy as np
 
         pixels = np.zeros((PIXELS, COLUMNS, 4), dtype=np.uint8)
         glBindFramebuffer(GL_FRAMEBUFFER, self.framebuffer)
