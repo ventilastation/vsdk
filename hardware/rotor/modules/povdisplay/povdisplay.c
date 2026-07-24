@@ -9,7 +9,6 @@
 
 #include "driver/gpio.h"
 #include "esp_timer.h"
-#include "esp_heap_caps.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -146,73 +145,6 @@ static uint32_t* fb_b = NULL;
 static uint32_t* volatile fb_front = NULL;
 static uint32_t* volatile fb_back = NULL;
 
-// DIAGNOSTIC: framebuffer allocation forensics, captured once at init and
-// queryable later via get_performance_stats() -- early-boot printf is lost
-// on this port (USB-CDC drops output before the host enumerates), so this is
-// the only reliable way to see it after the fact.
-uint32_t diag_fb_bytes_requested = 0;
-uint32_t diag_internal_free_before = 0;
-uint32_t diag_internal_largest_before = 0;
-uint32_t diag_internal_free_after = 0;
-uint32_t diag_fb_a_addr = 0;
-uint32_t diag_fb_b_addr = 0;
-uint32_t diag_fb_a_size = 0;
-uint32_t diag_fb_b_size = 0;
-
-// DIAGNOSTIC: guard-canary regions immediately before fb_a, between fb_a and
-// fb_b, and after fb_b (one combined allocation instead of two separate
-// mallocs, so these sit exactly where a heap-adjacent overflow into either
-// framebuffer would have to land). Filled with an index-encoded sentinel and
-// re-checked periodically; a mismatch means something outside this module
-// wrote into or through the framebuffer's memory.
-#define DIAG_GUARD_WORDS 16
-static uint32_t* diag_guard_before = NULL;
-static uint32_t* diag_guard_mid = NULL;
-static uint32_t* diag_guard_after = NULL;
-volatile uint32_t diag_canary_corrupt_words = 0;
-volatile uint32_t diag_canary_first_bad_region = 0;  // 0=none, 1=before, 2=mid, 3=after
-volatile uint32_t diag_canary_first_bad_offset = 0;
-volatile uint32_t diag_canary_first_bad_value = 0;
-volatile uint32_t diag_canary_checks = 0;
-
-static uint32_t diag_canary_sentinel(uint32_t region, uint32_t i) {
-    return 0xCA5E0000u | (region << 12) | i;
-}
-
-static void diag_canary_fill(uint32_t* region, uint32_t region_id) {
-    for (uint32_t i = 0; i < DIAG_GUARD_WORDS; i++) {
-        region[i] = diag_canary_sentinel(region_id, i);
-    }
-}
-
-static void diag_canary_check_region(uint32_t* region, uint32_t region_id) {
-    for (uint32_t i = 0; i < DIAG_GUARD_WORDS; i++) {
-        uint32_t expected = diag_canary_sentinel(region_id, i);
-        uint32_t actual = region[i];
-        if (actual != expected) {
-            diag_canary_corrupt_words++;
-            if (diag_canary_first_bad_region == 0) {
-                diag_canary_first_bad_region = region_id;
-                diag_canary_first_bad_offset = i;
-                diag_canary_first_bad_value = actual;
-            }
-        }
-    }
-}
-
-// Called once per publish (cheap: 48 word compares). Latches the FIRST
-// corruption seen; diag_canary_corrupt_words keeps counting so a persistent
-// vs. one-shot clobber can be told apart.
-static void diag_canary_check(void) {
-    if (!diag_guard_before) {
-        return;
-    }
-    diag_canary_check_region(diag_guard_before, 1);
-    diag_canary_check_region(diag_guard_mid, 2);
-    diag_canary_check_region(diag_guard_after, 3);
-    diag_canary_checks++;
-}
-
 int buf_size;
 bool ventilagon_active = false;
 
@@ -255,48 +187,14 @@ void init_buffers(int num_pixels) {
     // writes on core 1 are visible to the serve task on core 0 without any
     // cache maintenance.
     size_t fb_words = (size_t)COLUMNS * num_pixels;
-    size_t fb_bytes = fb_words * sizeof(uint32_t);
-    diag_fb_bytes_requested = (uint32_t)fb_bytes;
-    diag_internal_free_before = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    diag_internal_largest_before = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
-
-    // One combined allocation -- guard | fb_a | guard | fb_b | guard -- so the
-    // canary regions sit exactly where a heap-adjacent overflow into either
-    // framebuffer would have to pass through. See diag_canary_check().
-    size_t combined_words = DIAG_GUARD_WORDS + fb_words + DIAG_GUARD_WORDS + fb_words + DIAG_GUARD_WORDS;
-    uint32_t* combined = heap_caps_malloc(combined_words * sizeof(uint32_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT);
-    if (combined) {
-        diag_guard_before = combined;
-        fb_a = combined + DIAG_GUARD_WORDS;
-        diag_guard_mid = fb_a + fb_words;
-        fb_b = diag_guard_mid + DIAG_GUARD_WORDS;
-        diag_guard_after = fb_b + fb_words;
-        diag_canary_fill(diag_guard_before, 1);
-        diag_canary_fill(diag_guard_mid, 2);
-        diag_canary_fill(diag_guard_after, 3);
-    } else {
-        printf("POV fb: combined allocation FAILED\n");
-        fb_a = NULL;
-        fb_b = NULL;
-    }
-    diag_fb_a_addr = (uint32_t)(uintptr_t)fb_a;
-    diag_fb_b_addr = (uint32_t)(uintptr_t)fb_b;
-    diag_fb_a_size = (uint32_t)(combined ? heap_caps_get_allocated_size(combined) : 0);
-    diag_fb_b_size = diag_fb_a_size;
-    if (!fb_a) {
-        printf("POV fb: fb_a allocation FAILED\n");
-    }
-    if (!fb_b) {
-        printf("POV fb: fb_b allocation FAILED, falling back to single-buffer (tear-tolerant)\n");
-        fb_b = fb_a;
-    }
+    fb_a = heap_caps_malloc(fb_words * sizeof(uint32_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT);
+    fb_b = heap_caps_malloc(fb_words * sizeof(uint32_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT);
     for (size_t i = 0; i < fb_words; i++) {
         fb_a[i] = 0x000000ff;
         fb_b[i] = 0x000000ff;
     }
     fb_front = fb_a;
     fb_back = fb_b;
-    diag_internal_free_after = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 }
 
 
@@ -313,19 +211,9 @@ void spi_write_HSPI() {
 void spi_shutdown() {
     free(dma_buffer);
     free(draw_buffer0);
-    // fb_a/fb_b are offsets into the single diag_guard_before..diag_guard_after
-    // allocation (see init_buffers) -- free the block once, from its start.
-    free(diag_guard_before);
+    free(fb_a);
+    free(fb_b);
 }
-
-// DIAGNOSTIC: counts real hall-validated revolutions and framebuffer
-// publishes, so povperf can report publishes-per-revolution -- a direct,
-// serial-reliable (no Wi-Fi needed) check for whether a render pass is
-// completing faster than one physical revolution (see project_next_column()).
-// Plain word writes/reads: 32-bit and word-aligned, atomic enough on Xtensa
-// for a monotonic counter read as an instantaneous snapshot.
-volatile uint32_t diag_hall_revolutions = 0;
-volatile uint32_t diag_publish_count = 0;
 
 static void IRAM_ATTR hall_neg_sensed(void* arg)
 {
@@ -334,7 +222,6 @@ static void IRAM_ATTR hall_neg_sensed(void* arg)
     if (this_turn_duration > FASTEST_CREDIBLE_TURN) {
         last_turn_duration = this_turn_duration;
         last_turn = this_turn;
-        diag_hall_revolutions++;
     }
 
 #if DEBUG_ROTATION
@@ -351,37 +238,6 @@ static void IRAM_ATTR hall_any_sensed(void* arg)
         hall_neg_sensed(arg);
     }
 }
-
-// DIAGNOSTIC: when active, project_next_column() fills the framebuffer with
-// this deterministic pattern instead of calling the real renderer, and
-// gpu_serve() self-checks every served pixel against it right after copying
-// into the DMA staging buffer -- through the SAME project_next_column() /
-// gpu_serve() code paths real gameplay uses, at full per-column granularity
-// (up to 256 checks/revolution vs. the once-per-publish canary check), so a
-// mismatch pinpoints exactly which (column, led, arm) diverged and what
-// value appeared, with no capture needed.
-volatile bool diag_test_pattern_active = false;
-volatile uint32_t diag_serve_checks = 0;
-volatile uint32_t diag_mismatch_count = 0;
-volatile uint32_t diag_mismatch_arm0_count = 0;
-volatile uint32_t diag_mismatch_arm1_count = 0;
-volatile uint32_t diag_mismatch_front_a_count = 0;  // mismatches while fb_front==fb_a
-volatile uint32_t diag_mismatch_front_b_count = 0;  // mismatches while fb_front==fb_b
-volatile uint32_t diag_mismatch_first_column = 0xffffffffu;
-volatile uint32_t diag_mismatch_first_led = 0;
-volatile uint32_t diag_mismatch_first_arm = 0;  // 0 = arm1 (column), 1 = arm0 (column+128)
-volatile uint32_t diag_mismatch_first_expected = 0;
-volatile uint32_t diag_mismatch_first_actual = 0;
-volatile uint32_t diag_mismatch_last_column = 0xffffffffu;
-volatile uint32_t diag_mismatch_last_led = 0;
-volatile uint32_t diag_mismatch_last_arm = 0;
-volatile uint32_t diag_mismatch_last_expected = 0;
-volatile uint32_t diag_mismatch_last_actual = 0;
-
-static uint32_t diag_pattern_value(uint32_t column, uint32_t led) {
-    return ((column & 0xffu) << 24) | ((led & 0xffu) << 16) | 0x000000ffu;
-}
-
 
 void hall_init() {
     gpio_set_direction(hall_gpio, GPIO_MODE_INPUT);
@@ -405,31 +261,14 @@ int64_t last_starfield_step = 0;
 
 static int render_col = 0;
 
-// Render one framebuffer column into fb_back. Called exactly once per real
-// gpu_serve() tick (see below) -- never faster -- so a full 256-column pass
-// can never complete in less than one physical revolution. That matters:
-// project_next_column() used to be called unconditionally on every spin of
-// coreTask()'s loop, including the many spins where the physical column
-// hadn't advanced yet. Because rendering a column is usually faster than a
-// column's dwell time, that let a render pass lap the fan -- fb_front could
-// flip more than once per revolution, at a wall-clock moment with no relation
-// to where the fan physically was. The columns served after such a flip
-// jumped to a newer content generation than the columns served earlier in
-// the same sweep: a visible seam, landing wherever that revolution's lead
-// happened to cross a full lap, and only guaranteed to heal at the next
-// physical wrap (column 255->0), since that's the next point the ring is
-// guaranteed to be serving one single, fully-published generation throughout.
-// Gating this call under the same condition as the serve (one column
-// rendered per one column served) makes that impossible: render can never
-// get ahead of the physical rotation.
+// Render one framebuffer column into fb_back, publishing a fresh
+// double-buffered frame each time the whole ring has been covered. Runs
+// unconditionally on every spin of coreTask()'s loop, independent of the
+// physical column -- the heavy, scene-dependent render cost never sits on
+// the per-column serve deadline.
 static void project_next_column() {
     uint32_t* back = fb_back;
-    if (diag_test_pattern_active) {
-        uint32_t* slot = back + (size_t)render_col * num_pixels_g;
-        for (int n = 0; n < num_pixels_g; n++) {
-            slot[n] = diag_pattern_value(render_col, n);
-        }
-    } else if (vs2_render_active) {
+    if (vs2_render_active) {
         render_vs2(render_col, back + (size_t)render_col * num_pixels_g, &vs2_active_scene);
     } else {
         render(render_col, back + (size_t)render_col * num_pixels_g);
@@ -438,8 +277,6 @@ static void project_next_column() {
         render_col = 0;
         fb_front = back;
         fb_back = (back == fb_a) ? fb_b : fb_a;
-        diag_publish_count++;
-        diag_canary_check();
         int64_t now = esp_timer_get_time();
         if (now > last_starfield_step + 20000) {
             step_starfield();
@@ -451,10 +288,8 @@ static void project_next_column() {
 // Serve the column currently under the LEDs, if the fan has advanced to a new
 // one: copy that column's two arms out of the published framebuffer and start
 // the DMA. Cheap and constant-cost -- no scene rendering here -- so it always
-// meets the per-column deadline. project_next_column() runs right after
-// queuing the (async) DMA, so its render work overlaps that column's transfer
-// instead of sitting in front of the next tick's deadline; the next call's
-// spiWaitComplete() collects it.
+// meets the per-column deadline. The DMA overlaps the projection that
+// project_next_column() does right after, so the wait below is normally ~0.
 static void gpu_serve() {
     int64_t now = esp_timer_get_time();
     // Floor-mod: the C % operator keeps the sign of its dividend, and the
@@ -477,58 +312,11 @@ static void gpu_serve() {
         int64_t wait_end = measuring ? esp_timer_get_time() : 0;
 
         uint32_t* fb = fb_front;
-        uint32_t arm0_column = (column + COLUMNS/2) % COLUMNS;
-        uint32_t* arm0 = fb + (size_t)arm0_column * num_pixels_g;
+        uint32_t* arm0 = fb + (size_t)((column + COLUMNS/2) % COLUMNS) * num_pixels_g;
         uint32_t* arm1 = fb + (size_t)column * num_pixels_g;
         for (int n = 0; n < num_pixels_g; n++) {
             dma_pixels0[n] = arm0[num_pixels_g - 1 - n];
             dma_pixels1[n] = arm1[n];
-        }
-        if (diag_test_pattern_active) {
-            bool front_is_a = (fb == fb_a);
-            for (int n = 0; n < num_pixels_g; n++) {
-                // n==0 of dma_pixels1 aliases dma_pixels0[num_pixels_g-1] (the
-                // shared centre LED, see init_buffers) -- whichever write lands
-                // last there is correct by design, not a mismatch to flag.
-                uint32_t expected1 = diag_pattern_value(column, n);
-                if (n != 0 && dma_pixels1[n] != expected1) {
-                    diag_mismatch_count++;
-                    diag_mismatch_arm1_count++;
-                    if (front_is_a) diag_mismatch_front_a_count++; else diag_mismatch_front_b_count++;
-                    if (diag_mismatch_first_column == 0xffffffffu) {
-                        diag_mismatch_first_column = column;
-                        diag_mismatch_first_led = n;
-                        diag_mismatch_first_arm = 0;
-                        diag_mismatch_first_expected = expected1;
-                        diag_mismatch_first_actual = dma_pixels1[n];
-                    }
-                    diag_mismatch_last_column = column;
-                    diag_mismatch_last_led = n;
-                    diag_mismatch_last_arm = 0;
-                    diag_mismatch_last_expected = expected1;
-                    diag_mismatch_last_actual = dma_pixels1[n];
-                }
-                uint32_t arm0_led = num_pixels_g - 1 - n;
-                uint32_t expected0 = diag_pattern_value(arm0_column, arm0_led);
-                if (dma_pixels0[n] != expected0) {
-                    diag_mismatch_count++;
-                    diag_mismatch_arm0_count++;
-                    if (front_is_a) diag_mismatch_front_a_count++; else diag_mismatch_front_b_count++;
-                    if (diag_mismatch_first_column == 0xffffffffu) {
-                        diag_mismatch_first_column = arm0_column;
-                        diag_mismatch_first_led = arm0_led;
-                        diag_mismatch_first_arm = 1;
-                        diag_mismatch_first_expected = expected0;
-                        diag_mismatch_first_actual = dma_pixels0[n];
-                    }
-                    diag_mismatch_last_column = arm0_column;
-                    diag_mismatch_last_led = arm0_led;
-                    diag_mismatch_last_arm = 1;
-                    diag_mismatch_last_expected = expected0;
-                    diag_mismatch_last_actual = dma_pixels0[n];
-                }
-            }
-            diag_serve_checks++;
         }
         spi_write_HSPI();   // queue the DMA (async); it runs during the projection below
         int64_t queue_end = measuring ? esp_timer_get_time() : 0;
@@ -536,11 +324,10 @@ static void gpu_serve() {
         if (measuring) {
             performance_record(column, column_deadline_us,
                 elapsed_us(measurement_start, queue_end),  // total
-                0, 0, 0,                                    // projection off-path
+                0, 0, 0,                                    // render is off-path now
                 elapsed_us(measurement_start, wait_end),   // spi wait
                 elapsed_us(wait_end, queue_end));           // framebuffer copy
         }
-        project_next_column();  // overlaps the DMA just queued above
     }
 }
 
@@ -558,6 +345,7 @@ void coreTask( void * pvParameters ){
             ventilagon_loop();
         } else {
             gpu_serve();
+            project_next_column();
         }
     }
     vTaskDelete(NULL);
@@ -675,32 +463,6 @@ static mp_obj_t povdisplay_reset_performance_stats(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_reset_performance_stats_obj, povdisplay_reset_performance_stats);
 
-// DIAGNOSTIC: see diag_test_pattern_active's declaration above.
-static mp_obj_t povdisplay_set_diag_test_pattern(mp_obj_t enabled) {
-    bool value = mp_obj_is_true(enabled);
-    if (value) {
-        diag_serve_checks = 0;
-        diag_mismatch_count = 0;
-        diag_mismatch_arm0_count = 0;
-        diag_mismatch_arm1_count = 0;
-        diag_mismatch_front_a_count = 0;
-        diag_mismatch_front_b_count = 0;
-        diag_mismatch_first_column = 0xffffffffu;
-        diag_mismatch_first_led = 0;
-        diag_mismatch_first_arm = 0;
-        diag_mismatch_first_expected = 0;
-        diag_mismatch_first_actual = 0;
-        diag_mismatch_last_column = 0xffffffffu;
-        diag_mismatch_last_led = 0;
-        diag_mismatch_last_arm = 0;
-        diag_mismatch_last_expected = 0;
-        diag_mismatch_last_actual = 0;
-    }
-    __atomic_store_n(&diag_test_pattern_active, value, __ATOMIC_RELEASE);
-    return mp_const_none;
-}
-static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_diag_test_pattern_obj, povdisplay_set_diag_test_pattern);
-
 static void performance_dict_int(mp_obj_t dict, qstr key, mp_int_t value) {
     mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(key), mp_obj_new_int(value));
 }
@@ -712,7 +474,7 @@ static mp_obj_t povdisplay_get_performance_stats(void) {
     portEXIT_CRITICAL(&performance_lock);
 
     uint32_t samples = snapshot.samples;
-    mp_obj_t dict = mp_obj_new_dict(58);
+    mp_obj_t dict = mp_obj_new_dict(20);
     performance_dict_int(dict, MP_QSTR_enabled, performance_is_enabled());
     performance_dict_int(dict, MP_QSTR_calibrated, color_pipeline_is_active());
     performance_dict_int(dict, MP_QSTR_vs2, vs2_render_active);
@@ -734,38 +496,6 @@ static mp_obj_t povdisplay_get_performance_stats(void) {
     performance_dict_int(dict, MP_QSTR_max_copy_us, snapshot.max_copy_us);
     performance_dict_int(dict, MP_QSTR_worst_slack_us,
         samples ? snapshot.worst_slack_us : 0);
-    performance_dict_int(dict, MP_QSTR_diag_hall_revolutions, diag_hall_revolutions);
-    performance_dict_int(dict, MP_QSTR_diag_publish_count, diag_publish_count);
-    performance_dict_int(dict, MP_QSTR_diag_fb_bytes_requested, diag_fb_bytes_requested);
-    performance_dict_int(dict, MP_QSTR_diag_internal_free_before, diag_internal_free_before);
-    performance_dict_int(dict, MP_QSTR_diag_internal_largest_before, diag_internal_largest_before);
-    performance_dict_int(dict, MP_QSTR_diag_internal_free_after, diag_internal_free_after);
-    performance_dict_int(dict, MP_QSTR_diag_fb_a_addr, diag_fb_a_addr);
-    performance_dict_int(dict, MP_QSTR_diag_fb_b_addr, diag_fb_b_addr);
-    performance_dict_int(dict, MP_QSTR_diag_fb_a_size, diag_fb_a_size);
-    performance_dict_int(dict, MP_QSTR_diag_fb_b_size, diag_fb_b_size);
-    performance_dict_int(dict, MP_QSTR_diag_canary_checks, diag_canary_checks);
-    performance_dict_int(dict, MP_QSTR_diag_canary_corrupt_words, diag_canary_corrupt_words);
-    performance_dict_int(dict, MP_QSTR_diag_canary_first_bad_region, diag_canary_first_bad_region);
-    performance_dict_int(dict, MP_QSTR_diag_canary_first_bad_offset, diag_canary_first_bad_offset);
-    performance_dict_int(dict, MP_QSTR_diag_canary_first_bad_value, diag_canary_first_bad_value);
-    performance_dict_int(dict, MP_QSTR_diag_serve_checks, diag_serve_checks);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_count, diag_mismatch_count);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_first_column, diag_mismatch_first_column);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_first_led, diag_mismatch_first_led);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_first_arm, diag_mismatch_first_arm);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_first_expected, diag_mismatch_first_expected);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_first_actual, diag_mismatch_first_actual);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_arm0_count, diag_mismatch_arm0_count);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_arm1_count, diag_mismatch_arm1_count);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_front_a_count, diag_mismatch_front_a_count);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_front_b_count, diag_mismatch_front_b_count);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_last_column, diag_mismatch_last_column);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_last_led, diag_mismatch_last_led);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_last_arm, diag_mismatch_last_arm);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_last_expected, diag_mismatch_last_expected);
-    performance_dict_int(dict, MP_QSTR_diag_mismatch_last_actual, diag_mismatch_last_actual);
-    performance_dict_int(dict, MP_QSTR_diag_num_pixels_g, num_pixels_g);
     return dict;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_performance_stats_obj, povdisplay_get_performance_stats);
@@ -820,7 +550,6 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_pipeline_enabled), (mp_obj_t)&povdisplay_set_color_pipeline_enabled_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_performance_profiling), (mp_obj_t)&povdisplay_set_performance_profiling_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_reset_performance_stats), (mp_obj_t)&povdisplay_reset_performance_stats_obj },
-    { MP_OBJ_NEW_QSTR(MP_QSTR_set_diag_test_pattern), (mp_obj_t)&povdisplay_set_diag_test_pattern_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_performance_stats), (mp_obj_t)&povdisplay_get_performance_stats_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_column_offset), (mp_obj_t)&povdisplay_set_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_column_offset), (mp_obj_t)&povdisplay_get_column_offset_obj },

@@ -21,55 +21,14 @@ def _send_stats(send, display):
     send(("povperf_timing samples=%d deadline_us=%d skipped=%d overruns=%d "
           "avg_total_us=%d max_total_us=%d avg_render_us=%d max_render_us=%d "
           "max_arm_render_us=%d avg_spi_wait_us=%d max_spi_wait_us=%d "
-          "avg_copy_us=%d max_copy_us=%d worst_slack_us=%d "
-          "diag_hall_revolutions=%d diag_publish_count=%d" % (
+          "avg_copy_us=%d max_copy_us=%d worst_slack_us=%d" % (
               samples, stats.get("deadline_us", 0), stats.get("skipped_updates", 0),
               stats.get("deadline_misses", 0), stats.get("avg_total_us", 0),
               stats.get("max_total_us", 0), stats.get("avg_render_us", 0),
               stats.get("max_render_us", 0), stats.get("max_arm_render_us", 0),
               stats.get("avg_spi_wait_us", 0), stats.get("max_spi_wait_us", 0),
               stats.get("avg_copy_us", 0), stats.get("max_copy_us", 0),
-              stats.get("worst_slack_us", 0), stats.get("diag_hall_revolutions", 0),
-              stats.get("diag_publish_count", 0))).encode())
-    send(("povperf_diag fb_bytes_requested=%d internal_free_before=%d "
-          "internal_largest_before=%d internal_free_after=%d "
-          "fb_a_addr=%d fb_b_addr=%d fb_a_size=%d fb_b_size=%d "
-          "canary_checks=%d canary_corrupt_words=%d canary_first_bad_region=%d "
-          "canary_first_bad_offset=%d canary_first_bad_value=%d" % (
-              stats.get("diag_fb_bytes_requested", 0),
-              stats.get("diag_internal_free_before", 0),
-              stats.get("diag_internal_largest_before", 0),
-              stats.get("diag_internal_free_after", 0),
-              stats.get("diag_fb_a_addr", 0), stats.get("diag_fb_b_addr", 0),
-              stats.get("diag_fb_a_size", 0), stats.get("diag_fb_b_size", 0),
-              stats.get("diag_canary_checks", 0),
-              stats.get("diag_canary_corrupt_words", 0),
-              stats.get("diag_canary_first_bad_region", 0),
-              stats.get("diag_canary_first_bad_offset", 0),
-              stats.get("diag_canary_first_bad_value", 0))).encode())
-    send(("povperf_pattern serve_checks=%d mismatch_count=%d "
-          "arm0_count=%d arm1_count=%d front_a_count=%d front_b_count=%d "
-          "num_pixels_g=%d "
-          "first_column=%d first_led=%d first_arm=%d "
-          "first_expected=%d first_actual=%d "
-          "last_column=%d last_led=%d last_arm=%d "
-          "last_expected=%d last_actual=%d" % (
-              stats.get("diag_serve_checks", 0), stats.get("diag_mismatch_count", 0),
-              stats.get("diag_mismatch_arm0_count", 0),
-              stats.get("diag_mismatch_arm1_count", 0),
-              stats.get("diag_mismatch_front_a_count", 0),
-              stats.get("diag_mismatch_front_b_count", 0),
-              stats.get("diag_num_pixels_g", 0),
-              stats.get("diag_mismatch_first_column", 0),
-              stats.get("diag_mismatch_first_led", 0),
-              stats.get("diag_mismatch_first_arm", 0),
-              stats.get("diag_mismatch_first_expected", 0),
-              stats.get("diag_mismatch_first_actual", 0),
-              stats.get("diag_mismatch_last_column", 0),
-              stats.get("diag_mismatch_last_led", 0),
-              stats.get("diag_mismatch_last_arm", 0),
-              stats.get("diag_mismatch_last_expected", 0),
-              stats.get("diag_mismatch_last_actual", 0))).encode())
+              stats.get("worst_slack_us", 0))).encode())
 
 
 def _unsupported(send):
@@ -113,17 +72,6 @@ def handle_command(parts, send, display):
             else:
                 raise ValueError("unknown encoder")
             reset()
-        elif command == "testpattern" and len(parts) == 2:
-            setter = getattr(display, "set_diag_test_pattern", None)
-            if setter is None:
-                _unsupported(send)
-                return
-            if parts[1] == "on":
-                setter(True)
-            elif parts[1] == "off":
-                setter(False)
-            else:
-                raise ValueError("unknown testpattern state")
         else:
             raise ValueError("invalid command")
     except (AttributeError, RuntimeError, ValueError):
