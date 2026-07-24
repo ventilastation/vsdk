@@ -84,12 +84,17 @@ SERIAL_LOCK := $(shell if command -v lockf >/dev/null 2>&1; then echo lockf $(SE
 # happen per target (via a wrapping login shell) and added seconds to every
 # single step. Instead, source it once yourself before running make; it
 # stays active for the rest of the shell session. See docs/internals/building.md.
+define NL
+
+
+endef
+
 IDF_SOURCE_HINT := source ../../esp-idf/esp-5.5.2/export.sh
 NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs base-monitor
 IDF_GOALS := $(filter-out $(NO_IDF_TARGETS),$(MAKECMDGOALS))
 ifneq ($(strip $(IDF_GOALS)),)
 ifeq ($(strip $(IDF_PATH)),)
-$(error ESP-IDF environment not active in this shell. Run '$(IDF_SOURCE_HINT)' once per session (see docs/internals/building.md) before make $(firstword $(IDF_GOALS)))
+$(error ESP-IDF environment not active in this shell. Run:$(NL)$(NL)    $(IDF_SOURCE_HINT)$(NL)$(NL)once per session (see docs/internals/building.md) before make $(firstword $(IDF_GOALS)))
 endif
 endif
 
