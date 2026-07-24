@@ -124,10 +124,26 @@ volatile int DEBUG_rot_item = 0;
 uint32_t* dma_buffer;
 uint32_t* dma_pixels0;
 uint32_t* dma_pixels1;
+// Per-arm scratch buffers, still used by the ventilagon path (display.c), which
+// renders + serves directly rather than through the framebuffer.
 uint32_t* draw_buffer0;
 uint32_t* draw_buffer1;
 extern uint8_t brillos[PIXELS];
 extern uint8_t intensidades_por_led[PIXELS];
+
+// Polar framebuffer holding the finished per-column APA102 words. The heavy
+// render (render_vs2/render) runs off the per-column critical path on the
+// render task (core 1, with MicroPython); the GPU serve task (core 0) only
+// copies the current column's two arms out of the front buffer and clocks the
+// SPI, so its per-column cost is constant regardless of scene complexity.
+// Double-buffered: the render task fills fb_back, then publishes it as
+// fb_front. Both live in internal SRAM, which is uncached and coherent across
+// cores on the ESP32-S3.
+static int num_pixels_g = 0;
+static uint32_t* fb_a = NULL;
+static uint32_t* fb_b = NULL;
+static uint32_t* volatile fb_front = NULL;
+static uint32_t* volatile fb_back = NULL;
 
 int buf_size;
 bool ventilagon_active = false;
@@ -147,6 +163,7 @@ inline uint32_t max(uint32_t a, uint32_t b) {
 }
 
 void init_buffers(int num_pixels) {
+    num_pixels_g = num_pixels;
     dma_buffer = heap_caps_malloc(buf_size, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
     memset(dma_buffer, 0xff, buf_size);
     draw_buffer0 = heap_caps_malloc(buf_size, MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT);
@@ -154,11 +171,30 @@ void init_buffers(int num_pixels) {
     draw_buffer1 = draw_buffer0 + num_pixels;
     dma_buffer[0]=0;
     dma_pixels0 = dma_buffer+1;
+    // The strip is one continuous run through the hub, not two separate arms --
+    // with an odd total LED count, the centre LED is physically shared by both
+    // sweeps. dma_pixels0's last word and dma_pixels1's first word are meant to
+    // alias that same centre LED (whichever write lands last in the copy loop is
+    // what's shown there); this is intentional, not a bug.
     dma_pixels1 = dma_buffer+num_pixels;
     for(int n=0; n<num_pixels; n++) {
         dma_pixels0[n] = 0x010000Ff;
         dma_pixels1[n] = 0x000100Ff;
     }
+
+    // Two full-frame framebuffers in internal SRAM (COLUMNS * num_pixels words
+    // each). Internal RAM is required: it is uncached, so the render task's
+    // writes on core 1 are visible to the serve task on core 0 without any
+    // cache maintenance.
+    size_t fb_words = (size_t)COLUMNS * num_pixels;
+    fb_a = heap_caps_malloc(fb_words * sizeof(uint32_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT);
+    fb_b = heap_caps_malloc(fb_words * sizeof(uint32_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT);
+    for (size_t i = 0; i < fb_words; i++) {
+        fb_a[i] = 0x000000ff;
+        fb_b[i] = 0x000000ff;
+    }
+    fb_front = fb_a;
+    fb_back = fb_b;
 }
 
 
@@ -175,6 +211,8 @@ void spi_write_HSPI() {
 void spi_shutdown() {
     free(dma_buffer);
     free(draw_buffer0);
+    free(fb_a);
+    free(fb_b);
 }
 
 static void IRAM_ATTR hall_neg_sensed(void* arg)
@@ -201,7 +239,6 @@ static void IRAM_ATTR hall_any_sensed(void* arg)
     }
 }
 
-
 void hall_init() {
     gpio_set_direction(hall_gpio, GPIO_MODE_INPUT);
 #if DEBUG_ROTATION
@@ -221,73 +258,79 @@ void hall_init() {
 int last_column = 0;
 int column_offset = 0;
 int64_t last_starfield_step = 0;
-void gpu_step() {
+
+static int render_col = 0;
+
+// Render one framebuffer column into fb_back, publishing a fresh
+// double-buffered frame each time the whole ring has been covered. Runs
+// unconditionally on every spin of coreTask()'s loop, independent of the
+// physical column -- the heavy, scene-dependent render cost never sits on
+// the per-column serve deadline.
+static void project_next_column() {
+    uint32_t* back = fb_back;
+    if (vs2_render_active) {
+        render_vs2(render_col, back + (size_t)render_col * num_pixels_g, &vs2_active_scene);
+    } else {
+        render(render_col, back + (size_t)render_col * num_pixels_g);
+    }
+    if (++render_col >= COLUMNS) {
+        render_col = 0;
+        fb_front = back;
+        fb_back = (back == fb_a) ? fb_b : fb_a;
+        int64_t now = esp_timer_get_time();
+        if (now > last_starfield_step + 20000) {
+            step_starfield();
+            last_starfield_step = now;
+        }
+    }
+}
+
+// Serve the column currently under the LEDs, if the fan has advanced to a new
+// one: copy that column's two arms out of the published framebuffer and start
+// the DMA. Cheap and constant-cost -- no scene rendering here -- so it always
+// meets the per-column deadline. The DMA overlaps the projection that
+// project_next_column() does right after, so the wait below is normally ~0.
+static void gpu_serve() {
     int64_t now = esp_timer_get_time();
-    uint32_t column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
+    // Floor-mod: the C % operator keeps the sign of its dividend, and the
+    // dividend can go negative (a stored negative column_offset, or the hall
+    // ISR updating last_turn between our two reads). A negative value cast to
+    // uint32_t would index far outside fb_front below, so fold it into
+    // [0, COLUMNS) first.
+    int64_t raw_column = (((now - last_turn) * COLUMNS / last_turn_duration) + column_offset ) % COLUMNS;
+    if (raw_column < 0) {
+        raw_column += COLUMNS;
+    }
+    uint32_t column = (uint32_t)raw_column;
     if (column != last_column) {
         bool measuring = performance_is_enabled();
         int64_t measurement_start = measuring ? esp_timer_get_time() : 0;
         uint32_t column_deadline_us = last_turn_duration > 0
             ? (uint32_t)(last_turn_duration / COLUMNS) : 0;
-#if (PROFILE_GPU_STEP)
-        int64_t t_start = esp_timer_get_time();
-#endif
-        spi_write_HSPI();
-        int64_t render_start = measuring ? esp_timer_get_time() : 0;
-        int64_t arm0_render_end;
-        int64_t render_end;
-        if (vs2_render_active) {
-            render_vs2((column + COLUMNS/2) % COLUMNS, draw_buffer0, &vs2_active_scene);
-            arm0_render_end = measuring ? esp_timer_get_time() : 0;
-            render_vs2(column, draw_buffer1, &vs2_active_scene);
-        } else {
-            render((column + COLUMNS/2) % COLUMNS, draw_buffer0);
-            arm0_render_end = measuring ? esp_timer_get_time() : 0;
-            render(column, draw_buffer1);
-        }
-        render_end = measuring ? esp_timer_get_time() : 0;
 
-        // need to wait for spi to finish before overwriting the buffers, because the DMA is reading from them
-        spiWaitComplete();
+        spiWaitComplete();  // wait for the previous DMA (it overlapped the projection)
         int64_t wait_end = measuring ? esp_timer_get_time() : 0;
 
-        for(int n=0; n<54; n++) {
-            dma_pixels0[n] = draw_buffer0[53-n];
-            dma_pixels1[n] = draw_buffer1[n];
+        uint32_t* fb = fb_front;
+        uint32_t* arm0 = fb + (size_t)((column + COLUMNS/2) % COLUMNS) * num_pixels_g;
+        uint32_t* arm1 = fb + (size_t)column * num_pixels_g;
+        for (int n = 0; n < num_pixels_g; n++) {
+            dma_pixels0[n] = arm0[num_pixels_g - 1 - n];
+            dma_pixels1[n] = arm1[n];
         }
-        if (measuring) {
-            int64_t copy_end = esp_timer_get_time();
-            // The two arms can differ with a scene's geometry, so retain the
-            // slower arm as well as their combined render time.
-            performance_record(column, column_deadline_us,
-                elapsed_us(measurement_start, copy_end),
-                elapsed_us(render_start, render_end),
-                elapsed_us(render_start, arm0_render_end),
-                elapsed_us(arm0_render_end, render_end),
-                elapsed_us(render_end, wait_end), elapsed_us(wait_end, copy_end));
-        }
-#if (PROFILE_GPU_STEP)
-        int64_t t_end = esp_timer_get_time();
-        if (column % 8 == 0) {
-            printf("GPU overlapped spi+render: %d us\n", (int)(t_end - t_start));
-        }
-#endif
+        spi_write_HSPI();   // queue the DMA (async); it runs during the projection below
+        int64_t queue_end = measuring ? esp_timer_get_time() : 0;
         last_column = column;
-    }
-
-    if (now > last_starfield_step + 20000) {
-#if (PROFILE_GPU_STEP)
-        int64_t t_start = esp_timer_get_time();
-#endif
-        step_starfield();
-#if (PROFILE_GPU_STEP)
-        int64_t t_end = esp_timer_get_time();
-        printf("starfield step: %d us.\n", (int)(t_end - t_start));
-#endif
-        last_starfield_step = now;
+        if (measuring) {
+            performance_record(column, column_deadline_us,
+                elapsed_us(measurement_start, queue_end),  // total
+                0, 0, 0,                                    // render is off-path now
+                elapsed_us(measurement_start, wait_end),   // spi wait
+                elapsed_us(wait_end, queue_end));           // framebuffer copy
+        }
     }
 }
- 
+
 
 void coreTask( void * pvParameters ){
     printf("GPU task running on core %d\n", xPortGetCoreID());
@@ -301,7 +344,8 @@ void coreTask( void * pvParameters ){
         if (ventilagon_active) {
             ventilagon_loop();
         } else {
-            gpu_step();
+            gpu_serve();
+            project_next_column();
         }
     }
     vTaskDelete(NULL);
@@ -459,7 +503,10 @@ static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_performance_stats_obj, povdispla
 // ------------------------------
 
 static mp_obj_t povdisplay_set_column_offset(mp_obj_t offset) {
-    column_offset = mp_obj_get_int(offset) % COLUMNS;
+    // Normalize to [0, COLUMNS): the settings scene can step the offset below
+    // zero and the stored NVS value may already be negative. The retro-go
+    // driver normalizes the same value on its side (ventilastation_pov.c).
+    column_offset = ((mp_obj_get_int(offset) % COLUMNS) + COLUMNS) % COLUMNS;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_column_offset_obj, povdisplay_set_column_offset);
