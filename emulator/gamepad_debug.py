@@ -35,14 +35,31 @@ step that should trigger on_change -> Controller.leftx/.a updates), to
 tell whether reads are silently coming back empty or something breaks
 after a real read:
     python3 gamepad_debug.py --trace2
+
+--trace2 found it: readv() reads real bytes forever (readv_zero stays 0)
+but control_value_sets freezes after the initial handful from device-open
+resync -- and every single readv() call reads exactly 16 bytes, never 24.
+pyglet's InputEvent struct hardcodes tv_sec/tv_usec as c_int64 (8 bytes
+each) regardless of platform, making it 24 bytes; the kernel's actual
+struct input_event on a 32-bit userspace (common on a Pi 2) uses 32-bit
+`long` fields, making it 16 bytes. EvdevDevice.select() computes
+n_events = bytes_read // self._event_size -- 16 // 24 = 0 every time, so
+it silently decides each read held zero complete events and never
+parses any of them, forever, while readv() itself keeps "succeeding".
+--fix32 redefines Timeval/InputEvent with platform-native c_long fields
+(matching the kernel's actual layout on both 32- and 64-bit) before any
+device is opened, to confirm this is really it:
+    python3 gamepad_debug.py --fix32
 """
 
+import ctypes
 import select
 import sys
 
 NO_FF = "--no-ff" in sys.argv[1:]
 TRACE = "--trace" in sys.argv[1:]
 TRACE2 = "--trace2" in sys.argv[1:]
+FIX32 = "--fix32" in sys.argv[1:]
 
 import pyglet
 pyglet.options['shadow_window'] = False
@@ -104,6 +121,29 @@ if TRACE2:
 
     evdev_backend._readv = _traced_readv
     Control.value = property(Control.value.fget, _traced_value_setter)
+
+if FIX32:
+    import pyglet.input.linux.evdev as evdev_backend
+
+    print("native c_long size on this platform:", ctypes.sizeof(ctypes.c_long),
+          "(pyglet's hardcoded Timeval uses c_int64 = 8 bytes regardless)")
+
+    class Timeval(ctypes.Structure):
+        _fields_ = (('tv_sec', ctypes.c_long), ('tv_usec', ctypes.c_long))
+
+    class InputEvent(ctypes.Structure):
+        _fields_ = (('time', Timeval), ('type', ctypes.c_uint16),
+                    ('code', ctypes.c_uint16), ('value', ctypes.c_int32))
+
+    print("patched InputEvent size:", ctypes.sizeof(InputEvent),
+          "(was", ctypes.sizeof(evdev_backend.InputEvent), ")")
+
+    # Must happen before any EvdevDevice is constructed (ControllerManager()
+    # below) -- __init__ builds self._event_buffer from this module-level
+    # name and computes self._event_size from ctypes.sizeof(InputEvent) at
+    # that point.
+    evdev_backend.Timeval = Timeval
+    evdev_backend.InputEvent = InputEvent
 
 try:
     pyglet.input.controller.add_mappings_from_file("gamecontrollerdb.txt")
