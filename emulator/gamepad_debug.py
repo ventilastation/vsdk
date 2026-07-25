@@ -25,6 +25,16 @@ methods that are supposed to notice the fd is readable and read it) plus
 a raw select.select() on the same fd done entirely outside pyglet, so we
 can see exactly which side of that boundary stops seeing the device:
     python3 gamepad_debug.py --trace
+
+--trace showed EvdevDevice.select() DOES fire repeatedly, tracking real
+input activity -- so pyglet's event loop is noticing the fd and calling
+the read method. State still never updates. --trace2 goes one level
+deeper still, instrumenting the actual os.readv() call inside select()
+(how many bytes it reads per firing) and Control.value's setter (the
+step that should trigger on_change -> Controller.leftx/.a updates), to
+tell whether reads are silently coming back empty or something breaks
+after a real read:
+    python3 gamepad_debug.py --trace2
 """
 
 import select
@@ -32,6 +42,7 @@ import sys
 
 NO_FF = "--no-ff" in sys.argv[1:]
 TRACE = "--trace" in sys.argv[1:]
+TRACE2 = "--trace2" in sys.argv[1:]
 
 import pyglet
 pyglet.options['shadow_window'] = False
@@ -62,6 +73,37 @@ if TRACE:
 
     evdev_backend.EvdevDevice.poll = _traced_poll
     evdev_backend.EvdevDevice.select = _traced_select
+
+if TRACE2:
+    import pyglet.input.linux.evdev as evdev_backend
+    from pyglet.input.base import Control
+
+    _counts2 = {
+        "readv_calls": 0, "readv_bytes_total": 0, "readv_zero": 0,
+        "control_value_sets": 0,
+    }
+    _last_sets = []  # rolling log of the most recent Control.value assignments
+
+    _orig_readv = evdev_backend._readv
+
+    def _traced_readv(fd, buffers):
+        n = _orig_readv(fd, buffers)
+        _counts2["readv_calls"] += 1
+        _counts2["readv_bytes_total"] += n
+        if n == 0:
+            _counts2["readv_zero"] += 1
+        return n
+
+    _orig_value_setter = Control.value.fset
+
+    def _traced_value_setter(self, newvalue):
+        _counts2["control_value_sets"] += 1
+        _last_sets.append((getattr(self, "name", "?"), getattr(self, "event_code", "?"), newvalue))
+        del _last_sets[:-5]
+        _orig_value_setter(self, newvalue)
+
+    evdev_backend._readv = _traced_readv
+    Control.value = property(Control.value.fget, _traced_value_setter)
 
 try:
     pyglet.input.controller.add_mappings_from_file("gamecontrollerdb.txt")
@@ -138,6 +180,10 @@ def poll(dt):
             # EvdevDevice.select() above never fires.
             ready, _, _ = select.select([fd], [], [], 0)
             print("raw select() on fd", fd, "-> ready:", bool(ready))
+
+    if TRACE2:
+        print("trace2 counters:", dict(_counts2))
+        print("last Control.value sets (name, event_code, value):", _last_sets)
 
 
 if __name__ == '__main__':
