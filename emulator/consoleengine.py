@@ -41,6 +41,17 @@ class ConsoleEngine:
         pyglet.input.controller.add_mappings_from_file("gamecontrollerdb.txt")
         self.controller_manager = pyglet.input.ControllerManager()
         self.controllers = []
+        # Event-driven, matching pyglet2x/inputs.py -- NOT re-derived every
+        # tick. Controller.device.connected is just os.path.exists(path);
+        # polling that 30x/sec turned any single-tick blip into a full
+        # disconnect+reconnect, which called ctrl.open() on an
+        # already-open device and corrupted its fd/poll registration --
+        # that's why real button/stick events never arrived.
+        self.controller_manager.push_handlers(
+            on_connect=lambda ctrl: self._refresh_controllers(),
+            on_disconnect=lambda ctrl: self._refresh_controllers(),
+        )
+        self._refresh_controllers()  # pick up whatever's already plugged in
 
         self.last_input_sent = (0, 0, 0)
         self.last_exit_pressed = False
@@ -83,7 +94,6 @@ class ConsoleEngine:
         print("controller event: on_trigger_motion", trigger, value)
 
     def _encode_input(self):
-        self._refresh_controllers()
         self.keys.poll()
         kb_left, kb_right, kb_up, kb_down, kb_a, kb_b, kb_x = keyboard_state(self.keys)
         primary = self.controllers[0] if self.controllers else None
