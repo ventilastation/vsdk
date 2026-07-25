@@ -18,11 +18,20 @@ evtest never touches FF at all. --no-ff patches those ioctls out to test
 whether that upload is what's disrupting the normal input stream on this
 kernel/driver:
     python3 gamepad_debug.py --no-ff
+
+--no-ff ruled that out too: state stayed frozen either way. --trace goes
+one level deeper, instrumenting pyglet's own EvdevDevice.poll/select (the
+methods that are supposed to notice the fd is readable and read it) plus
+a raw select.select() on the same fd done entirely outside pyglet, so we
+can see exactly which side of that boundary stops seeing the device:
+    python3 gamepad_debug.py --trace
 """
 
+import select
 import sys
 
 NO_FF = "--no-ff" in sys.argv[1:]
+TRACE = "--trace" in sys.argv[1:]
 
 import pyglet
 pyglet.options['shadow_window'] = False
@@ -31,6 +40,28 @@ if NO_FF:
     import pyglet.input.linux.evdev as evdev_backend
     evdev_backend.EVIOCSFF = lambda fileno, effect: None
     print("Patched out EVIOCSFF (force-feedback effect upload) for this run.")
+
+if TRACE:
+    import pyglet.input.linux.evdev as evdev_backend
+
+    _counts = {"poll_calls": 0, "poll_true": 0, "select_calls": 0}
+    _orig_poll = evdev_backend.EvdevDevice.poll
+    _orig_select = evdev_backend.EvdevDevice.select
+
+    def _traced_poll(self):
+        _counts["poll_calls"] += 1
+        ready = _orig_poll(self)
+        if ready:
+            _counts["poll_true"] += 1
+        return ready
+
+    def _traced_select(self):
+        _counts["select_calls"] += 1
+        print("EvdevDevice.select() FIRED for", self.name)
+        return _orig_select(self)
+
+    evdev_backend.EvdevDevice.poll = _traced_poll
+    evdev_backend.EvdevDevice.select = _traced_select
 
 try:
     pyglet.input.controller.add_mappings_from_file("gamecontrollerdb.txt")
@@ -48,6 +79,11 @@ def open_controller(ctrl):
     print("opening:", ctrl.device.name, "guid:", ctrl.guid)
     ctrl.open()
     opened.append(ctrl)
+
+    if TRACE:
+        registered = ctrl.device in pyglet.app.platform_event_loop.select_devices
+        print("device.fileno() =", ctrl.device.fileno(),
+              "| registered in platform_event_loop.select_devices:", registered)
 
     @ctrl.event
     def on_button_press(controller, button):
@@ -91,6 +127,17 @@ def poll(dt):
     for ctrl in opened:
         print("poll:", ctrl.device.name, "a=", ctrl.a, "leftx=", ctrl.leftx,
               "lefty=", ctrl.lefty, "dpad=", ctrl.dpad)
+
+    if TRACE:
+        print("trace counters:", dict(_counts))
+        for ctrl in opened:
+            fd = ctrl.device.fileno()
+            # A raw select() on the exact same fd, done entirely outside
+            # pyglet, to see whether the OS reports it readable right now
+            # (it should, if you're actively moving the stick) even though
+            # EvdevDevice.select() above never fires.
+            ready, _, _ = select.select([fd], [], [], 0)
+            print("raw select() on fd", fd, "-> ready:", bool(ready))
 
 
 if __name__ == '__main__':
