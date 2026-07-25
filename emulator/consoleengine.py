@@ -49,9 +49,38 @@ class ConsoleEngine:
         connected = list(self.controller_manager.get_controllers())[:2]
         for ctrl in connected:
             if ctrl not in self.controllers:
-                print("Controller connected:", ctrl.device.name)
+                print("Controller connected:", ctrl.device.name, "guid:", ctrl.guid)
                 ctrl.open()
+                # TEMPORARY (debugging real-hardware input not registering):
+                # pyglet's own events, hooked directly on the Controller, to
+                # tell whether pyglet is calling back at all vs. something
+                # downstream (pack_controllers/inputs_common) not seeing it.
+                ctrl.push_handlers(
+                    on_button_press=self._debug_button,
+                    on_stick_motion=self._debug_stick,
+                    on_dpad_motion=self._debug_dpad,
+                    on_trigger_motion=self._debug_trigger,
+                )
+        for ctrl in self.controllers:
+            if ctrl not in connected:
+                print("Controller disconnected:", ctrl.device.name)
         self.controllers = connected
+
+    @staticmethod
+    def _debug_button(controller, button):
+        print("controller event: on_button_press", button)
+
+    @staticmethod
+    def _debug_stick(controller, stick, vector):
+        print("controller event: on_stick_motion", stick, vector)
+
+    @staticmethod
+    def _debug_dpad(controller, vector):
+        print("controller event: on_dpad_motion", vector)
+
+    @staticmethod
+    def _debug_trigger(controller, trigger, value):
+        print("controller event: on_trigger_motion", trigger, value)
 
     def _encode_input(self):
         self._refresh_controllers()
