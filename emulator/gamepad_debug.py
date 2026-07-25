@@ -7,10 +7,30 @@ this machine at all, independent of anything else in this project.
 
 Run it, then press buttons / move sticks on the gamepad:
     python3 gamepad_debug.py
+
+`python3 -m evdev.evtest` reading the same /dev/input/eventN showed a
+perfect, continuous stream of real events while pyglet's Controller
+stayed frozen -- so the break is inside pyglet, between that fd and
+Controller state. One real difference: a device with rumble support
+(pyglet.input.linux.evdev.FFController, which this F310 qualifies for)
+uploads force-feedback effects via EVIOCSFF ioctls right after opening;
+evtest never touches FF at all. --no-ff patches those ioctls out to test
+whether that upload is what's disrupting the normal input stream on this
+kernel/driver:
+    python3 gamepad_debug.py --no-ff
 """
+
+import sys
+
+NO_FF = "--no-ff" in sys.argv[1:]
 
 import pyglet
 pyglet.options['shadow_window'] = False
+
+if NO_FF:
+    import pyglet.input.linux.evdev as evdev_backend
+    evdev_backend.EVIOCSFF = lambda fileno, effect: None
+    print("Patched out EVIOCSFF (force-feedback effect upload) for this run.")
 
 try:
     pyglet.input.controller.add_mappings_from_file("gamecontrollerdb.txt")
