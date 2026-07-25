@@ -5,16 +5,26 @@ no X11/EGL context to back one, only the spinning board's LEDs are the
 display. Without a window there is no event queue to dispatch key-down/up
 into, so pyglet.window.key.KeyStateHandler (what pyglet1x/pyglet2x's
 inputs.py use in the windowed desktop build) isn't available. The arcade
-panel's button encoder presents as a plain USB HID keyboard, so this reads
-it directly off /dev/input/eventN instead and exposes the same
+panel's button encoder(s) present as plain USB HID keyboards, so this reads
+them directly off /dev/input/eventN instead and exposes the same
 keys[pyglet_symbol] -> bool interface inputs_common.keyboard_state() and
 keyboard_v2_state() expect, so those functions work unmodified either way.
 
+MultiKeyState supports any number of keyboard-like devices at once (their
+pressed keys are simply ORed together) and hot-plugs them: newly attached
+matching devices are picked up on the next periodic rescan, and a device
+that errors out on read (unplugged) is dropped without taking the rest of
+the engine down. This matters for a 2-player cabinet with one encoder per
+player, and for testing where a device gets connected after the process
+already started.
+
 Importing this module requires pyglet.options['shadow_window'] to already
-be False (set in consoleengine.py before any of these imports run) --
-otherwise the `from pyglet.window import key` below drags in a live X11
-connection attempt. See consoleengine.py's module docstring.
+be False (set in emu.py before any pyglet-touching import runs, including
+comms.py) -- otherwise the `from pyglet.window import key` below drags in
+a live X11 connection attempt. See consoleengine.py's module docstring.
 """
+
+import time
 
 try:
     import evdev
@@ -63,97 +73,99 @@ _UP, _DOWN, _REPEAT = 0, 1, 2
 # the arcade panel's encoder.
 _MIN_MATCHING_KEYS = 10
 
-
-class NullKeyState:
-    """Stand-in when evdev is unavailable or no device was found: every key
-    reads as not-pressed, matching pyglet's KeyStateHandler default."""
-
-    def poll(self):
-        pass
-
-    def __getitem__(self, symbol):
-        return False
+# How often to re-scan /dev/input for newly attached (or gone) matching
+# devices. Listing + opening every node isn't free, so this is throttled
+# rather than done every tick; a device going away is still noticed
+# immediately, on the very next read, regardless of this interval.
+_RESCAN_INTERVAL_S = 2.0
 
 
-class EvdevKeyState:
-    """keys[pyglet_symbol] -> bool, backed by polling one evdev device."""
+def _is_joystick_like(device):
+    """True for anything that looks like a joystick/gamepad interface.
 
-    def __init__(self, device_path):
-        self._device = evdev.InputDevice(device_path)
-        self._pressed = set()
-        print(f"evdev_keys: reading keyboard from {device_path} ({self._device.name})")
-
-    def poll(self):
-        """Drain pending events. Call once per tick before reading state."""
-        try:
-            for event in self._device.read():
-                if event.type != ecodes.EV_KEY:
-                    continue
-                symbol = _EVDEV_TO_PYGLET.get(event.code)
-                if symbol is None:
-                    continue
-                if event.value == _UP:
-                    self._pressed.discard(symbol)
-                elif event.value in (_DOWN, _REPEAT):
-                    self._pressed.add(symbol)
-        except BlockingIOError:
-            pass
-
-    def __getitem__(self, symbol):
-        return symbol in self._pressed
+    Cheap USB gamepads are exactly the kind of device that can otherwise
+    pass the keyboard check below (many report a real KEY_* range for
+    D-pad/buttons alongside their axes) -- this keeps one from being
+    grabbed as "a keyboard" and losing pyglet's own Controller/Joystick
+    handling of it, and from taking the whole engine down via
+    MultiKeyState the moment it's unplugged.
+    """
+    caps = device.capabilities()
+    if ecodes.EV_ABS in caps:
+        return True
+    return any(code >= ecodes.BTN_JOYSTICK for code in caps.get(ecodes.EV_KEY, []))
 
 
 def _looks_like_keyboard(device):
-    keys = device.capabilities().get(ecodes.EV_KEY, [])
-    return len(set(keys) & set(_EVDEV_TO_PYGLET)) >= _MIN_MATCHING_KEYS
+    keys = set(device.capabilities().get(ecodes.EV_KEY, []))
+    if len(keys & set(_EVDEV_TO_PYGLET)) < _MIN_MATCHING_KEYS:
+        return False
+    return not _is_joystick_like(device)
 
 
-def find_device(name_substring=None):
-    """Return an evdev device path for the arcade panel's keyboard encoder,
-    or None. With name_substring, matches the first device whose name
-    contains it (case-insensitive); otherwise auto-detects the first
-    device exposing a broad keyboard-like key range."""
-    if evdev is None:
-        return None
+class MultiKeyState:
+    """keys[pyglet_symbol] -> bool, backed by any number of hot-pluggable
+    evdev keyboard-like devices, ORed together. Safe to use even with no
+    matching device present (or evdev not installed): every key just reads
+    as not-pressed, matching pyglet's KeyStateHandler default."""
 
-    candidates = []
-    for path in evdev.list_devices():
+    def __init__(self, name_substring=None):
+        self._name_substring = name_substring
+        self._devices = {}  # path -> (evdev.InputDevice, {pressed pyglet symbols})
+        self._last_scan = 0.0
+        self._rescan()
+
+    def _matches(self, device):
+        if self._name_substring:
+            return self._name_substring.lower() in device.name.lower()
+        return _looks_like_keyboard(device)
+
+    def _rescan(self):
+        self._last_scan = time.monotonic()
+        if evdev is None:
+            return
         try:
-            candidates.append((path, evdev.InputDevice(path)))
-        except OSError:
-            continue
+            live_paths = set(evdev.list_devices())
+        except OSError as error:
+            print("evdev_keys: device scan failed:", error)
+            return
+        for path in live_paths - self._devices.keys():
+            try:
+                device = evdev.InputDevice(path)
+                if not self._matches(device):
+                    continue
+            except OSError:
+                continue
+            print(f"evdev_keys: keyboard connected: {path} ({device.name})")
+            self._devices[path] = (device, set())
 
-    if name_substring:
-        needle = name_substring.lower()
-        for path, device in candidates:
-            if needle in device.name.lower():
-                return path
-        return None
+    def poll(self):
+        """Drain pending events on every open device, dropping any that
+        error out (unplugged). Also re-scans for newly attached devices,
+        throttled to _RESCAN_INTERVAL_S. Call once per tick."""
+        if time.monotonic() - self._last_scan >= _RESCAN_INTERVAL_S:
+            self._rescan()
 
-    for path, device in candidates:
-        if _looks_like_keyboard(device):
-            return path
-    return None
+        dead = []
+        for path, (device, pressed) in self._devices.items():
+            try:
+                for event in device.read():
+                    if event.type != ecodes.EV_KEY:
+                        continue
+                    symbol = _EVDEV_TO_PYGLET.get(event.code)
+                    if symbol is None:
+                        continue
+                    if event.value == _UP:
+                        pressed.discard(symbol)
+                    elif event.value in (_DOWN, _REPEAT):
+                        pressed.add(symbol)
+            except BlockingIOError:
+                pass
+            except OSError:
+                print(f"evdev_keys: keyboard disconnected: {path} ({device.name})")
+                dead.append(path)
+        for path in dead:
+            del self._devices[path]
 
-
-def open_keyboard(name_substring=None):
-    """Build the keys[] state for console mode. Falls back to a no-op
-    NullKeyState (all keys unpressed) if evdev is unavailable or no
-    matching device is found -- mirrors inputs_common.py's RPi.GPIO
-    fallback for dev machines without the real peripheral."""
-    if evdev is None:
-        print("evdev_keys: evdev not installed; keyboard input disabled")
-        return NullKeyState()
-    try:
-        path = find_device(name_substring)
-    except Exception as error:
-        print("evdev_keys: device scan failed:", error)
-        return NullKeyState()
-    if path is None:
-        print("evdev_keys: no keyboard device found; keyboard input disabled")
-        return NullKeyState()
-    try:
-        return EvdevKeyState(path)
-    except Exception as error:
-        print("evdev_keys: failed to open", path, "-", error)
-        return NullKeyState()
+    def __getitem__(self, symbol):
+        return any(symbol in pressed for _device, pressed in self._devices.values())

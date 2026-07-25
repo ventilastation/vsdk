@@ -27,7 +27,7 @@ pyglet.options['shadow_window'] = False
 import config
 from audio import sound_init, sound_process_queue
 from emu_audio import emu_audio
-from evdev_keys import open_keyboard
+from evdev_keys import MultiKeyState
 from inputs_common import keyboard_state, keyboard_v2_state, pack_controllers
 from pyglet.window import key
 
@@ -36,7 +36,7 @@ class ConsoleEngine:
     def __init__(self, comms_send):
         sound_init()
         self.comms_send = comms_send
-        self.keys = open_keyboard(config.KEYBOARD_DEVICE_NAME)
+        self.keys = MultiKeyState(config.KEYBOARD_DEVICE_NAME)
 
         pyglet.input.controller.add_mappings_from_file("gamecontrollerdb.txt")
         self.controller_manager = pyglet.input.ControllerManager()
