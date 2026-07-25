@@ -42,6 +42,15 @@ SERIAL_DEVICE_RASPI3 = "ttyACM"
 SERVER_IP = "127.0.0.1"  # local desktop MicroPython subprocess
 SERVER_PORT = 5005
 
+# Console/no-display mode only (see consoleengine.py): substring match
+# (case-insensitive) against an evdev device name, to pick out the arcade
+# panel's USB keyboard-emulating encoder among /dev/input/event*. None
+# auto-detects the first device exposing a full keyboard-like key range;
+# set this explicitly once real hardware shows more than one candidate
+# (list device names with `python3 -m evdev.evtest` or
+# `cat /proc/bus/input/devices`).
+KEYBOARD_DEVICE_NAME = None
+
 
 def configure(args):
     """Apply parsed command-line arguments (see emu.py)."""

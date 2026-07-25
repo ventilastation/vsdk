@@ -4,8 +4,10 @@ Modes (see also config.py):
   (default)      run the local desktop MicroPython as the frame source and render it
   --remote       connect to the hardware workbench and render the POV frames it
                  captures from the real board; no local MicroPython
-  --no-display   connect to a real board for button input only; render nothing
-                 (the physical spinning LEDs are the display)
+  --no-display   connect to a real board for button input/sound only; render nothing
+                 (the physical spinning LEDs are the display). This is the
+                 production Base's mode: it runs headless, with no window and
+                 no X11 (see consoleengine.py).
 """
 
 import argparse
@@ -41,10 +43,19 @@ def main(argv=None):
     import config
     config.configure(args)
 
+    if not config.DISPLAY_ENABLED:
+        # Must happen before the very first pyglet-touching import below
+        # (comms.py itself imports audio/emu_audio, which import
+        # pyglet.media). Without a real window ever being created, pyglet
+        # otherwise still creates an invisible 1x1 GL window as an import
+        # side effect (see consoleengine.py's docstring) -- which needs a
+        # live X11/EGL connection this console mode doesn't have.
+        import pyglet
+        pyglet.options['shadow_window'] = False
+
     # Imported after configure(): these modules read config at import time
     # to build windows/connections matching the selected mode.
     import comms
-    from pygletengine import PygletEngine
 
     comms.start()
 
@@ -57,7 +68,12 @@ def main(argv=None):
                 [UPY_EXEC, "-X", "heapsize=8m", "main.py", "--platform=desktop"],
                 cwd=UPY_ROOT,
             )
-        PygletEngine(LED_COUNT, comms.send, config.DISPLAY_ENABLED)
+        if config.DISPLAY_ENABLED:
+            from pygletengine import PygletEngine
+            PygletEngine(LED_COUNT, comms.send)
+        else:
+            from consoleengine import ConsoleEngine
+            ConsoleEngine(comms.send).run()
     finally:
         comms.shutdown()
         if upy is not None:

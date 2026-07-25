@@ -12,13 +12,12 @@ from povrender import step_starfield
 
 
 class PygletEngine():
-    def __init__(self, led_count, comms_send, enable_display=True):
+    def __init__(self, led_count, comms_send):
         sound_init()
         display_init(led_count)
         self.last_input_sent = (0, 0, 0)
         self.last_exit_pressed = False
         self.comms_send = comms_send
-        self.enable_display = enable_display
 
         def process_input():
             import comms
@@ -33,16 +32,13 @@ class PygletEngine():
 
         @window.event
         def on_draw():
-            if not self.enable_display:
-                return
             display_draw()
 
         def animate(dt):
             process_input()
             sound_process_queue()
             emu_audio.process()  # drive emulator-audio player lifecycle (main thread)
-            if self.enable_display:
-                step_starfield()
+            step_starfield()
 
         init_inputs()
         pyglet.clock.schedule_interval(animate, 1/30.0)
