@@ -466,7 +466,24 @@ def _register_mdns(port):
         server=f"{_MDNS_HOSTNAME}.local.",
         parsed_addresses=[ip],
     )
-    _mdns_zc.register_service(_mdns_info)
+    try:
+        _mdns_zc.register_service(_mdns_info)
+    except Exception as exc:
+        # Most commonly a NonUniqueNameException: some other host on the LAN
+        # (a production base Pi, or another dev instance) already owns
+        # "{_MDNS_HOSTNAME}.local". That's a real name collision, not a bug
+        # here -- don't crash the whole emulator over an advertisement that's
+        # a convenience for device discovery, not required for the emulator
+        # itself to run.
+        _mdns_zc.close()
+        _mdns_zc = None
+        _mdns_info = None
+        print(
+            f"upgrade_server: mDNS advertisement skipped -- {_MDNS_HOSTNAME}.local "
+            f"is already claimed by another host on this network ({exc.__class__.__name__}). "
+            "The device won't auto-discover this server; use its IP directly if needed."
+        )
+        return
     atexit.register(_unregister_mdns)
     print(f"upgrade_server: advertising {_MDNS_HOSTNAME}.local ({ip}) via mDNS")
 
