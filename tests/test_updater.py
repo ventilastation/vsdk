@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import sys
 import types
@@ -250,11 +251,18 @@ class SyncLfsFilesHeartbeatTests(unittest.TestCase):
                 yield min(i + chunk_size, len(content)) * 100 // total_size
 
         class FakeFile:
+            # Faking every open() call in _sync_lfs_files() now also covers
+            # the text-mode LFS hash cache load/save, not just the binary
+            # download-write path -- branch the buffer type on mode like a
+            # real file would.
             def __init__(self, path, mode):
-                self.buf = bytearray()
+                self.buf = bytearray() if "b" in mode else ""
 
             def write(self, data):
                 self.buf += data
+
+            def read(self, *a):
+                return self.buf
 
             def __enter__(self):
                 return self
@@ -274,6 +282,129 @@ class SyncLfsFilesHeartbeatTests(unittest.TestCase):
 
         progress_lines = [s for s in sent if s.startswith(b"ota_progress downloading big_file.bin")]
         self.assertTrue(progress_lines, "expected at least one heartbeat during the slow download")
+
+
+class LfsHashCacheTests(unittest.TestCase):
+    """_sync_lfs_files() caches each path's last-verified sha256 (mirroring
+    the NVS partition-hash cache tier-3 already uses) so an unchanged file
+    is trusted without re-reading and re-hashing its content on every
+    session -- this is what makes repeat scans of an otherwise-unchanged
+    tree fast instead of hashing the full LFS content every time."""
+
+    def setUp(self):
+        sys.modules.pop("updater", None)
+
+    def _run_sync(self, files, fake_fs, sha256_calls, download_content=b"new content"):
+        class FakeUtime:
+            @staticmethod
+            def ticks_ms():
+                return 0
+
+            @staticmethod
+            def ticks_diff(a, b):
+                return 0
+
+        sys.modules["utime"] = FakeUtime
+
+        import updater
+
+        class FakeFile:
+            def __init__(self, path, mode):
+                self.path = path
+                self.mode = mode
+                self.write_buf = bytearray() if "b" in mode else ""
+
+            def read(self, *a):
+                return fake_fs.get(self.path, b"" if "b" in self.mode else "")
+
+            def write(self, data):
+                self.write_buf += data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                if "w" in self.mode:
+                    fake_fs[self.path] = self.write_buf
+                return False
+
+        def fake_sha256_file(path):
+            sha256_calls.append(path)
+            content = fake_fs.get(path)
+            if content is None:
+                return None
+            data = content if isinstance(content, (bytes, bytearray)) else content.encode()
+            return hashlib.sha256(data).hexdigest()
+
+        def fake_rename(a, b):
+            fake_fs[b] = fake_fs.pop(a)
+
+        def fake_http_stream(url, callback, total_size):
+            callback(download_content)
+            yield 100
+
+        with unittest.mock.patch("builtins.open", FakeFile), \
+                unittest.mock.patch.object(updater, "_sha256_file", fake_sha256_file), \
+                unittest.mock.patch.object(updater, "_makedirs", lambda path: None), \
+                unittest.mock.patch.object(updater.os, "rename", fake_rename), \
+                unittest.mock.patch.object(updater, "_http_stream", fake_http_stream):
+            updater._sync_lfs_files("http://base", files)
+        return updater
+
+    def test_second_sync_skips_rehashing_an_unchanged_file(self):
+        content = b"hello world"
+        sha = hashlib.sha256(content).hexdigest()
+        fake_fs = {"/a.py": content}
+        files = [{"path": "a.py", "size": len(content), "sha256": sha}]
+
+        first_calls = []
+        self._run_sync(files, fake_fs, first_calls)
+        self.assertIn("/a.py", first_calls, "first-ever sync has no cache yet, must hash")
+
+        second_calls = []
+        self._run_sync(files, fake_fs, second_calls)
+        self.assertNotIn("/a.py", second_calls, "cache hit should skip re-hashing unchanged content")
+
+    def test_changed_file_downloads_and_refreshes_the_cache(self):
+        old_content = b"old"
+        old_sha = hashlib.sha256(old_content).hexdigest()
+        fake_fs = {"/a.py": old_content}
+        files = [{"path": "a.py", "size": len(old_content), "sha256": old_sha}]
+        self._run_sync(files, fake_fs, [])  # seed the cache with the old hash
+
+        new_content = b"brand new content"
+        new_sha = hashlib.sha256(new_content).hexdigest()
+        files[0]["sha256"] = new_sha
+        files[0]["size"] = len(new_content)
+
+        self._run_sync(files, fake_fs, [], download_content=new_content)
+        self.assertEqual(fake_fs["/a.py"], new_content)
+
+        # Cache should now hold the new hash, so a third, unchanged sync
+        # doesn't re-hash it either.
+        third_calls = []
+        self._run_sync(files, fake_fs, third_calls)
+        self.assertNotIn("/a.py", third_calls)
+
+    def test_cache_drops_paths_no_longer_in_the_manifest(self):
+        content_a = b"a-content"
+        content_b = b"b-content"
+        fake_fs = {
+            "/a.py": content_a,
+            "/b.py": content_b,
+        }
+        files = [
+            {"path": "a.py", "size": len(content_a), "sha256": hashlib.sha256(content_a).hexdigest()},
+            {"path": "b.py", "size": len(content_b), "sha256": hashlib.sha256(content_b).hexdigest()},
+        ]
+        self._run_sync(files, fake_fs, [])
+
+        cached = json.loads(fake_fs["/.vsdk_lfs_cache.json"])
+        self.assertEqual(set(cached), {"a.py", "b.py"})
+
+        self._run_sync(files[:1], fake_fs, [])  # b.py dropped from the manifest
+        cached = json.loads(fake_fs["/.vsdk_lfs_cache.json"])
+        self.assertEqual(set(cached), {"a.py"})
 
 
 class ResolveBaseUrlTests(unittest.TestCase):

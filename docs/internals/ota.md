@@ -251,6 +251,22 @@ the start of each session. Files deleted from the host tree are *not*
 deleted on the device; run `hardware/rotor/deploy_micropython_fs.py --port <p>`
 to push a full, authoritative vfs image over USB if that matters.
 
+Computing SHA256 of the full LFS content tree (195 files on a typical
+board) took ~15s on real hardware even when nothing had changed — pure
+per-file LittleFS open/read overhead, paid on every session. A cache of
+each path's last-verified sha256, `/.vsdk_lfs_cache.json`, mirrors the
+NVS-cached partition hashes below: a cache hit for a path whose cached
+hash matches the manifest's is trusted outright, skipping the read+hash
+entirely. This is only safe because nothing besides this updater (or a
+full `deploy_micropython_fs.py` reflash, which replaces this cache file
+along with everything else in one shot) writes LFS files on a fielded
+board; a manual `mpremote cp` of a single file, bypassing OTA, would go
+undetected. A cache miss (new file, or the manifest hash legitimately
+changed) always falls back to a real read+hash, so a wrong or missing
+cache entry can never cause a bad file to be accepted — only cost the
+same work this loop always used to do. The cache is pruned to the
+current manifest's paths on every save, so it doesn't grow unboundedly.
+
 The updater reports the local scan and final SHA256 comparison as
 `checking`, and the HTTP stream as `downloading`.
 
@@ -258,9 +274,17 @@ The updater reports the local scan and final SHA256 comparison as
 
 For each partition in `fmsx`, `retro-core`, `prboom-go`, `micropython` order: skip
 if the NVS-stored SHA256 matches the manifest (a missing/never-set hash
-counts as "differs"); otherwise erase, stream in 4096-byte blocks, verify
+counts as "differs"); otherwise stream in 4096-byte blocks, verify
 SHA256, store the hash in NVS. A mismatch leaves NVS unchanged (retried next
-session).
+session). Each block is erased immediately before it's written by
+`writeblocks(block_num, buf)` itself (the 3-arg form auto-erases when
+block_size is at least the native 4096-byte erase size, which it always
+is here — see `esp32_partition_writeblocks()` in
+`ports/esp32/esp32_partition.c`); there is no separate erase pass. An
+earlier version erased every sector twice — once in an explicit
+pre-erase loop, once again implicitly inside `writeblocks()` — which
+measured as ~20-30% of total tier-2/3 time on real hardware for no
+benefit.
 
 The updater reports validation as `checking` and the erase/stream/write phase
 as `writing`.
