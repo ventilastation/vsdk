@@ -16,6 +16,7 @@
 
 extern uint32_t* palette_pal;
 extern int gamma_mode;
+extern bool starfield_enabled;
 
 typedef struct {
     uint8_t id;

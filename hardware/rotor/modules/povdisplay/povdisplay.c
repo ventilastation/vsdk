@@ -468,6 +468,17 @@ static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_gamma_mode_obj, povdisplay_set_g
 
 // ------------------------------
 
+// See gpu.c's starfield_enabled declaration for why this exists: the
+// background stars are drawn unconditionally by both render() and
+// render_vs2(), which visually competes with anything else on screen.
+static mp_obj_t povdisplay_set_starfield_enabled(mp_obj_t enabled) {
+    starfield_enabled = mp_obj_is_true(enabled);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_starfield_enabled_obj, povdisplay_set_starfield_enabled);
+
+// ------------------------------
+
 static mp_obj_t povdisplay_set_color_profile(mp_obj_t profile) {
     mp_buffer_info_t buffer;
     mp_get_buffer_raise(profile, &buffer, MP_BUFFER_READ);
@@ -636,6 +647,7 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&povdisplay_init_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_palettes), (mp_obj_t)&povdisplay_set_palettes_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_gamma_mode), (mp_obj_t)&povdisplay_set_gamma_mode_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_starfield_enabled), (mp_obj_t)&povdisplay_set_starfield_enabled_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_profile), (mp_obj_t)&povdisplay_set_color_profile_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_test_pattern), (mp_obj_t)&povdisplay_set_color_test_pattern_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_pipeline_enabled), (mp_obj_t)&povdisplay_set_color_pipeline_enabled_obj },

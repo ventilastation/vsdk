@@ -134,7 +134,7 @@ deliberate hand-off — `main.py`'s own top-of-file check runs
 in-place OTA (below) against `http://ventilastation-base.local:5653` — the
 base is discovered via mDNS, not a hardcoded IP, so no NVS URL provisioning
 is needed for that step. `boot.py`/`vsdk_recovery.py`/`updater.py`/
-`vsdk_logo_strip.py` are frozen at the top level (not nested under the
+`vsdk_ota_rings.py` are frozen at the top level (not nested under the
 `ventilastation` package) specifically so they work even with `vfs`
 completely empty. Once recovery succeeds, tier-1 OTA file sync overwrites
 the bootstrap stub with the real, field-updatable `main.py`.
@@ -175,13 +175,16 @@ development server as the upgrade source instead:
 python emu.py SERIAL --serial-port /dev/tty.usbserial-144220 --no-ota-server
 ```
 
-The device does **not** run the update inline: the GPU task and WiFi both
-use the SPI bus, and running them concurrently crashes the core. Instead
-`director._dispatch_control()` writes the URL to `/ota_request` and resets
-the board. Early in the next boot — before `ensure_runtime()` starts the
-GPU task — `main.py` sees `/ota_request`, deletes it, and runs
-`apps/micropython/updater.py` (frozen at the top level, not nested under
-`ventilastation/`) in isolation:
+The device does **not** run the update inline: `ensure_runtime()`'s full
+vs2/game rendering pipeline running concurrently with a real WiFi transfer
+reproducibly crashes the core (confirmed on hardware: a plain manifest GET
+while the launcher's GPU task was running reset the board mid-transfer —
+PSRAM is shared between the two in a way a bare WiFi connect alone doesn't
+trip, but sustained data transfer does). Instead `director._dispatch_control()`
+writes the URL to `/ota_request` and resets the board. Early in the next
+boot — before `ensure_runtime()` ever starts that pipeline — `main.py` sees
+`/ota_request`, deletes it, and runs `apps/micropython/updater.py` (frozen
+at the top level, not nested under `ventilastation/`) in isolation:
 
 1. Connect WiFi using NVS namespace `devel_wifi` (keys `ssid`/`password`),
    provisioned once per board with
@@ -205,9 +208,67 @@ Tier 3: MicroPython firmware  (micropython ota_2 — stream + verify + set_boot)
 
 Progress is reported back over the comms channel as
 `ota_progress <stage> <detail> <pct>`, completion as `ota_done ok`, errors
-as `ota_error <message>`. Recovery renders the three update stages as a
-status ring: `downloading` is green, `checking` (SHA256 checksums) is yellow,
-and `writing` (flash erase/write) is red.
+as `ota_error <message>` — this is a text log for the base station (and,
+via the emulator, the desktop dev loop), not something the board itself
+renders anywhere. Separately, and driven directly rather than through that
+text protocol, `updater.py` also shows the same progress locally as LED
+rings on the device's own POV display — see "On-device progress display"
+below.
+
+---
+
+## On-device progress display
+
+`updater.py` calls into `vsdk_ota_rings.py` (frozen at the top level, same
+vfs-independence requirement as `updater.py`/`vsdk_recovery.py`) directly —
+not through the `ota_progress` text protocol above — to show OTA progress
+as concentric single-LED rings on the spinning display, in both the
+in-place (`ota_start`) and recovery/factory paths. There is no font or
+glyph renderer in this codebase (checked before building this): the display
+renders identically at every rotation column, so a value can only be
+conveyed by *which row* (radius) lights up, not by a per-column shape.
+
+| Ring | Color | Meaning |
+|---|---|---|
+| outermost LED only | blue | connecting to WiFi |
+| radius (0%=outermost, 99%=innermost) | 50% gray | fraction of blocks written, across every partition that needs writing this session |
+| radius, bounces in and out one LED per block write | dim (~10%) yellow | tier 2/3 activity — "it's alive," distinct from the calm progress ring |
+| radius (0%=outermost, 99%=innermost) | white | fraction of bytes synced, across every LFS file that needs syncing this session |
+| radius, bounces in and out one LED per HTTP chunk received | green | tier 1 activity |
+
+Where two rings land on the same LED, white always wins (an explicit
+requirement); the rest of the stacking order is `vsdk_ota_rings.py`'s own
+judgment call, documented there. Each ring is its own sprite + one-frame
+`ImageStrip`, rebuilt and re-registered (a cheap pointer swap — see
+`sprites.c`'s `set_imagestrip()`) every time its position changes; there's
+no pre-baked frame-per-position table (that would cost ~750 KB per ring at
+this display's 256×54 resolution for negligible benefit).
+
+The "total" side of each ring's fraction is computed upfront, once, from
+the manifest: total blocks-to-write across every partition whose NVS-stored
+hash doesn't match, total bytes-to-sync across every file whose on-device
+hash cache doesn't match. Both estimates use only cheap, local comparisons
+(NVS reads, cache-dict lookups) — never a flash read or an extra full-file
+hash just to compute a denominator — so they can occasionally overcount
+slightly (see `_update_partitions()`/`_sync_lfs_files()`'s own comments for
+the specific cases) but never get stuck short of 100%.
+
+This safely runs concurrently with the WiFi transfer it's showing progress
+for, unlike the full launcher (see the crash note above): it's the same
+lightweight, non-vs2 sprite rendering `vsdk_recovery.py` has always run
+throughout entire multi-minute WiFi sessions without incident, just reused
+for the in-place path too instead of being recovery-only. The display
+initializes lazily — the first ring update call starts it — so a normal
+boot with no pending OTA never touches it at all.
+
+**Known bug, not yet fixed:** on real hardware the rings render as
+corrupted noise rather than clean bands during a real partition write —
+see [ota-ring-sprite-corruption.md](ota-ring-sprite-corruption.md) for the
+symptom, the suspected root cause (a GC-lifetime bug matching a previously
+fixed one in `director.py`, see
+[menu-sprite-corruption.md](menu-sprite-corruption.md)), and hand-off
+instructions. The design above is what's *intended*; don't take "rings are
+visible" in a screenshot as proof this is working correctly end to end.
 
 ---
 
@@ -376,9 +437,9 @@ the bootloader rolls back to `factory`.
 | File | Role |
 |---|---|
 | `apps/micropython/updater.py` | Three-tier OTA client (also the only WiFi user on the board); tier-3 hand-off to `factory` |
-| `apps/micropython/vsdk_recovery.py` | Permanent recovery environment: logo, WiFi, retry loop calling `updater.py` against the mDNS-discovered base |
+| `apps/micropython/vsdk_recovery.py` | Permanent recovery environment: WiFi, retry loop calling `updater.py` against the mDNS-discovered base |
 | `apps/micropython/boot.py` | Frozen; picked up by stock (unmodified) `main.c`. Guarantees `main.py` exists (writes a bootstrap stub if not); the factory-vs-normal decision itself lives in `main.py` |
-| `apps/micropython/vsdk_logo_strip.py` | Hand-authored logo `ImageStrip`, frozen alongside recovery |
+| `apps/micropython/vsdk_ota_rings.py` | On-device LED-ring progress display, driven directly by `updater.py`; frozen alongside recovery |
 | `apps/micropython/main.py` | WDT + deferred rollback confirm, factory→recovery branch, `/ota_request` boot mode |
 | `apps/micropython/ventilastation/director.py` | `ota_start` dispatch → `/ota_request` + reset |
 | `emulator/upgrade_server.py` | HTTP server: manifest + files + partition bins; `--bundle <dir>` mode for production base deployment |

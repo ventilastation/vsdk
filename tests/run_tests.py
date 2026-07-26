@@ -29,7 +29,7 @@ MPY_SOURCE_ROOTS = [
     ROOT / "apps" / "micropython" / "vs2.py",
     ROOT / "apps" / "micropython" / "updater.py",
     ROOT / "apps" / "micropython" / "vsdk_recovery.py",
-    ROOT / "apps" / "micropython" / "vsdk_logo_strip.py",
+    ROOT / "apps" / "micropython" / "vsdk_ota_rings.py",
     ROOT / "apps" / "micropython" / "ventilastation",
     ROOT / "system",
     ROOT / "games",

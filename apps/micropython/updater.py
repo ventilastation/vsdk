@@ -19,12 +19,20 @@ Completion:
     ota_done ok
 Errors:
     ota_error <message>
+
+Separately (and unrelated to the comms/base-station line above), this
+device's own POV display shows the same progress locally as concentric
+rings -- see vsdk_ota_rings.py. That module already no-ops when the native
+display isn't linked in (desktop/emulator), so the calls below are
+unconditional.
 """
 
 import gc
 import os
 import hashlib
 import binascii
+
+import vsdk_ota_rings
 
 try:
     import ujson as json
@@ -288,6 +296,18 @@ def _sync_lfs_files(base_url, files):
     cache = _load_hash_cache()
     cache_dirty = False
 
+    # Upfront estimate of "bytes that need transferring", for the file-sync
+    # ring (vsdk_ota_rings.set_file_progress()): every file whose cached hash
+    # doesn't already match the manifest. This can slightly overcount (a
+    # cache miss sometimes turns out, after the real read+hash below, to
+    # already be correct -- e.g. a fresh cache after a USB reflash) but never
+    # undercounts, so the ring can only reach 100% a little early, never get
+    # stuck short of it -- fine for a progress indicator, not worth a second
+    # full scan just to be exact.
+    total_bytes = sum(e["size"] for e in files if cache.get(e["path"]) != e["sha256"])
+    done_bytes = 0
+    vsdk_ota_rings.set_file_progress(0, total_bytes)
+
     total = len(files)
     checked = 0
     last_report = utime.ticks_ms()
@@ -297,6 +317,7 @@ def _sync_lfs_files(base_url, files):
         expected_sha = entry["sha256"]
         size = entry["size"]
         local_path = "/" + rel_path
+        needed_work = cache.get(rel_path) != expected_sha
 
         # A cache hit means this exact content was already verified on flash
         # in a previous session -- skip touching flash at all. Anything else
@@ -304,7 +325,7 @@ def _sync_lfs_files(base_url, files):
         # changed) falls back to a real read+hash, so an incorrect or
         # missing cache entry can never cause a bad file to be accepted, only
         # cost the same work this loop always used to do.
-        if cache.get(rel_path) == expected_sha:
+        if not needed_work:
             local_sha = expected_sha
         else:
             gc.collect()
@@ -322,6 +343,12 @@ def _sync_lfs_files(base_url, files):
             last_report = now
 
         if local_sha == expected_sha:
+            if needed_work:
+                # Counted in total_bytes above but turned out not to need a
+                # download after all (see the overcount note) -- still counts
+                # as "done" so the ring's denominator gets fully accounted for.
+                done_bytes += size
+                vsdk_ota_rings.set_file_progress(done_bytes, total_bytes)
             continue  # already up to date
 
         _progress("downloading", rel_path.replace("/", "_"), i * 100 // total)
@@ -344,6 +371,7 @@ def _sync_lfs_files(base_url, files):
                 # never fires.
                 last_report = utime.ticks_ms()
                 for pct in _http_stream(file_url, _write, size):
+                    vsdk_ota_rings.pulse_file_activity()
                     now = utime.ticks_ms()
                     if utime.ticks_diff(now, last_report) >= _SCAN_PROGRESS_INTERVAL_MS:
                         _progress("downloading", rel_path.replace("/", "_"), pct)
@@ -358,6 +386,8 @@ def _sync_lfs_files(base_url, files):
             cache[rel_path] = got
             cache_dirty = True
             print("updater: updated", rel_path)
+            done_bytes += size
+            vsdk_ota_rings.set_file_progress(done_bytes, total_bytes)
         except Exception as e:
             print("updater: failed to update", rel_path, ":", e)
             try:
@@ -428,6 +458,26 @@ def _update_partitions(base_url, partitions):
     _BLOCK = 4096
 
     order = ["fmsx", "retro-core", "prboom-go", "micropython"]
+
+    # Upfront estimate of "blocks that need writing" across every partition
+    # in this session, for the partition-write ring
+    # (vsdk_ota_rings.set_partition_progress()). Just the NVS-hash comparison
+    # -- not the extra on-flash _partition_matches() verify-read below -- so
+    # this can occasionally undercount in the rare case of a stale NVS cache
+    # (see that check's own comment); a progress ring is worth this
+    # imprecision rather than a second, flash-reading pass just to be exact.
+    total_blocks = 0
+    for name in order:
+        if name not in partitions:
+            continue
+        entry = partitions[name]
+        nvs_key = _NVS_KEYS.get(name)
+        stored_sha = _nvs_get(nvs_key) if nvs_key else None
+        if stored_sha != entry["sha256"]:
+            total_blocks += (entry["size"] + _BLOCK - 1) // _BLOCK
+    done_blocks = 0
+    vsdk_ota_rings.set_partition_progress(0, total_blocks)
+
     for name in order:
         if name not in partitions:
             continue
@@ -506,7 +556,7 @@ def _update_partitions(base_url, partitions):
             block_pos = 0
 
             def write_chunk(chunk):
-                nonlocal offset, block_pos
+                nonlocal offset, block_pos, done_blocks
                 sha.update(chunk)
                 chunk_off = 0
                 while chunk_off < len(chunk):
@@ -519,6 +569,9 @@ def _update_partitions(base_url, partitions):
                         part.writeblocks(offset // _BLOCK, block_buf)
                         offset += _BLOCK
                         block_pos = 0
+                        done_blocks += 1
+                        vsdk_ota_rings.pulse_partition_activity()
+                        vsdk_ota_rings.set_partition_progress(done_blocks, total_blocks)
 
             for pct in _http_stream(url, write_chunk, size):
                 _progress("writing", name, pct)
@@ -530,6 +583,9 @@ def _update_partitions(base_url, partitions):
                     block_buf[i] = 0xFF
                 part.writeblocks(offset // _BLOCK, block_buf)
                 offset += _BLOCK
+                done_blocks += 1
+                vsdk_ota_rings.pulse_partition_activity()
+                vsdk_ota_rings.set_partition_progress(done_blocks, total_blocks)
 
             _progress("checking", name, 100)
             got = binascii.hexlify(sha.digest()).decode()
@@ -616,6 +672,8 @@ def run(base_url, send_fn):
 
     print("updater: starting OTA from", base_url)
     _send("ota_progress start fetching_manifest 0\n")
+    vsdk_ota_rings.clear()  # fresh slate -- a previous failed attempt may have left rings lit
+    vsdk_ota_rings.show_wifi_connecting()
 
     # Bring WiFi up only for the duration of the OTA session.
     _newly_connected = False
@@ -624,6 +682,8 @@ def run(base_url, send_fn):
     except OSError as e:
         _send(("ota_error wifi_connect_failed: %s\n" % e).encode())
         return
+    finally:
+        vsdk_ota_rings.hide_wifi()
 
     try:
         try:
@@ -646,3 +706,4 @@ def run(base_url, send_fn):
         # we never reach here — that's fine, the reboot drops WiFi anyway.
         if _newly_connected:
             _wifi_disconnect()
+        vsdk_ota_rings.clear()

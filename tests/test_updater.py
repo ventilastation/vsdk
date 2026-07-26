@@ -480,5 +480,195 @@ class UrlQuoteTests(unittest.TestCase):
             self.assertNotIn(" ", quoted)
 
 
+class PartitionProgressRingTests(unittest.TestCase):
+    """_update_partitions() feeds vsdk_ota_rings (the on-device LED-ring
+    display, see vsdk_ota_rings.py) a running done/total block count across
+    every partition in this session, not a per-partition percentage -- these
+    check that math, independent of the ring module's own rendering (see
+    test_vsdk_ota_rings.py)."""
+
+    def setUp(self):
+        for name in ("machine", "esp32", "updater"):
+            sys.modules.pop(name, None)
+
+    def tearDown(self):
+        for name in ("machine", "esp32"):
+            sys.modules.pop(name, None)
+
+    def test_total_blocks_excludes_already_up_to_date_partitions(self):
+        content = b"x" * 8192  # exactly 2 blocks
+        expected_sha = hashlib.sha256(content).hexdigest()
+
+        machine, esp32, _nvs = _install_fakes(
+            running_label="factory",
+            nvs_blobs={"fmsx_sha": "matches"},  # fmsx already up to date
+        )
+        import updater
+
+        recorded = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            set_partition_progress=lambda done, total: recorded.append(("progress", done, total)),
+            pulse_partition_activity=lambda: recorded.append(("pulse",)),
+        )
+
+        class FakeWritePartition:
+            def writeblocks(self, block_num, buf):
+                pass
+
+        write_targets = {"prboom-go": [FakeWritePartition()]}
+        esp32.Partition.find = staticmethod(lambda type_, label=None: list(write_targets.get(label, [])))
+
+        def fake_http_stream(url, callback, total_size):
+            callback(content)
+            yield 100
+
+        partitions_manifest = {
+            "fmsx": {"sha256": "matches", "size": 4096, "url": "/fmsx"},
+            "prboom-go": {"sha256": expected_sha, "size": len(content), "url": "/prboom-go"},
+        }
+
+        with unittest.mock.patch.object(updater, "_http_stream", fake_http_stream):
+            updater._update_partitions("http://base", partitions_manifest)
+
+        progress_calls = [r for r in recorded if r[0] == "progress"]
+        # Upfront total counts only prboom-go's 2 blocks -- fmsx's stored
+        # hash already matches the manifest, so it's not "work to do".
+        self.assertEqual(progress_calls[0], ("progress", 0, 2))
+        self.assertEqual(progress_calls[-1], ("progress", 2, 2))
+        self.assertEqual(len([r for r in recorded if r[0] == "pulse"]), 2)
+
+    def test_total_blocks_rounds_partial_final_block_up(self):
+        content = b"x" * 4097  # one full block plus one byte -- rounds up to 2
+        expected_sha = hashlib.sha256(content).hexdigest()
+
+        machine, esp32, _nvs = _install_fakes(running_label="factory", nvs_blobs={})
+        import updater
+
+        recorded = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            set_partition_progress=lambda done, total: recorded.append((done, total)),
+            pulse_partition_activity=lambda: None,
+        )
+
+        class FakeWritePartition:
+            def writeblocks(self, block_num, buf):
+                pass
+
+        esp32.Partition.find = staticmethod(
+            lambda type_, label=None: [FakeWritePartition()] if label == "prboom-go" else []
+        )
+
+        def fake_http_stream(url, callback, total_size):
+            callback(content)
+            yield 100
+
+        partitions_manifest = {
+            "prboom-go": {"sha256": expected_sha, "size": len(content), "url": "/prboom-go"},
+        }
+
+        with unittest.mock.patch.object(updater, "_http_stream", fake_http_stream):
+            updater._update_partitions("http://base", partitions_manifest)
+
+        self.assertEqual(recorded[0], (0, 2))
+        self.assertEqual(recorded[-1], (2, 2))
+
+
+class FileProgressRingTests(unittest.TestCase):
+    """_sync_lfs_files()'s equivalent for tier 1: a running done/total byte
+    count across every file that needs syncing, fed to vsdk_ota_rings."""
+
+    def setUp(self):
+        sys.modules.pop("updater", None)
+
+    def _run_sync(self, files, fake_fs, download_content=b"new content"):
+        class FakeUtime:
+            @staticmethod
+            def ticks_ms():
+                return 0
+
+            @staticmethod
+            def ticks_diff(a, b):
+                return 0
+
+        sys.modules["utime"] = FakeUtime
+
+        import updater
+
+        recorded = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            set_file_progress=lambda done, total: recorded.append((done, total)),
+            pulse_file_activity=lambda: None,
+        )
+
+        class FakeFile:
+            def __init__(self, path, mode):
+                self.path = path
+                self.mode = mode
+                self.write_buf = bytearray() if "b" in mode else ""
+
+            def read(self, *a):
+                return fake_fs.get(self.path, b"" if "b" in self.mode else "")
+
+            def write(self, data):
+                self.write_buf += data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                if "w" in self.mode:
+                    fake_fs[self.path] = self.write_buf
+                return False
+
+        def fake_sha256_file(path):
+            content = fake_fs.get(path)
+            if content is None:
+                return None
+            data = content if isinstance(content, (bytes, bytearray)) else content.encode()
+            return hashlib.sha256(data).hexdigest()
+
+        def fake_rename(a, b):
+            fake_fs[b] = fake_fs.pop(a)
+
+        def fake_http_stream(url, callback, total_size):
+            callback(download_content)
+            yield 100
+
+        with unittest.mock.patch("builtins.open", FakeFile), \
+                unittest.mock.patch.object(updater, "_sha256_file", fake_sha256_file), \
+                unittest.mock.patch.object(updater, "_makedirs", lambda path: None), \
+                unittest.mock.patch.object(updater.os, "rename", fake_rename), \
+                unittest.mock.patch.object(updater, "_http_stream", fake_http_stream):
+            updater._sync_lfs_files("http://base", files)
+        return recorded
+
+    def test_total_bytes_excludes_files_already_cached(self):
+        cached_content = b"already correct"
+        cached_sha = hashlib.sha256(cached_content).hexdigest()
+        new_content = b"needs downloading"
+        new_sha = hashlib.sha256(new_content).hexdigest()
+
+        # Seed the on-device hash cache so cached.py is a cache hit.
+        import json as _json
+        fake_fs = {
+            "/cached.py": cached_content,
+            "/.vsdk_lfs_cache.json": _json.dumps({"cached.py": cached_sha}),
+        }
+
+        files = [
+            {"path": "cached.py", "size": len(cached_content), "sha256": cached_sha},
+            {"path": "new.py", "size": len(new_content), "sha256": new_sha},
+        ]
+
+        recorded = self._run_sync(files, fake_fs, download_content=new_content)
+
+        # Upfront total only counts new.py -- cached.py is a cache hit, not
+        # "work to do" (see _sync_lfs_files()'s overcount note for why a
+        # cache *miss* that turns out unchanged is still counted: that path
+        # isn't exercised here since new.py always needs a real download).
+        self.assertEqual(recorded[0], (0, len(new_content)))
+        self.assertEqual(recorded[-1], (len(new_content), len(new_content)))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,7 +17,7 @@ module("vsdk_board.py")
 # instead of staying vfs-only.
 freeze(".", "boot.py")
 freeze(".", "vsdk_recovery.py")
-freeze(".", "vsdk_logo_strip.py")
+freeze(".", "vsdk_ota_rings.py")
 freeze(".", "updater.py")
 freeze(".", "vsdk_uart_log.py")
 

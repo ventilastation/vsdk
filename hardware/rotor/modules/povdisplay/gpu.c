@@ -20,6 +20,16 @@
 
 const uint8_t TRANSPARENT = 0xFF;
 uint8_t deepspace[ROWS];
+// Drawn unconditionally by both render() and render_vs2() below -- normally
+// desirable ambient decoration, but it visually competes with anything else
+// on screen (confirmed: it's what made an earlier on-device progress
+// display look like "stuck showing the starfield" even while the actual
+// indicator was rendering correctly underneath it). Callers that need the
+// display to show only their own content -- OTA progress rings being the
+// motivating case, see vsdk_ota_rings.py -- can turn it off for the
+// duration via vshw_povdisplay.set_starfield_enabled(False) and restore it
+// afterward; defaults on to match every existing scene's expectations.
+bool starfield_enabled = true;
 sprite_obj_t* sprites[NUM_SPRITES];
 extern const uint8_t intensidades[PIXELS][256];
 extern uint8_t brillos[PIXELS];
@@ -293,9 +303,11 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
   for (int y=0; y<PIXELS; y++) {
     colorbuf[y] = 0x000000ff;
   }
-  for (int f=0; f<STARS; f++) {
-    if (starfield[f].x == column) {
-      set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
+  if (starfield_enabled) {
+    for (int f=0; f<STARS; f++) {
+      if (starfield[f].x == column) {
+        set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
+      }
     }
   }
 
@@ -400,9 +412,11 @@ void render(int column, uint32_t* led_buffer) {
   for (int y=0; y<PIXELS; y++) {
     colorbuf[y] = 0x000000ff;
   }
-  for (int f=0; f<STARS; f++) {
-    if (starfield[f].x == column) {
-      set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
+  if (starfield_enabled) {
+    for (int f=0; f<STARS; f++) {
+      if (starfield[f].x == column) {
+        set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
+      }
     }
   }
 

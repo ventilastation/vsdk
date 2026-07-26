@@ -9,7 +9,7 @@ framing from ventilastation/uart_logging.py's InfoWriter) directly against
 vs_board's NVS wiring, so recovery's status is visible on the same UART
 link a real base station reads, and the desktop emulator's comms.py parses
 identically. Frozen at the top level alongside boot.py/vsdk_recovery.py/
-updater.py/vsdk_logo_strip.py for the same reason those are.
+updater.py/vsdk_ota_rings.py for the same reason those are.
 """
 
 _uart = None
