@@ -69,6 +69,52 @@ loop, never USB. `make initial-flash` still writes both `factory` and
 `micropython` (plus an empty `vfs`) over USB, but it's a bench-dev
 convenience now, not the bring-up procedure.
 
+### `make flash-full` — the fastest from-scratch bring-up
+
+`flash-recovery`'s USB step is small on purpose, but that means a genuinely
+from-scratch board pays for the rest over WiFi: the *entire* LFS content
+tree (195+ files, each its own HTTP round trip) plus every native app
+partition, at the ~1 MB/s TCP throughput noted below. `make flash-full`
+(see `hardware/rotor/flash_full_image.py`) instead writes bootloader,
+partition table, `factory`, `prboom-go`, `retro-core`, `micropython`
+(ota_2), `fmsx` and a fully populated `vfs` in one `esptool write_flash`
+call — one big USB burst at `BAUD` instead of hundreds of small network
+round trips.
+
+Doing that alone would just move the problem: the board's first
+OTA/recovery pass afterwards would still see no stored hashes for any of
+these partitions or files and redo all that work over WiFi anyway. So
+`flash-full` also primes the on-device OTA bookkeeping to match exactly
+what it just flashed:
+
+- `build_micropython_fs.py` bakes a `.vsdk_lfs_cache.json` into every
+  non-empty `vfs` image it builds — the same file, same keys, same SHA256
+  values that `_sync_lfs_files()`'s on-device cache (below) would end up
+  with after a real sync, computed from the exact bytes written to each
+  LFS file so it can never drift from what the OTA manifest would compute
+  for the same content.
+- `flash_full_image.py` writes the SHA256 of each just-flashed native app
+  binary and the MicroPython image into NVS namespace `vsdk_ota`
+  (`prboom_sha`/`retro_sha`/`fmsx_sha`/`mp_sha`), read-merge-write like
+  `provision_board.py`/`provision_wifi.py` so `vs_board`/`devel_wifi` (if
+  already set) survive untouched.
+
+The result: the board's next OTA/recovery pass (triggered either by
+`vsdk_recovery.py`'s own retry loop, since USB flashing doesn't touch
+`otadata`, or by an explicit `ota_start`) finds every tier already
+up to date. Tier 1 skips every file on a cache hit without touching flash;
+tiers 2–3 still read back and hash each native partition's on-flash bytes
+before trusting the NVS-stored hash (see `_partition_matches()` below), but
+that's a local flash read, not a WiFi download. Nothing gets re-transferred.
+
+`flash-full` deliberately does not touch WiFi credentials or board wiring —
+run `make wifi-provision` / `make configure-board` (or its `-v2`/`-eu`
+variants) separately, same as after `flash-recovery`. It's a full,
+authoritative `vfs` write like `deploy_micropython_fs.py`, so anything on
+the board's current filesystem that isn't part of this checkout's tracked
+content — save states, installed packages, locally-added ROMs — does not
+survive it.
+
 The vendored MicroPython source tree is unmodified for this: `apps/micropython/boot.py`,
 a frozen module, is picked up automatically by the stock
 `pyexec_file_if_exists("boot.py")` call in `main.c`. Its only job is to
@@ -339,6 +385,7 @@ the bootloader rolls back to `factory`.
 | `emulator/comms.py` | Starts `upgrade_server`; `trigger_ota()` sends `ota_start` |
 | `hardware/rotor/build_micropython_fs.py` | Single source of truth for the LFS file set (USB image *and* OTA manifest) |
 | `hardware/rotor/flash_recovery_image.py` / `make flash-recovery` | Bring-up procedure: USB-flash `factory` + NVS only, everything else over WiFi |
+| `hardware/rotor/flash_full_image.py` / `make flash-full` | Fastest from-scratch bring-up: USB-flash every partition in one shot, priming `vsdk_ota` NVS + the vfs's baked-in LFS hash cache to match |
 | `tools/package_release.py` | Assembles a fixed bundle directory for `upgrade_server.py --bundle` |
 | `tools/provision_wifi.py` / `make wifi-provision` | One-time `devel_wifi` NVS provisioning |
 

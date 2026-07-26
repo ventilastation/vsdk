@@ -42,8 +42,13 @@ def generate_partition_table(idf_path, partition_csv, output_path):
 
 
 # Offset/size of the `vfs` partition, matching partitions-ventilastation.csv.
-VFS_OFFSET = "0x690000"
-VFS_PARTITION_SIZE = 0x970000
+# (These drifted from the CSV once before -- fmsx was carved out of what used
+# to be one bigger vfs region, shrinking and moving vfs without this file's
+# copy of the numbers being updated to match; make initial-flash spent a
+# while silently writing part of its empty-vfs image over the fmsx partition
+# instead. Confirm against the CSV, don't just trust this comment.)
+VFS_OFFSET = "0x740000"
+VFS_PARTITION_SIZE = 0x8C0000
 
 
 def build_empty_vfs_image(build_fs_script, output_path):
