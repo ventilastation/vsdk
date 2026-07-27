@@ -1,5 +1,6 @@
 """Policy and wire-protocol tests for the remote workbench gateway."""
 
+import asyncio
 import os
 import sys
 import tempfile
@@ -13,18 +14,36 @@ sys.path.insert(0, os.path.join(ROOT, "emulator"))
 from remote_gateway import (  # noqa: E402
     AuthenticationError,
     AuthorizationError,
+    BrowserSession,
     GatewayStore,
     HELLO,
+    HostEvent,
     LeaseManager,
     Principal,
     ProtocolError,
     RemoteGatewayCore,
+    RemoteGatewayService,
     TicketSigner,
     TrustedProxyIdentityVerifier,
     config_from_environment,
     decode_message,
     encode_message,
 )
+
+
+def _required_gateway_environment(directory):
+    key_path = os.path.join(directory, "ticket.key")
+    with open(key_path, "wb") as key_file:
+        key_file.write(b"t" * 32)
+    return {
+        "REMOTE_WORKBENCH_BOARD": "workbench-1",
+        "REMOTE_WORKBENCH_TICKET_AUDIENCE": "remote-browser",
+        "REMOTE_WORKBENCH_TICKET_KEY_FILE": key_path,
+        "REMOTE_WORKBENCH_STATE_DB": os.path.join(directory, "state.sqlite3"),
+        "REMOTE_WORKBENCH_SERIAL_PORT": "/dev/test-board",
+        "REMOTE_WORKBENCH_ALLOWED_ORIGINS": "https://emulator.example.test",
+        "REMOTE_WORKBENCH_AUTH_MODE": "trusted-proxy",
+    }
 
 
 class RemoteGatewayTests(unittest.TestCase):
@@ -107,23 +126,9 @@ class RemoteGatewayTests(unittest.TestCase):
 
 
 class GatewayConfigurationTests(unittest.TestCase):
-    def required_environment(self, directory):
-        key_path = os.path.join(directory, "ticket.key")
-        with open(key_path, "wb") as key_file:
-            key_file.write(b"t" * 32)
-        return {
-            "REMOTE_WORKBENCH_BOARD": "workbench-1",
-            "REMOTE_WORKBENCH_TICKET_AUDIENCE": "remote-browser",
-            "REMOTE_WORKBENCH_TICKET_KEY_FILE": key_path,
-            "REMOTE_WORKBENCH_STATE_DB": os.path.join(directory, "state.sqlite3"),
-            "REMOTE_WORKBENCH_SERIAL_PORT": "/dev/test-board",
-            "REMOTE_WORKBENCH_ALLOWED_ORIGINS": "https://emulator.example.test",
-            "REMOTE_WORKBENCH_AUTH_MODE": "trusted-proxy",
-        }
-
     def test_default_ice_configuration_uses_public_stun(self):
         with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.dict(os.environ, self.required_environment(directory), clear=True):
+            with mock.patch.dict(os.environ, _required_gateway_environment(directory), clear=True):
                 config = config_from_environment()
         self.assertEqual(config.ice_servers, ({
             "urls": ["stun:stun.l.google.com:19302"],
@@ -131,7 +136,7 @@ class GatewayConfigurationTests(unittest.TestCase):
 
     def test_turn_configuration_preserves_credentials_for_authenticated_hello(self):
         with tempfile.TemporaryDirectory() as directory:
-            environment = self.required_environment(directory)
+            environment = _required_gateway_environment(directory)
             environment["REMOTE_WORKBENCH_ICE_SERVERS_JSON"] = (
                 '[{"urls":"turns:relay.example.test:5349",'
                 '"username":"workbench","credential":"secret"}]'
@@ -140,6 +145,40 @@ class GatewayConfigurationTests(unittest.TestCase):
                 config = config_from_environment()
         self.assertEqual(config.ice_servers[0]["username"], "workbench")
         self.assertEqual(config.ice_servers[0]["credential"], "secret")
+
+
+class ChipAudioEventForwardingTests(unittest.TestCase):
+    """achip/aframe/astop used to be parsed off serial and then silently
+    dropped in _broadcast_host_event pending a browser-side consumer; the web
+    emulator's chip-audio WASM path (web/chip-audio-host.js) is that
+    consumer now, so these must reach connected browser sessions like any
+    other host event."""
+
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        with mock.patch.dict(os.environ, _required_gateway_environment(self.tempdir.name), clear=True):
+            config = config_from_environment()
+        self.service = RemoteGatewayService(config)
+        self.websocket = mock.AsyncMock()
+        session = BrowserSession("session-a", self.websocket, Principal("sub", "player@example.com", "controller"))
+        self.service.sessions[session.session_id] = session
+
+    def tearDown(self):
+        self.service.store.close()
+        self.tempdir.cleanup()
+
+    def test_chip_audio_events_reach_browser_sessions(self):
+        for event in (
+            HostEvent("achip", ("nes-ntsc",)),
+            HostEvent("aframe", ("3", "800"), b"\x01\x02\x03"),
+            HostEvent("astop", ()),
+        ):
+            asyncio.run(self.service._broadcast_host_event(event))
+        self.assertEqual(self.websocket.send.call_count, 3)
+
+    def test_unrecognized_commands_are_still_dropped(self):
+        asyncio.run(self.service._broadcast_host_event(HostEvent("shell", ("rm", "-rf"))))
+        self.websocket.send.assert_not_called()
 
 
 if __name__ == "__main__":

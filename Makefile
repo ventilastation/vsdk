@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision base-monitor list-boards register-rotor register-workbench register-base
+.PHONY: micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision base-monitor list-boards register-rotor register-workbench register-base
 
 PORT ?=
 MAC ?=
@@ -90,7 +90,7 @@ define NL
 endef
 
 IDF_SOURCE_HINT := source ../../esp-idf/esp-5.5.2/export.sh
-NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs base-monitor
+NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs base-monitor
 IDF_GOALS := $(filter-out $(NO_IDF_TARGETS),$(MAKECMDGOALS))
 ifneq ($(strip $(IDF_GOALS)),)
 ifeq ($(strip $(IDF_PATH)),)
@@ -146,6 +146,9 @@ register-base:
 
 micropython-webassembly:
 	./tools/build-micropython-webassembly.sh
+
+chipsynth-wasm:
+	./tools/build-chipsynth-wasm.sh
 
 web-runtime-bundle:
 	python3 ./tools/generate_web_runtime_bundle.py
