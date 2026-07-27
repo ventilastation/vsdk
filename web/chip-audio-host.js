@@ -17,7 +17,7 @@
 // Bump this whenever tools/build-chipsynth-wasm.sh output changes, same
 // discipline as the other ?v= cache-busting tags in this directory (see
 // docs/internals/deploying-web-emulator.md).
-const CHIPSYNTH_VERSION = "20260727a";
+const CHIPSYNTH_VERSION = "20260727b";
 
 const WASM_MODULES = {
   "nes-ntsc": { key: "nes", path: `./vendor/chipsynth/nes-synth.mjs?v=${CHIPSYNTH_VERSION}`, factory: "createNesSynth" },
@@ -161,6 +161,16 @@ class ChipAudioHost {
     }
     const payload = payloadBytes instanceof Uint8Array ? payloadBytes : new Uint8Array(0);
     const { Module, outPtr, render } = this._current;
+    if (!Module.HEAP16) {
+      // Built without HEAP16 in EXPORTED_RUNTIME_METHODS (see
+      // tools/build-chipsynth-wasm.sh) -- warn once instead of throwing on
+      // every ~60Hz aframe, which is unusably noisy.
+      if (!this._missingWarned.has("HEAP16")) {
+        this._missingWarned.add("HEAP16");
+        console.error("chip-audio: WASM module was built without HEAP16 exported; rebuild with tools/build-chipsynth-wasm.sh");
+      }
+      return;
+    }
     const rendered = render(payload, payload.length, n, outPtr);
     if (rendered <= 0) {
       return;

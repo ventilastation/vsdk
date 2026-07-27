@@ -74,7 +74,12 @@ COMMON_FLAGS=(
   -sEXPORT_ES6=1
   -sALLOW_MEMORY_GROWTH=1
   -sENVIRONMENT=web
-  "-sEXPORTED_RUNTIME_METHODS=['cwrap']"
+  # HEAP16 must be listed explicitly: since Emscripten ~3.1.44, MODULARIZE
+  # builds no longer attach the heap typed-array views to the returned
+  # Module object unless exported here (this bit us once already --
+  # chip-audio-host.js's frame() reads Module.HEAP16 to pull rendered PCM
+  # back out of WASM memory).
+  "-sEXPORTED_RUNTIME_METHODS=['cwrap','HEAP16']"
 )
 
 # build_module <name> <export-name> <exported-functions-csv> <include-dir>... -- <source-file>...
