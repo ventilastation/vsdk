@@ -219,6 +219,12 @@ def _cleanup_tmp_files():
     stack = ["/"]
     while stack:
         d = stack.pop()
+        # One pulse per directory -- this walk is the other real source of
+        # "quiet time" between WiFi connecting and file-sync's own progress
+        # ring (see run()'s prep-ring comment); most boards have few enough
+        # directories that this barely matters, but it keeps the ring alive
+        # instead of static on any board with more of them.
+        vsdk_ota_rings.pulse_prep_activity()
         try:
             for name, ftype, *_ in os.ilistdir(d):
                 full = d.rstrip("/") + "/" + name
@@ -408,6 +414,10 @@ def _sync_lfs_files(base_url, files):
     pruned_cache = {k: v for k, v in cache.items() if k in manifest_paths}
     if cache_dirty or len(pruned_cache) != len(cache):
         _save_hash_cache(pruned_cache)
+
+    # Tier 1 is done -- don't leave white/green showing their last position
+    # through tier 2/3's writes below.
+    vsdk_ota_rings.hide_file_rings()
 
 
 def _running_label():
@@ -613,13 +623,33 @@ def _update_partitions(base_url, partitions):
             _progress("writing", name + "_error", 0)
             # Continue to next partition rather than aborting entirely.
 
+    # Tier 2/3 is done -- don't leave gray/yellow showing their last
+    # position (run()'s own vsdk_ota_rings.clear() would catch it a moment
+    # later anyway, but a finished operation should look finished right
+    # away, not after whatever comes next in run() gets around to it).
+    vsdk_ota_rings.hide_partition_rings()
+
+
+# How long to wait for one connect() to succeed before trying again, and how
+# many of those attempts to give a quiet chance before saying so on-device --
+# see the ring/label switch to red/"wifi problem" below. Chosen so the total
+# time to that switch (~30s) roughly matches this function's old one-shot
+# timeout, just broken into visible sub-attempts instead of one long silent
+# wait -- see docs/internals/ota.md.
+_WIFI_ATTEMPT_TIMEOUT_MS = 10000
+_WIFI_ATTEMPTS_BEFORE_WARNING = 3
+
 
 def _wifi_connect():
     """Connect WiFi using NVS credentials.
 
     Returns True if we brought WiFi up (caller must disconnect after OTA),
     False if WiFi was already connected (caller must leave it alone).
-    Raises OSError if connection fails.
+    Raises OSError only for something retrying can't fix (missing/unreadable
+    NVS credentials) -- a slow or unreachable AP is not treated as fatal; this
+    keeps retrying indefinitely, switching the on-device rings/label to a
+    red "wifi problem" indicator after a few quiet attempts so a real outage
+    is visible rather than looking like a hang (see vsdk_ota_rings.py).
     """
     import network, utime
     sta = network.WLAN(network.STA_IF)
@@ -638,16 +668,56 @@ def _wifi_connect():
         raise OSError("NVS read failed: %s" % e)
     if not ssid:
         raise OSError("no WiFi credentials in NVS (run: make wifi-provision)")
-    print("updater: connecting WiFi to", ssid)
+
     sta.active(True)
-    sta.connect(ssid, password)
-    for _ in range(60):
-        if sta.isconnected():
-            print("updater: WiFi connected:", sta.ifconfig()[0])
-            return True
-        utime.sleep_ms(500)
-    sta.active(False)
-    raise OSError("WiFi connection timeout")
+    attempt = 0
+    warned = False
+    while True:
+        attempt += 1
+        # Called every attempt, not just once at the attempt-3 transition:
+        # ensure_started() (inside these) can itself fail the first time
+        # it's tried -- confirmed on hardware, right after a hard reset,
+        # some dependency (NVS/SPI) isn't consistently ready yet at the very
+        # first call. Normally that's masked by however long WiFi/manifest/
+        # LFS-scan naturally takes, giving it many later chances across
+        # run() -- but when connect() itself raises immediately (see below)
+        # every attempt after the first used to complete in well under a
+        # second, so ensure_started() got at most one or two tries total
+        # near t=0 and then never again, leaving the display dark for the
+        # rest of a retry loop that (correctly) never gives up. Calling
+        # these every attempt costs nothing once already showing the right
+        # state -- see _set_ring()'s own early-return -- and keeps retrying
+        # ensure_started() for as long as this loop runs.
+        if attempt >= _WIFI_ATTEMPTS_BEFORE_WARNING:
+            vsdk_ota_rings.show_wifi_problem()
+        else:
+            vsdk_ota_rings.show_wifi_connecting()
+        print("updater: connecting WiFi to", ssid, "(attempt %d)" % attempt)
+        try:
+            # A bad password or a driver-level hiccup (e.g. repeated failed
+            # associations) can make connect() itself raise rather than just
+            # leaving isconnected() False -- caught here so it counts as one
+            # more failed attempt, not a reason to give up. Confirmed on
+            # hardware: an uncaught exception here previously escaped all
+            # the way out to run()'s own `except OSError`, ending the retry
+            # loop entirely instead of eventually turning the ring red.
+            sta.connect(ssid, password)
+            waited_ms = 0
+            while waited_ms < _WIFI_ATTEMPT_TIMEOUT_MS:
+                if sta.isconnected():
+                    print("updater: WiFi connected:", sta.ifconfig()[0])
+                    return True
+                utime.sleep_ms(500)
+                waited_ms += 500
+        except Exception as e:
+            print("updater: WiFi attempt %d failed:" % attempt, e)
+            # Also confirmed on hardware: without this, an immediately-
+            # raising connect() turns this into a tight busy-loop (hundreds
+            # of attempts/second) instead of a paced retry.
+            utime.sleep_ms(2000)
+        if attempt == _WIFI_ATTEMPTS_BEFORE_WARNING and not warned:
+            print("updater: WiFi still not connected after %d attempts, will keep trying" % attempt)
+            warned = True
 
 
 def _wifi_disconnect():
@@ -685,15 +755,29 @@ def run(base_url, send_fn):
     finally:
         vsdk_ota_rings.hide_wifi()
 
+    # Between "WiFi connected" and the first real file/partition total (once
+    # _sync_lfs_files() below computes one), there's nothing to show a
+    # progress ring against yet -- resolving the base station's address,
+    # fetching the manifest, and scanning for stale .tmp files can together
+    # take a real handful of seconds. Previously nothing was shown here at
+    # all (the WiFi ring had just been hidden above), which reads as a
+    # stall. pulse_prep_activity() gives this stretch its own bouncing
+    # ring, pulsed at each checkpoint below; hide_prep_activity() below
+    # retires it once _sync_lfs_files() takes over with real progress.
+    vsdk_ota_rings.pulse_prep_activity()
+
     try:
         try:
             base_url = _resolve_base_url(base_url)
+            vsdk_ota_rings.pulse_prep_activity()
             manifest = _http_get_json(base_url + "/manifest")
+            vsdk_ota_rings.pulse_prep_activity()
         except Exception as e:
             _send(("ota_error manifest_fetch_failed: %s\n" % e).encode())
             return
 
         _cleanup_tmp_files()
+        vsdk_ota_rings.hide_prep_activity()
         _sync_lfs_files(base_url, manifest.get("files", []))
         _update_partitions(base_url, manifest.get("partitions", {}))
 

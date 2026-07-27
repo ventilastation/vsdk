@@ -1,13 +1,16 @@
 # OTA progress rings — original request (plan)
 
-Status as of 2026-07-26: **implemented per the spec below and confirmed
-visible on real hardware, but blocked on a sprite-buffer corruption bug**
-that makes the rings render as glitchy noise instead of clean bands during
-real partition writes. See
-[ota-ring-sprite-corruption.md](ota-ring-sprite-corruption.md) for the bug
-and hand-off instructions — that is the actual next step, not this file.
-This file exists so the original request survives independently of any one
-implementation attempt.
+Status as of 2026-07-26: **implemented per the spec below, and confirmed
+clean on real hardware** — the sprite-buffer corruption bug that once made
+the rings render as glitchy noise during real partition writes is fixed;
+see [ota-ring-sprite-corruption.md](ota-ring-sprite-corruption.md) for what
+it actually was (a type-confusion bug, not the GC-lifetime issue first
+suspected) and how it was confirmed. Follow-up requests in the same
+conversation (a WiFi-problem red/retry state, a text label, bounding the
+activity rings' bounce range) extended this beyond the original spec below
+— see [ota.md](ota.md)'s "On-device progress display" section for the
+finished, as-built design. This file exists so the original request
+survives independently of any one implementation attempt.
 
 The as-built reference doc (data flow, file list, ring color table) lives
 in [ota.md](ota.md)'s "On-device progress display" section. This file is

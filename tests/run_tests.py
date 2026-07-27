@@ -58,6 +58,7 @@ CPYTHON_TESTS = [
     "tests/test_povstress_vs2.py",
     "tests/test_recovery.py",
     "tests/test_updater.py",
+    "tests/test_vsdk_ota_rings.py",
     "tests/test_upgrade_server.py",
     "tests/test_vszip.py",
     "tests/test_menurom.py",

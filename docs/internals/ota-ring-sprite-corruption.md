@@ -1,12 +1,15 @@
 # OTA ring sprite corruption — hand-off
 
-Status as of 2026-07-26: **not fixed, not yet verified on hardware.** Root
-cause below is from static code reading only (no logging added, no fix
-flashed) — it is a strong, specific lead, not a confirmed diagnosis. Verify
-on hardware before trusting it. See
+Status as of 2026-07-26: **fixed, verified on hardware.** The GC-lifetime
+bug below is real and worth having (the fix for it shipped alongside the
+real one), but hardware testing showed it wasn't what was actually causing
+the corruption — see "The real cause" at the end of this doc, which follows
+the same pattern [menu-sprite-corruption.md](menu-sprite-corruption.md)'s
+own Bug #3 section used: two real, independently-worthwhile fixes that
+turned out not to be the story, kept below for the record. See
 [ota-progress-rings-plan.md](ota-progress-rings-plan.md) for the original
-feature request this is blocking, and [ota.md](ota.md)'s "On-device
-progress display" section for how the feature is meant to work end to end.
+feature request this was blocking, and [ota.md](ota.md)'s "On-device
+progress display" section for how the finished feature works end to end.
 
 ## The symptom
 
@@ -179,8 +182,69 @@ taps the DUT's LED bus and re-streams it over Wi-Fi, and
 
 | File | Role |
 |---|---|
-| `apps/micropython/vsdk_ota_rings.py` | Where the fix goes — `_set_ring()`, needs a buffer-rooting dict |
-| `apps/micropython/updater.py` | Calls into the ring functions; the `gc.collect()` in `_update_partitions()`'s write loop is what makes this reproduce almost immediately rather than eventually |
-| `hardware/rotor/modules/povdisplay/sprites.c` | `set_imagestrip()` — the native call that only stores a raw pointer |
-| `hardware/rotor/modules/povdisplay/gpu.c` | `render_vs2()` — where a stale pointer would actually get drawn; add diagnostic logging here if the buffer-rooting fix alone isn't enough |
-| `docs/internals/menu-sprite-corruption.md` | The prior investigation of the same bug shape in a different file — read this first |
+| `apps/micropython/vsdk_ota_rings.py` | `_set_ring()`/`ensure_started()` — both fixes (buffer-rooting dicts, `memoryview(...)` wraps) live here |
+| `apps/micropython/updater.py` | Calls into the ring functions; the `gc.collect()` in `_update_partitions()`'s write loop is what made the GC-lifetime theory look so plausible |
+| `hardware/rotor/modules/povdisplay/sprites.c` | `set_imagestrip()`/`memoryview_data()` — the actual bug: casts to `mp_obj_array_t*` and reads `items+free`, valid only for a real memoryview/bytearray |
+| `hardware/rotor/modules/povdisplay/gpu.c` | `render_vs2()` — where a bad pointer actually gets drawn |
+| `docs/internals/menu-sprite-corruption.md` | The prior investigation of the same two bug shapes (GC lifetime *and* this exact type confusion, as its own Bug #2) in a different file |
+
+## The real cause: Bug #2's type confusion, not GC lifetime
+
+The GC-lifetime fix above shipped (it's real, and cheap insurance — see
+`director.py`'s own belt-and-suspenders use of both fixes together for the
+same reason), but a hardware re-test after applying it *alone* still showed
+the identical corruption, unchanged. That ruled it out the same way
+[menu-sprite-corruption.md](menu-sprite-corruption.md)'s own bug #1 fix got
+ruled out there: same symptom, same timing, before and after.
+
+The actual bug is `menu-sprite-corruption.md`'s **Bug #2**, independently
+rediscovered here: `vshw_sprites.set_imagestrip()` and
+`vshw_povdisplay.set_palettes()` both read their argument via
+`memoryview_data()` (`sprites.c`):
+
+```c
+const char* memoryview_data(mp_obj_t mv_obj) {
+    mp_obj_array_t *mv = MP_OBJ_TO_PTR(mv_obj);
+    return ((char*)mv->items) + mv->free;
+}
+```
+
+This casts straight to `mp_obj_array_t*` and reads `items + free` as the
+data pointer. `free` is a valid element offset only for a real
+`memoryview`/`bytearray`. For a plain `bytes` object, that identical struct
+slot holds the object's eagerly-computed hash instead — so passing plain
+`bytes` (as both `_build_ring_strip()` and `_build_palette()` originally
+did) makes the native side compute `items + <hash value used as a byte
+offset>`: an address that's *wrong*, not merely *stale*. Confirmed directly
+on hardware via temporary counters in `render_vs2()` (since removed):
+100% of draws showed a garbage header, from the very first draw of each
+sprite, with a *stable* address across the whole session — the opposite of
+what a GC-reclaim signature would look like (which should start valid and
+go bad later, once something else's allocation lands on the freed memory).
+A stable-but-wrong address from the first draw onward means the address
+was never right in the first place.
+
+**Fix:** wrap both builders' return values in `memoryview(...)` before they
+reach `set_imagestrip()`/`set_palettes()` — the exact fix
+`director.py`'s `_load_rom_streaming()` already uses for the same pair of
+calls (see its own comment there). `_build_ring_strip()`/`_build_palette()`
+now return a plain `bytearray` (not `bytes`) for this reason, and every
+call site wraps it in `memoryview(...)` right before the native call.
+
+**Verified on hardware**, twice, isolating the two ring families
+separately: a real partition-write OTA (gray/yellow) and a real LFS
+cache-wipe forcing a full file re-sync (white/green) both produced clean,
+stable, correctly-colored concentric bands throughout, with zero noise —
+a clear improvement over the pre-fix screenshots this doc originally
+included.
+
+One anomaly worth a footnote: a single much longer combined test (full
+cache wipe + all three partitions corrupted in one session) once showed no
+rings at all for its ~45s duration (not corrupted — just absent, starfield
+never disabled). Not reproduced in two separate follow-up isolation tests.
+Later traced to a *different*, real issue: `ensure_started()`'s very first
+call after a hard reset can itself fail (some dependency isn't consistently
+ready yet), which is normally masked by however long WiFi/manifest/LFS-scan
+takes naturally, giving it many later chances — see `ota.md`'s "On-device
+progress display" section for how that's handled now (`_wifi_connect()`
+re-asserts the ring/label state every attempt, not just once).

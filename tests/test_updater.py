@@ -509,6 +509,7 @@ class PartitionProgressRingTests(unittest.TestCase):
         updater.vsdk_ota_rings = types.SimpleNamespace(
             set_partition_progress=lambda done, total: recorded.append(("progress", done, total)),
             pulse_partition_activity=lambda: recorded.append(("pulse",)),
+            hide_partition_rings=lambda: recorded.append(("hide",)),
         )
 
         class FakeWritePartition:
@@ -536,6 +537,9 @@ class PartitionProgressRingTests(unittest.TestCase):
         self.assertEqual(progress_calls[0], ("progress", 0, 2))
         self.assertEqual(progress_calls[-1], ("progress", 2, 2))
         self.assertEqual(len([r for r in recorded if r[0] == "pulse"]), 2)
+        # Gray/yellow shouldn't linger at their last position once this tier
+        # is done -- see vsdk_ota_rings.hide_partition_rings()'s docstring.
+        self.assertEqual(recorded[-1], ("hide",))
 
     def test_total_blocks_rounds_partial_final_block_up(self):
         content = b"x" * 4097  # one full block plus one byte -- rounds up to 2
@@ -548,6 +552,7 @@ class PartitionProgressRingTests(unittest.TestCase):
         updater.vsdk_ota_rings = types.SimpleNamespace(
             set_partition_progress=lambda done, total: recorded.append((done, total)),
             pulse_partition_activity=lambda: None,
+            hide_partition_rings=lambda: None,
         )
 
         class FakeWritePartition:
@@ -595,9 +600,11 @@ class FileProgressRingTests(unittest.TestCase):
         import updater
 
         recorded = []
+        hide_calls = []
         updater.vsdk_ota_rings = types.SimpleNamespace(
             set_file_progress=lambda done, total: recorded.append((done, total)),
             pulse_file_activity=lambda: None,
+            hide_file_rings=lambda: hide_calls.append(True),
         )
 
         class FakeFile:
@@ -640,6 +647,7 @@ class FileProgressRingTests(unittest.TestCase):
                 unittest.mock.patch.object(updater.os, "rename", fake_rename), \
                 unittest.mock.patch.object(updater, "_http_stream", fake_http_stream):
             updater._sync_lfs_files("http://base", files)
+        self._hide_calls = hide_calls
         return recorded
 
     def test_total_bytes_excludes_files_already_cached(self):
@@ -668,6 +676,136 @@ class FileProgressRingTests(unittest.TestCase):
         # isn't exercised here since new.py always needs a real download).
         self.assertEqual(recorded[0], (0, len(new_content)))
         self.assertEqual(recorded[-1], (len(new_content), len(new_content)))
+
+    def test_hide_file_rings_called_once_sync_completes(self):
+        # White/green shouldn't linger at their last position once tier 2/3
+        # starts -- see vsdk_ota_rings.hide_file_rings()'s own docstring.
+        self._run_sync([], {})
+        self.assertEqual(self._hide_calls, [True])
+
+
+class WifiConnectRetryTests(unittest.TestCase):
+    """_wifi_connect() never gives up on a slow/unreachable AP, but switches
+    the on-device ring/label to a red "wifi problem" indicator after a few
+    quiet attempts -- see vsdk_ota_rings.show_wifi_problem()."""
+
+    def setUp(self):
+        for name in ("machine", "esp32", "updater", "network", "utime"):
+            sys.modules.pop(name, None)
+
+    def tearDown(self):
+        for name in ("machine", "esp32", "network", "utime"):
+            sys.modules.pop(name, None)
+
+    def _install_network(self, connect_on_attempt):
+        """connect_on_attempt: 1-based attempt number on which isconnected()
+        starts reporting True; None means it never connects."""
+        network = types.ModuleType("network")
+        network.STA_IF = "STA_IF"
+        state = {"attempt": 0}
+
+        class FakeWLAN:
+            def __init__(self, mode):
+                pass
+
+            def active(self, value=None):
+                pass
+
+            def isconnected(self):
+                return connect_on_attempt is not None and state["attempt"] >= connect_on_attempt
+
+            def connect(self, ssid, password):
+                state["attempt"] += 1
+
+            def ifconfig(self):
+                return ("1.2.3.4",)
+
+        network.WLAN = FakeWLAN
+        sys.modules["network"] = network
+        sys.modules["utime"] = types.SimpleNamespace(sleep_ms=lambda ms: None)
+        return state
+
+    def test_calls_show_wifi_problem_from_third_attempt_onward(self):
+        _machine, _esp32, _nvs = _install_fakes(
+            running_label="micropython",
+            nvs_blobs={"ssid": "myssid", "password": "mypass"},
+        )
+        self._install_network(connect_on_attempt=5)  # fails 4 times, connects on the 5th
+
+        import updater
+        calls = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            show_wifi_problem=lambda: calls.append("problem"),
+            show_wifi_connecting=lambda: calls.append("connecting"),
+        )
+
+        self.assertTrue(updater._wifi_connect())
+        # Attempts 1-2 show the calm "connecting" state; attempts 3-5 (the
+        # last one succeeds, but the switch happens before that attempt's
+        # own connect() call -- see the ordering in _wifi_connect()) show
+        # "problem" -- called every attempt from there on, not just once,
+        # so ensure_started() keeps getting retried -- see that comment.
+        self.assertEqual(calls, ["connecting", "connecting", "problem", "problem", "problem"])
+
+    def test_no_wifi_problem_call_when_it_connects_right_away(self):
+        _machine, _esp32, _nvs = _install_fakes(
+            running_label="micropython",
+            nvs_blobs={"ssid": "myssid", "password": "mypass"},
+        )
+        self._install_network(connect_on_attempt=1)
+
+        import updater
+        calls = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            show_wifi_problem=lambda: calls.append("problem"),
+            show_wifi_connecting=lambda: calls.append("connecting"),
+        )
+
+        self.assertTrue(updater._wifi_connect())
+        self.assertEqual(calls, ["connecting"])
+
+    def test_survives_connect_raising_instead_of_just_never_connecting(self):
+        # Confirmed on hardware: a bad password made connect() itself raise
+        # (not just leave isconnected() False), which used to escape
+        # _wifi_connect() entirely and abort the retry loop via run()'s own
+        # `except OSError`. Must count as a failed attempt, not a fatal one.
+        _machine, _esp32, _nvs = _install_fakes(
+            running_label="micropython",
+            nvs_blobs={"ssid": "myssid", "password": "mypass"},
+        )
+        network = types.ModuleType("network")
+        network.STA_IF = "STA_IF"
+        state = {"attempt": 0}
+
+        class FlakyWLAN:
+            def __init__(self, mode):
+                pass
+
+            def active(self, value=None):
+                pass
+
+            def isconnected(self):
+                return state["attempt"] >= 4
+
+            def connect(self, ssid, password):
+                state["attempt"] += 1
+                if state["attempt"] <= 2:
+                    raise OSError("Wifi Internal Error")
+
+            def ifconfig(self):
+                return ("1.2.3.4",)
+
+        network.WLAN = FlakyWLAN
+        sys.modules["network"] = network
+        sys.modules["utime"] = types.SimpleNamespace(sleep_ms=lambda ms: None)
+
+        import updater
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            show_wifi_problem=lambda: None,
+            show_wifi_connecting=lambda: None,
+        )
+
+        self.assertTrue(updater._wifi_connect())
 
 
 if __name__ == "__main__":
