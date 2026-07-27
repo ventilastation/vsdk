@@ -246,9 +246,47 @@ def _makedirs(path):
 # stuck.
 _SCAN_PROGRESS_INTERVAL_MS = 3000
 
+# Cache of the last verified sha256 for each LFS path, keyed by manifest path
+# -- lets a session skip re-reading + re-hashing files that were already
+# confirmed correct, instead of hashing the full LFS content tree (195 files,
+# ~15s on real hardware) on every single OTA session. Trust model mirrors the
+# NVS-cached partition hashes in _update_partitions(): a cache hit is trusted
+# outright rather than re-verified against flash content, which is only safe
+# because nothing besides this updater (or a full authoritative
+# deploy_micropython_fs.py reflash, which replaces this file along with
+# everything else in one shot) ever writes LFS files on a fielded board. A
+# manual mpremote cp of a single file, bypassing OTA, would go undetected --
+# not a concern for the intended field update path, but worth knowing if
+# debugging a "file didn't update" report.
+_LFS_HASH_CACHE_PATH = "/.vsdk_lfs_cache.json"
+
+
+def _load_hash_cache():
+    # Best-effort like the NVS reads elsewhere in this file (_nvs_get): a
+    # missing file, corrupt JSON, or anything else wrong with it just means
+    # no cache -- never worth failing the sync over.
+    try:
+        with open(_LFS_HASH_CACHE_PATH, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_hash_cache(cache):
+    tmp_path = _LFS_HASH_CACHE_PATH + ".tmp"
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump(cache, f)
+        os.rename(tmp_path, _LFS_HASH_CACHE_PATH)
+    except OSError as e:
+        print("updater: failed to save LFS hash cache:", e)
+
 
 def _sync_lfs_files(base_url, files):
     import utime
+
+    cache = _load_hash_cache()
+    cache_dirty = False
 
     total = len(files)
     checked = 0
@@ -260,8 +298,20 @@ def _sync_lfs_files(base_url, files):
         size = entry["size"]
         local_path = "/" + rel_path
 
-        gc.collect()
-        local_sha = _sha256_file(local_path)
+        # A cache hit means this exact content was already verified on flash
+        # in a previous session -- skip touching flash at all. Anything else
+        # (no entry, or a stale hash because the manifest says the file
+        # changed) falls back to a real read+hash, so an incorrect or
+        # missing cache entry can never cause a bad file to be accepted, only
+        # cost the same work this loop always used to do.
+        if cache.get(rel_path) == expected_sha:
+            local_sha = expected_sha
+        else:
+            gc.collect()
+            local_sha = _sha256_file(local_path)
+            if local_sha == expected_sha:
+                cache[rel_path] = local_sha
+                cache_dirty = True
         checked += 1
 
         now = utime.ticks_ms()
@@ -305,6 +355,8 @@ def _sync_lfs_files(base_url, files):
                 os.remove(tmp_path)
                 continue
             os.rename(tmp_path, local_path)
+            cache[rel_path] = got
+            cache_dirty = True
             print("updater: updated", rel_path)
         except Exception as e:
             print("updater: failed to update", rel_path, ":", e)
@@ -314,6 +366,18 @@ def _sync_lfs_files(base_url, files):
                 pass
 
     _progress("checking", "files", 100)
+
+    # Drop entries for paths no longer in the manifest so the cache doesn't
+    # grow unboundedly over the life of a board (deleted-from-host files
+    # that are still on-device per the "deletions" open question below are
+    # simply re-hashed once, next time they reappear). Checked unconditionally
+    # -- not just when cache_dirty -- because a manifest that only shrank
+    # (every remaining path was a cache hit) wouldn't otherwise set that flag
+    # at all, and the stale entries would never get pruned.
+    manifest_paths = set(entry["path"] for entry in files)
+    pruned_cache = {k: v for k, v in cache.items() if k in manifest_paths}
+    if cache_dirty or len(pruned_cache) != len(cache):
+        _save_hash_cache(pruned_cache)
 
 
 def _running_label():
@@ -426,12 +490,15 @@ def _update_partitions(base_url, partitions):
                 continue
             part = parts[0]
 
-            # Erase sectors that will be written.
-            sectors = (size + _BLOCK - 1) // _BLOCK
-            print("updater: erasing", sectors, "sectors ...")
-            for i in range(sectors):
-                part.ioctl(6, i)
-
+            # No separate erase pass: writeblocks(block_num, buf) below (the
+            # 3-arg form) already erases each 4096-byte block immediately
+            # before writing it -- see esp32_partition_writeblocks() in
+            # ports/esp32/esp32_partition.c, the "efficient erase" branch
+            # taken whenever block_size >= NATIVE_BLOCK_SIZE_BYTES (always
+            # true here). A prior explicit ioctl(6, i) pre-erase loop here
+            # duplicated that same erase for every sector, doubling flash
+            # erase time for no benefit (measured ~20-30% of total tier-2/3
+            # time on real hardware).
             sha = hashlib.sha256()
             offset = 0
             # Fixed 4096-byte block buffer; avoids bytearray slice deletion.
