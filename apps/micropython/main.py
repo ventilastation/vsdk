@@ -47,8 +47,17 @@ if _running_partition_label() == "factory":
 # partition couldn't be determined (e.g. a non-ESP32 test/dev platform). ---
 
 # OTA boot mode: if /ota_request exists, run OTA before the GPU task starts.
-# The GPU task and WiFi both use the SPI bus (PSRAM); running them concurrently
-# causes a core crash. OTA runs here, in isolation, before ensure_runtime().
+# The GPU task and WiFi DON'T get along at full weight -- ensure_runtime()'s
+# full vs2/game rendering pipeline concurrently with a real WiFi transfer
+# reproducibly crashes the core (confirmed on hardware: a plain manifest GET
+# while the launcher's GPU task was running reset the board mid-transfer).
+# OTA runs here, in isolation, before ensure_runtime() ever starts that
+# pipeline. What it starts INSTEAD is the same lightweight, non-vs2 POV
+# display vsdk_recovery.py already runs concurrently with WiFi for entire
+# multi-minute sessions without incident: vsdk_ota_rings (see its own
+# docstring) lazily initializes the display the first time updater.py's
+# progress calls land, showing the OTA's progress as LED rings on this
+# device -- not just the base-station's ota_progress log line.
 # To trigger: write "http://HOST:5653" to /ota_request and reset the board.
 # director.py does this automatically when it receives an ota_start command.
 def _check_ota_boot():

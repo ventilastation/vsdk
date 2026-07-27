@@ -29,64 +29,22 @@ for the same reason -- it already had no `ventilastation.*` dependencies of
 its own, so moving it out costs nothing and it's genuinely bootstrap-critical
 infrastructure, not something that needs to self-update via its own OTA.
 
-Display setup uses the native `vshw_povdisplay`/`vshw_sprites` modules
-directly (always present, compiled into firmware) rather than going through
-`ventilastation.platforms`/`Director`/`vs2`, which are vfs-only.
+Recovery doesn't touch the POV display itself at all: updater.py's progress
+calls into vsdk_ota_rings (also frozen, same vfs-independence requirement)
+lazily initialize it and drive it directly the first time they're called
+inside the retry loop below -- see vsdk_ota_rings.py's own docstring for the
+LED-ring display this shows on-device, and updater.py's docstring for why
+that display can safely run concurrently with the WiFi it also brings up.
 """
 
 import utime
 
 import updater
-import vsdk_logo_strip
 import vsdk_uart_log
 
 _OTA_URL = "http://ventilastation-base.local:5653"
 _WDT_TIMEOUT_MS = 30000
 _BACKOFF_SCHEDULE_MS = (5000, 10000, 20000, 30000)
-_PIXELS = 54
-_PERSPECTIVE_HUD = 2
-
-# Keys read from NVS namespace "vs_board" -- the same namespace and key
-# names as ventilastation/board_config.py, kept in sync by hand rather than
-# imported (board_config.py lives on vfs; see the module docstring). Only
-# the display-wiring keys here; the serial_* keys for the UART status link
-# are read separately by vsdk_uart_log.py.
-_DISPLAY_NVS_KEYS = (
-    "hall_gpio", "irdiode_gpio", "led_spi_host",
-    "led_clk", "led_mosi", "led_cs", "led_freq",
-)
-
-
-def _read_display_args():
-    import esp32
-    nvs = esp32.NVS("vs_board")
-    return tuple(nvs.get_i32(key) for key in _DISPLAY_NVS_KEYS)
-
-
-def _make_sprite():
-    """Best-effort: initialize the display and show the boot frame. Returns
-    None (not an exception) if board wiring isn't provisioned -- a missing
-    display must not prevent the WiFi/OTA attempts below.
-    """
-    try:
-        import vshw_povdisplay
-        import vshw_sprites
-
-        display_args = _read_display_args()
-        vshw_povdisplay.init(_PIXELS, *display_args)
-        vshw_povdisplay.set_gamma_mode(1)
-
-        strip_number = vsdk_logo_strip.install(vshw_povdisplay, vshw_sprites)
-        sprite = vshw_sprites.Sprite()
-        sprite.set_strip(strip_number)
-        sprite.set_perspective(_PERSPECTIVE_HUD)
-        sprite.set_x(0)
-        sprite.set_y((_PIXELS - vsdk_logo_strip.HEIGHT) // 2)
-        sprite.set_frame(vsdk_logo_strip.FRAME_BOOT)
-        return sprite
-    except Exception as error:
-        print("recovery: display unavailable, continuing without it:", error)
-        return None
 
 
 def _arm_wdt():
@@ -117,15 +75,12 @@ def _feed(wdt):
             pass
 
 
-def _set_frame(sprite, frame):
-    if sprite is not None:
-        try:
-            sprite.set_frame(frame)
-        except Exception:
-            pass
-
-
-def _make_progress_handler(sprite, wdt):
+def _make_progress_handler(wdt):
+    """Forward every progress line to the base station over UART (same
+    framing the desktop emulator's comms.py parses) and feed the watchdog on
+    each one. The on-device LED rings are a separate concern, driven
+    directly by updater.py's own vsdk_ota_rings calls -- this handler only
+    tracks the base-station-facing log and the attempt's final outcome."""
     outcome = {"ok": None}
 
     def handle(line):
@@ -136,21 +91,11 @@ def _make_progress_handler(sprite, wdt):
             text = (line.decode() if isinstance(line, bytes) else line).strip()
         except Exception:
             return
-        if text.startswith("ota_progress start"):
-            _set_frame(sprite, vsdk_logo_strip.FRAME_WIFI)
-        elif text.startswith("ota_progress downloading") or text.startswith("ota_progress file"):
-            _set_frame(sprite, vsdk_logo_strip.FRAME_DOWNLOADING)
-        elif text.startswith("ota_progress checking") or text.startswith("ota_progress scan"):
-            _set_frame(sprite, vsdk_logo_strip.FRAME_CHECKING)
-        elif text.startswith("ota_progress writing") or text.startswith("ota_progress partition"):
-            _set_frame(sprite, vsdk_logo_strip.FRAME_WRITING)
-        elif text.startswith("ota_error"):
+        if text.startswith("ota_error"):
             outcome["ok"] = False
-            _set_frame(sprite, vsdk_logo_strip.FRAME_ERROR)
             print("recovery:", text)
         elif text.startswith("ota_done"):
             outcome["ok"] = True
-            _set_frame(sprite, vsdk_logo_strip.FRAME_SUCCESS)
 
     return handle, outcome
 
@@ -170,8 +115,8 @@ def _boot_into_micropython_if_ready():
     machine.reset()
 
 
-def _attempt(sprite, wdt):
-    handle, outcome = _make_progress_handler(sprite, wdt)
+def _attempt(wdt):
+    handle, outcome = _make_progress_handler(wdt)
     updater.run(_OTA_URL, handle)
     # updater.run() calls machine.reset() itself on a successful micropython
     # write; reaching here means either nothing needed a firmware write, or
@@ -204,7 +149,6 @@ def _boot_grace_period(wdt):
 
 def run():
     try:
-        sprite = _make_sprite()
         wdt = _arm_wdt()
         vsdk_uart_log.info("recovery: booted from factory, target %s" % _OTA_URL)
         _boot_grace_period(wdt)
@@ -213,7 +157,7 @@ def run():
         while True:
             _feed(wdt)
             vsdk_uart_log.info("recovery: OTA attempt %d" % (attempt + 1))
-            ok = _attempt(sprite, wdt)
+            ok = _attempt(wdt)
             if ok:
                 vsdk_uart_log.info("recovery: OTA attempt %d succeeded" % (attempt + 1))
                 _boot_into_micropython_if_ready()

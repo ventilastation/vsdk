@@ -3,6 +3,8 @@
 
 import argparse
 import gzip
+import hashlib
+import json
 import os
 import pathlib
 import struct
@@ -175,6 +177,7 @@ def build_image(vsdk_root, partition_size, output_path, empty=False):
         print(f"  mkdir /{retro_go_dir}")
         fs.makedirs(f"/{retro_go_dir}", exist_ok=True)
 
+    ota_hash_cache = {}
     for kind, remote_path, local_path in iter_copy_jobs(vsdk_root):
         lfs_path = "/" + remote_path
         if kind == "dir":
@@ -204,6 +207,19 @@ def build_image(vsdk_root, partition_size, output_path, empty=False):
                 print(f"  add   {lfs_path}")
             with fs.open(lfs_path, "wb") as f_out:
                 f_out.write(data)
+            ota_hash_cache[lfs_path[1:]] = hashlib.sha256(data).hexdigest()
+
+    # Bake in updater.py's on-device LFS hash cache (_LFS_HASH_CACHE_PATH),
+    # keyed and hashed exactly the way the OTA manifest computes it
+    # (emulator/upgrade_server.py's _file_entry(): sha256 of these same
+    # post-transform bytes, under this same device-relative path). A board
+    # flashed from this image then treats every one of these files as
+    # already verified on its very first OTA/recovery pass, instead of
+    # re-hashing (or, on a from-scratch board with nothing cached yet,
+    # re-downloading) content that's already correct on flash.
+    print("  add   /.vsdk_lfs_cache.json")
+    with fs.open("/.vsdk_lfs_cache.json", "w") as f_out:
+        f_out.write(json.dumps(ota_hash_cache))
 
     output_path.write_bytes(fs.context.buffer)
     used = sum(1 for _ in iter_copy_jobs(vsdk_root) if _[0] == "file")

@@ -480,5 +480,333 @@ class UrlQuoteTests(unittest.TestCase):
             self.assertNotIn(" ", quoted)
 
 
+class PartitionProgressRingTests(unittest.TestCase):
+    """_update_partitions() feeds vsdk_ota_rings (the on-device LED-ring
+    display, see vsdk_ota_rings.py) a running done/total block count across
+    every partition in this session, not a per-partition percentage -- these
+    check that math, independent of the ring module's own rendering (see
+    test_vsdk_ota_rings.py)."""
+
+    def setUp(self):
+        for name in ("machine", "esp32", "updater"):
+            sys.modules.pop(name, None)
+
+    def tearDown(self):
+        for name in ("machine", "esp32"):
+            sys.modules.pop(name, None)
+
+    def test_total_blocks_excludes_already_up_to_date_partitions(self):
+        content = b"x" * 8192  # exactly 2 blocks
+        expected_sha = hashlib.sha256(content).hexdigest()
+
+        machine, esp32, _nvs = _install_fakes(
+            running_label="factory",
+            nvs_blobs={"fmsx_sha": "matches"},  # fmsx already up to date
+        )
+        import updater
+
+        recorded = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            set_partition_progress=lambda done, total: recorded.append(("progress", done, total)),
+            pulse_partition_activity=lambda: recorded.append(("pulse",)),
+            hide_partition_rings=lambda: recorded.append(("hide",)),
+        )
+
+        class FakeWritePartition:
+            def writeblocks(self, block_num, buf):
+                pass
+
+        write_targets = {"prboom-go": [FakeWritePartition()]}
+        esp32.Partition.find = staticmethod(lambda type_, label=None: list(write_targets.get(label, [])))
+
+        def fake_http_stream(url, callback, total_size):
+            callback(content)
+            yield 100
+
+        partitions_manifest = {
+            "fmsx": {"sha256": "matches", "size": 4096, "url": "/fmsx"},
+            "prboom-go": {"sha256": expected_sha, "size": len(content), "url": "/prboom-go"},
+        }
+
+        with unittest.mock.patch.object(updater, "_http_stream", fake_http_stream):
+            updater._update_partitions("http://base", partitions_manifest)
+
+        progress_calls = [r for r in recorded if r[0] == "progress"]
+        # Upfront total counts only prboom-go's 2 blocks -- fmsx's stored
+        # hash already matches the manifest, so it's not "work to do".
+        self.assertEqual(progress_calls[0], ("progress", 0, 2))
+        self.assertEqual(progress_calls[-1], ("progress", 2, 2))
+        self.assertEqual(len([r for r in recorded if r[0] == "pulse"]), 2)
+        # Gray/yellow shouldn't linger at their last position once this tier
+        # is done -- see vsdk_ota_rings.hide_partition_rings()'s docstring.
+        self.assertEqual(recorded[-1], ("hide",))
+
+    def test_total_blocks_rounds_partial_final_block_up(self):
+        content = b"x" * 4097  # one full block plus one byte -- rounds up to 2
+        expected_sha = hashlib.sha256(content).hexdigest()
+
+        machine, esp32, _nvs = _install_fakes(running_label="factory", nvs_blobs={})
+        import updater
+
+        recorded = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            set_partition_progress=lambda done, total: recorded.append((done, total)),
+            pulse_partition_activity=lambda: None,
+            hide_partition_rings=lambda: None,
+        )
+
+        class FakeWritePartition:
+            def writeblocks(self, block_num, buf):
+                pass
+
+        esp32.Partition.find = staticmethod(
+            lambda type_, label=None: [FakeWritePartition()] if label == "prboom-go" else []
+        )
+
+        def fake_http_stream(url, callback, total_size):
+            callback(content)
+            yield 100
+
+        partitions_manifest = {
+            "prboom-go": {"sha256": expected_sha, "size": len(content), "url": "/prboom-go"},
+        }
+
+        with unittest.mock.patch.object(updater, "_http_stream", fake_http_stream):
+            updater._update_partitions("http://base", partitions_manifest)
+
+        self.assertEqual(recorded[0], (0, 2))
+        self.assertEqual(recorded[-1], (2, 2))
+
+
+class FileProgressRingTests(unittest.TestCase):
+    """_sync_lfs_files()'s equivalent for tier 1: a running done/total byte
+    count across every file that needs syncing, fed to vsdk_ota_rings."""
+
+    def setUp(self):
+        sys.modules.pop("updater", None)
+
+    def _run_sync(self, files, fake_fs, download_content=b"new content"):
+        class FakeUtime:
+            @staticmethod
+            def ticks_ms():
+                return 0
+
+            @staticmethod
+            def ticks_diff(a, b):
+                return 0
+
+        sys.modules["utime"] = FakeUtime
+
+        import updater
+
+        recorded = []
+        hide_calls = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            set_file_progress=lambda done, total: recorded.append((done, total)),
+            pulse_file_activity=lambda: None,
+            hide_file_rings=lambda: hide_calls.append(True),
+        )
+
+        class FakeFile:
+            def __init__(self, path, mode):
+                self.path = path
+                self.mode = mode
+                self.write_buf = bytearray() if "b" in mode else ""
+
+            def read(self, *a):
+                return fake_fs.get(self.path, b"" if "b" in self.mode else "")
+
+            def write(self, data):
+                self.write_buf += data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                if "w" in self.mode:
+                    fake_fs[self.path] = self.write_buf
+                return False
+
+        def fake_sha256_file(path):
+            content = fake_fs.get(path)
+            if content is None:
+                return None
+            data = content if isinstance(content, (bytes, bytearray)) else content.encode()
+            return hashlib.sha256(data).hexdigest()
+
+        def fake_rename(a, b):
+            fake_fs[b] = fake_fs.pop(a)
+
+        def fake_http_stream(url, callback, total_size):
+            callback(download_content)
+            yield 100
+
+        with unittest.mock.patch("builtins.open", FakeFile), \
+                unittest.mock.patch.object(updater, "_sha256_file", fake_sha256_file), \
+                unittest.mock.patch.object(updater, "_makedirs", lambda path: None), \
+                unittest.mock.patch.object(updater.os, "rename", fake_rename), \
+                unittest.mock.patch.object(updater, "_http_stream", fake_http_stream):
+            updater._sync_lfs_files("http://base", files)
+        self._hide_calls = hide_calls
+        return recorded
+
+    def test_total_bytes_excludes_files_already_cached(self):
+        cached_content = b"already correct"
+        cached_sha = hashlib.sha256(cached_content).hexdigest()
+        new_content = b"needs downloading"
+        new_sha = hashlib.sha256(new_content).hexdigest()
+
+        # Seed the on-device hash cache so cached.py is a cache hit.
+        import json as _json
+        fake_fs = {
+            "/cached.py": cached_content,
+            "/.vsdk_lfs_cache.json": _json.dumps({"cached.py": cached_sha}),
+        }
+
+        files = [
+            {"path": "cached.py", "size": len(cached_content), "sha256": cached_sha},
+            {"path": "new.py", "size": len(new_content), "sha256": new_sha},
+        ]
+
+        recorded = self._run_sync(files, fake_fs, download_content=new_content)
+
+        # Upfront total only counts new.py -- cached.py is a cache hit, not
+        # "work to do" (see _sync_lfs_files()'s overcount note for why a
+        # cache *miss* that turns out unchanged is still counted: that path
+        # isn't exercised here since new.py always needs a real download).
+        self.assertEqual(recorded[0], (0, len(new_content)))
+        self.assertEqual(recorded[-1], (len(new_content), len(new_content)))
+
+    def test_hide_file_rings_called_once_sync_completes(self):
+        # White/green shouldn't linger at their last position once tier 2/3
+        # starts -- see vsdk_ota_rings.hide_file_rings()'s own docstring.
+        self._run_sync([], {})
+        self.assertEqual(self._hide_calls, [True])
+
+
+class WifiConnectRetryTests(unittest.TestCase):
+    """_wifi_connect() never gives up on a slow/unreachable AP, but switches
+    the on-device ring/label to a red "wifi problem" indicator after a few
+    quiet attempts -- see vsdk_ota_rings.show_wifi_problem()."""
+
+    def setUp(self):
+        for name in ("machine", "esp32", "updater", "network", "utime"):
+            sys.modules.pop(name, None)
+
+    def tearDown(self):
+        for name in ("machine", "esp32", "network", "utime"):
+            sys.modules.pop(name, None)
+
+    def _install_network(self, connect_on_attempt):
+        """connect_on_attempt: 1-based attempt number on which isconnected()
+        starts reporting True; None means it never connects."""
+        network = types.ModuleType("network")
+        network.STA_IF = "STA_IF"
+        state = {"attempt": 0}
+
+        class FakeWLAN:
+            def __init__(self, mode):
+                pass
+
+            def active(self, value=None):
+                pass
+
+            def isconnected(self):
+                return connect_on_attempt is not None and state["attempt"] >= connect_on_attempt
+
+            def connect(self, ssid, password):
+                state["attempt"] += 1
+
+            def ifconfig(self):
+                return ("1.2.3.4",)
+
+        network.WLAN = FakeWLAN
+        sys.modules["network"] = network
+        sys.modules["utime"] = types.SimpleNamespace(sleep_ms=lambda ms: None)
+        return state
+
+    def test_calls_show_wifi_problem_from_third_attempt_onward(self):
+        _machine, _esp32, _nvs = _install_fakes(
+            running_label="micropython",
+            nvs_blobs={"ssid": "myssid", "password": "mypass"},
+        )
+        self._install_network(connect_on_attempt=5)  # fails 4 times, connects on the 5th
+
+        import updater
+        calls = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            show_wifi_problem=lambda: calls.append("problem"),
+            show_wifi_connecting=lambda: calls.append("connecting"),
+        )
+
+        self.assertTrue(updater._wifi_connect())
+        # Attempts 1-2 show the calm "connecting" state; attempts 3-5 (the
+        # last one succeeds, but the switch happens before that attempt's
+        # own connect() call -- see the ordering in _wifi_connect()) show
+        # "problem" -- called every attempt from there on, not just once,
+        # so ensure_started() keeps getting retried -- see that comment.
+        self.assertEqual(calls, ["connecting", "connecting", "problem", "problem", "problem"])
+
+    def test_no_wifi_problem_call_when_it_connects_right_away(self):
+        _machine, _esp32, _nvs = _install_fakes(
+            running_label="micropython",
+            nvs_blobs={"ssid": "myssid", "password": "mypass"},
+        )
+        self._install_network(connect_on_attempt=1)
+
+        import updater
+        calls = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            show_wifi_problem=lambda: calls.append("problem"),
+            show_wifi_connecting=lambda: calls.append("connecting"),
+        )
+
+        self.assertTrue(updater._wifi_connect())
+        self.assertEqual(calls, ["connecting"])
+
+    def test_survives_connect_raising_instead_of_just_never_connecting(self):
+        # Confirmed on hardware: a bad password made connect() itself raise
+        # (not just leave isconnected() False), which used to escape
+        # _wifi_connect() entirely and abort the retry loop via run()'s own
+        # `except OSError`. Must count as a failed attempt, not a fatal one.
+        _machine, _esp32, _nvs = _install_fakes(
+            running_label="micropython",
+            nvs_blobs={"ssid": "myssid", "password": "mypass"},
+        )
+        network = types.ModuleType("network")
+        network.STA_IF = "STA_IF"
+        state = {"attempt": 0}
+
+        class FlakyWLAN:
+            def __init__(self, mode):
+                pass
+
+            def active(self, value=None):
+                pass
+
+            def isconnected(self):
+                return state["attempt"] >= 4
+
+            def connect(self, ssid, password):
+                state["attempt"] += 1
+                if state["attempt"] <= 2:
+                    raise OSError("Wifi Internal Error")
+
+            def ifconfig(self):
+                return ("1.2.3.4",)
+
+        network.WLAN = FlakyWLAN
+        sys.modules["network"] = network
+        sys.modules["utime"] = types.SimpleNamespace(sleep_ms=lambda ms: None)
+
+        import updater
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            show_wifi_problem=lambda: None,
+            show_wifi_connecting=lambda: None,
+        )
+
+        self.assertTrue(updater._wifi_connect())
+
+
 if __name__ == "__main__":
     unittest.main()

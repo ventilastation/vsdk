@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision base-monitor list-boards register-rotor register-workbench register-base
+.PHONY: micropython-webassembly web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision base-monitor list-boards register-rotor register-workbench register-base
 
 PORT ?=
 MAC ?=
@@ -11,7 +11,7 @@ BAUD ?= 2000000
 # boards of one type are attached or when a particular board must be forced.
 PYTHON ?= python3
 BOARD_DETECTOR := $(abspath tools/find_board.py)
-ROTOR_PORT_TARGETS := initial-flash flash-recovery flash-launcher configure-board configure-board-v2 configure-board-eu wifi-provision
+ROTOR_PORT_TARGETS := initial-flash flash-recovery flash-full flash-launcher configure-board configure-board-v2 configure-board-eu wifi-provision
 WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
 BASE_PORT_TARGETS := base-monitor
 PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS) $(BASE_PORT_TARGETS)
@@ -197,6 +197,19 @@ initial-flash: vsdk
 FORCE ?=
 flash-recovery: vsdk
 	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_recovery_image.py --port "$(PORT)" --baud "$(BAUD)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)" $(if $(FORCE),--force,) $(if $(WIFI_SSID),--wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)",)'
+
+# flash-full is the fastest way to bring up a board from scratch: it writes
+# every partition (factory, prboom-go, retro-core, micropython/ota_2, fmsx,
+# and a fully populated vfs) over USB in one esptool call, instead of
+# flash-recovery's USB-factory-only + download-everything-else-over-WiFi
+# path. It also primes the board's OTA bookkeeping (vsdk_ota's NVS partition
+# hashes, and the vfs image's baked-in .vsdk_lfs_cache.json) to match exactly
+# what was just flashed, so the very first OTA/recovery pass afterwards only
+# verifies content instead of re-downloading it. WiFi/board-wiring NVS is
+# untouched -- run wifi-provision / configure-board separately, same as
+# after flash-recovery.
+flash-full: vsdk voom retro-core fmsx
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_full_image.py --port "$(PORT)" --baud "$(BAUD)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"'
 
 voom:
 	$(call rg-build,prboom-go)
