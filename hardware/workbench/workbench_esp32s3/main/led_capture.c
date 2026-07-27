@@ -205,8 +205,8 @@ static void capture_task(void *arg) {
 
         int64_t now = esp_timer_get_time();
         if (now - last_report >= 1000000) {
-            ESP_LOGI(TAG, "bursts/s: good=%lu other=%lu drops=%lu last_len=%lu",
-                     (unsigned long)good, (unsigned long)other, (unsigned long)drops, (unsigned long)last_len);
+            // ESP_LOGI(TAG, "bursts/s: good=%lu other=%lu drops=%lu last_len=%lu",
+            //          (unsigned long)good, (unsigned long)other, (unsigned long)drops, (unsigned long)last_len);
             good = 0; other = 0; drops = 0;
             last_report = now;
         }
@@ -305,7 +305,7 @@ static void decode_task(void *arg) {
 
         int64_t now = esp_timer_get_time();
         if (now - last_report >= 1000000) {
-            ESP_LOGI(TAG, "decode: bursts_last_turn=%lu", (unsigned long)bursts_last_turn);
+            // ESP_LOGI(TAG, "decode: bursts_last_turn=%lu", (unsigned long)bursts_last_turn);
             last_report = now;
         }
     }
