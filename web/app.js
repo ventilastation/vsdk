@@ -41,6 +41,7 @@ import {
 } from "./app-support.js?v=20260717b";
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
+import { ChipAudioHost } from "./chip-audio-host.js?v=20260727a";
 import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260722d";
 import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722e";
 
@@ -112,6 +113,10 @@ class BrowserHostApp {
     this.audio = new BrowserAudioHost({
       readProjectFile: (path, encoding = "utf8") => this.readProjectFile(path, encoding),
     });
+    // Continuous synthesized chip audio for native SMS/NES/MSX apps, relayed
+    // from a physical board in remote-workbench mode -- a separate pipeline
+    // from the clip-trigger sound/music system above (see chip-audio-host.js).
+    this.chipAudio = new ChipAudioHost();
     // Remote H.264 frames are decoded straight into the WebGL LED texture;
     // there is intentionally no JS readback path for the 2D renderer.
     this.force2dFallback = runtime.source === "remote" ? false : this.readForce2dPreference();
@@ -270,6 +275,21 @@ class BrowserHostApp {
         const folder = event.args?.[0] || "";
         const notes = event.args?.[1] || "";
         this.audio.playNotes(folder, notes);
+        continue;
+      }
+      if (event.command === "achip") {
+        // "achip <system> [<rom-name-len>]" — remote-workbench native-app
+        // chip audio (SMS/NES/MSX), resynthesized in-browser from WASM.
+        void this.chipAudio.begin(event.args?.[0] || "", event.data);
+        continue;
+      }
+      if (event.command === "aframe") {
+        // "aframe <wire-len> <nsamples>" + register-log payload.
+        this.chipAudio.frame(event.data, Number(event.args?.[1]) || 0);
+        continue;
+      }
+      if (event.command === "astop") {
+        this.chipAudio.stop();
         continue;
       }
       if (event.command === "base") {
@@ -672,6 +692,7 @@ class BrowserHostApp {
   bindInput() {
     window.addEventListener("pointerdown", () => {
       this.audio.enable();
+      void this.chipAudio.resume();
     }, { once: true });
 
     window.addEventListener("keydown", (event) => {
@@ -679,6 +700,7 @@ class BrowserHostApp {
         return;
       }
       this.audio.enable();
+      void this.chipAudio.resume();
       if (EXIT_KEY_CODES.has(event.code)) {
         event.preventDefault();
         this.keyboardExitPressed = true;
@@ -823,6 +845,7 @@ class BrowserHostApp {
     }
     if (nextInput.joy1 || nextInput.joy2 || nextInput.extra || nextInput.exit) {
       this.audio.enable();
+      void this.chipAudio.resume();
     }
     this.gamepadInput = nextInput;
     this.syncButtons();
@@ -850,6 +873,7 @@ class BrowserHostApp {
     stick.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       this.audio.enable();
+      void this.chipAudio.resume();
       this.touchStickPointerId = event.pointerId;
       stick.setPointerCapture(event.pointerId);
       this.updateTouchStickFromPoint(event.clientX, event.clientY);
@@ -893,6 +917,7 @@ class BrowserHostApp {
       button.addEventListener("pointerdown", (event) => {
         event.preventDefault();
         this.audio.enable();
+        void this.chipAudio.resume();
         button.setPointerCapture(event.pointerId);
         setPressed(true);
       });

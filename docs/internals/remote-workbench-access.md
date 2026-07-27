@@ -256,6 +256,14 @@ carry several ICE candidates.
 and `astop`. The public protocol exposes no shell, filesystem, firmware flash,
 arbitrary serial write, or raw UDP command.
 
+`achip`/`aframe`/`astop` carry the native SMS/NES/MSX apps' sound-chip
+register-write log (the same bridge the desktop pyglet emulator uses over
+plain serial, see `docs/internals/emulator-audio.md`). The browser client
+resynthesizes that into audio itself via a WebAssembly build of the same
+chip-emulation cores (`web/chip-audio-host.js`,
+`tools/build-chipsynth-wasm.sh`) — the gateway only relays the register log,
+it does not decode or play audio.
+
 ## ICE, STUN, and TURN
 
 The default is a public STUN server:

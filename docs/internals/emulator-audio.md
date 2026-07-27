@@ -1,49 +1,60 @@
-# Streaming NES / Genesis / Lynx audio to the pyglet emulator over 115200 serial
+# Streaming NES / SMS / MSX / Genesis / GB audio over the register-log bridge
 
-Originally a plan (branch `emulator-audio-serial-bridge`); phase 1 has shipped,
-see the status section below for what is real vs still planned.
+Originally a plan (branch `emulator-audio-serial-bridge`) for the desktop
+pyglet emulator only; see the status section below for what is real. The
+same device-side bridge is now also the source for chip audio in the
+**browser** web emulator's remote-workbench mode (§13).
 
 ## 0. Implementation status
 
-**Phase 1 (Genesis) is implemented.** What landed:
+**Device-side taps are wired for every console except Lynx**, not just
+Genesis:
 
-Device (retro-go):
 - `components/retro-go/emu_audio_bridge.{c,h}` — UART transport, per-frame
   varint register-log encoder, `achip`/`aframe`/`astop` wire commands, periodic
-  bandwidth/drop stats. Inert on non-ventilastation targets.
-- Register taps in `gwenesis/.../ym2612.c` (`YM2612Write`) and
-  `gwenesis_sn76489.c` (`gwenesis_SN76489_Write`), timestamped with each chip's
-  in-frame sample index.
-- `gwenesis/main/main.c` — `emu_audio_begin("genesis")` + per-frame
-  begin/end around the existing chip run.
-- **Builds clean** for the ventilastation target (`rg_tool.py build gwenesis`).
+  bandwidth/drop stats. Inert on non-ventilastation targets
+  (`RG_VS_ENABLE_HOST_BRIDGE` in `targets/ventilastation/config.h`).
+- Register taps + per-frame `emu_audio_begin`/`emu_audio_frame_begin`/
+  `emu_audio_frame_end` calls next to each core's existing
+  `rg_audio_submit()`:
+  - Genesis (gwenesis): `ym2612.c` (`YM2612Write`),
+    `gwenesis_sn76489.c` (`gwenesis_SN76489_Write`); `gwenesis/main/main.c`.
+  - SMS/Game Gear (smsplus): `sound.c`; `retro-core/main/main_sms.c`.
+  - NES (nofrendo): `nes/apu.c` (`apu_write`); `retro-core/main/main_nes.c`.
+  - Game Boy (gnuboy): `sound.c`; `retro-core/main/main_gbc.c`.
+  - MSX (fMSX): `EMULib/AY8910.c` (`Write8910`); `fmsx/main/main.c`.
+  - Lynx (handy) is **not** wired — the shared-timer-driven audio makes a
+    faithful register-log replay hard (see §4); descoped for now.
+- **Builds clean** for the ventilastation target.
 
-Host (pyglet emulator):
-- `emulator/chipsynth/` — `host_chip.c` + `Makefile` building
-  `libgenesissynth.*` from the unmodified gwenesis YM2612 + SN76489 cores.
-  **Compiles clean.**
-- `emulator/emu_audio.py` — ctypes synth wrapper, lock-protected PCM ring
-  buffer, pyglet streaming `Source`/`Player` (lifecycle on the main thread,
-  rendering on the comms thread).
-- `emulator/comms.py` + `pygletengine.py` — dispatch the new commands and pump
-  the player each tick.
+Host (desktop pyglet emulator, `emulator/`):
+- `emulator/chipsynth/` — `host_chip.c`/`host_sms.c`/`host_nes.c`/
+  `host_gb.c`/`host_msx.c` + `Makefile`, each building a small shared library
+  from the *unmodified* device chip-emulation sources (`ym2612.c`+
+  `gwenesis_sn76489.c`, `sn76489.c`, `nes/apu.c`, `sound.c`, `AY8910.c`+
+  `Sound.c`). All five build with `make -C emulator/chipsynth`; only
+  `libgenesissynth`/`libsmssynth` ship pre-built in the repo, the rest build
+  on demand.
+- `emulator/emu_audio.py` — ctypes synth wrapper (`_Synth`), per-system
+  factory/sample-rate/ROM-loader tables (`_SYNTH_FACTORIES`, `_SYSTEM_RATE`,
+  `_ROM_LOADERS`), lock-protected PCM ring buffer, pyglet streaming
+  `Source`/`Player` (lifecycle on the main thread, rendering on the comms
+  thread).
+- `emulator/comms.py` + `pygletengine.py` — dispatch the wire commands and
+  pump the player each tick.
 
 Verified statically: device + host both compile; the ctypes load path and chip
 ABI ran (an early load reached reset/render); the varint encode/decode is
-symmetric. One host crash was found and fixed by source analysis — the synth
-must call `YM2612ResetChip()` (sets the channels' output-routing pointers, which
-are NULL otherwise and segfault `YM2612Update`).
+symmetric. One host crash was found and fixed by source analysis — the
+Genesis synth must call `YM2612ResetChip()` (sets the channels' output-routing
+pointers, which are NULL otherwise and segfault `YM2612Update`).
 
-**Not yet done — verify on a Mac with audio hardware** (the dev sandbox could
-not exercise the freshly built dylib or play audio):
-1. `cd emulator/chipsynth && make`.
-2. Flash the gwenesis app, run a Genesis ROM on the spinning board.
+**Not yet done — verify on real hardware with audio output:**
+1. `make -C emulator/chipsynth` (builds all five libraries).
+2. Flash a console app, run a ROM on the spinning board.
 3. Run the pyglet emulator pointed at the board over serial; confirm music/SFX
    play and check the device's `emu_audio: N B/s … dropped` stat stays within
    the ~11.5 KB/s link budget. Tune the encoder governor (§8) if needed.
-
-Phases 2 (NES) and 3 (Lynx) are not started; the device bridge and host
-plumbing are generic and ready for their op ranges.
 
 ## 1. Goal
 
@@ -251,3 +262,35 @@ that is not the use case.
 - Instrument the device governor to report bytes/frame and drop counts.
 - Reuse the existing `render-parity-test` discipline: a fixed input script →
   deterministic register log → byte-compare host PCM against a reference render.
+
+## 13. Browser playback (remote-workbench mode)
+
+This is a **different transport and a different synth build** from the
+desktop pyglet path above, sharing only the device-side bridge and the
+`host_nes.c`/`host_sms.c`/`host_msx.c` wrapper sources. Do not confuse the
+two:
+
+- Transport: `emulator/remote_gateway.py`'s `HostProtocolParser` already
+  parses `achip`/`aframe`/`astop` off the same USB-serial link (it exists
+  specifically so the gateway doesn't need the desktop host's audio code).
+  `_broadcast_host_event()` forwards them to the browser over the existing
+  WSS host-event channel used for `sound`/`music`/etc — no WebRTC/Opus
+  involved, no server-side resynthesis.
+- Synth: the browser has its own build of the chip cores, compiled to
+  WebAssembly by `tools/build-chipsynth-wasm.sh` (mirrors
+  `tools/build-micropython-webassembly.sh`'s emsdk bootstrap) from the same
+  `emulator/chipsynth/host_nes.c`/`host_sms.c`/`host_msx.c` +
+  vendored-core sources, output to `web/vendor/chipsynth/*.mjs`. Only
+  SMS/NES/MSX are built for the browser today (no Genesis/GB/Lynx WASM
+  build); Lynx isn't wired on-device at all (§0).
+- Playback: `web/chip-audio-host.js` loads the matching WASM module on
+  `achip`, renders PCM per `aframe` (reusing the exact `reset()`/
+  `render(payload,len,nsamples,out)` C ABI the ctypes host already calls),
+  and feeds it to `web/chip-audio-worklet-processor.js` (an
+  `AudioWorkletProcessor`) over a dedicated `AudioContext({ sampleRate:
+  32000 })` — the chips' native rate, so no resampling is needed anywhere.
+  `web/app.js`'s `processFrameEvents()` dispatches the three commands to
+  `this.chipAudio`.
+- NES DMC sample playback needs real PRG-ROM bytes (see `host_nes.c`); the
+  browser bundle doesn't ship ROM files, so DMC silently stays quiet here,
+  same graceful fallback as the desktop host when it can't find a ROM either.

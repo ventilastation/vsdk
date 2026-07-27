@@ -1303,10 +1303,6 @@ if (window.opener) {
         allowed = {"sound", "music", "musicstop", "notes", "base", "info", "traceback", "achip", "aframe", "amap", "astop"}
         if event.command not in allowed:
             return
-        # Chip-audio payloads are accepted by the parser but not sent unless a
-        # browser implementation declares support in a later protocol version.
-        if event.command in {"achip", "aframe", "amap", "astop"}:
-            return
         for email in {session.principal.email for session in self.sessions.values()}:
             self.store.audit(self.config.board, email, "host_event", event.command)
         name = event.command.encode("ascii")
