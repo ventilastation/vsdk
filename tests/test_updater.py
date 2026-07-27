@@ -585,7 +585,8 @@ class FileProgressRingTests(unittest.TestCase):
     def setUp(self):
         sys.modules.pop("updater", None)
 
-    def _run_sync(self, files, fake_fs, download_content=b"new content"):
+    def _run_sync(self, files, fake_fs, download_content=b"new content",
+                  fake_http_stream=None):
         class FakeUtime:
             @staticmethod
             def ticks_ms():
@@ -637,9 +638,10 @@ class FileProgressRingTests(unittest.TestCase):
         def fake_rename(a, b):
             fake_fs[b] = fake_fs.pop(a)
 
-        def fake_http_stream(url, callback, total_size):
-            callback(download_content)
-            yield 100
+        if fake_http_stream is None:
+            def fake_http_stream(url, callback, total_size):
+                callback(download_content)
+                yield 100
 
         with unittest.mock.patch("builtins.open", FakeFile), \
                 unittest.mock.patch.object(updater, "_sha256_file", fake_sha256_file), \
@@ -682,6 +684,29 @@ class FileProgressRingTests(unittest.TestCase):
         # starts -- see vsdk_ota_rings.hide_file_rings()'s own docstring.
         self._run_sync([], {})
         self.assertEqual(self._hide_calls, [True])
+
+    def test_progress_advances_within_a_single_large_file_download(self):
+        # A multi-MB WAD/ROM can take tens of seconds to transfer; the white
+        # ring must move as chunks arrive, not sit at the previous file's
+        # tally and then jump straight to "done" -- see _sync_lfs_files()'s
+        # _write() comment.
+        new_content = b"x" * 30
+        new_sha = hashlib.sha256(new_content).hexdigest()
+        files = [{"path": "big.wad", "size": len(new_content), "sha256": new_sha}]
+
+        def fake_http_stream(url, callback, total_size):
+            for i in range(0, len(new_content), 10):
+                callback(new_content[i:i + 10])
+                yield (i + 10) * 100 // total_size
+
+        recorded = self._run_sync(files, {}, fake_http_stream=fake_http_stream)
+
+        # Every chunk (10 bytes each, 3 chunks) should have produced its own
+        # progress update -- not just one jump from 0 straight to total.
+        total = len(new_content)
+        self.assertIn((10, total), recorded)
+        self.assertIn((20, total), recorded)
+        self.assertEqual(recorded[-1], (total, total))
 
 
 class WifiConnectRetryTests(unittest.TestCase):

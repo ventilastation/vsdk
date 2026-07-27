@@ -364,10 +364,22 @@ def _sync_lfs_files(base_url, files):
 
         try:
             _makedirs(local_path)
+            file_received = 0
             with open(tmp_path, "wb") as f:
                 def _write(chunk):
+                    nonlocal file_received
                     f.write(chunk)
                     sha.update(chunk)
+                    # Advance the white ring within this single file, not
+                    # just once it finishes -- a multi-MB WAD/ROM can take
+                    # tens of seconds, and without this the ring sat frozen
+                    # at the previous file's tally for the whole transfer,
+                    # then jumped straight to "done". _set_ring() no-ops
+                    # unless the row actually changes, so this is as cheap as
+                    # the per-block update _update_partitions() already does
+                    # for the gray ring.
+                    file_received += len(chunk)
+                    vsdk_ota_rings.set_file_progress(done_bytes + file_received, total_bytes)
                 # A large file (e.g. a multi-MB WAD) can take longer than the
                 # watchdog timeout to transfer; nothing else feeds it during
                 # this loop (unlike the per-chunk feed in _update_partitions),
