@@ -600,6 +600,27 @@ FrameError: ship.png has 4 frames; frame must be 0..3
 AssetLimitError: alecu.my_game defines 103 images; this target supports 100
 ```
 
+### Palettes (advanced)
+
+Palette animation is the cheapest color effect a POV display has, and one
+jam game already uses it: `2bam_sencom` hand-parses the raw ROM binary out
+of `director.romdata` to locate the palette block, mutates a copy, and
+re-uploads it through `povdisplay.set_palettes()`
+(`2bam_sencom.py:1304-1320`). V2 sanctions the technique without the
+binary parsing, since the asset bank already owns the loaded palette data:
+
+```python
+palettes = vs2.display.palettes    # mutable view of the loaded block
+cycle(palettes)                    # tint, flash, rotate entries in place
+vs2.display.apply_palettes()       # publish the change to the renderer
+```
+
+`palettes` is the same buffer the asset bank loaded, so mutating it
+allocates nothing, and `apply_palettes()` is cheap enough to call every
+tick for a cycling effect. The buffer is replaced when a new asset pack
+loads — resolve it in `build()` like any other asset handle. This is the
+only member of `vs2.display`; drawing still happens through layers.
+
 ### Controls
 
 ```python
@@ -902,7 +923,8 @@ Each phase lands green on the existing suites (`test_vs2_api`,
    `frame_offset`. Port `input_demo` and `tutorial_vs2` first — they are
    the acceptance fixtures — and measure the sprite/heap savings and the
    per-column cost of a full 16-tilemap scene on hardware.
-5. **Services and app migration.** `vs2.controls`, `vs2.audio`, declarative
+5. **Services and app migration.** `vs2.controls`, `vs2.audio`,
+   `vs2.display.palettes` + `apply_palettes()`, declarative
    `starfield`, base-output lifecycle; port `mapdemo`, `vixeous`,
    `vyruss_vs2`, `povstress`; add the package API-revision check; remove
    the old draft surface only when every in-tree V2 app has moved.
@@ -1008,6 +1030,11 @@ Recorded so the debate doesn't reopen by accident:
   installation machine must drift back to the attract loop even when a
   jam game forgot to handle it. Idleness counts input from any
   controller, fixing V1's joy1-only wart.
+- **Palette animation gets a sanctioned surface**:
+  `vs2.display.palettes` — a mutable view of the asset bank's loaded
+  palette block — plus `vs2.display.apply_palettes()`, replacing
+  2bam_sencom's hand-parsing of `director.romdata` and its direct
+  `povdisplay.set_palettes()` calls.
 - **Packages**: no legacy `.vs2` check — the format is alpha with no real
   games packaged. Package metadata gains an integer `api_revision` going
   forward (this rework is revision 2), and the loader rejects mismatches.
