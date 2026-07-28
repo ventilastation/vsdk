@@ -110,6 +110,14 @@ Cited against the actual code on `main`:
   V1's naming: the separate `is_pressed2`/`was_pressed2` family for player
   2, and `director.pop()` followed by `raise StopIteration()` to leave a
   scene. None of this is a V2 contract; it leaked through.
+- **Display geometry is an undocumented magic number.** V2 has no way to
+  ask how wide or tall the display is. `tincho_vrunner` imports the
+  director's private-by-convention `PIXELS = 54` constant in both
+  `tincho_level.py` and `pantallas.py`, while V2 games repeatedly spell the
+  256-column circumference as `% 256`; `vixeous` and `povstress` even
+  redefine `COLUMNS = 256` locally. Display geometry is hardware state and
+  belongs in the public display API, not in game literals or a V1 director
+  import.
 - **Global mutable module state stands in for scene ownership.**
   `_live_sprites`, `_live_tilemaps`, and the scratch lists (`vs2.py:124-129`)
   collect every drawable ever created; `export_scene_payload()` filters them
@@ -315,9 +323,9 @@ for sprite layers only; creating a `tilemap()` or `label()` on a
 nothing, which is what happens today.
 
 All drawables share `x`, `y`, `visible`, `show()`, `hide()`. Coordinates are
-signed 8.8 fixed point in the native records; X wraps around the 256-column
-display, Y clips at the visible radial range. Projection defines how a
-renderer maps Y to LEDs, not whether negative values are accepted.
+signed 8.8 fixed point in the native records; X wraps at
+`vs2.display.width`, Y clips at `vs2.display.height`. Projection defines how
+a renderer maps Y to LEDs, not whether negative values are accepted.
 
 ### Sprites
 
@@ -395,7 +403,7 @@ self.enemies.despawn_all()                          # level reset
 ```python
 for shot in self.shots:
     shot.y += SHOT_SPEED
-    if shot.y > 54:
+    if shot.y >= vs2.display.height:
         self.shots.despawn(shot)
         continue
     baddie = shot.first_overlap(self.baddies)
@@ -600,14 +608,30 @@ FrameError: ship.png has 4 frames; frame must be 0..3
 AssetLimitError: alecu.my_game defines 103 images; this target supports 100
 ```
 
-### Palettes (advanced)
+### Display geometry and palettes
 
-Palette animation is the cheapest color effect a POV display has, and one
-jam game already uses it: `2bam_sencom` hand-parses the raw ROM binary out
-of `director.romdata` to locate the palette block, mutates a copy, and
-re-uploads it through `povdisplay.set_palettes()`
-(`2bam_sencom.py:1304-1320`). V2 sanctions the technique without the
-binary parsing, since the asset bank already owns the loaded palette data:
+Display geometry is available as two read-only integers:
+
+```python
+vs2.display.width    # 256 circumference columns; the period of X
+vs2.display.height   # 54 radial pixels/LEDs; the visible range of Y
+```
+
+`width` and `height` come from the same generated target definition used by
+the native renderer, emulator, and tests; they are not separately maintained
+Python literals. Games use them for wrapping, bounds checks, procedural
+layout, and full-display viewports instead of importing `PIXELS` from the V1
+director or repeating `% 256`. The conventional coordinate names are chosen
+over exposing the hardware-specific `PIXELS` and `COLUMNS` names at the
+`vs2` root.
+
+Palette animation is the advanced part of the display API. It is the cheapest
+color effect a POV display has, and one jam game already uses it:
+`2bam_sencom` hand-parses the raw ROM binary out of `director.romdata` to
+locate the palette block, mutates a copy, and re-uploads it through
+`povdisplay.set_palettes()` (`2bam_sencom.py:1304-1320`). V2 sanctions the
+technique without the binary parsing, since the asset bank already owns the
+loaded palette data:
 
 ```python
 palettes = vs2.display.palettes    # mutable view of the loaded block
@@ -618,8 +642,8 @@ vs2.display.apply_palettes()       # publish the change to the renderer
 `palettes` is the same buffer the asset bank loaded, so mutating it
 allocates nothing, and `apply_palettes()` is cheap enough to call every
 tick for a cycling effect. The buffer is replaced when a new asset pack
-loads — resolve it in `build()` like any other asset handle. This is the
-only member of `vs2.display`; drawing still happens through layers.
+loads — resolve it in `build()` like any other asset handle. Drawing still
+happens through layers.
 
 ### Controls
 
@@ -898,6 +922,8 @@ Each phase lands green on the existing suites (`test_vs2_api`,
    snapshot desktop/web parity fixtures; add a V1 compatibility test set
    before touching shared runtime code.
 1. **Asset hardening (no V1 source changes).** Shared limits definition;
+   shared display-geometry definition exposed as read-only
+   `vs2.display.width`/`.height`;
    ROM-builder validation; bounds-checked `set_imagestrip` without modulo
    wrap; native GC rooting of strip buffers; `AssetBank` + `Image` metadata
    (including frame counts and manifest-declared glyph maps recorded at
@@ -942,6 +968,9 @@ Each phase lands green on the existing suites (`test_vs2_api`,
   in-`update()` GC.
 - Pool spawn/despawn, scalar tilemap scrolling, label writes, control
   reads, and property updates allocate nothing.
+- `vs2.display.width` and `.height` match the native renderer geometry on
+  every target; migrated V2 games contain no hardcoded circumference or LED
+  count for wrapping and display bounds.
 - The 101st sprite, 17th tilemap, 9th layer, and 101st image fail at build
   time with the census error — identically on hardware, desktop, web, and
   headless tests. No strip id silently wraps; no tilemap is silently
@@ -1035,6 +1064,12 @@ Recorded so the debate doesn't reopen by accident:
   palette block — plus `vs2.display.apply_palettes()`, replacing
   2bam_sencom's hand-parsing of `director.romdata` and its direct
   `povdisplay.set_palettes()` calls.
+- **Display geometry is public and target-derived**:
+  read-only `vs2.display.width`/`.height` expose the 256-column
+  circumference and 54-pixel radial height from the renderer's shared
+  target definition. The coordinate names win over root-level
+  `PIXELS`/`COLUMNS`; they remove V1 director imports and magic-number wrap
+  arithmetic without encoding rotor hardware terminology in game code.
 - **Packages**: no legacy `.vs2` check — the format is alpha with no real
   games packaged. Package metadata gains an integer `api_revision` going
   forward (this rework is revision 2), and the loader rejects mismatches.
