@@ -8,8 +8,8 @@
 // #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 // #include "esp_log.h"
 
-#define COLUMNS 256
-#define PIXELS 54
+#define COLUMNS VS_DISPLAY_COLUMNS
+#define PIXELS VS_DISPLAY_PIXELS
 #define ROWS 256
 #define VS2_FLAG_VISIBLE 0x01
 #define VS2_FLAG_FLIP_X 0x02
@@ -296,56 +296,20 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   }
 }
 
-void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
-  uint32_t colorbuf[PIXELS];
-
-  column = column % COLUMNS;
-  for (int y=0; y<PIXELS; y++) {
-    colorbuf[y] = 0x000000ff;
-  }
-  if (starfield_enabled) {
-    for (int f=0; f<STARS; f++) {
-      if (starfield[f].x == column) {
-        set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
-      }
-    }
-  }
-
-  if (scene == NULL) {
-    finish_colorbuf(colorbuf, led_buffer);
-    return;
-  }
-
-  // first slice: all tilemaps draw behind all sprites
-  if (scene->tilemaps != NULL) {
-    for (int n=scene->tilemap_count - 1; n>=0; n--) {
-      const vs2_tilemap_t* t = scene->tilemaps[n];
-      if (t == NULL) {
-        continue;
-      }
-      render_vs2_tilemap(column, colorbuf, scene, t);
-    }
-  }
-
-  if (scene->sprites == NULL) {
-    finish_colorbuf(colorbuf, led_buffer);
-    return;
-  }
-
-  for (int n=scene->sprite_count - 1; n>=0; n--) {
-    const vs2_sprite_t* s = scene->sprites[n];
+static void render_vs2_sprite(int column, uint32_t* colorbuf,
+                              const vs2_scene_t* scene, const vs2_sprite_t* s) {
     if (s == NULL) {
-      continue;
+      return;
     }
     if ((s->flags & VS2_FLAG_VISIBLE) == 0 || !vs2_slot_visible(scene, s->layer)) {
-      continue;
+      return;
     }
     if (s->image_strip >= NUM_IMAGES) {
-      continue;
+      return;
     }
     const ImageStrip* is = image_stripes[s->image_strip];
     if ((uintptr_t)is < 1000) {
-      continue;
+      return;
     }
 
     uint32_t* current_palette = palette_pal + 256 * is->palette;
@@ -358,7 +322,7 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
       (s->flags & VS2_FLAG_FLIP_X) != 0
     );
     if (visible_column == -1) {
-      continue;
+      return;
     }
 
     uint8_t height = is->frame_height;
@@ -397,6 +361,59 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
         if (color != TRANSPARENT) {
           set_colorbuf_pixel(colorbuf, led, current_palette[color]);
         }
+      }
+    }
+}
+
+void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
+  uint32_t colorbuf[PIXELS];
+
+  column = column % COLUMNS;
+  for (int y=0; y<PIXELS; y++) {
+    colorbuf[y] = 0x000000ff;
+  }
+  if (starfield_enabled) {
+    for (int f=0; f<STARS; f++) {
+      if (starfield[f].x == column) {
+        set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
+      }
+    }
+  }
+
+  if (scene == NULL) {
+    finish_colorbuf(colorbuf, led_buffer);
+    return;
+  }
+
+  // Compatibility for pre-rework wire fixtures only.  Every V2 scene built
+  // by vs2_native or decoded from payload v3 has a tagged draw table.
+  if (scene->draw_order == NULL) {
+    if (scene->tilemaps != NULL) {
+      for (int n = scene->tilemap_count - 1; n >= 0; n--) {
+        render_vs2_tilemap(column, colorbuf, scene, scene->tilemaps[n]);
+      }
+    }
+    if (scene->sprites != NULL) {
+      for (int n = scene->sprite_count - 1; n >= 0; n--) {
+        render_vs2_sprite(column, colorbuf, scene, scene->sprites[n]);
+      }
+    }
+    finish_colorbuf(colorbuf, led_buffer);
+    return;
+  }
+
+  // Draw references are emitted in layer and creation order (bottom to top).
+  // Each later drawable overwrites the prior one, so sprites and tilemaps can
+  // genuinely interleave without a renderer pass privileging either kind.
+  for (uint8_t draw = 0; draw < scene->draw_order_count; draw++) {
+    const vs2_draw_ref_t* ref = &scene->draw_order[draw];
+    if (ref->kind == VS2_DRAW_SPRITE) {
+      if (scene->sprites != NULL && ref->index < scene->sprite_count) {
+        render_vs2_sprite(column, colorbuf, scene, scene->sprites[ref->index]);
+      }
+    } else if (ref->kind == VS2_DRAW_TILEMAP) {
+      if (scene->tilemaps != NULL && ref->index < scene->tilemap_count) {
+        render_vs2_tilemap(column, colorbuf, scene, scene->tilemaps[ref->index]);
       }
     }
   }

@@ -13,6 +13,7 @@ palettegroups:
     - strip: gameover.png
     - strip: numerals.png
       frames: 12
+      glyphs: "0123456789 *"
   palette2:
     - fullscreen: tierra.png
       radius: 25

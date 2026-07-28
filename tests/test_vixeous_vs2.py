@@ -90,8 +90,8 @@ class VixeousVs2Tests(unittest.TestCase):
                 )
 
         payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[4], 2)
-        self.assertEqual(payload[7], 1)
+        self.assertEqual(payload[4], 3)
+        self.assertEqual(payload[7], 2)  # terrain + score label
 
     def test_vixeous_terrain_scrolls_by_panning_the_viewport(self):
         scene = load_app("alecu.vixeous")
@@ -108,8 +108,8 @@ class VixeousVs2Tests(unittest.TestCase):
             self.step_buttons(0)
         self.assertEqual(scene.depth, TERRAIN_TILE_H // 2)
         self.assertEqual(
-            scene.terrain.viewport,
-            (0, TERRAIN_TILE_H // 2, 256, TERRAIN_VIEW_H),
+            scene.terrain.view_y,
+            TERRAIN_TILE_H // 2,
         )
         self.assertEqual(scene.terrain_base_row, 0)
 
@@ -117,7 +117,7 @@ class VixeousVs2Tests(unittest.TestCase):
         for _ in range(TERRAIN_SCROLL_TICKS * (TERRAIN_TILE_H // 2)):
             self.step_buttons(0)
         self.assertEqual(scene.depth, TERRAIN_TILE_H)
-        self.assertEqual(scene.terrain.viewport, (0, 0, 256, TERRAIN_VIEW_H))
+        self.assertEqual(scene.terrain.view_y, 0)
         self.assertEqual(scene.terrain_base_row, 1)
         for col in range(TERRAIN_COLS):
             self.assertEqual(

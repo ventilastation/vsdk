@@ -70,6 +70,19 @@ def read_app_api(root_path, slug):
     return None
 
 
+def read_app_api_revision(root_path, slug):
+    try:
+        import ujson as json
+    except ImportError:
+        import json
+    try:
+        with open(slug_to_meta_path(root_path, slug)) as handle:
+            meta = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    return meta.get("api_revision") if isinstance(meta, dict) else None
+
+
 def app_api(slug):
     if app_exists(GAMES_ROOT, slug):
         return slug, read_app_api(GAMES_ROOT, slug)
@@ -82,10 +95,14 @@ def import_app_module(slug):
     ensure_project_root_on_path()
     if app_exists(GAMES_ROOT, slug):
         api_slug, declared_api = app_api(slug)
+        if declared_api == "vs2" and read_app_api_revision(GAMES_ROOT, slug) != 2:
+            raise ImportError("%s needs VS2 API revision 2" % slug)
         api_guard.begin_app(api_slug, declared_api)
         return __import__(slug_to_entry_module_name("games", slug), None, None, ["main"])
     if app_exists(SYSTEM_ROOT, slug):
         api_slug, declared_api = app_api(slug)
+        if declared_api == "vs2" and read_app_api_revision(SYSTEM_ROOT, slug) != 2:
+            raise ImportError("%s needs VS2 API revision 2" % slug)
         api_guard.begin_app(api_slug, declared_api)
         return __import__(slug_to_module_name("system", slug), None, None, ["main"])
     raise ImportError("Unknown app slug: %s" % slug)

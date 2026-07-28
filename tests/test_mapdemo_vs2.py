@@ -75,7 +75,7 @@ class MapDemoTests(unittest.TestCase):
         self.assertIs(scene.map.frames, scene.map_data)
 
         payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[4], 2)
+        self.assertEqual(payload[4], 3)
         self.assertEqual(payload[7], 1)
         tilemap_size = struct.unpack_from("<H", payload, 14)[0]
         self.assertEqual(tilemap_size, 32)
@@ -84,11 +84,11 @@ class MapDemoTests(unittest.TestCase):
         self.step_buttons(director.JOY_RIGHT)
         self.assertEqual(scene.map.x, 1)
         self.step_buttons(director.JOY_DOWN)
-        self.assertEqual(scene.map.viewport[1], 1)
+        self.assertEqual(scene.map.view_y, 1)
         self.step_buttons(director.JOY_UP)
         self.step_buttons(director.JOY_UP)
-        self.assertEqual(scene.map.viewport[1], 0)
-        self.assertEqual(scene.map.viewport[3], VIEW_H)
+        self.assertEqual(scene.map.view_y, 0)
+        self.assertEqual(scene.map.view_height, VIEW_H)
 
         # button A writes a WALL into the live buffer, visible on re-export
         col, row = scene.cursor_cell()

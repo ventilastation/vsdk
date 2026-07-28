@@ -19,9 +19,9 @@ import scene_shader
 def make_vs2_fixture():
     """A mixed VS2 scene: layer modes, signed coords, flips and a tilemap."""
     header_size, layer_size, sprite_size, tilemap_size = 16, 8, 24, 32
-    payload = bytearray(header_size + 2 * layer_size + 3 * sprite_size + tilemap_size + 4)
+    payload = bytearray(header_size + 2 * layer_size + 3 * sprite_size + tilemap_size + 4 + 8)
     payload[:4] = b"VS2\0"
-    payload[4:8] = bytes((2, 2, 3, 1))
+    payload[4:8] = bytes((3, 2, 3, 1))
     struct.pack_into("<HHHH", payload, 8, header_size, layer_size, sprite_size, tilemap_size)
     offset = header_size
     # layer zero replaces record mode with HUD; layer one is hidden.
@@ -43,6 +43,7 @@ def make_vs2_fixture():
         0, 9, 1, 1, 2, 2, 4, 4, 1, 2, 6, 5, -128, 2048, frames_offset,
     )
     payload[frames_offset:frames_offset + 4] = bytes((0, 1, 255, 2))
+    payload[frames_offset + 4:frames_offset + 12] = bytes((0, 0, 1, 0, 0, 1, 0, 2))
     return bytes(payload)
 
 
@@ -94,6 +95,7 @@ const scene = (packed) => ({
   scene_height: packed.sceneHeight,
   sprite_count: packed.spriteCount,
   tilemap_count: packed.tilemapCount,
+  drawable_count: packed.drawableCount,
   cells: Array.from(packed.cells),
   cells_width: packed.cellsWidth,
   cells_height: packed.cellsHeight,

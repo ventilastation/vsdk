@@ -165,7 +165,14 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
 
             fnb = filename.encode("utf-8")
             pascal_filename = struct.pack("B", len(fnb)) + fnb
-            rom_strips.append(pascal_filename + attrbytes + b)
+            glyphs = images_opts[fn].get("glyphs", "")
+            glyph_bytes = glyphs.encode("utf-8")
+            if len(glyph_bytes) > 0xFFFF:
+                raise ValueError("glyph map for %s is too long" % filename)
+            # Strip offsets already delimit every record, so the optional V2
+            # glyph table can trail the established V1 image data without
+            # changing its header or the bytes V1 registers with the GPU.
+            rom_strips.append(pascal_filename + attrbytes + b + struct.pack("<H", len(glyph_bytes)) + glyph_bytes)
         
     with open(rom_filename, "wb") as rom:
         offset = 4 + len(rom_strips) * 4 + len(palettes) * 4
@@ -247,6 +254,13 @@ def _normalize_item(item, source_path, palettegroup_index, item_index):
                 f"{source_path}: palette group {palettegroup_index} item {item_index} has invalid id {strip_id!r}"
             )
         options["id"] = strip_id
+    if "glyphs" in item:
+        glyphs = item.get("glyphs")
+        if not isinstance(glyphs, str):
+            raise ValueError(
+                f"{source_path}: palette group {palettegroup_index} item {item_index} has invalid glyphs"
+            )
+        options["glyphs"] = glyphs
     if item_type == "fullscreen":
         radius = item.get("radius", 54)
         if not isinstance(radius, int) or radius < 1:

@@ -39,14 +39,15 @@
 //             palette bytes uploaded as-is: each entry is [0xFF, B, G, R],
 //             so sampled texel channels are (r=alpha, g=B, b=G, a=R) and the
 //             shader swizzles color.rgb = (texel.a, texel.b, texel.g).
-// u_scene     RGBA32UI, SCENE_TEXELS_PER_ENTITY x (spriteCount+tilemapCount).
-//             One row per entity: sprite rows first (ascending slot), then
-//             tilemap rows (ascending slot). Fields per row (u32 lanes):
+// u_scene     RGBA32UI, SCENE_TEXELS_PER_ENTITY x drawableCount. One row per
+//             drawable, in top-to-bottom probe order. Fields per row (u32
+//             lanes):
 //             sprite:  [0]=x (int32 bitcast) [1]=y (int32 bitcast)
 //                      [2]=strip [3]=frame [4]=mode [5]=flags(1=flipX,2=flipY)
 //             tilemap: [0]=x [1]=y [2]=strip [3]=mode [4]=mapColumns
 //                      [5]=mapRows [6]=tileWidth [7]=tileHeight
-//                      [8..11]=viewport x/y/w/h [12]=cells byte offset
+//                      [8..11]=viewport x/y/w/h [12]=cells byte offset;
+//             [15]=kind (0=sprite, 1=tilemap).
 //             mode is canonical: 0=planet/fullscreen, 1=tunnel, 2=HUD
 //             (pack time maps every other value the way the CPU renderers
 //             treat it: nonzero and not 1 behaves as HUD).
@@ -61,7 +62,7 @@
 //             values with deepspace[y]==led (deepspace is monotonic, so the
 //             range is contiguous); 255|0<<8 marks an empty range.
 //
-// Uniforms: u_sprite_count, u_tilemap_count, u_star_count, u_column_offset,
+// Uniforms: u_drawable_count, u_star_count, u_column_offset,
 // and u_led_axis selecting the output orientation (0: x=led, y=column --
 // the web ledColorTexture; 1: x=column, y=led -- the desktop
 // led_color_texture).
@@ -194,7 +195,7 @@
   }
 
   function makeScenePacker() {
-    return { sprites: [], tilemaps: [], cells: [] };
+    return { drawables: [], spriteCount: 0, tilemapCount: 0, cells: [] };
   }
 
   function pushSprite(packer, { x, y, strip, frame, mode, flipX, flipY }) {
@@ -205,7 +206,9 @@
     lanes[3] = frame & 0xff;
     lanes[4] = canonicalMode(mode);
     lanes[5] = (flipX ? 1 : 0) | (flipY ? 2 : 0);
-    packer.sprites.push(lanes);
+    lanes[15] = 0;
+    packer.drawables.push(lanes);
+    packer.spriteCount += 1;
   }
 
   function pushTilemap(packer, tilemap) {
@@ -229,18 +232,16 @@
     lanes[10] = tilemap.viewport[2];
     lanes[11] = tilemap.viewport[3];
     lanes[12] = offset;
-    packer.tilemaps.push(lanes);
+    lanes[15] = 1;
+    packer.drawables.push(lanes);
+    packer.tilemapCount += 1;
   }
 
   function finishScene(packer) {
-    const entityCount = packer.sprites.length + packer.tilemaps.length;
+    const entityCount = packer.drawables.length;
     const scene = new Uint32Array(Math.max(entityCount, 1) * SCENE_LANES_PER_ENTITY);
     let row = 0;
-    for (const lanes of packer.sprites) {
-      scene.set(lanes, row * SCENE_LANES_PER_ENTITY);
-      row += 1;
-    }
-    for (const lanes of packer.tilemaps) {
+    for (const lanes of packer.drawables) {
       scene.set(lanes, row * SCENE_LANES_PER_ENTITY);
       row += 1;
     }
@@ -259,8 +260,9 @@
       scene,
       sceneWidth: SCENE_TEXELS_PER_ENTITY,
       sceneHeight: Math.max(entityCount, 1),
-      spriteCount: packer.sprites.length,
-      tilemapCount: packer.tilemaps.length,
+      spriteCount: packer.spriteCount,
+      tilemapCount: packer.tilemapCount,
+      drawableCount: entityCount,
       cells,
       cellsWidth: ATLAS_WIDTH,
       cellsHeight,
@@ -307,7 +309,7 @@
       return finishScene(packer);
     }
     const version = bytes[4];
-    if (version !== 1 && version !== 2) {
+    if (version !== 1 && version !== 2 && version !== 3) {
       return finishScene(packer);
     }
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -336,6 +338,7 @@
       offset += layerSize;
     }
 
+    const spriteBySlot = new Array(spriteCount);
     for (let slot = 0; slot < spriteCount; slot += 1) {
       if (offset + spriteSize > bytes.length) {
         return finishScene(packer);
@@ -347,7 +350,7 @@
       if (!(flags & 1) || (layer && !layer.visible)) {
         continue;
       }
-      pushSprite(packer, {
+      spriteBySlot[slot] = {
         x: Math.floor(view.getInt32(recordOffset + 10, true) / 256),
         y: Math.floor(view.getInt32(recordOffset + 14, true) / 256),
         strip: bytes[recordOffset + 1],
@@ -355,9 +358,11 @@
         mode: layer ? layer.mode : bytes[recordOffset + 3],
         flipX: Boolean(flags & 2),
         flipY: Boolean(flags & 4),
-      });
+      };
     }
 
+    let framesEnd = offset + tilemapCount * tilemapSize;
+    const tilemapBySlot = new Array(tilemapCount);
     for (let slot = 0; slot < tilemapCount; slot += 1) {
       if (offset + tilemapSize > bytes.length) {
         return finishScene(packer);
@@ -376,11 +381,12 @@
       if (framesOffset + cellsLength > bytes.length) {
         continue;
       }
+      framesEnd = Math.max(framesEnd, framesOffset + cellsLength);
       const mode = layer ? layer.mode : bytes[recordOffset + 3];
       if (canonicalMode(mode) === MODE_PLANET) {
         continue; // FULLSCREEN tilemaps are unsupported in every renderer.
       }
-      pushTilemap(packer, {
+      tilemapBySlot[slot] = {
         x: Math.floor(view.getInt32(recordOffset + 20, true) / 256),
         y: Math.floor(view.getInt32(recordOffset + 24, true) / 256),
         strip: bytes[recordOffset + 1],
@@ -396,7 +402,32 @@
           view.getUint16(recordOffset + 18, true),
         ],
         frames: bytes.subarray(framesOffset, framesOffset + cellsLength),
-      });
+      };
+    }
+    if (version === 3) {
+      const drawCount = spriteCount + tilemapCount;
+      if (framesEnd + drawCount * 2 > bytes.length) {
+        return finishScene(packer);
+      }
+      // Wire draw refs are bottom-to-top creation order. A shader stops at
+      // the first opaque hit, therefore its rows must be the reverse order.
+      for (let index = drawCount - 1; index >= 0; index -= 1) {
+        const kind = bytes[framesEnd + index * 2];
+        const slot = bytes[framesEnd + index * 2 + 1];
+        if ((kind === 0 && slot >= spriteCount) || (kind === 1 && slot >= tilemapCount) ||
+            (kind !== 0 && kind !== 1)) {
+          return finishScene(makeScenePacker());
+        }
+        const drawable = kind === 0 ? spriteBySlot[slot] : tilemapBySlot[slot];
+        if (drawable) {
+          if (kind === 0) pushSprite(packer, drawable);
+          else pushTilemap(packer, drawable);
+        }
+      }
+    } else {
+      // Preserve the historical two-pass precedence for v1/v2 payloads.
+      for (const sprite of spriteBySlot) if (sprite) pushSprite(packer, sprite);
+      for (const tilemap of tilemapBySlot) if (tilemap) pushTilemap(packer, tilemap);
     }
     return finishScene(packer);
   }
@@ -412,33 +443,45 @@
       return packSceneVs2Bytes(scene);
     }
     const packer = makeScenePacker();
-    for (const sprite of scene?.sprites || []) {
+    const sprite = (value) => {
       pushSprite(packer, {
-        x: Math.floor(sprite.x || 0),
-        y: Math.floor(sprite.y || 0),
-        strip: sprite.image_strip ?? sprite.image,
-        frame: sprite.frame || 0,
-        mode: sprite.perspective,
-        flipX: Boolean(sprite.vs2 ? sprite.vs2.flip_x : sprite.flip_x),
-        flipY: Boolean(sprite.vs2 ? sprite.vs2.flip_y : sprite.flip_y),
+        x: Math.floor(value.x || 0),
+        y: Math.floor(value.y || 0),
+        strip: value.image_strip ?? value.image,
+        frame: value.frame || 0,
+        mode: value.perspective,
+        flipX: Boolean(value.vs2 ? value.vs2.flip_x : value.flip_x),
+        flipY: Boolean(value.vs2 ? value.vs2.flip_y : value.flip_y),
       });
-    }
-    for (const tilemap of scene?.tilemaps || []) {
-      if (canonicalMode(tilemap.perspective) === MODE_PLANET) {
-        continue; // FULLSCREEN tilemaps are unsupported, same as the CPU path
-      }
+    };
+    const tilemap = (value) => {
+      if (canonicalMode(value.perspective) === MODE_PLANET) return;
       pushTilemap(packer, {
-        x: Math.floor(tilemap.x || 0),
-        y: Math.floor(tilemap.y || 0),
-        strip: tilemap.image_strip ?? tilemap.image,
-        mode: tilemap.perspective,
-        columns: tilemap.columns,
-        rows: tilemap.rows,
-        tileWidth: tilemap.tile_width,
-        tileHeight: tilemap.tile_height,
-        viewport: tilemap.viewport,
-        frames: tilemap.frames,
+        x: Math.floor(value.x || 0),
+        y: Math.floor(value.y || 0),
+        strip: value.image_strip ?? value.image,
+        mode: value.perspective,
+        columns: value.columns,
+        rows: value.rows,
+        tileWidth: value.tile_width,
+        tileHeight: value.tile_height,
+        viewport: value.viewport,
+        frames: value.frames,
       });
+    };
+    if (Array.isArray(scene?.drawables)) {
+      for (let index = scene.drawables.length - 1; index >= 0; index -= 1) {
+        const drawable = scene.drawables[index];
+        if (drawable.kind === "sprite") sprite(drawable.value);
+        else if (drawable.kind === "tilemap") tilemap(drawable.value);
+      }
+      return finishScene(packer);
+    }
+    for (const value of scene?.sprites || []) {
+      sprite(value);
+    }
+    for (const value of scene?.tilemaps || []) {
+      tilemap(value);
     }
     return finishScene(packer);
   }
@@ -721,14 +764,10 @@
 
   function shadeLed(context, sceneData, column, led, columnOffset) {
     const renderColumn = (column + columnOffset) & (COLUMNS - 1);
-    for (let row = 0; row < sceneData.spriteCount; row += 1) {
-      const color = probeSprite(context, row, renderColumn, led);
-      if (color) {
-        return color;
-      }
-    }
-    for (let row = 0; row < sceneData.tilemapCount; row += 1) {
-      const color = probeTilemap(context, sceneData.spriteCount + row, renderColumn, led);
+    for (let row = 0; row < sceneData.drawableCount; row += 1) {
+      const color = sceneLane(context.scene, row, 15) === 0
+        ? probeSprite(context, row, renderColumn, led)
+        : probeTilemap(context, row, renderColumn, led);
       if (color) {
         return color;
       }
@@ -779,8 +818,7 @@ uniform highp usampler2D u_scene;
 uniform highp usampler2D u_cells;
 uniform highp usampler2D u_stars;
 uniform highp usampler2D u_deepspace;
-uniform int u_sprite_count;
-uniform int u_tilemap_count;
+uniform int u_drawable_count;
 uniform int u_star_count;
 uniform int u_column_offset;
 uniform int u_led_axis;
@@ -1030,14 +1068,11 @@ void main() {
   int renderColumn = (column + u_column_offset) & (COLUMNS - 1);
 
   vec4 color;
-  for (int row = 0; row < u_sprite_count; row++) {
-    if (probeSprite(row, renderColumn, led, color)) {
-      out_color = color;
-      return;
-    }
-  }
-  for (int row = 0; row < u_tilemap_count; row++) {
-    if (probeTilemap(u_sprite_count + row, renderColumn, led, color)) {
+  for (int row = 0; row < u_drawable_count; row++) {
+    bool hit = sceneTexel(row, 3).w == 0u
+      ? probeSprite(row, renderColumn, led, color)
+      : probeTilemap(row, renderColumn, led, color);
+    if (hit) {
       out_color = color;
       return;
     }

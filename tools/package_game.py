@@ -67,6 +67,8 @@ def build_package(game_dir, output_dir):
     slug = "%s.%s" % (group, name)
     meta_path = game_dir / "meta.json"
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    if meta.get("api") == "vs2":
+        meta["api_revision"] = 2
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -92,8 +94,7 @@ def build_package(game_dir, output_dir):
             generate_roms.generate_menu_icon_rom(game_dir, icon_path)
 
         with zipfile.ZipFile(package_path, "w") as archive:
-            _add_member(archive, "meta.json",
-                        meta_path.read_bytes() if meta_path.exists() else b"{}")
+            _add_member(archive, "meta.json", json.dumps(meta, sort_keys=True).encode("utf-8"))
             if (game_dir / "menu.png").exists():
                 _add_member(archive, "menu.png", (game_dir / "menu.png").read_bytes())
             for source in sorted((game_dir / "code").rglob("*.py")):

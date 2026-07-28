@@ -1,5 +1,6 @@
 {
   "api": "vs2",
+  "api_revision": 2,
   "title": "POV Stress",
   "hidden": true
 }

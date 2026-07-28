@@ -38,9 +38,9 @@ POVSTRESS_STRIPS = ("ship.png", "shots.png", "explosion.png", "terrain.png", "di
 
 # Renderer capacities from hardware/rotor/modules/povdisplay/gpu.h -- the demo
 # is a stress test, so it must stay inside them.
-VS2_MAX_LAYERS = 16
+VS2_MAX_LAYERS = 8
 VS2_MAX_SPRITES = 100
-VS2_MAX_TILEMAPS = 8
+VS2_MAX_TILEMAPS = 16
 
 
 class PovStressVs2Tests(unittest.TestCase):
@@ -87,10 +87,11 @@ class PovStressVs2Tests(unittest.TestCase):
             self.assertEqual(len(layer.sprites), SPRITES_PER_LAYER)
         self.assertEqual(len(scene.movers), NUM_LAYERS * SPRITES_PER_LAYER)
 
-        # one base tilemap, scoreboard = 5 digits + 3 life icons
+        # Terrain and score label are tilemaps; labels no longer spend slots.
         self.assertEqual(len(scene.terrain_layer.tilemaps), 1)
         self.assertIs(scene.terrain.frames, scene.terrain_data)
-        self.assertEqual(len(scene.hud.sprites), 8)
+        self.assertEqual(len(scene.hud.sprites), 0)
+        self.assertEqual(len(scene.hud.tilemaps), 1)
 
     def test_terrain_is_identical_to_vixeous(self):
         scene = load_app("demos.povstress")
@@ -114,11 +115,11 @@ class PovStressVs2Tests(unittest.TestCase):
 
         payload = vs2.export_scene_payload(scene)
         version, layers, sprites, tilemaps = payload[4], payload[5], payload[6], payload[7]
-        self.assertEqual(version, 2)  # tilemap-carrying payload
+        self.assertEqual(version, 3)  # ordered tilemap-carrying payload
         self.assertLessEqual(layers, VS2_MAX_LAYERS)
         self.assertLessEqual(sprites, VS2_MAX_SPRITES)
         self.assertLessEqual(tilemaps, VS2_MAX_TILEMAPS)
-        self.assertEqual(sprites, 68)  # 60 movers + 8 scoreboard
+        self.assertEqual(sprites, 60)
 
     def test_stepping_moves_every_sprite_and_scrolls_terrain(self):
         scene = load_app("demos.povstress")

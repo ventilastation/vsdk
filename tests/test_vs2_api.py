@@ -1,6 +1,6 @@
 import os
-import sys
 import struct
+import sys
 import time
 import unittest
 
@@ -20,652 +20,203 @@ if "utime" not in sys.modules:
         @staticmethod
         def ticks_diff(end, start):
             return end - start
-
-        @staticmethod
-        def sleep_ms(ms):
-            time.sleep(ms / 1000.0)
-
     sys.modules["utime"] = _Utime
 
 from ventilastation import api_guard
-from ventilastation.director import configure_runtime, director, reset_runtime
-from ventilastation.scene import Scene
+from ventilastation.director import configure_runtime, director, reset_runtime, stripes
+from ventilastation.scene import Scene as LegacyScene
 
 
 class Vs2ApiTests(unittest.TestCase):
     def setUp(self):
         reset_runtime()
         api_guard.reset()
-        configure_runtime("headless")
+        self.runtime_director = configure_runtime("headless")
+        stripes.clear()
+        for index, name in enumerate(("ship.png", "terrain.png", "font.png")):
+            stripes[name] = index
+            self.runtime_director.platform.sprites.stripes[index] = {
+                "width": 8, "height": 8, "frames": 4 if name != "font.png" else 128,
+                "palette": 0,
+            }
+        self.runtime_director.platform.sprites.stripes[stripes["terrain.png"]]["width"] = 16
+        self.runtime_director.platform.sprites.stripes[stripes["terrain.png"]]["height"] = 8
+        api_guard.begin_app("games.test_vs2", "vs2")
+        import vs2
+        self.vs2 = vs2
 
     def tearDown(self):
         reset_runtime()
         api_guard.reset()
 
-    def test_base_control_uses_normalized_commands_and_deduplicates(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
+    def enter(self, scene):
+        director.push(scene)
+        return scene
 
-        vs2.base.leds.set_all(1, 2, 3)
-        vs2.base.leds.set_all(1, 2, 3)
-        vs2.base.servo.set(128)
-        vs2.base.buttons.set(vs2.base.BUTTON_LED_ALL, 250)
-        self.assertEqual(director.platform.comms.sent, [
-            (b"base leds 1 2 3", b""),
-            (b"base servo 128", b""),
-            (b"base buttons 3 250", b""),
+    def test_display_geometry_and_services_are_public(self):
+        from vs2.controls import BACK, START, joy1, joy2
+
+        self.assertEqual(self.vs2.display.width, 256)
+        self.assertEqual(self.vs2.display.height, 54)
+        director.extra_buttons = 0x20
+        self.assertTrue(joy2.held(BACK))
+        self.assertFalse(joy1.held(BACK))
+        director.extra_buttons = 0x04
+        self.assertTrue(joy1.held(START))
+        self.vs2.audio.sound("shoot")
+        self.vs2.audio.music("theme", loop=True)
+        self.vs2.audio.stop_music()
+        self.assertEqual(director.platform.comms.sent[-3:], [
+            (b"sound games.test_vs2/shoot", b""),
+            (b"music games.test_vs2/theme loop", b""),
+            (b"music off", b""),
         ])
-        with self.assertRaises(ValueError):
-            vs2.base.servo.set(256)
-        with self.assertRaises(ValueError):
-            vs2.base.buttons.set(4)
 
-    def test_sprite_attributes_sync_to_backend(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
+    def test_scene_builds_owned_drawables_then_seals(self):
+        vs2 = self.vs2
 
-        sprite = vs2.Sprite(x=12.5, y=-4, frame=3, mode=vs2.HUD, visible=True)
-        self.assertEqual(sprite.x, 12.5)
-        self.assertEqual(sprite.y, -4)
-        self.assertEqual(sprite.frame, 3)
-        self.assertEqual(sprite.mode, vs2.HUD)
-        self.assertEqual(sprite._sprite._state["x"], 12)
-        self.assertEqual(sprite._sprite._state["y"], 0)
-        self.assertEqual(sprite._sprite._state["frame"], 3)
-        self.assertEqual(sprite._sprite._state["perspective"], vs2.HUD)
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world", projection=vs2.TUNNEL)
+                self.ship = self.world.sprite("ship.png", x=12.5, y=-0.25, visible=False)
 
-        sprite.x = -0.25
-        self.assertEqual(sprite.x, -0.25)
-        self.assertEqual(sprite._sprite._state["x"], 255)
+            def update(self):
+                self.ship.frame = 1
 
-        sprite.x = 256.25
-        self.assertEqual(sprite.x, 256.25)
-        self.assertEqual(sprite._sprite._state["x"], 0)
+        game = self.enter(Game())
+        self.assertEqual(game._phase, "sealed")
+        self.assertIs(game.ship.layer, game.world)
+        self.assertFalse(game.ship.visible)
+        game.ship.frame = 2
+        self.assertFalse(game.ship.visible, "preloading a hidden frame must not show it")
+        with self.assertRaises(vs2.SceneSealedError):
+            game.world.sprite("ship.png")
+        with self.assertRaises(TypeError):
+            vs2.Sprite()
+        director.step_once()
+        self.assertFalse(game.ship.visible)
+        self.assertEqual(game.ship.frame, 1)
 
-        sprite.hide()
-        self.assertFalse(sprite.visible)
-        self.assertEqual(sprite._sprite._state["frame"], 255)
+    def test_pool_is_fixed_and_supports_current_despawn_iteration(self):
+        vs2 = self.vs2
 
-    def test_sprites_start_hidden_without_an_explicit_frame(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
+        class Game(vs2.Scene):
+            def build(self):
+                layer = self.layer("world")
+                self.pool = layer.sprite_pool("ship.png", count=2, frame=0)
 
-        sprite = vs2.Sprite()
-        self.assertFalse(sprite.visible)
-        self.assertEqual(sprite.frame, 0)
-        self.assertEqual(sprite._sprite._state["frame"], 255)
+        game = self.enter(Game())
+        first = game.pool.spawn(1, 2)
+        second = game.pool.spawn(3, 4, frame=1)
+        self.assertEqual((len(game.pool), game.pool.free), (2, 0))
+        self.assertIsNone(game.pool.spawn(0, 0))
+        seen = []
+        for sprite in game.pool:
+            seen.append(sprite)
+            game.pool.despawn(sprite)
+        self.assertEqual(set(seen), {first, second})
+        self.assertEqual((len(game.pool), game.pool.free), (0, 2))
 
-        sprite.frame = 0
-        self.assertTrue(sprite.visible)
-        self.assertEqual(sprite._sprite._state["frame"], 0)
+    def test_image_metadata_validates_frames_and_tile_dimensions(self):
+        vs2 = self.vs2
 
-    def test_sprite_constructor_omits_replacing_when_not_replacing(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
+        class Game(vs2.Scene):
+            def build(self):
+                self.layer_ = self.layer("world")
+                self.ship = self.layer_.sprite("ship.png")
+                self.map = self.layer_.tilemap("terrain.png", columns=2, rows=2)
 
-        original_sprite_type = director.platform.sprites.Sprite
-        sentinel = object()
+        game = self.enter(Game())
+        self.assertEqual((game.ship.width, game.ship.height, game.ship.image.frames), (8, 8, 4))
+        self.assertEqual((game.map.tile_width, game.map.tile_height), (16, 8))
+        with self.assertRaises(vs2.FrameError):
+            game.ship.frame = 4
+        with self.assertRaises(vs2.AssetNotFoundError):
+            game.image("missing.png")
+
+    def test_tilemap_cells_scalar_view_and_label_writes(self):
+        vs2 = self.vs2
+        self.runtime_director.platform.sprites.stripes[stripes["font.png"]]["frames"] = 128
+
+        class Game(vs2.Scene):
+            def build(self):
+                layer = self.layer("hud", projection=vs2.HUD)
+                self.map = layer.tilemap("terrain.png", columns=2, rows=2,
+                                         view_width=vs2.display.width, view_height=16)
+                self.label = layer.label("font.png", columns=3, glyphs="0123")
+
+        game = self.enter(Game())
+        game.map[1, 0] = 3
+        self.assertEqual(game.map[1, 0], 3)
+        game.map.view_y = 4
+        self.assertEqual(game.map.view_y, 4)
+        game.label.write(0, 0, "12")
+        self.assertEqual(list(game.label.cells), [vs2.EMPTY_TILE, 2, 1])
+        game.label.set_number(23, width=2, pad="0")
+        self.assertEqual(list(game.label.cells)[1:], [3, 2])
+
+    def test_payload_v3_preserves_sprite_tilemap_interleaving_and_reuses_buffer(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                layer = self.layer("world")
+                self.ground = layer.tilemap("terrain.png", columns=1, rows=1)
+                self.ship = layer.sprite("ship.png", x=1)
+                self.clouds = layer.tilemap("terrain.png", columns=1, rows=1)
+
+        game = self.enter(Game())
+        first = vs2.export_scene_payload(game)
+        second = vs2.export_scene_payload(game)
+        self.assertIs(first, second)
+        self.assertEqual(first[4], 3)
+        self.assertEqual(first[-6:], bytes((1, 0, 0, 0, 1, 1)))
+        game.ship.x = 3
+        self.assertIs(vs2.export_scene_payload(game), first)
+
+    def test_limits_are_build_time_diagnostics(self):
+        vs2 = self.vs2
+
+        class TooMany(vs2.Scene):
+            def build(self):
+                layer = self.layer("world")
+                for _ in range(vs2.limits.sprites + 1):
+                    layer.sprite("ship.png")
+
+        with self.assertRaises(vs2.ResourceLimitError) as error:
+            self.enter(TooMany())
+        self.assertIn("sprite 101/100", str(error.exception))
+
+    def test_queued_transition_skips_timers_and_reenters_legacy_scene(self):
+        vs2 = self.vs2
         calls = []
 
-        class StrictSprite(original_sprite_type):
-            def __init__(self, replacing=sentinel):
-                calls.append(replacing)
-                if replacing is None:
-                    raise AssertionError("replacing=None should be omitted")
-                super().__init__(replacing=None if replacing is sentinel else replacing)
+        class Launcher(LegacyScene):
+            def on_enter(self):
+                calls.append("launcher")
 
-        director.platform.sprites.Sprite = StrictSprite
+        class Game(vs2.Scene):
+            def build(self):
+                self.call_later(0, lambda: calls.append("timer"))
 
-        sprite = vs2.Sprite()
-        replacement = vs2.Sprite(replacing=sprite)
+            def update(self):
+                calls.append("update")
+                self.pop()
 
-        self.assertIs(calls[0], sentinel)
-        self.assertIs(calls[1], sprite._sprite)
-        self.assertIs(replacement._sprite._state, sprite._sprite._state)
+        director.push(Launcher())
+        self.enter(Game())
+        director.step_once()
+        self.assertEqual(calls, ["launcher", "update", "launcher"])
 
-    def test_explicit_constructor_frame_shows_unless_visibility_overridden(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        sprite = vs2.Sprite(frame=3)
-        self.assertTrue(sprite.visible)
-        self.assertEqual(sprite._sprite._state["frame"], 3)
-
-        hidden = vs2.Sprite(frame=4, visible=False)
-        self.assertFalse(hidden.visible)
-        self.assertEqual(hidden.frame, 4)
-        self.assertEqual(hidden._sprite._state["frame"], 255)
-
-    def test_layer_adopts_sprite_mode(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        layer = scene.layer("hud", mode=vs2.HUD)
-        sprite = vs2.Sprite()
-        layer.add(sprite)
-
-        self.assertIs(sprite.layer, layer)
-        self.assertEqual(sprite.mode, vs2.HUD)
-        self.assertIn(sprite, layer.sprites)
-        self.assertIn(layer, scene.layers)
-
-    def test_native_backend_receives_live_fixed_point_records(self):
-        class NativeLayer:
-            def __init__(self, mode=1, visible=True):
-                self.mode = mode
-                self.visible = visible
-
-            def set_mode(self, mode):
-                self.mode = mode
-
-            def set_visible(self, visible):
-                self.visible = visible
-
-        class NativeSprite:
-            def __init__(self, replacing=None):
-                self.replacing = replacing
-                self.x_fixed = None
-                self.y_fixed = None
-                self.frame = None
-                self.strip = None
-                self.mode = None
-                self.flags = None
-                self.layer = None
-
-            def set_x_fixed(self, value):
-                self.x_fixed = value
-
-            def set_y_fixed(self, value):
-                self.y_fixed = value
-
-            def set_frame(self, value):
-                self.frame = value
-
-            def set_strip(self, value):
-                self.strip = value
-
-            def set_perspective(self, value):
-                self.mode = value
-
-            def set_flags(self, value):
-                self.flags = value
-
-            def set_layer(self, value):
-                self.layer = value
-
-            def width(self):
-                return 8
-
-            def height(self):
-                return 8
-
-        class NativeVs2:
-            Layer = NativeLayer
-            Sprite = NativeSprite
-
-            def __init__(self):
-                self.reset_count = 0
-                self.active = []
-
-            def reset_scene(self):
-                self.reset_count += 1
-
-            def set_active(self, active):
-                self.active.append(active)
-
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        native = NativeVs2()
-        director.platform.vs2 = native
-
-        scene = vs2.Scene()
-        scene.on_enter()
-        layer = scene.layer("hud", mode=vs2.HUD)
-        sprite = layer.add(vs2.Sprite(7, x=-0.25, y=12.5, frame=3, flip_x=True))
-
-        self.assertEqual(native.reset_count, 1)
-        self.assertEqual(native.active, [True])
-        self.assertIs(sprite._sprite.layer, layer._layer)
-        self.assertEqual(sprite._sprite.x_fixed, -64)
-        self.assertEqual(sprite._sprite.y_fixed, 3200)
-        self.assertEqual(sprite._sprite.strip, 7)
-        self.assertEqual(sprite._sprite.mode, vs2.HUD)
-        self.assertEqual(sprite._sprite.frame, 3)
-        self.assertEqual(sprite._sprite.flags & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
-        self.assertEqual(sprite._sprite.flags & vs2.FLAG_FLIP_X, vs2.FLAG_FLIP_X)
-
-        sprite.visible = False
-        self.assertEqual(sprite._sprite.frame, 3)
-        self.assertFalse(sprite._sprite.flags & vs2.FLAG_VISIBLE)
-
-        sprite.frame = 4
-        self.assertEqual(sprite._sprite.frame, 4)
-        self.assertEqual(sprite._sprite.flags & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
-
-        scene.on_exit()
-        self.assertEqual(native.active, [True, False])
-        self.assertEqual(native.reset_count, 2)
-
-    def test_declared_vs2_rejects_legacy_sprites(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        with self.assertRaises(ImportError):
-            from ventilastation.sprites import Sprite  # noqa: F401
-
-    def test_game_cannot_mix_vs2_after_legacy_sprites(self):
-        api_guard.begin_app("games.test_legacy")
+    def test_v1_and_v2_still_cannot_mix(self):
+        reset_runtime()
+        api_guard.reset()
+        configure_runtime("headless")
+        api_guard.begin_app("games.legacy")
         from ventilastation.sprites import Sprite
-
         Sprite()
-        import vs2
         with self.assertRaises(ImportError):
-            vs2.Sprite()
-
-    def test_popping_vs2_scene_reenters_neutral_legacy_scene(self):
-        class Launcher(Scene):
-            def __init__(self):
-                super().__init__()
-                self.enters = 0
-
-            def on_enter(self):
-                from ventilastation.sprites import Sprite
-
-                self.enters += 1
-                Sprite()
-
-        class Vs2Game(Scene):
-            _vs_api_slug = "games.test_vs2"
-            _vs_declared_api = "vs2"
-
-            def on_enter(self):
-                import vs2
-
-                vs2.Sprite()
-
-        launcher = Launcher()
-        director.push(launcher)
-        director.push(Vs2Game())
-        director.pop()
-
-        self.assertEqual(launcher.enters, 2)
-        self.assertIsNone(api_guard.current_app())
-
-    def test_scene_payload_exports_layers_and_fixed_point_sprites(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        layer = scene.layer("playfield", mode=vs2.HUD)
-        sprite = layer.add(vs2.Sprite(7, x=12.5, y=-4.25, frame=3, flip_x=True))
-
-        payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[0:4], b"VS2\0")
-        self.assertEqual(payload[4], 1)
-        self.assertEqual(payload[5], 1)
-        self.assertEqual(payload[6], 1)
-
-        header_size = struct.unpack_from("<H", payload, 8)[0]
-        layer_size = struct.unpack_from("<H", payload, 10)[0]
-        sprite_size = struct.unpack_from("<H", payload, 12)[0]
-        self.assertEqual(header_size, 16)
-        self.assertEqual(layer_size, 8)
-        self.assertEqual(sprite_size, 24)
-
-        layer_id, mode, flags = struct.unpack_from("<BBB", payload, header_size)
-        self.assertEqual(layer_id, 0)
-        self.assertEqual(mode, vs2.HUD)
-        self.assertEqual(flags & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
-
-        offset = header_size + layer_size
-        fields = struct.unpack_from("<BBBBBBhhii", payload, offset)
-        self.assertEqual(fields[0], 0)
-        self.assertEqual(fields[1], 7)
-        self.assertEqual(fields[2], 3)
-        self.assertEqual(fields[3], vs2.HUD)
-        self.assertEqual(fields[4] & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
-        self.assertEqual(fields[4] & vs2.FLAG_FLIP_X, vs2.FLAG_FLIP_X)
-        self.assertEqual(fields[8], int(12.5 * 256))
-        self.assertEqual(fields[9], int(-4.25 * 256))
-        self.assertIs(sprite.layer, layer)
-
-    def test_unlayered_scene_payload_preserves_sprite_mode(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        planet = vs2.Sprite(9, x=0, y=255, frame=0, mode=vs2.FULLSCREEN)
-        sign = vs2.Sprite(10, x=224, y=0, frame=0, mode=vs2.HUD)
-
-        payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[5], 0)
-        self.assertEqual(payload[6], 2)
-
-        header_size = struct.unpack_from("<H", payload, 8)[0]
-        sprite_size = struct.unpack_from("<H", payload, 12)[0]
-        first = struct.unpack_from("<BBBBBBhhii", payload, header_size)
-        second = struct.unpack_from("<BBBBBBhhii", payload, header_size + sprite_size)
-        self.assertEqual(first[0], vs2.NO_LAYER)
-        self.assertEqual(first[1], 9)
-        self.assertEqual(first[3], vs2.FULLSCREEN)
-        self.assertEqual(second[0], vs2.NO_LAYER)
-        self.assertEqual(second[1], 10)
-        self.assertEqual(second[3], vs2.HUD)
-        self.assertIs(planet.layer, None)
-        self.assertIs(sign.layer, None)
-
-    def test_scene_payload_reuses_buffer_when_shape_is_stable(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        sprite = vs2.Sprite(7, x=1, y=2, frame=0)
-
-        first = vs2.export_scene_payload(scene)
-        sprite.x = 3
-        second = vs2.export_scene_payload(scene)
-
-        self.assertIs(first, second)
-        header_size = struct.unpack_from("<H", second, 8)[0]
-        x_fixed = struct.unpack_from("<i", second, header_size + 10)[0]
-        self.assertEqual(x_fixed, 3 * 256)
-
-    def test_scene_exit_releases_live_sprites_and_payload_buffer(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        vs2.Sprite(7, frame=0)
-        vs2.export_scene_payload(scene)
-
-        self.assertTrue(scene._vs2_payload)
-        self.assertGreaterEqual(len(vs2._live_sprites), 1)
-
-        director.pop()
-
-        self.assertIsNone(scene._vs2_payload)
-        self.assertNotIn(scene, [getattr(sprite, "_scene", None) for sprite in vs2._live_sprites])
-
-    def test_scene_exit_clears_layer_ownership(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        layer = scene.layer("world")
-        sprite = layer.add(vs2.Sprite(7, frame=0))
-
-        director.pop()
-
-        self.assertEqual(scene.layers, [])
-        self.assertEqual(layer.sprites, [])
-        self.assertIsNone(layer.scene)
-        self.assertIsNone(layer._layer)
-        self.assertIsNone(sprite.layer)
-        self.assertIsNone(sprite._scene)
-
-    def test_reentering_scene_recreates_layers_and_sprites(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        class Reenterable(vs2.Scene):
-            _vs_api_slug = "games.test_vs2"
-            _vs_declared_api = "vs2"
-
-            def on_enter(self):
-                super().on_enter()
-                layer = self.layer("world")
-                self.sprite = layer.add(vs2.Sprite(7, frame=0))
-
-        scene = Reenterable()
-        director.push(scene)
-        old_layer = scene.layers[0]
-        old_sprite = scene.sprite
-        director.pop()
-        director.push(scene)
-
-        self.assertIsNot(scene.layers[0], old_layer)
-        self.assertIsNot(scene.sprite, old_sprite)
-        self.assertEqual(len(scene.layers), 1)
-        self.assertEqual(len(scene.layers[0].sprites), 1)
-        self.assertIs(scene.layers[0].sprites[0], scene.sprite)
-        self.assertNotIn(old_sprite, vs2._live_sprites)
-
-    def test_tilemap_validates_dimensions_and_buffer(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        frames = bytearray(16)
-        with self.assertRaises(ValueError):
-            vs2.Tilemap(7, frames, columns=0, rows=4, tile_width=8, tile_height=8)
-        with self.assertRaises(ValueError):
-            vs2.Tilemap(7, frames, columns=4, rows=4, tile_width=0, tile_height=8)
-        with self.assertRaises(ValueError):
-            vs2.Tilemap(7, bytearray(15), columns=4, rows=4, tile_width=8, tile_height=8)
-        with self.assertRaises(ValueError):
-            vs2.Tilemap(
-                7, frames, columns=4, rows=4, tile_width=8, tile_height=8,
-                viewport=(0, 0, 0, 8),
-            )
-        with self.assertRaises(ValueError):
-            vs2.Tilemap(
-                7, frames, columns=4, rows=4, tile_width=8, tile_height=8,
-                viewport=(-1, 0, 8, 8),
-            )
-
-    def test_tilemap_retains_frame_buffer_and_defaults_viewport(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        frames = bytearray(range(16))
-        tilemap = vs2.Tilemap(7, frames, columns=4, rows=4, tile_width=8, tile_height=16)
-        self.assertIs(tilemap.frames, frames)
-        self.assertEqual(tilemap.viewport, (0, 0, 32, 64))
-        tilemap.viewport = (8, 4, 16, 16)
-        self.assertEqual(tilemap.viewport, (8, 4, 16, 16))
-
-    def test_tilemap_native_backend_receives_live_records(self):
-        class NativeLayer:
-            def __init__(self, mode=1, visible=True):
-                self.mode = mode
-                self.visible = visible
-
-            def set_mode(self, mode):
-                self.mode = mode
-
-            def set_visible(self, visible):
-                self.visible = visible
-
-        class NativeTilemap:
-            def __init__(self, **kwargs):
-                self.kwargs = kwargs
-                self.x_fixed = None
-                self.y_fixed = None
-                self.viewport = None
-                self.flags = None
-                self.layer = None
-                self.mode = None
-
-            def set_x_fixed(self, value):
-                self.x_fixed = value
-
-            def set_y_fixed(self, value):
-                self.y_fixed = value
-
-            def set_viewport(self, x, y, w, h):
-                self.viewport = (x, y, w, h)
-
-            def set_flags(self, value):
-                self.flags = value
-
-            def set_layer(self, value):
-                self.layer = value
-
-            def set_perspective(self, value):
-                self.mode = value
-
-        class NativeVs2:
-            Layer = NativeLayer
-            Tilemap = NativeTilemap
-
-            def reset_scene(self):
-                pass
-
-            def set_active(self, active):
-                pass
-
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        director.platform.vs2 = NativeVs2()
-
-        scene = vs2.Scene()
-        scene.on_enter()
-        layer = scene.layer("world", mode=vs2.HUD)
-        frames = bytearray(16)
-        tilemap = layer.add(vs2.Tilemap(
-            7, frames, columns=4, rows=4, tile_width=8, tile_height=8,
-            x=-0.25, y=12.5,
-        ))
-
-        native = tilemap._tilemap
-        self.assertIs(native.kwargs["frames"], frames)
-        self.assertEqual(native.kwargs["strip"], 7)
-        self.assertEqual(native.kwargs["columns"], 4)
-        self.assertEqual(native.kwargs["rows"], 4)
-        self.assertEqual(native.kwargs["tile_width"], 8)
-        self.assertEqual(native.kwargs["tile_height"], 8)
-        self.assertEqual(native.x_fixed, -64)
-        self.assertEqual(native.y_fixed, 3200)
-        self.assertEqual(native.viewport, (0, 0, 32, 32))
-        self.assertEqual(native.flags & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
-        self.assertIs(native.layer, layer._layer)
-        self.assertEqual(native.mode, vs2.HUD)
-
-        tilemap.viewport = (4, 0, 16, 32)
-        self.assertEqual(native.viewport, (4, 0, 16, 32))
-        tilemap.visible = False
-        self.assertFalse(native.flags & vs2.FLAG_VISIBLE)
-
-        scene.on_exit()
-
-    def test_tilemap_scene_payload_is_version_2_with_frame_section(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        layer = scene.layer("world", mode=vs2.HUD)
-        sprite = layer.add(vs2.Sprite(7, x=1, y=2, frame=0))
-        frames = bytearray([0, 1, 1, 0, 1, 2, 2, 1, 1, 2, 2, 1, 0, 1, 1, 0])
-        tilemap = layer.add(vs2.Tilemap(
-            9, frames, columns=4, rows=4, tile_width=8, tile_height=8,
-            x=96, y=32.5, viewport=(8, 4, 16, 20),
-        ))
-
-        payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[0:4], b"VS2\0")
-        self.assertEqual(payload[4], 2)
-        self.assertEqual(payload[5], 1)
-        self.assertEqual(payload[6], 1)
-        self.assertEqual(payload[7], 1)
-        header_size, layer_size, sprite_size = struct.unpack_from("<HHH", payload, 8)
-        tilemap_size = struct.unpack_from("<H", payload, 14)[0]
-        self.assertEqual(tilemap_size, 32)
-
-        record_offset = header_size + layer_size + sprite_size
-        fields = struct.unpack_from("<BBBBHHHHHHHHiiI", payload, record_offset)
-        self.assertEqual(fields[0], 0)
-        self.assertEqual(fields[1], 9)
-        self.assertEqual(fields[2] & vs2.FLAG_VISIBLE, vs2.FLAG_VISIBLE)
-        self.assertEqual(fields[3], vs2.HUD)
-        self.assertEqual(fields[4:8], (4, 4, 8, 8))
-        self.assertEqual(fields[8:12], (8, 4, 16, 20))
-        self.assertEqual(fields[12], 96 * 256)
-        self.assertEqual(fields[13], int(32.5 * 256))
-        frames_offset = fields[14]
-        self.assertEqual(frames_offset, record_offset + tilemap_size)
-        self.assertEqual(payload[frames_offset:frames_offset + 16], frames)
-        self.assertEqual(len(payload), frames_offset + 16)
-        self.assertIs(sprite.layer, layer)
-        self.assertIs(tilemap.layer, layer)
-
-        frames[5] = 3
-        updated = vs2.export_scene_payload(scene)
-        self.assertIs(updated, payload)
-        self.assertEqual(updated[frames_offset + 5], 3)
-
-    def test_sprite_only_payload_stays_version_1(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        vs2.Sprite(7, x=1, y=2, frame=0)
-
-        payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[4], 1)
-        self.assertEqual(payload[7], 0)
-        self.assertEqual(struct.unpack_from("<H", payload, 14)[0], 0)
-
-    def test_scene_exit_releases_tilemaps(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        layer = scene.layer("world")
-        tilemap = layer.add(vs2.Tilemap(
-            7, bytearray(16), columns=4, rows=4, tile_width=8, tile_height=8,
-        ))
-        self.assertIn(tilemap, vs2._live_tilemaps)
-
-        director.pop()
-
-        self.assertEqual(layer.tilemaps, [])
-        self.assertIsNone(tilemap.layer)
-        self.assertIsNone(tilemap._scene)
-        self.assertNotIn(tilemap, vs2._live_tilemaps)
-
-    def test_stable_scene_payload_is_mutated_in_place(self):
-        api_guard.begin_app("games.test_vs2", "vs2")
-        import vs2
-
-        scene = vs2.Scene()
-        scene._vs_api_slug = "games.test_vs2"
-        scene._vs_declared_api = "vs2"
-        director.push(scene)
-        sprite = vs2.Sprite(7, x=1, y=2, frame=0)
-        payload = vs2.export_scene_payload(scene)
-        payload_id = id(payload)
-
-        sprite.x = -3.25
-        updated = vs2.export_scene_payload(scene)
-
-        self.assertEqual(id(updated), payload_id)
-        header_size = struct.unpack_from("<H", updated, 8)[0]
-        x_fixed = struct.unpack_from("<i", updated, header_size + 10)[0]
-        self.assertEqual(x_fixed, int(-3.25 * 256))
+            self.vs2.Scene()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 #include <stdint.h>
-#define PIXELS 54
+#include "display_geometry.h"
+#define PIXELS VS_DISPLAY_PIXELS
 
 uint8_t brillos[PIXELS] = \
 {

@@ -36,16 +36,28 @@ const mp_obj_type_t vs2_tilemap_type;
 static const vs2_layer_t* vs2_layer_records[VS2_MAX_LAYERS];
 static const vs2_sprite_t* vs2_sprite_records[VS2_MAX_SPRITES];
 static const vs2_tilemap_t* vs2_tilemap_records[VS2_MAX_TILEMAPS];
+static vs2_draw_ref_t vs2_draw_order[VS2_MAX_DRAWABLES];
 
 bool vs2_render_active = false;
 vs2_scene_t vs2_active_scene = {
     .layer_count = 0,
     .sprite_count = 0,
     .tilemap_count = 0,
+    .draw_order_count = 0,
     .layers = vs2_layer_records,
     .sprites = vs2_sprite_records,
     .tilemaps = vs2_tilemap_records,
+    .draw_order = vs2_draw_order,
 };
+
+static void append_draw_ref(uint8_t kind, uint8_t index) {
+    if (vs2_active_scene.draw_order_count >= VS2_MAX_DRAWABLES) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("too many vs2 drawables"));
+    }
+    vs2_draw_ref_t* ref = &vs2_draw_order[vs2_active_scene.draw_order_count++];
+    ref->kind = kind;
+    ref->index = index;
+}
 
 static uint8_t alloc_layer_slot(const vs2_layer_t* layer) {
     for (uint8_t slot = 0; slot < VS2_MAX_LAYERS; slot++) {
@@ -108,9 +120,11 @@ static mp_obj_t vs2_reset_scene(void) {
     memset(vs2_layer_records, 0, sizeof(vs2_layer_records));
     memset(vs2_sprite_records, 0, sizeof(vs2_sprite_records));
     memset(vs2_tilemap_records, 0, sizeof(vs2_tilemap_records));
+    memset(vs2_draw_order, 0, sizeof(vs2_draw_order));
     vs2_active_scene.layer_count = 0;
     vs2_active_scene.sprite_count = 0;
     vs2_active_scene.tilemap_count = 0;
+    vs2_active_scene.draw_order_count = 0;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(vs2_reset_scene_obj, vs2_reset_scene);
@@ -206,6 +220,7 @@ static mp_obj_t vs2_sprite_make_new(const mp_obj_type_t *type, size_t n_args, si
     mp_obj_t replacing = args[ARG_replacing].u_obj;
     if (replacing == MP_OBJ_NULL) {
         self->slot = alloc_sprite_slot(&self->sprite);
+        append_draw_ref(VS2_DRAW_SPRITE, self->slot);
     } else {
         vs2_sprite_obj_t *replacing_sprite = to_vs2_sprite(replacing);
         self->slot = replacing_sprite->slot;
@@ -391,6 +406,7 @@ static mp_obj_t vs2_tilemap_make_new(const mp_obj_type_t *type, size_t n_args, s
     self->tilemap.frames = (const uint8_t*)bufinfo.buf;
     self->tilemap.frames_len = bufinfo.len;
     self->slot = alloc_tilemap_slot(&self->tilemap);
+    append_draw_ref(VS2_DRAW_TILEMAP, self->slot);
     return MP_OBJ_FROM_PTR(self);
 }
 

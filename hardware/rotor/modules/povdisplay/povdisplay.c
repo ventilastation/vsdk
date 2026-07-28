@@ -29,7 +29,8 @@ int led_mosi;
 int led_cs;
 uint32_t led_freq;
 
-#define COLUMNS 256
+#include "display_geometry.h"
+#define COLUMNS VS_DISPLAY_COLUMNS
 #define FASTEST_CREDIBLE_TURN 10000 // if the fan is going over 100 FPS, then I don't believe it, and discard the reading
 
 #define DEBUG_ROTATION 0

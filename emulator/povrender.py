@@ -194,7 +194,7 @@ def decode_vs2_scene(data):
         data,
         4,
     )
-    if version not in (1, 2):
+    if version not in (1, 2, 3):
         return None
     if version < 2:
         tilemap_count = 0
@@ -214,6 +214,7 @@ def decode_vs2_scene(data):
         offset += layer_size
 
     decoded = []
+    sprite_by_slot = {}
     for slot in range(sprite_count):
         if offset + sprite_size > len(data):
             return None
@@ -230,7 +231,7 @@ def decode_vs2_scene(data):
             continue
         if layer is not None:
             mode = layer["mode"]
-        decoded.append({
+        sprite = {
             "slot": slot,
             "x": x_fixed / 256.0,
             "y": y_fixed / 256.0,
@@ -239,9 +240,13 @@ def decode_vs2_scene(data):
             "perspective": mode,
             "flip_x": bool(flags & 0x02),
             "flip_y": bool(flags & 0x04),
-        })
+        }
+        decoded.append(sprite)
+        sprite_by_slot[slot] = sprite
 
     tilemaps = []
+    tilemap_by_slot = {}
+    frames_end = offset + tilemap_count * tilemap_size
     for slot in range(tilemap_count):
         if offset + tilemap_size > len(data):
             return None
@@ -256,13 +261,15 @@ def decode_vs2_scene(data):
         cells = map_columns * map_rows
         if frames_offset + cells > len(data):
             return None
+        if frames_offset + cells > frames_end:
+            frames_end = frames_offset + cells
         if not flags & 0x01:
             continue
         if layer is not None and not layer["visible"]:
             continue
         if layer is not None:
             mode = layer["mode"]
-        tilemaps.append({
+        tilemap = {
             "slot": slot,
             "x": x_fixed / 256.0,
             "y": y_fixed / 256.0,
@@ -274,8 +281,31 @@ def decode_vs2_scene(data):
             "tile_height": tile_height,
             "viewport": (viewport_x, viewport_y, viewport_w, viewport_h),
             "perspective": mode,
-        })
-    return {"sprites": decoded, "tilemaps": tilemaps}
+        }
+        tilemaps.append(tilemap)
+        tilemap_by_slot[slot] = tilemap
+    drawables = []
+    if version == 3:
+        draw_count = sprite_count + tilemap_count
+        if frames_end + draw_count * 2 > len(data):
+            return None
+        for index in range(draw_count):
+            kind = data[frames_end + index * 2]
+            slot = data[frames_end + index * 2 + 1]
+            drawable = sprite_by_slot.get(slot) if kind == 0 else tilemap_by_slot.get(slot) if kind == 1 else None
+            if drawable is None:
+                # Invisible drawables do not need a render entry, but a bad
+                # kind or out-of-range slot is always a malformed payload.
+                if kind not in (0, 1) or (kind == 0 and slot >= sprite_count) or (kind == 1 and slot >= tilemap_count):
+                    return None
+                continue
+            drawables.append((kind, drawable))
+    else:
+        # Legacy payloads used reverse slot drawing, so slot zero stays on
+        # top when the compositor overwrites in this listed order.
+        drawables = ([(1, tilemap) for tilemap in reversed(tilemaps)]
+                     + [(0, sprite) for sprite in reversed(decoded)])
+    return {"sprites": decoded, "tilemaps": tilemaps, "drawables": drawables}
 
 def change_colors(colors):
     # byteswap all longs
@@ -416,6 +446,42 @@ def render_tilemap(pixels, column, tilemap):
             set_pixel(pixels, led, color)
 
 
+def render_vs2_sprite(pixels, column, sprite):
+    x = _floor_coord(sprite["x"])
+    y = _floor_coord(sprite["y"])
+    strip = all_strips.get(sprite["image"])
+    if not strip:
+        return
+    w, h, total_frames, pal_base, pixeldata = _strip_header(strip)
+    frame = sprite["frame"] % total_frames
+    visible_column = get_source_column(x, w, column, sprite.get("flip_x", False))
+    if visible_column == -1:
+        return
+    base = visible_column * h + frame * w * h
+    perspective = sprite["perspective"]
+    flip_y = sprite.get("flip_y", False)
+    if perspective:
+        for dest_y in range(max(y, 0), min(y + h, ROWS)):
+            source_row = dest_y - y
+            if flip_y:
+                source_row = h - 1 - source_row
+            index = pixeldata[base + source_row]
+            if index != TRANSPARENT_INDEX:
+                color = upalette[index + pal_base]
+                set_pixel(pixels, deepspace[dest_y] if perspective == 1 else led_count - 1 - dest_y, color)
+    else:
+        zleds = deepspace[_clamp(255 - y, 0, ROWS - 1)]
+        for led in range(zleds):
+            source_row = led * led_count // zleds
+            if source_row >= h:
+                break
+            if not flip_y:
+                source_row = h - 1 - source_row
+            index = pixeldata[base + source_row]
+            if index != TRANSPARENT_INDEX:
+                set_pixel(pixels, led, upalette[index + pal_base])
+
+
 def step_starfield():
     for (n, (x, y)) in enumerate(starfield):
         y -= 1
@@ -458,6 +524,14 @@ def render(column, vs2_scene=_CURRENT_VS2_SCENE):
             except Exception as e:
                 print(e, len(pixels), y, px)
                 print(y, deepspace)
+
+    if vs2_scene is not None and "drawables" in vs2_scene:
+        for kind, drawable in vs2_scene["drawables"]:
+            if kind == 0:
+                render_vs2_sprite(pixels, column, drawable)
+            else:
+                render_tilemap(pixels, column, drawable)
+        return pixels
 
     scene_sprites = vs2_scene["sprites"] if vs2_scene is not None else None
     use_vs2_renderer = vs2_scene is not None
