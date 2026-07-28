@@ -175,15 +175,15 @@ class MyGame(vs2.Scene):
                                     glyphs=vs2.DIGITS)
 
     def update(self):
-        if joy1.down(LEFT):
+        if joy1.held(LEFT):
             self.ship.x -= 0.5
-        if joy1.down(RIGHT):
+        if joy1.held(RIGHT):
             self.ship.x += 0.5
 
-        if joy1.pressed(A):
+        if joy1.just_pressed(A):
             self.bullets.spawn(x=self.ship.x, y=self.ship.y - 4)
 
-        if joy1.pressed(BACK):
+        if joy1.just_pressed(BACK):
             return self.pop()
 
 
@@ -536,11 +536,11 @@ AssetLimitError: alecu.my_game defines 103 images; this target supports 100
 ```python
 from vs2.controls import *
 
-if joy1.down(LEFT):
+if joy1.held(LEFT):
     ...
-if joy2.pressed(START):
+if joy2.just_pressed(START):
     ...
-if joy1.released(A):
+if joy1.just_released(A):
     ...
 ```
 
@@ -550,14 +550,24 @@ joy1/joy2 fields — and one button namespace: `LEFT`/`RIGHT`/`UP`/`DOWN`,
 `A`/`B`/`X`/`Y`, `START`, `BACK`. The suggested pattern is
 `from vs2.controls import *`: the module's `__all__` is exactly those
 names, so the star import is well-defined and game code reads
-`joy1.down(LEFT)`. Qualified access (`vs2.controls.joy1`,
+`joy1.held(LEFT)`. Qualified access (`vs2.controls.joy1`,
 `vs2.controls.LEFT`) works too.
 
-One method vocabulary — `down` = held now, `pressed`/`released` = this
-tick's transition — applies to both controllers. A thin, allocation-free
-wrapper over the director's existing bitfields: the wire protocol and V1
-surface do not change; V2 code just stops seeing the `is_pressed2` family
-and the wire-protocol "extra" bits.
+One method vocabulary applies to both controllers, in the Godot style:
+`held` = the button is down right now (level), `just_pressed` /
+`just_released` = the transition happened this tick (edge). The mapping
+from V1 is mechanical — `is_pressed` → `held`, `was_pressed` →
+`just_pressed`, `was_released` → `just_released` — and unambiguous in both
+directions: `held` cannot be misread as an edge, `just_*` cannot be
+misread as a level, and no method collides with the `DOWN` constant. In
+today's games, level reads are mostly movement (held directions, held
+accelerate/brake modifiers) and edge reads are fire/confirm/exit and menu
+stepping — but both combine freely with any button, as V1 usage shows.
+
+The implementation is a thin, allocation-free wrapper over the director's
+existing bitfields: the wire protocol and V1 surface do not change; V2
+code just stops seeing the `is_pressed2` family and the wire-protocol
+"extra" bits.
 
 ### Audio
 
@@ -701,7 +711,7 @@ class Game(vs2.Scene):
         self.ship = hud.sprite("ship.png")
 
     def update(self):
-        if joy1.down(LEFT):
+        if joy1.held(LEFT):
             self.ship.x -= 1
 ```
 
@@ -851,7 +861,12 @@ Recorded so the debate doesn't reopen by accident:
   `teardown`; `push`/`pop`/`switch`; controller views are `joy1`/`joy2`
   (matching the wire protocol's field names) and button constants live in
   `vs2.controls`, designed for `from vs2.controls import *` — not in the
-  `vs2` root namespace.
+  `vs2` root namespace. Input methods are Godot-style
+  `held`/`just_pressed`/`just_released`: `down` was rejected for colliding
+  with the `DOWN` constant, and a bare `pressed` edge method was rejected
+  because V1's `is_pressed` means the level — reusing the word with the
+  other meaning inside the same ecosystem is the kind of incoherence this
+  rework removes.
 - **Tilemap cap**: stays 8 until phase 4's measurement; the label workload
   is the argument that will likely move it to 12–16, and the measurement is
   what earns it.
