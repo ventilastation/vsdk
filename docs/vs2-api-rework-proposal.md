@@ -161,6 +161,7 @@ import vs2
 
 ```python
 import vs2
+from vs2.controls import *
 
 
 class MyGame(vs2.Scene):
@@ -174,16 +175,15 @@ class MyGame(vs2.Scene):
                                     glyphs=vs2.DIGITS)
 
     def update(self):
-        pad = vs2.controls.p1
-        if pad.down(vs2.LEFT):
+        if joy1.down(LEFT):
             self.ship.x -= 0.5
-        if pad.down(vs2.RIGHT):
+        if joy1.down(RIGHT):
             self.ship.x += 0.5
 
-        if pad.pressed(vs2.A):
+        if joy1.pressed(A):
             self.bullets.spawn(x=self.ship.x, y=self.ship.y - 4)
 
-        if pad.pressed(vs2.BACK):
+        if joy1.pressed(BACK):
             return self.pop()
 
 
@@ -534,22 +534,30 @@ AssetLimitError: alecu.my_game defines 103 images; this target supports 100
 ### Controls
 
 ```python
-p1, p2 = vs2.controls.p1, vs2.controls.p2
+from vs2.controls import *
 
-if p1.down(vs2.LEFT):
+if joy1.down(LEFT):
     ...
-if p2.pressed(vs2.START):
+if joy2.pressed(START):
     ...
-if p1.released(vs2.A):
+if joy1.released(A):
     ...
 ```
 
-One button namespace (`vs2.LEFT/RIGHT/UP/DOWN`, `vs2.A/B/X/Y`, `vs2.START`,
-`vs2.BACK`) and one method vocabulary (`down` = held now, `pressed` /
-`released` = this tick's transition) for both players. A thin,
-allocation-free wrapper over the director's existing bitfields — the wire
-protocol and V1 surface do not change; V2 code just stops seeing the
-`is_pressed2` family and the wire-protocol "extra" bits.
+`vs2.controls` is a small submodule (making `vs2` a package) holding the
+two controller views — `joy1` and `joy2`, named after the wire protocol's
+joy1/joy2 fields — and one button namespace: `LEFT`/`RIGHT`/`UP`/`DOWN`,
+`A`/`B`/`X`/`Y`, `START`, `BACK`. The suggested pattern is
+`from vs2.controls import *`: the module's `__all__` is exactly those
+names, so the star import is well-defined and game code reads
+`joy1.down(LEFT)`. Qualified access (`vs2.controls.joy1`,
+`vs2.controls.LEFT`) works too.
+
+One method vocabulary — `down` = held now, `pressed`/`released` = this
+tick's transition — applies to both controllers. A thin, allocation-free
+wrapper over the director's existing bitfields: the wire protocol and V1
+surface do not change; V2 code just stops seeing the `is_pressed2` family
+and the wire-protocol "extra" bits.
 
 ### Audio
 
@@ -685,6 +693,7 @@ class Game(Scene):
 
 # after
 import vs2
+from vs2.controls import *
 
 class Game(vs2.Scene):
     def build(self):
@@ -692,7 +701,7 @@ class Game(vs2.Scene):
         self.ship = hud.sprite("ship.png")
 
     def update(self):
-        if vs2.controls.p1.down(vs2.LEFT):
+        if joy1.down(LEFT):
             self.ship.x -= 1
 ```
 
@@ -839,7 +848,10 @@ Recorded so the debate doesn't reopen by accident:
 - **Naming**: `projection`; `sprite_pool` with `spawn`/`despawn` and
   `on_empty=vs2.RECYCLE`; `Image`/`self.image()`; `view_x`/`view_y`;
   `[col, row]` indexing; `overlaps`/`first_overlap`; `build`/`update`/
-  `teardown`; `push`/`pop`/`switch`.
+  `teardown`; `push`/`pop`/`switch`; controller views are `joy1`/`joy2`
+  (matching the wire protocol's field names) and button constants live in
+  `vs2.controls`, designed for `from vs2.controls import *` — not in the
+  `vs2` root namespace.
 - **Tilemap cap**: stays 8 until phase 4's measurement; the label workload
   is the argument that will likely move it to 12–16, and the measurement is
   what earns it.
