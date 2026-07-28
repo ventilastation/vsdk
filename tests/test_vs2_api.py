@@ -134,6 +134,8 @@ class Vs2ApiTests(unittest.TestCase):
         oldest = recycling.pool.spawn(1, 2)
         self.assertIs(recycling.pool.spawn(3, 4), oldest)
         self.assertEqual((oldest.x, oldest.y, len(recycling.pool)), (3, 4, 1))
+        recycling.pool.despawn_all()
+        self.assertEqual((len(recycling.pool), recycling.pool.free), (0, 1))
 
     def test_image_metadata_validates_frames_and_tile_dimensions(self):
         vs2 = self.vs2
@@ -268,19 +270,38 @@ class Vs2ApiTests(unittest.TestCase):
             game = self.enter(Game())
         self.assertEqual(native.order, (game.ship._sprite, game.badge._sprite))
 
+    def test_old_hardware_without_ordered_draw_api_fails_loudly(self):
+        vs2 = self.vs2
+
+        class OldNative:
+            def reset_scene(self): pass
+            def set_active(self, _active): pass
+
+        class Game(vs2.Scene):
+            def build(self):
+                pass
+
+        with mock.patch.object(vs2, "_vs2_backend", return_value=OldNative()):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "this firmware is too old for VS2 revision 2"):
+                self.enter(Game())
+
     def test_limits_are_build_time_diagnostics(self):
         vs2 = self.vs2
 
         class TooMany(vs2.Scene):
             def build(self):
-                layer = self.layer("world")
-                for _ in range(vs2.limits.sprites + 1):
-                    layer.sprite("ship.png")
+                world = self.layer("world")
+                hud = self.layer("hud", projection=vs2.HUD)
+                for _ in range(60):
+                    world.sprite("ship.png")
+                for _ in range(41):
+                    hud.sprite("ship.png")
 
         with self.assertRaises(vs2.ResourceLimitError) as error:
             self.enter(TooMany())
         self.assertIn("sprite 101/100", str(error.exception))
-        self.assertIn("layer world", str(error.exception))
+        self.assertIn("world: 60, hud: 41", str(error.exception))
 
     def test_asset_limit_is_checked_before_build(self):
         vs2 = self.vs2
@@ -295,6 +316,19 @@ class Vs2ApiTests(unittest.TestCase):
         with self.assertRaises(vs2.AssetLimitError) as error:
             self.enter(TooManyImages())
         self.assertIn("defines 101 images; this target supports 100", str(error.exception))
+
+    def test_asset_pack_is_loaded_before_build(self):
+        vs2 = self.vs2
+
+        class Packed(vs2.Scene):
+            asset_pack = "other"
+
+            def build(self):
+                self.layer("world")
+
+        with mock.patch.object(director, "load_rom") as load_rom:
+            self.enter(Packed())
+        load_rom.assert_called_once_with("roms/other.rom")
 
     def test_queued_transition_skips_timers_and_reenters_legacy_scene(self):
         vs2 = self.vs2

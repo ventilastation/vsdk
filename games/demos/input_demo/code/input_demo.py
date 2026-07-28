@@ -5,9 +5,10 @@ from vs2.controls import A, B, BACK, DOWN, LEFT, RIGHT, START, UP, X, Y, joy1, j
 
 
 FONT = "tinyfont_menu.png"
+FONT_WIDTH = 4
 LINE_LENGTH = 21
 LINE_COUNT = 3
-TEXT_X = -(LINE_LENGTH * 4 // 2)
+TEXT_X = -(LINE_LENGTH * FONT_WIDTH // 2)
 
 
 def _marker(pressed, label):

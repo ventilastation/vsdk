@@ -71,7 +71,7 @@ def _idle_ms():
 
 
 class _IdleMs:
-    """Readable integer-like idle duration, evaluated when it is compared."""
+    """Integer-like idle duration, evaluated afresh for each operation."""
 
     def __int__(self):
         return _idle_ms()
@@ -81,6 +81,18 @@ class _IdleMs:
 
     def __repr__(self):
         return str(_idle_ms())
+
+    def __str__(self):
+        return str(_idle_ms())
+
+    def __bool__(self):
+        return bool(_idle_ms())
+
+    def __float__(self):
+        return float(_idle_ms())
+
+    def __hash__(self):
+        return hash(_idle_ms())
 
     def __lt__(self, value):
         return _idle_ms() < value
@@ -96,6 +108,51 @@ class _IdleMs:
 
     def __eq__(self, value):
         return _idle_ms() == value
+
+    def __ne__(self, value):
+        return _idle_ms() != value
+
+    def __add__(self, value):
+        return _idle_ms() + value
+
+    def __radd__(self, value):
+        return value + _idle_ms()
+
+    def __sub__(self, value):
+        return _idle_ms() - value
+
+    def __rsub__(self, value):
+        return value - _idle_ms()
+
+    def __mul__(self, value):
+        return _idle_ms() * value
+
+    def __rmul__(self, value):
+        return value * _idle_ms()
+
+    def __floordiv__(self, value):
+        return _idle_ms() // value
+
+    def __rfloordiv__(self, value):
+        return value // _idle_ms()
+
+    def __mod__(self, value):
+        return _idle_ms() % value
+
+    def __rmod__(self, value):
+        return value % _idle_ms()
+
+    def __truediv__(self, value):
+        return _idle_ms() / value
+
+    def __rtruediv__(self, value):
+        return value / _idle_ms()
+
+    def __neg__(self):
+        return -_idle_ms()
+
+    def __pos__(self):
+        return _idle_ms()
 
 
 idle_ms = _IdleMs()

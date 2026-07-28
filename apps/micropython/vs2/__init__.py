@@ -352,10 +352,20 @@ class Scene(_Scene):
         requested = current + count
         layer_count = getattr(layer, "_" + kind + "_count", 0) + count
         if requested > limit:
+            census = []
+            if kind in ("sprite", "tilemap"):
+                for candidate in self.layers:
+                    candidate_count = getattr(candidate, "_" + kind + "_count", 0)
+                    if candidate is layer:
+                        candidate_count += count
+                    if candidate_count:
+                        census.append("%s: %d" %
+                                      (candidate.name or "unnamed", candidate_count))
             raise ResourceLimitError(
-                "%s layer %s: %s %d/%d (scene %d/%d); reduce the %s budget"
-                % (self.__class__.__name__, getattr(layer, "name", None) or "unnamed",
-                   kind, layer_count, limit, requested, limit, kind)
+                "%s %d/%d in %s%s; reduce the %s budget"
+                % (kind, requested, limit, self.__class__.__name__,
+                   " (" + ", ".join(census) + ")" if census else "",
+                   kind)
             )
         if kind == "sprite":
             self._sprite_count = requested
@@ -409,14 +419,14 @@ class Scene(_Scene):
                     % (_app_slug(), image_count, limits.image_strips)
                 )
             self.build()
+            self._phase = "sealed"
+            self._seal_drawables()
         except Exception:
             self._phase = "closed"
             if backend is not None:
                 backend.set_active(False)
                 backend.reset_scene()
             raise
-        self._phase = "sealed"
-        self._seal_drawables()
         setter = getattr(get_platform().display, "set_starfield", None)
         if setter is not None:
             setter(bool(self.starfield))
@@ -472,8 +482,10 @@ class Scene(_Scene):
         self._payload_drawables = tuple(drawables)
         self._payload_frames_size = frames_size
         backend = _vs2_backend()
-        setter = getattr(backend, "set_draw_order", None) if backend is not None else None
-        if setter is not None:
+        if backend is not None:
+            setter = getattr(backend, "set_draw_order", None)
+            if setter is None:
+                raise RuntimeError("this firmware is too old for VS2 revision 2")
             setter(tuple(native_order))
 
     def call_later(self, delay, callback, *args, **kwargs):
@@ -1109,7 +1121,7 @@ class Label(Tilemap):
         if column < 0 or column >= self.columns:
             raise IndexError("label column out of range")
         text = str(text)
-        remaining = self.columns - column if pad else min(len(str(text)), self.columns - column)
+        remaining = self.columns - column if pad else min(len(text), self.columns - column)
         for index in range(remaining):
             char = text[index] if index < len(text) else None
             value = EMPTY_TILE if char is None else self._glyph(char, int(frame_offset))

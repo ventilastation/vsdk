@@ -28,6 +28,8 @@ def main():
     assert globals()["joy1"] is not globals()["joy2"]
     assert vs2.display.width == 256 and vs2.display.height == 54
     assert int(vs2.controls.idle_ms) >= 0
+    assert vs2.controls.idle_ms // 1000 >= 0
+    assert isinstance(hash(vs2.controls.idle_ms), int)
 
     class Game(vs2.Scene):
         def build(self):
