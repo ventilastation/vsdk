@@ -411,12 +411,15 @@ its own layer above `world` gives the same visual result; a game chooses
 whichever reads better. The renderer must not keep the hard-coded "all
 tilemaps, then all sprites" passes — see "Under the hood".
 
-The API promises *multiple*, not *unbounded*: the native cap of 8 tilemap
-records (labels included) is the starting point. Labels will make tilemaps
-much more common, so the cap likely moves to 12 or 16 — but only after the
-acceptance scene (a scrolling terrain map, several HUD labels, one overlay
-map) is measured for native-record memory and per-column render cost. Each
-record is ~40 bytes, so memory is not the concern; per-column CPU is.
+The API promises *multiple*, not *unbounded*: the budget is 16 tilemap
+records (labels included), doubled from today's native cap of 8 because
+labels make tilemaps the routine drawable — a score, a message line, and a
+debug overlay are already three before any terrain. The matching trim is
+layers, 16 → 8: current games use 2–4, and halving the layer table offsets
+the tilemap growth. Each tilemap record is ~40 bytes, so memory is
+negligible; phase 4's acceptance scene (a scrolling terrain map, several
+HUD labels, one overlay map) validates the per-column render cost with the
+full budget live.
 
 ### Labels: text is a tilemap you write into
 
@@ -602,10 +605,9 @@ tests through one generated definition (not the independently maintained
 copies in `gpu.h`/`gpu.c` today). `vs2.limits` exposes them read-only.
 
 ```text
-layers        16
+layers         8
 sprites      100
-tilemaps       8   (a label counts as one tilemap; cap revisited after
-                    the interleaving acceptance scene is measured)
+tilemaps      16   (a label counts as one tilemap)
 image strips 100
 ```
 
@@ -621,12 +623,12 @@ ResourceLimitError: sprite 101/100 in Vixeous
 ```
 
 ```text
-ResourceLimitError: tilemap 9/8 in MapDemo (labels count as tilemaps);
+ResourceLimitError: tilemap 17/16 in MapDemo (labels count as tilemaps);
   combine cell data into fewer maps or drop a label
 ```
 
 After `build()`, a debug build may print a compact usage line
-(`Vixeous: layers=2/16 sprites=38/100 tilemaps=2/8 strips=9/100`); release
+(`Vixeous: layers=2/8 sprites=38/100 tilemaps=2/16 strips=9/100`); release
 builds allocate nothing for diagnostics unless an error needs formatting.
 
 ## What has to change under the hood
@@ -639,8 +641,9 @@ builds allocate nothing for diagnostics unless an error needs formatting.
   a reference.
 - **A tagged draw-order table, not two hard passes.** Native state gains an
   ordered list of `(kind, record-index)` pairs per layer; the renderer
-  walks layers bottom-up and dispatches per entry. At current caps that is
-  ~108 two-byte entries — negligible next to the existing records — and it
+  walks layers bottom-up and dispatches per entry. At the proposed caps
+  that is ~116 two-byte entries — negligible next to the existing records
+  — and it
   is the only native data-model change required to let a cloud tilemap draw
   over a player sprite. Labels dispatch through the tilemap path; no new
   tag.
@@ -788,8 +791,10 @@ Each phase lands green on the existing suites (`test_vs2_api`,
    resource-census diagnostics. Keep the current two-pass renderer behind an
    adapter so this phase is independently testable.
 3. **Ordered draw table and tilemap cleanup.** Tagged draw-order list in
-   native state and the new payload version; `layer.tilemap()` with
-   inferred tile size, scalar `view_*`, `[col, row]` indexing, `fill()`;
+   native state and the new payload version; native caps move to the
+   agreed budgets (`VS2_MAX_TILEMAPS` 8 → 16, `VS2_MAX_LAYERS` 16 → 8);
+   `layer.tilemap()` with inferred tile size, scalar `view_*`,
+   `[col, row]` indexing, `fill()`;
    FULLSCREEN tilemaps rejected at build; parity fixtures for
    tilemap/sprite/tilemap interleaving, layer order, X wrap, Y clip, and
    overlapping maps on hardware, desktop, and web.
@@ -797,7 +802,7 @@ Each phase lands green on the existing suites (`test_vs2_api`,
    tables, storage-direction reversal, `write()`, `.text`, `set_number()`,
    `frame_offset`. Port `input_demo` and `tutorial_vs2` first — they are
    the acceptance fixtures — and measure the sprite/heap savings and the
-   tilemap-cap headroom on hardware (this measurement decides the cap).
+   per-column cost of a full 16-tilemap scene on hardware.
 5. **Services and app migration.** `vs2.controls`, `vs2.audio`, declarative
    `starfield`, base-output lifecycle; port `mapdemo`, `vixeous`,
    `vyruss_vs2`, `povstress`; add the package API-revision check; remove
@@ -816,7 +821,7 @@ Each phase lands green on the existing suites (`test_vs2_api`,
   in-`update()` GC.
 - Pool spawn/despawn, scalar tilemap scrolling, label writes, control
   reads, and property updates allocate nothing.
-- The 101st sprite, 9th tilemap, 17th layer, and 101st image fail at build
+- The 101st sprite, 17th tilemap, 9th layer, and 101st image fail at build
   time with the census error — identically on hardware, desktop, web, and
   headless tests. No strip id silently wraps; no tilemap is silently
   skipped; no out-of-range frame renders garbage.
@@ -867,9 +872,10 @@ Recorded so the debate doesn't reopen by accident:
   because V1's `is_pressed` means the level — reusing the word with the
   other meaning inside the same ecosystem is the kind of incoherence this
   rework removes.
-- **Tilemap cap**: stays 8 until phase 4's measurement; the label workload
-  is the argument that will likely move it to 12–16, and the measurement is
-  what earns it.
+- **Budgets**: tilemaps go 8 → 16 because labels make tilemaps the routine
+  drawable, and layers go 16 → 8 because current games use 2–4 and the trim
+  offsets the tilemap growth. Phase 4's measurement validates the
+  per-column cost of a full 16-tilemap scene rather than deciding the cap.
 - **Frame validation**: always on (one integer compare per assignment).
 
 ## Open for review
