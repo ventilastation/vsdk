@@ -182,9 +182,6 @@ class MyGame(vs2.Scene):
         if joy1.just_pressed(A):
             self.bullets.spawn(x=self.ship.x, y=self.ship.y - 4)
 
-        if joy1.just_pressed(BACK):
-            return self.pop()
-
 
 def main():
     return MyGame()
@@ -192,7 +189,8 @@ def main():
 
 No `stripes_rom`, no `super().on_enter()`, no `director` import, no numeric
 perspective constants, no tuple viewport, and nothing in `update()` can
-allocate a slot.
+allocate a slot. Even exiting isn't written: the default back button and
+idle timeout (below) return to the launcher on their own.
 
 ### Scene lifecycle
 
@@ -260,6 +258,42 @@ Scene-scoped display effects are declarative:
 class MyGame(vs2.Scene):
     starfield = True    # applied on entry, restored to default on exit
 ```
+
+### Idle timeout and the back button
+
+Two behaviors every V1 app hand-rolls — or forgets — become runtime
+defaults, declared on the scene:
+
+```python
+class MyGame(vs2.Scene):
+    idle_timeout = 30      # seconds without input; None disables
+    back_button = True     # Y or BACK pops the scene; False claims them
+
+    def on_idle(self):     # default implementation: self.pop()
+        self.push(AttractSlideshow())
+```
+
+- **Idle timeout.** After `idle_timeout` seconds without input from any
+  controller, the runtime calls `on_idle()`, whose default queues
+  `self.pop()` — an unattended machine always drifts back to the
+  launcher's attract loop. V1 made this voluntary polling of
+  `director.timedout`: four games wired it into their exit check,
+  ventilagon built its two-stage attract flow on it (the title screen
+  resets the timer and pushes the gallery on timeout), and two jam games
+  simply commented it out. Overriding `on_idle()` covers the ventilagon
+  cases; `vs2.controls.idle_ms` stays readable for exotic ones. V1 also
+  counts only joy1 activity toward idleness (`director.py:579-580`), so a
+  joy2 player "idles out" mid-game; V2 counts any controller.
+- **The back button.** `just_pressed` on `Y` (the wire's fourth face
+  button — V1's `BUTTON_D`) or `BACK` queues `self.pop()`. This replaces
+  the 53 hand-written copies of "D exits the game" across V1 apps, and
+  gives launcher-style menus their back-one-level behavior for free. A
+  scene that wants those buttons for gameplay sets `back_button = False`
+  and remains exitable through the idle timeout and the host home
+  command.
+
+Both fire through the normal transition queue: `teardown()` runs, timers
+are discarded, and the tick's remaining callbacks are skipped.
 
 ### Layers
 
@@ -675,6 +709,24 @@ After `build()`, a debug build may print a compact usage line
 (`Vixeous: layers=2/8 sprites=38/100 tilemaps=2/16 strips=9/100`); release
 builds allocate nothing for diagnostics unless an error needs formatting.
 
+## System escape hatches
+
+Two host-level recovery paths sit above every app, V1 or V2; V2 defines
+how they interact with the scene lifecycle:
+
+- **The home command.** The console's Home/Guide button (Escape in the
+  desktop emulator) sends the text command `exit`, and the director
+  unwinds every scene down to the launcher (`director.py:145-160`).
+  Under V2 that unwind runs through the transition machinery: each
+  scene's `teardown()` runs, timers are discarded, and the launcher's
+  music backstop silences whatever was playing. Apps cannot opt out —
+  this is the recovery path for a stuck game. (Naming trap to avoid: the
+  web emulator maps the keyboard "Home" *key* to Joy2 START, which is
+  unrelated.)
+- **RESYNC.** The wire-level resync sequence hard-resets the board
+  (`director.py:552-561`) — recovery below Python, for when even the
+  director can't be trusted. Unchanged by this proposal.
+
 ## What has to change under the hood
 
 - **A scene arena replaces the module globals.** `_live_sprites`,
@@ -833,6 +885,7 @@ Each phase lands green on the existing suites (`test_vs2_api`,
    globals; `build()`/`update()`/`teardown()` adapters; sealing;
    `layer.sprite()` / `sprite_pool()`; frame/visibility decoupled;
    projection layer-only; queued `push`/`pop`/`switch`; `call_later()`;
+   the idle-timeout and back-button runtime defaults;
    resource-census diagnostics. Keep the current two-pass renderer behind an
    adapter so this phase is independently testable.
 3. **Ordered draw table and tilemap cleanup.** Tagged draw-order list in
@@ -948,6 +1001,13 @@ Recorded so the debate doesn't reopen by accident:
   further game callbacks run that tick (the drain is skipped or stopped),
   and the remaining timers are discarded with the scene. This is the
   deterministic replacement for V1's `raise StopIteration()`.
+- **Idle timeout and the back button are runtime defaults** declared on
+  the scene (`idle_timeout = 30` with an `on_idle()` hook,
+  `back_button = True`), replacing V1's voluntary `director.timedout`
+  polling and the hand-written BUTTON_D exit convention. Defaults on: an
+  installation machine must drift back to the attract loop even when a
+  jam game forgot to handle it. Idleness counts input from any
+  controller, fixing V1's joy1-only wart.
 - **Packages**: no legacy `.vs2` check — the format is alpha with no real
   games packaged. Package metadata gains an integer `api_revision` going
   forward (this rework is revision 2), and the loader rejects mismatches.
