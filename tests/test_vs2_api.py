@@ -3,6 +3,7 @@ import struct
 import sys
 import time
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "apps", "micropython"))
@@ -71,6 +72,13 @@ class Vs2ApiTests(unittest.TestCase):
             (b"music games.test_vs2/theme loop", b""),
             (b"music off", b""),
         ])
+        director.palette_data = bytearray(b"palette")
+        self.vs2.display.apply_palettes()
+        self.assertIs(director.platform.display.palette, director.palette_data)
+
+        exported = {}
+        exec("from vs2.controls import *\nexported = (LEFT, joy1, BACK)", {}, exported)
+        self.assertEqual(exported["exported"][0], 1)
 
     def test_scene_builds_owned_drawables_then_seals(self):
         vs2 = self.vs2
@@ -117,6 +125,16 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertEqual(set(seen), {first, second})
         self.assertEqual((len(game.pool), game.pool.free), (0, 2))
 
+        class Recycling(vs2.Scene):
+            def build(self):
+                self.pool = self.layer("world").sprite_pool(
+                    "ship.png", count=1, on_empty=vs2.RECYCLE)
+
+        recycling = self.enter(Recycling())
+        oldest = recycling.pool.spawn(1, 2)
+        self.assertIs(recycling.pool.spawn(3, 4), oldest)
+        self.assertEqual((oldest.x, oldest.y, len(recycling.pool)), (3, 4, 1))
+
     def test_image_metadata_validates_frames_and_tile_dimensions(self):
         vs2 = self.vs2
 
@@ -154,6 +172,18 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertEqual(list(game.label.cells), [vs2.EMPTY_TILE, 2, 1])
         game.label.set_number(23, width=2, pad="0")
         self.assertEqual(list(game.label.cells)[1:], [3, 2])
+        game.label.text = "12"
+        self.assertEqual(game.label.text, "12")
+        game.label.text += "3"
+        self.assertEqual(game.label.text, "123")
+        game.label.text = " 1"
+        self.assertEqual(game.label.cells[2], vs2.EMPTY_TILE)
+        with self.assertRaises(AttributeError):
+            game.map.columns = 3
+        with self.assertRaises(AttributeError):
+            game.map.cells = bytearray(4)
+        with self.assertRaises(BufferError):
+            game.map.cells.append(1)
 
     def test_payload_v3_preserves_sprite_tilemap_interleaving_and_reuses_buffer(self):
         vs2 = self.vs2
@@ -174,6 +204,70 @@ class Vs2ApiTests(unittest.TestCase):
         game.ship.x = 3
         self.assertIs(vs2.export_scene_payload(game), first)
 
+    def test_layer_order_wins_over_allocation_order_and_layout_is_sealed(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world", projection=vs2.TUNNEL)
+                self.hud = self.layer("hud", projection=vs2.HUD)
+                self.badge = self.hud.sprite("ship.png")
+                self.ship = self.world.sprite("ship.png")
+
+        game = self.enter(Game())
+        payload = vs2.export_scene_payload(game)
+        sprite_offset = 16 + 2 * 8
+        self.assertEqual(payload[sprite_offset], 0)
+        self.assertEqual(payload[sprite_offset + 24], 1)
+        self.assertEqual(payload[-4:], bytes((0, 0, 0, 1)))
+        self.assertIs(game._payload_sprites, game._payload_sprites)
+        self.assertIs(game._payload_drawables, game._payload_drawables)
+
+    def test_native_backend_receives_layer_major_draw_order_after_seal(self):
+        vs2 = self.vs2
+
+        class Record:
+            def set_x_fixed(self, _value): pass
+            def set_y_fixed(self, _value): pass
+            def set_strip(self, _value): pass
+            def set_frame(self, _value): pass
+            def set_perspective(self, _value): pass
+            def set_flags(self, _value): pass
+            def set_layer(self, _value): pass
+            def set_viewport(self, *_values): pass
+
+        class Native:
+            def __init__(self):
+                self.order = None
+
+            class Layer:
+                def __init__(self, **_kwargs): pass
+                def set_mode(self, _value): pass
+                def set_visible(self, _value): pass
+
+            def Sprite(self):
+                return Record()
+
+            def Tilemap(self, **_kwargs):
+                return Record()
+
+            def reset_scene(self): pass
+            def set_active(self, _active): pass
+            def set_draw_order(self, drawables): self.order = drawables
+
+        native = Native()
+
+        class Game(vs2.Scene):
+            def build(self):
+                world = self.layer("world")
+                hud = self.layer("hud", projection=vs2.HUD)
+                self.badge = hud.sprite("ship.png")
+                self.ship = world.sprite("ship.png")
+
+        with mock.patch.object(vs2, "_vs2_backend", return_value=native):
+            game = self.enter(Game())
+        self.assertEqual(native.order, (game.ship._sprite, game.badge._sprite))
+
     def test_limits_are_build_time_diagnostics(self):
         vs2 = self.vs2
 
@@ -186,6 +280,21 @@ class Vs2ApiTests(unittest.TestCase):
         with self.assertRaises(vs2.ResourceLimitError) as error:
             self.enter(TooMany())
         self.assertIn("sprite 101/100", str(error.exception))
+        self.assertIn("layer world", str(error.exception))
+
+    def test_asset_limit_is_checked_before_build(self):
+        vs2 = self.vs2
+        stripes.clear()
+        for index in range(vs2.limits.image_strips + 1):
+            stripes["image%d.png" % index] = index
+
+        class TooManyImages(vs2.Scene):
+            def build(self):
+                raise AssertionError("build must not run with an oversized asset bank")
+
+        with self.assertRaises(vs2.AssetLimitError) as error:
+            self.enter(TooManyImages())
+        self.assertIn("defines 101 images; this target supports 100", str(error.exception))
 
     def test_queued_transition_skips_timers_and_reenters_legacy_scene(self):
         vs2 = self.vs2
@@ -207,6 +316,109 @@ class Vs2ApiTests(unittest.TestCase):
         self.enter(Game())
         director.step_once()
         self.assertEqual(calls, ["launcher", "update", "launcher"])
+
+    def test_idle_back_switch_and_timer_defaults(self):
+        vs2 = self.vs2
+        calls = []
+
+        class Replacement(vs2.Scene):
+            def build(self):
+                calls.append("replacement")
+
+        class Game(vs2.Scene):
+            idle_timeout = 0
+
+            def build(self):
+                self.layer("world").sprite("ship.png")
+
+            def on_idle(self):
+                calls.append("idle")
+
+        game = self.enter(Game())
+        self.assertGreaterEqual(int(vs2.controls.idle_ms), 0)
+        game._run_defaults()
+        self.assertEqual(calls, ["idle"])
+        game._pending_transition = None
+        game.idle_timeout = None
+        director.extra_buttons = 0x08
+        director.last_extra_buttons = 0
+        game._run_defaults()
+        self.assertEqual(game._pending_transition[0], "pop")
+        game._pending_transition = None
+
+        vs2.audio.music("theme", loop=True)
+        game.switch(Replacement())
+        game._commit_transition()
+        self.assertIsInstance(director.scene_stack[-1], Replacement)
+        self.assertNotIn((b"music off", b""), director.platform.comms.sent[-1:])
+
+    def test_timers_sort_across_ticks_wraparound(self):
+        vs2 = self.vs2
+        calls = []
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.layer("world").sprite("ship.png")
+
+        game = self.enter(Game())
+
+        class WrappedTicks:
+            now = 95
+
+            @classmethod
+            def ticks_ms(cls):
+                return cls.now
+
+            @staticmethod
+            def ticks_add(value, delta):
+                return (value + delta) % 100
+
+            @staticmethod
+            def ticks_diff(end, start):
+                value = (end - start) % 100
+                return value - 100 if value >= 50 else value
+
+        original_utime = vs2.utime
+        vs2.utime = WrappedTicks
+        try:
+            game.call_later(20, lambda: calls.append("later"))
+            game.call_later(5, lambda: calls.append("first"))
+            WrappedTicks.now = 0
+            game._drain_timers()
+            self.assertEqual(calls, ["first"])
+            WrappedTicks.now = 15
+            game._drain_timers()
+            self.assertEqual(calls, ["first", "later"])
+        finally:
+            vs2.utime = original_utime
+
+    def test_closed_drawables_reject_mutation_and_y_is_not_circular(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                layer = self.layer("world")
+                self.one = layer.sprite("ship.png", x=0, y=8)
+                self.two = layer.sprite("ship.png", x=250, y=-8)
+                self.three = layer.sprite("ship.png", x=1, y=8)
+                self.map = layer.tilemap("terrain.png", columns=1, rows=1)
+
+        game = self.enter(Game())
+        self.assertFalse(game.one.overlaps(game.two))
+        self.assertIs(game.one.first_overlap((game.two, game.three)), game.three)
+        director.pop()
+        with self.assertRaises(vs2.SceneSealedError):
+            game.one.x = 42
+        with self.assertRaises(vs2.SceneSealedError):
+            game.map.view_y = 2
+
+    def test_api_revision_gate_rejects_unversioned_vs2_before_import(self):
+        from ventilastation import app_loader
+
+        with mock.patch.object(app_loader, "app_exists", return_value=True), \
+             mock.patch.object(app_loader, "app_metadata", return_value=("test.game", "vs2", None)):
+            with self.assertRaisesRegex(ImportError, "needs VS2 API revision 2"):
+                app_loader.import_app_module("test.game")
 
     def test_v1_and_v2_still_cannot_mix(self):
         reset_runtime()

@@ -72,7 +72,7 @@ class MapDemoTests(unittest.TestCase):
 
         self.assertEqual(scene._vs_declared_api, "vs2")
         self.assertEqual(len(scene.map_data), MAP_COLUMNS * MAP_ROWS)
-        self.assertIs(scene.map.frames, scene.map_data)
+        self.assertIs(scene.map.cells, scene.map_data)
 
         payload = vs2.export_scene_payload(scene)
         self.assertEqual(payload[4], 3)

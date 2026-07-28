@@ -198,6 +198,31 @@ int main(void) {
         CHECK_EQ(render_led(&scene, 10, 11), 10, "tilemap shows below the sprite");
     }
 
+    /* The sealed V2 draw table is the board path: it must honor tagged
+     * sprite/tilemap order instead of falling back to the legacy two passes. */
+    {
+        vs2_tilemap_t tilemap = default_tilemap();
+        const vs2_tilemap_t* tilemap_records[] = { &tilemap };
+        vs2_sprite_t sprite = {
+            .layer = 255, .image_strip = 8, .frame = 0, .mode = 2,
+            .flags = 0x01, .x = 10 * 256, .y = 40 * 256,
+        };
+        const vs2_sprite_t* sprite_records[] = { &sprite };
+        vs2_draw_ref_t order[] = {
+            { .kind = VS2_DRAW_TILEMAP, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+        };
+        vs2_scene_t scene = tilemap_scene(tilemap_records, 1);
+        scene.sprite_count = 1;
+        scene.sprites = sprite_records;
+        scene.draw_order = order;
+        scene.draw_order_count = 2;
+        CHECK_EQ(render_led(&scene, 10, 13), 30, "native draw table sprite on top");
+        order[0].kind = VS2_DRAW_SPRITE;
+        order[1].kind = VS2_DRAW_TILEMAP;
+        CHECK_EQ(render_led(&scene, 10, 13), 10, "native draw table tilemap on top");
+    }
+
     /* Layer visibility and mode override */
     {
         vs2_tilemap_t tilemap = default_tilemap();

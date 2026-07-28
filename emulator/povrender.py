@@ -446,20 +446,18 @@ def render_tilemap(pixels, column, tilemap):
             set_pixel(pixels, led, color)
 
 
-def render_vs2_sprite(pixels, column, sprite):
-    x = _floor_coord(sprite["x"])
-    y = _floor_coord(sprite["y"])
-    strip = all_strips.get(sprite["image"])
+def render_sprite(pixels, column, x, y, image, frame, perspective, flip_x=False, flip_y=False):
+    x = _floor_coord(x)
+    y = _floor_coord(y)
+    strip = all_strips.get(image)
     if not strip:
         return
     w, h, total_frames, pal_base, pixeldata = _strip_header(strip)
-    frame = sprite["frame"] % total_frames
-    visible_column = get_source_column(x, w, column, sprite.get("flip_x", False))
+    frame %= total_frames
+    visible_column = get_source_column(x, w, column, flip_x)
     if visible_column == -1:
         return
     base = visible_column * h + frame * w * h
-    perspective = sprite["perspective"]
-    flip_y = sprite.get("flip_y", False)
     if perspective:
         for dest_y in range(max(y, 0), min(y + h, ROWS)):
             source_row = dest_y - y
@@ -528,85 +526,18 @@ def render(column, vs2_scene=_CURRENT_VS2_SCENE):
     if vs2_scene is not None and "drawables" in vs2_scene:
         for kind, drawable in vs2_scene["drawables"]:
             if kind == 0:
-                render_vs2_sprite(pixels, column, drawable)
+                render_sprite(pixels, column, drawable["x"], drawable["y"],
+                              drawable["image"], drawable["frame"], drawable["perspective"],
+                              drawable.get("flip_x", False), drawable.get("flip_y", False))
             else:
                 render_tilemap(pixels, column, drawable)
         return pixels
 
-    scene_sprites = vs2_scene["sprites"] if vs2_scene is not None else None
-    use_vs2_renderer = vs2_scene is not None
-    if use_vs2_renderer and vs2_scene["tilemaps"]:
-        # first slice: all tilemaps draw behind all sprites
-        for tilemap in sorted(vs2_scene["tilemaps"], key=lambda t: t["slot"], reverse=True):
-            render_tilemap(pixels, column, tilemap)
-    if scene_sprites is None:
-        # sprite 0 is drawn on top of all the others
-        scene_sprites = []
-        for n in range(99, -1, -1):
-            x, y, image, frame, perspective = unpack("BBBBb", spritedata[n*5:n*5+5])
-            if frame == 255:
-                continue
-            scene_sprites.append({
-                "slot": n,
-                "x": x,
-                "y": y,
-                "image": image,
-                "frame": frame,
-                "perspective": perspective,
-                "flip_x": False,
-                "flip_y": False,
-            })
-    else:
-        scene_sprites = sorted(scene_sprites, key=lambda sprite: sprite["slot"], reverse=True)
-
-    for sprite in scene_sprites:
-        x = _floor_coord(sprite["x"]) if use_vs2_renderer else int(sprite["x"])
-        y = _floor_coord(sprite["y"]) if use_vs2_renderer else int(sprite["y"])
-        image = sprite["image"]
-        frame = sprite["frame"]
-        perspective = sprite["perspective"]
-        flip_x = sprite.get("flip_x", False)
-        flip_y = sprite.get("flip_y", False)
-
-        strip = all_strips.get(image)
-        if not strip:
-            continue
-        w, h, total_frames, pal_base, pixeldata = _strip_header(strip)
-
-        frame %= total_frames
-
-        visible_column = get_source_column(x, w, column, flip_x)
-        if visible_column != -1:
-            base = visible_column * h + (frame * w * h)
-            if perspective:
-                y_start = max(y, 0)
-                y_end = min(y + h, ROWS)
-
-                for dest_y in range(y_start, y_end):
-                    source_row = dest_y - y
-                    if flip_y:
-                        source_row = h - 1 - source_row
-                    index = pixeldata[base + source_row]
-                    if index != TRANSPARENT_INDEX:
-                        color = upalette[index + pal_base]
-                        if perspective == 1:
-                            led = deepspace[dest_y]
-                        else:
-                            led = led_count - 1 - dest_y
-                        set_pixel(pixels, led, color)
-            else:
-                zleds = deepspace[_clamp(255 - y, 0, ROWS - 1)]
-
-                for led in range(zleds):
-                    source_row = led * led_count // zleds
-                    if source_row >= h:
-                        break
-                    if not flip_y:
-                        source_row = h - 1 - source_row
-                    index = pixeldata[base + source_row]
-                    if index != TRANSPARENT_INDEX:
-                        color = upalette[index + pal_base]
-                        set_pixel(pixels, led, color)
+    # Legacy sprite zero is drawn on top of all the other slots.
+    for n in range(99, -1, -1):
+        x, y, image, frame, perspective = unpack("BBBBb", spritedata[n*5:n*5+5])
+        if frame != 255:
+            render_sprite(pixels, column, x, y, image, frame, perspective)
 
     return pixels
 

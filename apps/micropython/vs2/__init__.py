@@ -6,7 +6,6 @@ once, then mutates it without allocating renderer records while it runs.
 """
 
 import struct
-import sys
 import utime
 
 from ventilastation import api_guard
@@ -53,6 +52,10 @@ class SceneSealedError(RuntimeError):
 
 
 class ResourceLimitError(RuntimeError):
+    pass
+
+
+class AssetLimitError(ResourceLimitError):
     pass
 
 
@@ -171,71 +174,7 @@ class _BaseControl:
 base = _BaseControl()
 
 
-class _Controller:
-    def __init__(self, player):
-        self.player = player
-
-    def _mask(self, button):
-        return button[0] if isinstance(button, tuple) else button
-
-    def _extra(self, button):
-        if not isinstance(button, tuple):
-            return 0
-        return button[self.player]
-
-    def held(self, button):
-        mask = self._mask(button)
-        extra = self._extra(button)
-        if self.player == 1:
-            return bool((director.buttons & mask) or (director.extra_buttons & extra))
-        return bool((director.buttons2 & mask) or (director.extra_buttons & extra))
-
-    def just_pressed(self, button):
-        mask = self._mask(button)
-        extra = self._extra(button)
-        if self.player == 1:
-            return bool(((director.buttons & mask) and not (director.last_buttons & mask))
-                        or ((director.extra_buttons & extra) and not (director.last_extra_buttons & extra)))
-        return bool(((director.buttons2 & mask) and not (director.last_buttons2 & mask))
-                    or ((director.extra_buttons & extra) and not (director.last_extra_buttons & extra)))
-
-    def just_released(self, button):
-        mask = self._mask(button)
-        extra = self._extra(button)
-        if self.player == 1:
-            return bool((not (director.buttons & mask) and (director.last_buttons & mask))
-                        or (not (director.extra_buttons & extra) and (director.last_extra_buttons & extra)))
-        return bool((not (director.buttons2 & mask) and (director.last_buttons2 & mask))
-                    or (not (director.extra_buttons & extra) and (director.last_extra_buttons & extra)))
-
-
-class _Controls:
-    LEFT = 0x01
-    RIGHT = 0x02
-    UP = 0x04
-    DOWN = 0x08
-    A = 0x10
-    B = 0x20
-    X = 0x40
-    # The high bit also mirrors Y for V1 compatibility.  The extra bit is
-    # included so the semantic V2 value remains correct on both controllers.
-    Y = (0x80, 0x01, 0x02)
-    START = (0, 0x04, 0x10)
-    BACK = (0, 0x08, 0x20)
-    joy1 = _Controller(1)
-    joy2 = _Controller(2)
-    __all__ = ("joy1", "joy2", "LEFT", "RIGHT", "UP", "DOWN", "A", "B",
-               "X", "Y", "START", "BACK")
-
-
-controls = _Controls()
-# ``vs2`` is kept as one frozen-friendly source file.  Registering this small
-# module object provides the documented ``from vs2.controls import ...`` API
-# without making the board filesystem package layout more fragile.
-try:
-    sys.modules["vs2.controls"] = controls
-except Exception:
-    pass
+from . import controls
 
 
 def _app_slug():
@@ -356,7 +295,7 @@ def _resolve_image(value):
     return Image(value, strip, metadata)
 
 
-def _intersects(x1, width1, x2, width2):
+def _intersects_circular(x1, width1, x2, width2):
     delta = min(x1, x2)
     x1 = (x1 - delta + display.width // 2) % display.width
     x2 = (x2 - delta + display.width // 2) % display.width
@@ -381,6 +320,10 @@ class Scene(_Scene):
         self._sprite_count = 0
         self._tilemap_count = 0
         self._image_cache = {}
+        self._payload_sprites = ()
+        self._payload_tilemaps = ()
+        self._payload_drawables = ()
+        self._payload_frames_size = 0
 
     def build(self):
         pass
@@ -407,16 +350,19 @@ class Scene(_Scene):
             current = len(self.layers)
             limit = limits.layers
         requested = current + count
+        layer_count = getattr(layer, "_" + kind + "_count", 0) + count
         if requested > limit:
             raise ResourceLimitError(
-                "%s %d/%d in %s (%s); reduce the %s budget"
-                % (kind, requested, limit, self.__class__.__name__,
-                   getattr(layer, "name", None) or "scene", kind)
+                "%s layer %s: %s %d/%d (scene %d/%d); reduce the %s budget"
+                % (self.__class__.__name__, getattr(layer, "name", None) or "unnamed",
+                   kind, layer_count, limit, requested, limit, kind)
             )
         if kind == "sprite":
             self._sprite_count = requested
         elif kind == "tilemap":
             self._tilemap_count = requested
+        if kind in ("sprite", "tilemap"):
+            setattr(layer, "_" + kind + "_count", layer_count)
 
     def image(self, value):
         if isinstance(value, Image):
@@ -427,9 +373,7 @@ class Scene(_Scene):
             self._image_cache[value] = cached
         return cached
 
-    def layer(self, name=None, projection=TUNNEL, visible=True, **legacy):
-        if "mode" in legacy:
-            projection = legacy["mode"]
+    def layer(self, name=None, projection=TUNNEL, visible=True):
         self._require_build("layer")
         self._reserve("layer", 1, self)
         layer = Layer(self, name, projection, visible)
@@ -444,6 +388,10 @@ class Scene(_Scene):
         self._sprite_count = 0
         self._tilemap_count = 0
         self._image_cache.clear()
+        self._payload_sprites = ()
+        self._payload_tilemaps = ()
+        self._payload_drawables = ()
+        self._payload_frames_size = 0
         if backend is not None:
             backend.reset_scene()
             backend.set_active(True)
@@ -454,6 +402,12 @@ class Scene(_Scene):
             pack = self.asset_pack or getattr(self, "_vs_api_slug", None)
             if pack:
                 director.load_rom("roms/" + pack + ".rom")
+            image_count = len(stripes)
+            if image_count > limits.image_strips:
+                raise AssetLimitError(
+                    "%s defines %d images; this target supports %d"
+                    % (_app_slug(), image_count, limits.image_strips)
+                )
             self.build()
         except Exception:
             self._phase = "closed"
@@ -462,6 +416,7 @@ class Scene(_Scene):
                 backend.reset_scene()
             raise
         self._phase = "sealed"
+        self._seal_drawables()
         setter = getattr(get_platform().display, "set_starfield", None)
         if setter is not None:
             setter(bool(self.starfield))
@@ -476,6 +431,10 @@ class Scene(_Scene):
             self._clear_drawables()
             self._vs2_payload = None
             self._image_cache.clear()
+            self._payload_sprites = ()
+            self._payload_tilemaps = ()
+            self._payload_drawables = ()
+            self._payload_frames_size = 0
             self._phase = "closed"
             setter = getattr(get_platform().display, "set_starfield", None)
             if setter is not None:
@@ -490,12 +449,44 @@ class Scene(_Scene):
             layer._close()
         del self.layers[:]
 
+    def _seal_drawables(self):
+        """Freeze render topology once; export and native rendering reuse it."""
+        sprites = []
+        tilemaps = []
+        drawables = []
+        native_order = []
+        frames_size = 0
+        for layer_index, layer in enumerate(self.layers):
+            for drawable in layer._drawables:
+                if isinstance(drawable, Sprite):
+                    sprites.append((drawable, layer_index))
+                    drawables.append((DRAW_SPRITE, len(sprites) - 1))
+                    native_order.append(drawable._sprite)
+                else:
+                    tilemaps.append((drawable, layer_index))
+                    drawables.append((DRAW_TILEMAP, len(tilemaps) - 1))
+                    native_order.append(drawable._tilemap)
+                    frames_size += len(drawable.cells)
+        self._payload_sprites = tuple(sprites)
+        self._payload_tilemaps = tuple(tilemaps)
+        self._payload_drawables = tuple(drawables)
+        self._payload_frames_size = frames_size
+        backend = _vs2_backend()
+        setter = getattr(backend, "set_draw_order", None) if backend is not None else None
+        if setter is not None:
+            setter(tuple(native_order))
+
     def call_later(self, delay, callback, *args, **kwargs):
         if self._phase not in ("building", "sealed"):
             raise SceneSealedError("call_later() requires a building or running V2 scene")
         when = utime.ticks_add(utime.ticks_ms(), int(delay))
-        self.pending_calls.append((when, callback, args, kwargs))
-        self.pending_calls.sort(key=lambda entry: entry[0])
+        entry = (when, callback, args, kwargs)
+        for index, queued in enumerate(self.pending_calls):
+            if utime.ticks_diff(when, queued[0]) < 0:
+                self.pending_calls.insert(index, entry)
+                break
+        else:
+            self.pending_calls.append(entry)
 
     def _queue_transition(self, kind, target=None):
         if self._pending_transition is not None:
@@ -521,7 +512,8 @@ class Scene(_Scene):
                                  or controls.joy1.just_pressed(controls.BACK)):
             self.pop()
             return
-        if self.idle_timeout is not None and director.timedout:
+        if (self.idle_timeout is not None
+                and int(controls.idle_ms) >= int(self.idle_timeout) * 1000):
             self.on_idle()
 
     def _drain_timers(self):
@@ -544,8 +536,7 @@ class Scene(_Scene):
         if kind == "push":
             director.push(target)
         elif kind == "switch":
-            director.pop()
-            director.push(target)
+            director.switch(target)
         else:
             director.pop()
 
@@ -567,10 +558,15 @@ class Layer:
         self._projection = _projection(projection)
         self._visible = bool(visible)
         self._drawables = []
+        self._closed = False
+        self._sprite_count = 0
+        self._tilemap_count = 0
         backend = _vs2_backend()
         self._layer = backend.Layer(mode=self._projection, visible=self._visible) if backend else None
 
     def _require_build(self, method):
+        if self._closed:
+            raise SceneSealedError("%s belongs to a closed V2 scene" % (method,))
         self.scene._require_build(method)
 
     def _close(self):
@@ -580,6 +576,7 @@ class Layer:
         del self._drawables[:]
         self.scene = None
         self._layer = None
+        self._closed = True
 
     @property
     def projection(self):
@@ -587,6 +584,7 @@ class Layer:
 
     @projection.setter
     def projection(self, value):
+        self._require_open("projection")
         self._projection = _projection(value)
         if self._layer is not None:
             self._layer.set_mode(self._projection)
@@ -597,6 +595,7 @@ class Layer:
 
     @visible.setter
     def visible(self, value):
+        self._require_open("visible")
         self._visible = bool(value)
         if self._layer is not None:
             self._layer.set_visible(self._visible)
@@ -608,6 +607,10 @@ class Layer:
     @property
     def tilemaps(self):
         return [drawable for drawable in self._drawables if isinstance(drawable, Tilemap)]
+
+    def _require_open(self, field):
+        if self._closed:
+            raise SceneSealedError("cannot change %s on a closed V2 layer" % field)
 
     def sprite(self, image, x=0, y=0, frame=0, visible=True, flip_x=False, flip_y=False):
         self._require_build("sprite")
@@ -683,6 +686,10 @@ class Sprite:
         self._set_frame(frame)
         self._sync_all()
 
+    def _require_open(self, field):
+        if self._closed:
+            raise SceneSealedError("cannot change %s on a sprite from a closed V2 scene" % field)
+
     def _sync_all(self):
         self._sprite.set_strip(self._image._strip)
         if self._uses_fixed_coords:
@@ -724,6 +731,7 @@ class Sprite:
 
     @image.setter
     def image(self, value):
+        self._require_open("image")
         image = self._layer.scene.image(value)
         self._image = image
         if self._frame >= image.frames:
@@ -737,6 +745,7 @@ class Sprite:
 
     @x.setter
     def x(self, value):
+        self._require_open("x")
         self._x = value
         if self._uses_fixed_coords:
             self._sprite.set_x_fixed(_fixed_8_8(value))
@@ -749,6 +758,7 @@ class Sprite:
 
     @y.setter
     def y(self, value):
+        self._require_open("y")
         self._y = value
         if self._uses_fixed_coords:
             self._sprite.set_y_fixed(_fixed_8_8(value))
@@ -761,6 +771,7 @@ class Sprite:
 
     @frame.setter
     def frame(self, value):
+        self._require_open("frame")
         self._set_frame(value)
         self._sync_frame()
 
@@ -770,6 +781,7 @@ class Sprite:
 
     @visible.setter
     def visible(self, value):
+        self._require_open("visible")
         self._visible = bool(value)
         self._sync_flags()
         self._sync_frame()
@@ -780,6 +792,7 @@ class Sprite:
 
     @flip_x.setter
     def flip_x(self, value):
+        self._require_open("flip_x")
         self._flip_x = bool(value)
         self._sync_flags()
 
@@ -789,6 +802,7 @@ class Sprite:
 
     @flip_y.setter
     def flip_y(self, value):
+        self._require_open("flip_y")
         self._flip_y = bool(value)
         self._sync_flags()
 
@@ -807,8 +821,9 @@ class Sprite:
         self.visible = False
 
     def overlaps(self, other):
-        return _intersects(self.x, self.width, other.x, other.width) and _intersects(
-            self.y, self.height, other.y, other.height)
+        return (_intersects_circular(self.x, self.width, other.x, other.width)
+                and self.y < other.y + other.height
+                and self.y + self.height > other.y)
 
     def first_overlap(self, sprites):
         for other in sprites:
@@ -903,27 +918,32 @@ class Tilemap:
         self._layer = layer
         self._closed = False
         self._image = image
-        self.columns = columns
-        self.rows = rows
-        self.tile_width = image.width
-        self.tile_height = image.height
-        self.cells = cells
+        self._columns = columns
+        self._rows = rows
+        self._tile_width = image.width
+        self._tile_height = image.height
+        self._cells = cells if isinstance(cells, bytearray) else bytearray(cells)
+        self._cells_view = memoryview(self._cells)
         self._x = x
         self._y = y
         self._view_x = int(view_x)
         self._view_y = int(view_y)
-        self.view_width = int(view_width if view_width is not None else columns * image.width)
-        self.view_height = int(view_height if view_height is not None else rows * image.height)
-        if self._view_x < 0 or self._view_y < 0 or self.view_width < 1 or self.view_height < 1:
+        self._view_width = int(view_width if view_width is not None else columns * image.width)
+        self._view_height = int(view_height if view_height is not None else rows * image.height)
+        if self._view_x < 0 or self._view_y < 0 or self._view_width < 1 or self._view_height < 1:
             raise ValueError("invalid tilemap view")
         self._visible = bool(visible)
         backend = _vs2_backend()
         self._tilemap = None
         if backend is not None and hasattr(backend, "Tilemap"):
             self._tilemap = backend.Tilemap(
-                strip=image._strip, frames=cells, columns=columns, rows=rows,
+                strip=image._strip, frames=self._cells_view, columns=columns, rows=rows,
                 tile_width=image.width, tile_height=image.height)
         self._sync_all()
+
+    def _require_open(self, field):
+        if self._closed:
+            raise SceneSealedError("cannot change %s on a tilemap from a closed V2 scene" % field)
 
     @property
     def layer(self):
@@ -934,10 +954,27 @@ class Tilemap:
         return self._image
 
     @property
-    def frames(self):
-        # Read-only compatibility alias for renderer tooling.  V2 game code
-        # uses ``cells``.
-        return self.cells
+    def columns(self):
+        return self._columns
+
+    @property
+    def rows(self):
+        return self._rows
+
+    @property
+    def tile_width(self):
+        return self._tile_width
+
+    @property
+    def tile_height(self):
+        return self._tile_height
+
+    @property
+    def cells(self):
+        # Keeping an exported memoryview alive makes CPython and MicroPython
+        # reject bytearray resizing, while callers that supplied a bytearray
+        # retain its exact identity for zero-copy bulk updates.
+        return self._cells
 
     @property
     def x(self):
@@ -945,6 +982,7 @@ class Tilemap:
 
     @x.setter
     def x(self, value):
+        self._require_open("x")
         self._x = value
         if self._tilemap is not None:
             self._tilemap.set_x_fixed(_fixed_8_8(value))
@@ -955,6 +993,7 @@ class Tilemap:
 
     @y.setter
     def y(self, value):
+        self._require_open("y")
         self._y = value
         if self._tilemap is not None:
             self._tilemap.set_y_fixed(_fixed_8_8(value))
@@ -965,6 +1004,7 @@ class Tilemap:
 
     @view_x.setter
     def view_x(self, value):
+        self._require_open("view_x")
         self._view_x = int(value)
         self._sync_view()
 
@@ -974,8 +1014,17 @@ class Tilemap:
 
     @view_y.setter
     def view_y(self, value):
+        self._require_open("view_y")
         self._view_y = int(value)
         self._sync_view()
+
+    @property
+    def view_width(self):
+        return self._view_width
+
+    @property
+    def view_height(self):
+        return self._view_height
 
     @property
     def visible(self):
@@ -983,6 +1032,7 @@ class Tilemap:
 
     @visible.setter
     def visible(self, value):
+        self._require_open("visible")
         self._visible = bool(value)
         if self._tilemap is not None:
             self._tilemap.set_flags(FLAG_VISIBLE if self._visible else 0)
@@ -1000,13 +1050,14 @@ class Tilemap:
     def _sync_view(self):
         if self._tilemap is not None:
             self._tilemap.set_viewport(self._view_x, self._view_y,
-                                       self.view_width, self.view_height)
+                                       self._view_width, self._view_height)
 
     def __getitem__(self, position):
         column, row = position
         return self.cells[self._cell_index(column, row)]
 
     def __setitem__(self, position, value):
+        self._require_open("cells")
         self.cells[self._cell_index(*position)] = int(value)
 
     def _cell_index(self, column, row):
@@ -1017,6 +1068,7 @@ class Tilemap:
         return row * self.columns + column
 
     def fill(self, value):
+        self._require_open("cells")
         value = int(value)
         for index in range(len(self.cells)):
             self.cells[index] = value
@@ -1036,6 +1088,8 @@ class Label(Tilemap):
                          0, 0, visible)
 
     def _glyph(self, char, frame_offset):
+        if char == " " and self._glyphs is None:
+            return EMPTY_TILE
         if self._glyphs is None:
             value = ord(char)
         else:
@@ -1047,6 +1101,7 @@ class Label(Tilemap):
         return value if 0 <= value < self.image.frames else EMPTY_TILE
 
     def write(self, column, row, text, frame_offset=0, pad=True):
+        self._require_open("cells")
         column = int(column)
         row = int(row)
         if row < 0 or row >= self.rows:
@@ -1066,7 +1121,18 @@ class Label(Tilemap):
     def text(self):
         if self.rows != 1:
             raise AttributeError("multi-line labels have no text property")
-        return ""
+        chars = []
+        for column in range(self.columns):
+            frame = self.cells[self.columns - 1 - column]
+            if frame == EMPTY_TILE:
+                chars.append(" ")
+            elif self._glyphs is None:
+                chars.append(chr(frame))
+            elif frame < len(self._glyphs):
+                chars.append(self._glyphs[frame])
+            else:
+                chars.append(" ")
+        return "".join(chars).rstrip()
 
     @text.setter
     def text(self, value):
@@ -1110,24 +1176,15 @@ def export_scene_payload(scene=None):
     _claim()
     if scene is None:
         return bytearray()
+    if scene._phase != "sealed":
+        raise SceneSealedError("cannot export a scene before build() seals it")
     layers = scene.layers
-    sprites = []
-    tilemaps = []
-    drawables = []
-    for layer_index, layer in enumerate(layers):
-        for drawable in layer._drawables:
-            if isinstance(drawable, Sprite):
-                sprites.append(drawable)
-                drawables.append((DRAW_SPRITE, len(sprites) - 1, layer_index))
-            else:
-                tilemaps.append(drawable)
-                drawables.append((DRAW_TILEMAP, len(tilemaps) - 1, layer_index))
-    frames_size = 0
-    for tilemap in tilemaps:
-        frames_size += len(tilemap.cells)
+    sprites = scene._payload_sprites
+    tilemaps = scene._payload_tilemaps
+    drawables = scene._payload_drawables
     size = (PAYLOAD_HEADER_SIZE + len(layers) * PAYLOAD_LAYER_SIZE
             + len(sprites) * PAYLOAD_SPRITE_SIZE + len(tilemaps) * PAYLOAD_TILEMAP_SIZE
-            + frames_size + len(drawables) * PAYLOAD_DRAW_REF_SIZE)
+            + scene._payload_frames_size + len(drawables) * PAYLOAD_DRAW_REF_SIZE)
     payload = _payload_buffer(scene, size)
     struct.pack_into("<4sBBBBHHHH", payload, 0, PAYLOAD_MAGIC, PAYLOAD_VERSION,
                      len(layers), len(sprites), len(tilemaps), PAYLOAD_HEADER_SIZE,
@@ -1137,16 +1194,14 @@ def export_scene_payload(scene=None):
         struct.pack_into("<BBBBBBBB", payload, offset, index, layer.projection,
                          FLAG_VISIBLE if layer.visible else 0, 0, 0, 0, 0, 0)
         offset += PAYLOAD_LAYER_SIZE
-    for sprite in sprites:
-        layer_index = layers.index(sprite.layer)
+    for sprite, layer_index in sprites:
         struct.pack_into("<BBBBBBhhii", payload, offset, layer_index,
                          sprite.image._strip, sprite.frame, sprite.layer.projection,
                          _sprite_flags(sprite), 0, 0, 0, _fixed_8_8(sprite.x),
                          _fixed_8_8(sprite.y))
         offset += PAYLOAD_SPRITE_SIZE
     cells_offset = offset + len(tilemaps) * PAYLOAD_TILEMAP_SIZE
-    for tilemap in tilemaps:
-        layer_index = layers.index(tilemap.layer)
+    for tilemap, layer_index in tilemaps:
         struct.pack_into("<BBBBHHHHHHHHiiI", payload, offset, layer_index,
                          tilemap.image._strip, FLAG_VISIBLE if tilemap.visible else 0,
                          tilemap.layer.projection, tilemap.columns, tilemap.rows,
@@ -1156,7 +1211,7 @@ def export_scene_payload(scene=None):
         offset += PAYLOAD_TILEMAP_SIZE
         payload[cells_offset:cells_offset + len(tilemap.cells)] = tilemap.cells
         cells_offset += len(tilemap.cells)
-    for kind, index, _layer_index in drawables:
+    for kind, index in drawables:
         payload[cells_offset] = kind
         payload[cells_offset + 1] = index
         cells_offset += PAYLOAD_DRAW_REF_SIZE
@@ -1167,12 +1222,3 @@ def reset_runtime_state():
     base._led_state = None
     base._servo_state = None
     base._button_state = None
-
-
-def set_starfield(enabled):
-    """Temporary adapter for code that has not moved to Scene.starfield."""
-    setter = getattr(get_platform().display, "set_starfield", None)
-    if setter is not None:
-        return setter(bool(enabled))
-    get_platform().display.starfield_enabled = bool(enabled)
-    return None

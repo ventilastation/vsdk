@@ -311,6 +311,15 @@ class Director:
             self._enter_scene(self.scene_stack[-1])
         return scene
 
+    def switch(self, scene):
+        """Replace the showing V2 scene without interrupting app music."""
+        previous = self.scene_stack.pop()
+        self._exit_scene(previous)
+        self.platform.sprites.reset_sprites()
+        gc.collect()
+        self.scene_stack.append(scene)
+        self._enter_top_scene()
+
     def is_pressed(self, button):
         return bool(button & self.buttons)
 

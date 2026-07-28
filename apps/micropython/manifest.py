@@ -4,7 +4,7 @@ module("vsdk_board.py")
 # Recovery must work with no vfs content at all (a fresh board only has
 # factory + NVS), so it and everything it needs are frozen into the
 # firmware rather than living on the LittleFS filesystem like the rest of
-# ventilastation/, vs2.py, and main.py. All are flat top-level modules, not
+# ventilastation/, the vs2 package, and main.py. All are top-level modules, not
 # nested under ventilastation/: a frozen submodule nested inside an
 # also-vfs-resident package is NOT reliably reachable once vfs has its own
 # copy of that package (see vsdk_recovery.py's docstring for why, confirmed

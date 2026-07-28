@@ -79,7 +79,7 @@ class VixeousVs2Tests(unittest.TestCase):
         )
 
         self.assertEqual(scene._vs_declared_api, "vs2")
-        self.assertIs(scene.terrain.frames, scene.terrain_data)
+        self.assertIs(scene.terrain.cells, scene.terrain_data)
         self.assertEqual(len(scene.world.tilemaps), 1)
 
         for row in range(TERRAIN_BUFFER_ROWS):

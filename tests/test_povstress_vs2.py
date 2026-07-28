@@ -89,7 +89,7 @@ class PovStressVs2Tests(unittest.TestCase):
 
         # Terrain and score label are tilemaps; labels no longer spend slots.
         self.assertEqual(len(scene.terrain_layer.tilemaps), 1)
-        self.assertIs(scene.terrain.frames, scene.terrain_data)
+        self.assertIs(scene.terrain.cells, scene.terrain_data)
         self.assertEqual(len(scene.hud.sprites), 0)
         self.assertEqual(len(scene.hud.tilemaps), 1)
 

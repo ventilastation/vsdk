@@ -14,6 +14,7 @@ GAMES_ROOT = ROOT_DIR / "games"
 SYSTEM_ROOT = ROOT_DIR / "system"
 ROMS_FOLDER = ROOT_DIR / "apps" / "micropython" / "roms"
 SEARCH_ROOTS = (GAMES_ROOT, SYSTEM_ROOT)
+MAX_IMAGE_STRIPS = 100
 
 os.makedirs(ROMS_FOLDER, exist_ok=True)
 
@@ -90,6 +91,7 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
     rom_strips = []
     palettes = []
     attributes = {}
+    strip_ids = set()
 
     for palnumber, group in enumerate(palettegroups):
         images = {}
@@ -152,6 +154,12 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
 
             b = i_paletted.transpose(Image.ROTATE_270).tobytes()
             filename = images_opts[fn].get("id", fn.rsplit("/", 1)[-1])
+            if filename in strip_ids:
+                raise ValueError("%s defines duplicate image id %s" % (rom_name, filename))
+            strip_ids.add(filename)
+            if len(rom_strips) >= MAX_IMAGE_STRIPS:
+                raise ValueError("%s defines %d images; this target supports %d"
+                                 % (rom_name, len(rom_strips) + 1, MAX_IMAGE_STRIPS))
             frames, palette = attributes[fn][2:4]
             width = i.width // frames
             if width > 255:

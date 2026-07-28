@@ -26,7 +26,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 MPY_SOURCE_ROOTS = [
     ROOT / "apps" / "micropython" / "main.py",
     ROOT / "apps" / "micropython" / "boot.py",
-    ROOT / "apps" / "micropython" / "vs2.py",
+    ROOT / "apps" / "micropython" / "vs2",
     ROOT / "apps" / "micropython" / "updater.py",
     ROOT / "apps" / "micropython" / "vsdk_recovery.py",
     ROOT / "apps" / "micropython" / "vsdk_ota_rings.py",
@@ -78,6 +78,7 @@ CPYTHON_TESTS = [
 ]
 
 MICROPYTHON_TESTS = [
+    "tests/test_vs2_api_micropython.py",
     "tests/test_browser_input_v2.py",
     "tests/test_director_headless.py",
     "tests/test_installer_micropython.py",
