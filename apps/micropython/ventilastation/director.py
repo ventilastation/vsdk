@@ -35,6 +35,16 @@ class _DirectorProxy:
     def __getattr__(self, name):
         return getattr(get_director(), name)
 
+    def __setattr__(self, name, value):
+        # Keep ``from ventilastation.director import director`` useful for
+        # tests and small apps that mutate input or palette state.  Without
+        # forwarding, an assignment sticks to this long-lived proxy and leaks
+        # across subsequently configured runtimes.
+        setattr(get_director(), name, value)
+
+    def __delattr__(self, name):
+        delattr(get_director(), name)
+
 
 class _CommsProxy:
     def receive(self, bufsize):

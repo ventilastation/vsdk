@@ -33,6 +33,12 @@ class Vs2ApiTests(unittest.TestCase):
         reset_runtime()
         api_guard.reset()
         self.runtime_director = configure_runtime("headless")
+        self.runtime_director.buttons = 0
+        self.runtime_director.last_buttons = 0
+        self.runtime_director.buttons2 = 0
+        self.runtime_director.last_buttons2 = 0
+        self.runtime_director.extra_buttons = 0
+        self.runtime_director.last_extra_buttons = 0
         stripes.clear()
         for index, name in enumerate(("ship.png", "terrain.png", "font.png")):
             stripes[name] = index
@@ -60,6 +66,7 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertEqual(self.vs2.display.width, 256)
         self.assertEqual(self.vs2.display.height, 54)
         director.extra_buttons = 0x20
+        self.assertEqual(self.runtime_director.extra_buttons, 0x20)
         self.assertTrue(joy2.held(BACK))
         self.assertFalse(joy1.held(BACK))
         director.extra_buttons = 0x04
@@ -82,7 +89,7 @@ class Vs2ApiTests(unittest.TestCase):
 
     def test_base_commands_validate_and_deduplicate(self):
         base = self.vs2.base
-        base._led_state = base._servo_state = base._button_state = None
+        self.vs2.reset_runtime_state()
         sent = self.runtime_director.platform.comms.sent
         base.leds.set_all(1, 2, 3)
         base.leds.set_all(1, 2, 3)
@@ -157,6 +164,16 @@ class Vs2ApiTests(unittest.TestCase):
         game.world.projection = vs2.TUNNEL
         game.map.fill(2)
         self.assertEqual(list(game.map.cells), [2, 2])
+        game.map.y = 3
+        game.map.view_x = 1
+        self.assertEqual((game.map.y, game.map.view_x), (3, 1))
+        game.map.visible = False
+        self.assertFalse(game.map.visible)
+        game.map.show()
+        self.assertTrue(game.map.visible)
+        game.map.hide()
+        self.assertFalse(game.map.visible)
+        game.map.show()
         game.ship.hide()
         self.assertFalse(game.ship.visible)
         game.ship.show()
@@ -451,12 +468,14 @@ class Vs2ApiTests(unittest.TestCase):
 
     def test_idle_default_pops_and_back_button_can_be_claimed(self):
         vs2 = self.vs2
+        idle_calls = []
 
         class Launcher(LegacyScene):
             pass
 
         class IdleGame(vs2.Scene):
             idle_timeout = 0
+            back_button = False
 
             def build(self):
                 self.layer("world")
@@ -471,7 +490,18 @@ class Vs2ApiTests(unittest.TestCase):
         launcher = Launcher()
         director.push(launcher)
         idle_game = self.enter(IdleGame())
-        idle_game._run_defaults()
+        original_on_idle = vs2.Scene.on_idle
+
+        def trace_on_idle(scene):
+            idle_calls.append(scene)
+            return original_on_idle(scene)
+
+        vs2.Scene.on_idle = trace_on_idle
+        try:
+            idle_game._run_defaults()
+        finally:
+            vs2.Scene.on_idle = original_on_idle
+        self.assertEqual(idle_calls, [idle_game])
         self.assertEqual(idle_game._pending_transition, ("pop", None))
         idle_game._commit_transition()
         self.assertIs(director.scene_stack[-1], launcher)
@@ -483,6 +513,33 @@ class Vs2ApiTests(unittest.TestCase):
         director.last_extra_buttons = 0
         claims_back._run_defaults()
         self.assertIsNone(claims_back._pending_transition)
+
+    def test_push_exits_current_scene_and_discards_its_timers(self):
+        vs2 = self.vs2
+        fired = []
+
+        class Child(vs2.Scene):
+            idle_timeout = None
+
+            def build(self):
+                self.layer("child")
+
+        class Parent(vs2.Scene):
+            idle_timeout = None
+
+            def build(self):
+                self.layer("parent")
+                self.call_later(10000, lambda: fired.append("old timer"))
+
+        parent = self.enter(Parent())
+        queued = parent.pending_calls[0]
+        child = Child()
+        parent.push(child)
+        parent._commit_transition()
+        self.assertIs(director.scene_stack[-1], child)
+        self.assertEqual(parent.pending_calls, [])
+        self.assertNotIn(queued, parent.pending_calls)
+        self.assertEqual(fired, [])
 
     def test_timers_sort_across_ticks_wraparound(self):
         vs2 = self.vs2
