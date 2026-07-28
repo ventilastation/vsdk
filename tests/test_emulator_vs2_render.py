@@ -1,11 +1,31 @@
 import os
+import random
 import struct
 import sys
+import time
 import unittest
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "emulator"))
+sys.path.insert(0, os.path.join(ROOT, "apps", "micropython"))
+sys.modules.setdefault("uos", os)
+sys.modules.setdefault("urandom", random)
+if "utime" not in sys.modules:
+    class _Utime:
+        @staticmethod
+        def ticks_ms():
+            return int(time.time() * 1000)
+
+        @staticmethod
+        def ticks_add(value, delta):
+            return value + delta
+
+        @staticmethod
+        def ticks_diff(end, start):
+            return end - start
+
+    sys.modules["utime"] = _Utime
 
 import povrender
 
@@ -254,7 +274,7 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(povrender.render(10)[13], 0)
         self.assertEqual(povrender.render(30)[13], 10)
 
-    def test_vs2_tilemap_draws_behind_sprites(self):
+    def test_legacy_vs2_tilemap_renders_before_sprites(self):
         povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
         povrender.all_strips[9] = make_tile_strip()
         povrender.set_vs2_scene(make_vs2_scene([], [
@@ -266,6 +286,51 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(pixels_column_10[13], 30)
         # rows below the 2x2 sprite still show the tilemap
         self.assertEqual(pixels_column_10[11], 10)
+
+    def test_v3_scene_round_trips_from_vs2_api_into_desktop_renderer(self):
+        from ventilastation import api_guard
+        from ventilastation.director import configure_runtime, director, reset_runtime, stripes
+        import vs2
+
+        reset_runtime()
+        api_guard.reset()
+        self.addCleanup(reset_runtime)
+        self.addCleanup(api_guard.reset)
+        runtime = configure_runtime("headless")
+        stripes.clear()
+        stripes["ship.png"] = 8
+        stripes["terrain.png"] = 9
+        runtime.platform.sprites.stripes[8] = {
+            "width": 2, "height": 2, "frames": 1, "palette": 0,
+        }
+        runtime.platform.sprites.stripes[9] = {
+            "width": 4, "height": 4, "frames": 3, "palette": 0,
+        }
+        povrender.all_strips[8] = bytes([2, 2, 1, 0, 3, 3, 3, 3])
+        povrender.all_strips[9] = make_tile_strip()
+        api_guard.begin_app("games.desktop_v3", "vs2")
+
+        class Game(vs2.Scene):
+            def build(self):
+                world = self.layer("world", projection=vs2.HUD)
+                hud = self.layer("hud", projection=vs2.HUD)
+                # Allocate topmost HUD first: v3 draw refs, not allocation
+                # order, must leave it above the map.
+                self.ship = hud.sprite("ship.png", x=10, y=40)
+                self.map = world.tilemap("terrain.png", columns=2, rows=2,
+                                         cells=bytearray((0, 1, 2, 255)),
+                                         x=10, y=40, view_width=8, view_height=8)
+
+        game = Game()
+        director.push(game)
+        payload = vs2.export_scene_payload(game)
+        self.assertEqual(payload[4], 3)
+        decoded = povrender.decode_vs2_scene(payload)
+        self.assertEqual([kind for kind, _drawable in decoded["drawables"]], [1, 0])
+        povrender.set_vs2_scene(payload)
+        pixels = povrender.render(10)
+        self.assertEqual(pixels[13], 30)  # HUD sprite is above the tilemap.
+        self.assertEqual(pixels[11], 10)  # Map remains visible below it.
 
     def test_vs2_tilemap_on_hidden_layer_is_dropped(self):
         povrender.all_strips[9] = make_tile_strip()

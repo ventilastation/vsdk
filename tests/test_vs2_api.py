@@ -80,6 +80,34 @@ class Vs2ApiTests(unittest.TestCase):
         exec("from vs2.controls import *\nexported = (LEFT, joy1, BACK)", {}, exported)
         self.assertEqual(exported["exported"][0], 1)
 
+    def test_base_commands_validate_and_deduplicate(self):
+        base = self.vs2.base
+        base._led_state = base._servo_state = base._button_state = None
+        sent = self.runtime_director.platform.comms.sent
+        base.leds.set_all(1, 2, 3)
+        base.leds.set_all(1, 2, 3)
+        base.leds.off()
+        base.servo.set(128)
+        base.servo.set(128)
+        base.buttons.set(base.BUTTON_LED_ALL, blink_ms=50)
+        base.buttons.set(base.BUTTON_LED_ALL, blink_ms=50)
+        base.buttons.off()
+        self.assertEqual(sent, [
+            (b"base leds 1 2 3", b""),
+            (b"base leds 0 0 0", b""),
+            (b"base servo 128", b""),
+            (b"base buttons 3 50", b""),
+            (b"base buttons 0 0", b""),
+        ])
+        with self.assertRaisesRegex(ValueError, "red must be in 0..255"):
+            base.leds.set_all(-1, 0, 0)
+        with self.assertRaisesRegex(ValueError, "position must be in 0..255"):
+            base.servo.set(256)
+        with self.assertRaisesRegex(ValueError, "mask must be in 0..3"):
+            base.buttons.set(4)
+        with self.assertRaisesRegex(ValueError, "blink_ms must be in 0..10000"):
+            base.buttons.set(0, blink_ms=10001)
+
     def test_scene_builds_owned_drawables_then_seals(self):
         vs2 = self.vs2
 
@@ -104,6 +132,41 @@ class Vs2ApiTests(unittest.TestCase):
         director.step_once()
         self.assertFalse(game.ship.visible)
         self.assertEqual(game.ship.frame, 1)
+
+    def test_small_game_happy_path_mutates_its_sealed_graph(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            idle_timeout = None
+            back_button = False
+
+            def build(self):
+                self.world = self.layer("world")
+                self.ship = self.world.sprite("ship.png")
+                self.pool = self.world.sprite_pool("ship.png", count=1)
+                self.map = self.world.tilemap("terrain.png", columns=2, rows=1)
+
+        game = self.enter(Game())
+        game.ship.image = "terrain.png"
+        self.assertEqual(game.ship.image.name, "terrain.png")
+        game.world.visible = False
+        self.assertFalse(game.world.visible)
+        game.world.visible = True
+        game.world.projection = vs2.HUD
+        self.assertEqual(game.world.projection, vs2.HUD)
+        game.world.projection = vs2.TUNNEL
+        game.map.fill(2)
+        self.assertEqual(list(game.map.cells), [2, 2])
+        game.ship.hide()
+        self.assertFalse(game.ship.visible)
+        game.ship.show()
+        self.assertTrue(game.ship.visible)
+        game.pool.spawn(4, 5)
+        game.pool.despawn_all()
+        self.assertEqual((len(game.pool), game.pool.free), (0, 1))
+        director.buttons = 0
+        director.last_buttons = vs2.controls.LEFT
+        self.assertTrue(vs2.controls.joy1.just_released(vs2.controls.LEFT))
 
     def test_pool_is_fixed_and_supports_current_despawn_iteration(self):
         vs2 = self.vs2
@@ -385,6 +448,41 @@ class Vs2ApiTests(unittest.TestCase):
         game._commit_transition()
         self.assertIsInstance(director.scene_stack[-1], Replacement)
         self.assertNotIn((b"music off", b""), director.platform.comms.sent[-1:])
+
+    def test_idle_default_pops_and_back_button_can_be_claimed(self):
+        vs2 = self.vs2
+
+        class Launcher(LegacyScene):
+            pass
+
+        class IdleGame(vs2.Scene):
+            idle_timeout = 0
+
+            def build(self):
+                self.layer("world")
+
+        class ClaimsBack(vs2.Scene):
+            idle_timeout = None
+            back_button = False
+
+            def build(self):
+                self.layer("world")
+
+        launcher = Launcher()
+        director.push(launcher)
+        idle_game = self.enter(IdleGame())
+        idle_game._run_defaults()
+        self.assertEqual(idle_game._pending_transition, ("pop", None))
+        idle_game._commit_transition()
+        self.assertIs(director.scene_stack[-1], launcher)
+
+        claims_back = self.enter(ClaimsBack())
+        director.buttons = 0
+        director.last_buttons = 0
+        director.extra_buttons = 0x08
+        director.last_extra_buttons = 0
+        claims_back._run_defaults()
+        self.assertIsNone(claims_back._pending_transition)
 
     def test_timers_sort_across_ticks_wraparound(self):
         vs2 = self.vs2
