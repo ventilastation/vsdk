@@ -171,8 +171,7 @@ class MyGame(vs2.Scene):
 
         self.ship = self.world.sprite("ship.png", x=120.5, y=16)
         self.bullets = self.world.sprite_pool("shot.png", count=8)
-        self.score = self.hud.label("digits.png", columns=5, x=100, y=1,
-                                    glyphs=vs2.DIGITS)
+        self.score = self.hud.label("digits.png", columns=5, x=100, y=1)
 
     def update(self):
         if joy1.held(LEFT):
@@ -453,14 +452,26 @@ Numeric HUDs avoid building a formatted string every frame:
 self.score.set_number(value, width=5, pad="0")
 ```
 
-Glyph mapping is resolved once at `build()`:
+Glyph mapping is resolved once at `build()`, in this order:
 
-- `glyphs=vs2.CP437` (default): `frame = ord(ch)`, matching
-  `rainbow437.png`; unmappable characters and spaces become `EMPTY_TILE`.
-- `glyphs=vs2.DIGITS`: for fonts like `digits.png` whose frame 0 is `"0"`.
-- `glyphs="0123456789/-"`: a literal charmap string for sparse icon fonts —
-  `frame = charmap.index(ch)`. Include `" "` in the charmap to get a real
-  space glyph on fonts with opaque backgrounds.
+- **The image manifest.** A font strip declares its mapping in
+  `__images__.yaml`, next to the images it describes — the artist sees the
+  mapping and the strip together in the editor:
+
+  ```yaml
+  - strip: digits.png
+    glyphs: "0123456789"
+  ```
+
+  The ROM builder embeds the mapping in the strip's metadata and `label()`
+  picks it up automatically — nothing at the call site.
+- `vs2.CP437` — the default when the strip declares nothing:
+  `frame = ord(ch)`, matching `rainbow437.png`. Unmappable characters and
+  spaces become `EMPTY_TILE`.
+- `glyphs="0123456789/-"` — a literal charmap override at the call site,
+  `frame = charmap.index(ch)`, for one-off cases. Include `" "` in a
+  charmap (manifest or literal) to get a real space glyph on fonts with
+  opaque backgrounds.
 
 Style variants that today require OR-ing a magic `0x80` into frame ids
 become a named argument:
@@ -585,6 +596,12 @@ Defaults to the current app's sound folder; a name containing `/` is
 already-qualified for shared assets (`vs2.audio.sound("alecu.vyruss/shoot1")`).
 Still sends compact commands to the host — nothing is decoded on the board.
 
+Music follows the app, not the scene: a track started with `music()` keeps
+playing across `push`/`pop` within the app and stops automatically only
+when the app returns to the launcher. V1's per-scene `keep_music` flag has
+no V2 equivalent — a game that wants the music to stop earlier calls
+`stop_music()` explicitly.
+
 ### Base hardware
 
 Unchanged in shape from today's `vs2.base`, because it already reads well:
@@ -596,7 +613,10 @@ vs2.base.buttons.set(vs2.base.BUTTON_LED_ALL, blink_ms=250)
 ```
 
 Values stay normalized, range-checked, deduplicated, and safe on systems
-without a physical base.
+without a physical base. Base output follows the same lifecycle as music:
+LED, servo, and button-light state persists across scene transitions
+within an app and resets to safe defaults only when the app returns to
+the launcher.
 
 ## Resource limits become diagnostics, not surprises
 
@@ -743,9 +763,9 @@ self.chars = [Sprite("numerals.png", x=110 + n * 4, y=0, frame=10, mode=HUD)
 for n, l in enumerate("%05d" % value):
     self.chars[n].frame = ord(l) - 0x30
 
-# after: one tilemap record
-self.score = hud.label("numerals.png", columns=5, x=110, y=0,
-                       glyphs=vs2.DIGITS)
+# after: one tilemap record; numerals.png declares glyphs: "0123456789"
+# in its __images__.yaml entry, so the call site names nothing
+self.score = hud.label("numerals.png", columns=5, x=110, y=0)
 self.score.set_number(value, width=5, pad="0")
 ```
 
@@ -783,7 +803,8 @@ Each phase lands green on the existing suites (`test_vs2_api`,
 1. **Asset hardening (no V1 source changes).** Shared limits definition;
    ROM-builder validation; bounds-checked `set_imagestrip` without modulo
    wrap; native GC rooting of strip buffers; `AssetBank` + `Image` metadata
-   (including frame counts recorded at load). Testable in isolation.
+   (including frame counts and manifest-declared glyph maps recorded at
+   load). Testable in isolation.
 2. **Scene arena and lifecycle.** Scene-owned structure replaces the module
    globals; `build()`/`update()`/`teardown()` adapters; sealing;
    `layer.sprite()` / `sprite_pool()`; frame/visibility decoupled;
@@ -799,7 +820,8 @@ Each phase lands green on the existing suites (`test_vs2_api`,
    tilemap/sprite/tilemap interleaving, layer order, X wrap, Y clip, and
    overlapping maps on hardware, desktop, and web.
 4. **Labels.** `layer.label()` on the interleavable tilemap path: glyph
-   tables, storage-direction reversal, `write()`, `.text`, `set_number()`,
+   tables (manifest-declared and the CP437 default), storage-direction
+   reversal, `write()`, `.text`, `set_number()`,
    `frame_offset`. Port `input_demo` and `tutorial_vs2` first — they are
    the acceptance fixtures — and measure the sprite/heap savings and the
    per-column cost of a full 16-tilemap scene on hardware.
@@ -877,18 +899,23 @@ Recorded so the debate doesn't reopen by accident:
   offsets the tilemap growth. Phase 4's measurement validates the
   per-column cost of a full 16-tilemap scene rather than deciding the cap.
 - **Frame validation**: always on (one integer compare per assignment).
+- **Label glyph maps live in the image manifest** (`__images__.yaml`),
+  next to the images they describe, so the artist sees the mapping and the
+  strip together in the editor. `vs2.CP437` stays the default for
+  undeclared strips; a literal charmap at the call site stays as a one-off
+  override; a `vs2.DIGITS` built-in is redundant and dropped.
+- **Base output and music follow the app, not the scene**: LEDs, servo,
+  button lights, and playing music persist across `push`/`pop` within an
+  app and reset only when the app returns to the launcher. This replaces
+  V1's per-scene `keep_music` flag for V2 games; stopping earlier is an
+  explicit `vs2.audio.stop_music()` or `vs2.base` call.
 
 ## Open for review
 
-1. Should `Label` ship only built-in `CP437`/`DIGITS` glyph tables plus
-   literal charmap strings, or should the image manifest carry a compact
-   custom mapping table for games with non-standard font strips?
-2. Package metadata: an integer `api_revision`, a `min_sdk_version` string,
+1. Package metadata: an integer `api_revision`, a `min_sdk_version` string,
    or both, for rejecting stale installed `.vs2` packages?
-3. Does app-owned base LED/servo state reset on every scene transition, or
-   only when the whole app returns to the launcher?
-4. Is `Scene.after()` part of the stable surface from day one, or held as
+2. Is `Scene.after()` part of the stable surface from day one, or held as
    advanced until its behavior across nested transitions is fully tested?
 
-None of these blocks starting: phase 0 (baselines) and phase 1 (asset
-hardening) do not depend on any of the answers.
+Neither blocks starting: phase 0 (baselines) and phase 1 (asset hardening)
+do not depend on the answers.
