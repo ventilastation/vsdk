@@ -228,10 +228,14 @@ All three return `None`, so `return self.pop()` reads as "handle input, then
 stop." No V2 game raises `StopIteration`. One transition may be queued per
 tick; a second request raises a diagnostic error.
 
-`self.after(ms, callback)` schedules a one-shot callback, discarded if the
-scene leaves first. It replaces `call_later` for V2 code. It is allowed at
-runtime because it is intentionally infrequent (menus, respawn delays) —
-never per-tick.
+`self.call_later(delay, callback)` keeps its V1 name and schedules a
+one-shot callback. Timers exist only while their scene is showing: pending
+callbacks are discarded the moment the scene stops showing — popped, or
+another scene pushed on top — and a scene shown again starts from a fresh
+`build()` with no timers. Timers interact with live drawables, so keeping
+them for a scene that isn't rendering makes no sense. Scheduling is
+allowed at runtime because it is intentionally infrequent (menus, respawn
+delays) — never per-tick.
 
 Scene-scoped display effects are declarative:
 
@@ -692,11 +696,11 @@ builds allocate nothing for diagnostics unless an error needs formatting.
 - Implicit V1 `meta.json` values remain valid; no V1 game or system app is
   migrated as part of this work.
 - `api_guard` continues to reject an app that imports both APIs.
-- Installed `.vs2` game packages built against the current draft API need a
-  compatibility check: package metadata records the V2 API revision (and/or
-  minimum SDK revision), checked at load, so a stale package fails with one
-  actionable message instead of erroring halfway through scene setup.
-  Packages using V1 are unaffected.
+- `.vs2` game packages are still alpha and no real game has been packaged
+  yet, so there is no legacy-package problem to handle. For future breaks,
+  package metadata gains an integer `api_revision` (this rework is
+  revision 2) written at packaging time; the loader rejects a mismatch
+  with one actionable message. Packages using V1 are unaffected.
 
 The revised V2 is a deliberate breaking change to the current experimental
 `vs2` draft: the old constructors, `layer.add()`, per-drawable `mode`,
@@ -808,7 +812,7 @@ Each phase lands green on the existing suites (`test_vs2_api`,
 2. **Scene arena and lifecycle.** Scene-owned structure replaces the module
    globals; `build()`/`update()`/`teardown()` adapters; sealing;
    `layer.sprite()` / `sprite_pool()`; frame/visibility decoupled;
-   projection layer-only; queued `push`/`pop`/`switch`; `after()`;
+   projection layer-only; queued `push`/`pop`/`switch`; `call_later()`;
    resource-census diagnostics. Keep the current two-pass renderer behind an
    adapter so this phase is independently testable.
 3. **Ordered draw table and tilemap cleanup.** Tagged draw-order list in
@@ -908,14 +912,24 @@ Recorded so the debate doesn't reopen by accident:
   button lights, and playing music persist across `push`/`pop` within an
   app and reset only when the app returns to the launcher. This replaces
   V1's per-scene `keep_music` flag for V2 games; stopping earlier is an
-  explicit `vs2.audio.stop_music()` or `vs2.base` call.
+  explicit `vs2.audio.stop_music()` or `vs2.base` call. Every in-tree use
+  of `keep_music = True` (oraculo, vladfarty, tincho_vrunner, the gallery)
+  exists to span one app's soundtrack across internal scene changes —
+  which is exactly this rule's default.
+- **`call_later` keeps its V1 name** (no `after()` rename) and gets a
+  defined lifetime: pending timers are discarded whenever the scene stops
+  showing — popped, or suspended under a `push` — and never survive into
+  the next showing, which starts from a fresh `build()`.
+- **Packages**: no legacy `.vs2` check — the format is alpha with no real
+  games packaged. Package metadata gains an integer `api_revision` going
+  forward (this rework is revision 2), and the loader rejects mismatches.
 
 ## Open for review
 
-1. Package metadata: an integer `api_revision`, a `min_sdk_version` string,
-   or both, for rejecting stale installed `.vs2` packages?
-2. Is `Scene.after()` part of the stable surface from day one, or held as
-   advanced until its behavior across nested transitions is fully tested?
+1. Once a transition has been queued this tick — by `update()` or by a
+   timer callback — do the remaining due `call_later` callbacks still run,
+   or does the tick stop delivering game callbacks at that point?
+   (Stopping is the recommended answer; see the transitions discussion.)
 
-Neither blocks starting: phase 0 (baselines) and phase 1 (asset hardening)
-do not depend on the answers.
+This doesn't block starting: phase 0 (baselines) and phase 1 (asset
+hardening) do not depend on the answer.
