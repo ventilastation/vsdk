@@ -228,8 +228,25 @@ All three return `None`, so `return self.pop()` reads as "handle input, then
 stop." No V2 game raises `StopIteration`. One transition may be queued per
 tick; a second request raises a diagnostic error.
 
-`self.call_later(delay, callback)` keeps its V1 name and schedules a
-one-shot callback. Timers exist only while their scene is showing: pending
+Transitions are committed at the end of the tick, and once one is queued,
+no further game callbacks run that tick: if `update()` queued it, the
+timer drain is skipped; if a timer callback queued it, the drain stops
+there, and the skipped timers are discarded with the rest when the scene
+stops showing. This is the deterministic replacement for V1's
+`raise StopIteration()` convention — a timer that comes due on the same
+tick as a game-over can no longer poke a scene that has already decided
+to leave.
+
+`self.call_later(delay, callback, *args, **kwargs)` keeps its V1 name and
+schedules a one-shot callback; extra positional and keyword arguments are
+stored with the timer and passed to the callback when it fires:
+
+```python
+self.call_later(1500, self.respawn)
+self.call_later(500, self.spawn_wave, wave, boss=True)
+```
+
+Timers exist only while their scene is showing: pending
 callbacks are discarded the moment the scene stops showing — popped, or
 another scene pushed on top — and a scene shown again starts from a fresh
 `build()` with no timers. Timers interact with live drawables, so keeping
@@ -604,7 +621,10 @@ Music follows the app, not the scene: a track started with `music()` keeps
 playing across `push`/`pop` within the app and stops automatically only
 when the app returns to the launcher. V1's per-scene `keep_music` flag has
 no V2 equivalent — a game that wants the music to stop earlier calls
-`stop_music()` explicitly.
+`stop_music()` explicitly. As a backstop, the launcher also stops music
+every time it becomes the showing scene, so "silence at the launcher"
+holds even after a watchdog reset mid-game or a native app that forgot to
+turn its music off.
 
 ### Base hardware
 
@@ -915,21 +935,24 @@ Recorded so the debate doesn't reopen by accident:
   explicit `vs2.audio.stop_music()` or `vs2.base` call. Every in-tree use
   of `keep_music = True` (oraculo, vladfarty, tincho_vrunner, the gallery)
   exists to span one app's soundtrack across internal scene changes —
-  which is exactly this rule's default.
+  which is exactly this rule's default. The launcher additionally stops
+  music every time it shows, as a backstop for watchdog resets and native
+  apps that forgot.
 - **`call_later` keeps its V1 name** (no `after()` rename) and gets a
   defined lifetime: pending timers are discarded whenever the scene stops
   showing — popped, or suspended under a `push` — and never survive into
-  the next showing, which starts from a fresh `build()`.
+  the next showing, which starts from a fresh `build()`. It gains
+  `*args`/`**kwargs`, stored with the timer and passed to the callback.
+- **A queued transition ends the tick's callbacks**: once
+  `push`/`pop`/`switch` is requested — from `update()` or a timer — no
+  further game callbacks run that tick (the drain is skipped or stopped),
+  and the remaining timers are discarded with the scene. This is the
+  deterministic replacement for V1's `raise StopIteration()`.
 - **Packages**: no legacy `.vs2` check — the format is alpha with no real
   games packaged. Package metadata gains an integer `api_revision` going
   forward (this rework is revision 2), and the loader rejects mismatches.
 
 ## Open for review
 
-1. Once a transition has been queued this tick — by `update()` or by a
-   timer callback — do the remaining due `call_later` callbacks still run,
-   or does the tick stop delivering game callbacks at that point?
-   (Stopping is the recommended answer; see the transitions discussion.)
-
-This doesn't block starting: phase 0 (baselines) and phase 1 (asset
-hardening) do not depend on the answer.
+Nothing remains open: every decision raised by the three drafts has been
+resolved above. Implementation can start at phase 0.
