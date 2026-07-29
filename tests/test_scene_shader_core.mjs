@@ -349,6 +349,7 @@ function blankFrame(overrides = {}) {
       },
       {
         image_strip: 10,
+        flags: 1 | 2 | 4,
         frames: [2, 0, 255, 1],
         columns: 2,
         rows: 2,
@@ -367,7 +368,7 @@ function blankFrame(overrides = {}) {
     [9, makeAsset({ width: 4, height: 4, frames: 3, data: tileData })],
     [10, makeAsset({ width: 4, height: 4, frames: 3, palette: 1, data: tileData })],
   ]);
-  compareScene("vs2 tilemaps: tunnel + HUD, empty tiles, viewport, palette group", {
+  compareScene("vs2 tilemaps: tunnel + flipped HUD, empty tiles, viewport, palette group", {
     assets,
     paletteBytes: TWO_GROUP_PALETTE,
     frame: blankFrame({ sprites: decoded.sprites, tilemaps: decoded.tilemaps, frame: 3, column_offset: 17 }),

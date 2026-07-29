@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision base-monitor list-boards register-rotor register-workbench register-base
+.PHONY: micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision vs2-hardware-test base-monitor list-boards register-rotor register-workbench register-base
 
 PORT ?=
 MAC ?=
@@ -90,7 +90,7 @@ define NL
 endef
 
 IDF_SOURCE_HINT := source ../../esp-idf/esp-5.5.2/export.sh
-NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs base-monitor
+NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs vs2-hardware-test base-monitor
 IDF_GOALS := $(filter-out $(NO_IDF_TARGETS),$(MAKECMDGOALS))
 ifneq ($(strip $(IDF_GOALS)),)
 ifeq ($(strip $(IDF_PATH)),)
@@ -325,6 +325,12 @@ workbench-monitor:
 
 workbench-wifi-provision:
 	$(SERIAL_LOCK) python3 "$(WORKBENCH_DIR)/tools/provision_wifi.py" --port "$(PORT)" --wifi-ssid "$(WIFI_SSID)" --wifi-password "$(WIFI_PASS)"
+
+# USB-only VS2 performance + physical-rendering acceptance run. The tool
+# auto-detects the registered workbench unless PORT is supplied.
+VSDK_TEST_PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,$(PYTHON))
+vs2-hardware-test:
+	$(VSDK_TEST_PYTHON) tools/vs2_hardware_test.py $(if $(PORT),--port "$(PORT)",)
 
 # --- Base Arduino (buttons/servo/dial relay; see docs/internals/base-control-api.md) ---
 # Not an ESP-IDF project, so there's no build/flash target here (use the

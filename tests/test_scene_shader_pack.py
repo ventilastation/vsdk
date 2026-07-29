@@ -40,7 +40,7 @@ def make_vs2_fixture():
     frames_offset = offset + tilemap_size
     struct.pack_into(
         "<BBBBHHHHHHHHiiI", payload, offset,
-        0, 9, 1, 1, 2, 2, 4, 4, 1, 2, 6, 5, -128, 2048, frames_offset,
+        0, 9, 7, 1, 2, 2, 4, 4, 1, 2, 6, 5, -128, 2048, frames_offset,
     )
     payload[frames_offset:frames_offset + 4] = bytes((0, 1, 255, 2))
     payload[frames_offset + 4:frames_offset + 12] = bytes((0, 0, 1, 0, 0, 1, 0, 2))

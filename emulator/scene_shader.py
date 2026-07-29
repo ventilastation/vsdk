@@ -70,7 +70,7 @@ def _push_sprite(packer, *, x, y, strip, frame, mode, flip_x=False, flip_y=False
 
 
 def _push_tilemap(packer, *, x, y, strip, mode, columns, rows, tile_width,
-                  tile_height, viewport, frames):
+                  tile_height, viewport, frames, flip_x=False, flip_y=False):
     import numpy as np
     offset = sum(len(cells) for cells in packer["cells"])
     raw_cells = bytes(frames)
@@ -83,6 +83,7 @@ def _push_tilemap(packer, *, x, y, strip, mode, columns, rows, tile_width,
     lanes[4:8] = (columns, rows, tile_width, tile_height)
     lanes[8:12] = viewport
     lanes[12] = offset
+    lanes[13] = (1 if flip_x else 0) | (2 if flip_y else 0)
     lanes[15] = 1
     packer["drawables"].append(lanes)
     packer["tilemap_count"] += 1
@@ -206,6 +207,8 @@ def pack_scene_vs2_bytes(scene_bytes):
             tile_height=unpack_from("<H", data, record + 10)[0],
             viewport=unpack_from("<HHHH", data, record + 12),
             frames=data[frames_offset:frames_offset + cells_length],
+            flip_x=bool(flags & 2),
+            flip_y=bool(flags & 4),
         )
     if version == 3:
         draw_count = sprite_count + tilemap_count

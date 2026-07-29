@@ -192,6 +192,14 @@
         tile_height: tileHeight,
         viewport,
         perspective: mode,
+        vs2: {
+          layer: layerId,
+          x,
+          y,
+          flags,
+          flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
+          flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
+        },
       };
       tilemaps.push(tilemap);
       tilemapBySlot[slot] = tilemap;
@@ -351,7 +359,10 @@
     if (delta >= viewportW) {
       return;
     }
-    const sx = viewportX + delta;
+    const flipX = Boolean(tilemap?.vs2 ? tilemap.vs2.flip_x : tilemap.flip_x);
+    const flipY = Boolean(tilemap?.vs2 ? tilemap.vs2.flip_y : tilemap.flip_y);
+    const sourceDelta = flipX ? viewportW - 1 - delta : delta;
+    const sx = viewportX + sourceDelta;
     const tileCol = Math.floor(sx / tileWidth);
     // strip data columns are stored mirrored, same as sprites
     const sourceColumn = tileWidth - 1 - (sx % tileWidth);
@@ -362,7 +373,8 @@
     const desde = Math.max(y0, 0);
     const hasta = Math.min(y0 + viewportH, ROWS);
     for (let y = desde; y < hasta; y += 1) {
-      const sy = viewportY + (y - y0);
+      const viewDeltaY = flipY ? viewportH - 1 - (y - y0) : y - y0;
+      const sy = viewportY + viewDeltaY;
       let frameId = frames[Math.floor(sy / tileHeight) * mapColumns + tileCol];
       if (frameId === EMPTY_TILE) {
         continue;

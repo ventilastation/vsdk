@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
@@ -19,6 +20,12 @@ class FakeSerial:
         if self._chunks:
             return self._chunks.pop(0)
         return b""
+
+    def write(self, data):
+        self.written = getattr(self, "written", b"") + data
+
+    def flush(self):
+        pass
 
 
 class ParseKvLineTests(unittest.TestCase):
@@ -48,13 +55,15 @@ class BuildReportRowTests(unittest.TestCase):
         self.assertFalse(row["ok"])
 
     def test_computes_overrun_and_skip_percent(self):
-        state = {"encoder": "calibrated"}
+        state = {"encoder": "calibrated", "heap_start": "10000", "heap_free": "9984",
+                 "heap_delta": "-16"}
         timing = {"samples": "100", "overruns": "5", "skipped": "5", "deadline_us": "390"}
         row = report.build_report_row(600, "prboom", "native.voom", state, timing)
         self.assertTrue(row["ok"])
         self.assertAlmostEqual(row["overrun_pct"], 5.0)
         # 5 skipped out of (100 samples + 5 skipped) columns actually swept.
         self.assertAlmostEqual(row["skip_pct"], 100.0 * 5 / 105)
+        self.assertEqual(row["heap_delta"], -16)
 
     def test_normalizes_micropython_field_names(self):
         # MicroPython's profiler calls these avg_render_us/avg_spi_wait_us;
@@ -113,6 +122,33 @@ class WireReaderTests(unittest.TestCase):
         events = reader.read_for(0.05)
         lines = [text for kind, text in events if kind == "line"]
         self.assertIn("povperf_state enabled=1 encoder=calibrated scene=voom complete=0", lines)
+
+    def test_unwraps_split_checksummed_workbench_frame(self):
+        payload = bytes(range(64))
+        crc = zlib.crc32(payload) & 0xffffffff
+        header = ("wb_frame %d %08x\n" % (len(payload), crc)).encode()
+        ser = FakeSerial([header + payload[:7], payload[7:31], payload[31:], b""])
+        reader = report.WireReader(ser)
+        self.assertEqual(reader.wait_for_event("wb_frame", 0.5), payload)
+
+    def test_rejects_workbench_frame_with_bad_crc(self):
+        payload = b"captured pixels"
+        ser = FakeSerial([b"wb_frame 15 deadbeef\n" + payload, b""])
+        reader = report.WireReader(ser)
+        with self.assertRaisesRegex(RuntimeError, "CRC mismatch"):
+            reader.wait_for_event("wb_frame", 0.5)
+
+    def test_unwraps_povcal_profile(self):
+        payload = b"profile-bytes"
+        ser = FakeSerial([b"povcal_state 1 7 13\n" + payload, b""])
+        reader = report.WireReader(ser)
+        self.assertEqual(reader.wait_for_event("povcal_state", 0.5), payload)
+
+    def test_usb_rpm_command_uses_reserved_escape(self):
+        ser = FakeSerial([b"wb_ok rpm=650\n", b""])
+        reader = report.WireReader(ser)
+        report.set_workbench_rpm_usb(ser, reader, 650, timeout=0.1)
+        self.assertEqual(ser.written, b"\xd3rpm 650\n")
 
 
 if __name__ == "__main__":

@@ -237,6 +237,9 @@ class Vs2ApiTests(unittest.TestCase):
     def test_tilemap_cells_scalar_view_and_label_writes(self):
         vs2 = self.vs2
         self.runtime_director.platform.sprites.stripes[stripes["font.png"]]["frames"] = 128
+        self.runtime_director.platform.sprites.stripes[
+            stripes["font.png"]
+        ]["glyphs"] = ""
 
         class Game(vs2.Scene):
             def build(self):
@@ -244,6 +247,7 @@ class Vs2ApiTests(unittest.TestCase):
                 self.map = layer.tilemap("terrain.png", columns=2, rows=2,
                                          view_width=vs2.display.width, view_height=16)
                 self.label = layer.label("font.png", columns=3, glyphs="0123")
+                self.cp437 = layer.label("font.png", columns=3, text="A1")
 
         game = self.enter(Game())
         game.map[1, 0] = 3
@@ -260,12 +264,48 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertEqual(game.label.text, "123")
         game.label.text = " 1"
         self.assertEqual(game.label.cells[2], vs2.EMPTY_TILE)
+        self.assertEqual(game.cp437.text, "A1")
+        self.assertEqual(
+            list(game.cp437.cells),
+            [vs2.EMPTY_TILE, ord("1"), ord("A")],
+        )
         with self.assertRaises(AttributeError):
             game.map.columns = 3
         with self.assertRaises(AttributeError):
             game.map.cells = bytearray(4)
         with self.assertRaises(BufferError):
             game.map.cells.append(1)
+
+    def test_tilemap_and_label_flips_round_trip_through_payload(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                layer = self.layer("hud", projection=vs2.HUD)
+                self.map = layer.tilemap(
+                    "terrain.png", columns=1, rows=1, flip_x=True)
+                self.label = layer.label(
+                    "font.png", columns=3, text="123", flip_y=True)
+
+        game = self.enter(Game())
+        self.assertTrue(game.map.flip_x)
+        self.assertFalse(game.map.flip_y)
+        self.assertFalse(game.label.flip_x)
+        self.assertTrue(game.label.flip_y)
+
+        payload = vs2.export_scene_payload(game)
+        tilemap_offset = 16 + 8
+        self.assertEqual(payload[tilemap_offset + 2], vs2.FLAG_VISIBLE | vs2.FLAG_FLIP_X)
+        self.assertEqual(
+            payload[tilemap_offset + 32 + 2],
+            vs2.FLAG_VISIBLE | vs2.FLAG_FLIP_Y,
+        )
+
+        game.map.flip_y = True
+        game.label.flip_x = True
+        self.assertIs(vs2.export_scene_payload(game), payload)
+        self.assertEqual(payload[tilemap_offset + 2], 7)
+        self.assertEqual(payload[tilemap_offset + 32 + 2], 7)
 
     def test_payload_v3_preserves_sprite_tilemap_interleaving_and_reuses_buffer(self):
         vs2 = self.vs2

@@ -17,6 +17,7 @@
 #define VS2_MODE_FULLSCREEN 0
 #define VS2_NO_LAYER 255
 #define VS2_EMPTY_TILE 255
+#define VS2_SERVICE_DRAW_INTERVAL 4
 
 const uint8_t TRANSPARENT = 0xFF;
 uint8_t deepspace[ROWS];
@@ -257,7 +258,8 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   if (delta >= viewport_w) {
     return;
   }
-  int sx = viewport_x + delta;
+  int sx = viewport_x + (
+      (t->flags & VS2_FLAG_FLIP_X) != 0 ? viewport_w - 1 - delta : delta);
   int tile_col = sx / tile_width;
   // strip data columns are stored mirrored, same as sprites
   int source_column = tile_width - 1 - (sx % tile_width);
@@ -267,32 +269,54 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   int desde = MAX(y0, 0);
   int hasta = MIN(y0 + viewport_h, ROWS);
 
-  // Walk the visible column of the map one source row at a time. sy advances
-  // by 1 per output row, so the per-row division/modulo and tile lookup of the
-  // naive form are replaced by counters that only touch t->frames (and the
-  // frame's strip base) when crossing a tile boundary -- a big compute cut for
-  // a full-height tilemap like the terrain (up to ~128 rows per column).
-  int sy = viewport_y + (desde - y0);
-  int tile_row = sy / tile_height;
-  int row_in_tile = sy - tile_row * tile_height;
-  int frame = t->frames[tile_row * t->columns + tile_col];
-  int strip_base = frame == VS2_EMPTY_TILE ? -1
-      : source_column * tile_height + (frame % total_frames) * tile_width * tile_height;
-  for (int y = desde; y < hasta; y++) {
-    if (strip_base >= 0) {
-      uint8_t color = is->data[strip_base + row_in_tile];
+  if ((t->flags & VS2_FLAG_FLIP_Y) != 0) {
+    for (int y = desde; y < hasta; y++) {
+      int sy = viewport_y + viewport_h - 1 - (y - y0);
+      int tile_row = sy / tile_height;
+      int frame = t->frames[tile_row * t->columns + tile_col];
+      if (frame == VS2_EMPTY_TILE) {
+        continue;
+      }
+      int strip_base = source_column * tile_height
+          + (frame % total_frames) * tile_width * tile_height;
+      uint8_t color = is->data[strip_base + (sy % tile_height)];
       if (color != TRANSPARENT) {
         int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
         set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
       }
     }
-    if (++row_in_tile == tile_height) {
-      row_in_tile = 0;
-      tile_row++;
-      frame = t->frames[tile_row * t->columns + tile_col];
-      strip_base = frame == VS2_EMPTY_TILE ? -1
-          : source_column * tile_height + (frame % total_frames) * tile_width * tile_height;
+    return;
+  }
+
+  // Walk the visible column one tile-row run at a time. Besides avoiding the
+  // per-pixel division/modulo of the naive form, this makes an EMPTY_TILE cost
+  // one iteration regardless of tile height. Sparse overlays such as clouds
+  // and scenery therefore do not consume a full-height scan just to discover
+  // that most source rows are transparent.
+  int sy = viewport_y + (desde - y0);
+  int tile_row = sy / tile_height;
+  int row_in_tile = sy - tile_row * tile_height;
+  int y = desde;
+  while (y < hasta) {
+    int run = MIN(tile_height - row_in_tile, hasta - y);
+    int frame = t->frames[tile_row * t->columns + tile_col];
+    if (frame != VS2_EMPTY_TILE) {
+      int strip_base = source_column * tile_height
+          + (frame % total_frames) * tile_width * tile_height;
+      int source_row = row_in_tile;
+      int run_end = y + run;
+      for (; y < run_end; y++, source_row++) {
+        uint8_t color = is->data[strip_base + source_row];
+        if (color != TRANSPARENT) {
+          int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
+          set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
+        }
+      }
+    } else {
+      y += run;
     }
+    row_in_tile = 0;
+    tile_row++;
   }
 }
 
@@ -365,7 +389,9 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
     }
 }
 
-void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
+static void render_vs2_impl(int column, uint32_t* led_buffer,
+                            const vs2_scene_t* scene,
+                            vs2_service_fn_t service) {
   uint32_t colorbuf[PIXELS];
 
   column = column % COLUMNS;
@@ -405,20 +431,45 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
   // Draw references are emitted in layer and creation order (bottom to top).
   // Each later drawable overwrites the prior one, so sprites and tilemaps can
   // genuinely interleave without a renderer pass privileging either kind.
+  uint8_t draws_since_service = 0;
   for (uint8_t draw = 0; draw < scene->draw_order_count; draw++) {
     const vs2_draw_ref_t* ref = &scene->draw_order[draw];
+    bool rendered_tilemap = false;
     if (ref->kind == VS2_DRAW_SPRITE) {
       if (scene->sprites != NULL && ref->index < scene->sprite_count) {
         render_vs2_sprite(column, colorbuf, scene, scene->sprites[ref->index]);
       }
     } else if (ref->kind == VS2_DRAW_TILEMAP) {
+      rendered_tilemap = true;
       if (scene->tilemaps != NULL && ref->index < scene->tilemap_count) {
         render_vs2_tilemap(column, colorbuf, scene, scene->tilemaps[ref->index]);
       }
     }
+    draws_since_service++;
+    // The physical LEDs read only the published front buffer, so servicing
+    // them here cannot expose this partially built back-buffer column. Yield
+    // after every tilemap (the largest indivisible drawable) and small sprite
+    // groups so a worst-case VS2 column cannot hide an angular edge until the
+    // entire scene has projected.
+    if (service != NULL
+        && (rendered_tilemap
+            || draws_since_service >= VS2_SERVICE_DRAW_INTERVAL)) {
+      service();
+      draws_since_service = 0;
+    }
   }
 
   finish_colorbuf(colorbuf, led_buffer);
+}
+
+void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
+  render_vs2_impl(column, led_buffer, scene, NULL);
+}
+
+void render_vs2_cooperative(int column, uint32_t* led_buffer,
+                            const vs2_scene_t* scene,
+                            vs2_service_fn_t service) {
+  render_vs2_impl(column, led_buffer, scene, service);
 }
 
 

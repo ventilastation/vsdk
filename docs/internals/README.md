@@ -42,6 +42,8 @@ shape and the rules that keep biting.
   `vs2` game API, compatibility guard, v2 memory model, and renderer phases.
 - **[workbench.md](workbench.md)** — the second ESP32-S3 that exercises a
   real board: LED-bus capture, hall simulation, UART bridge, telemetry.
+- **[vs2-hardware-acceptance.md](vs2-hardware-acceptance.md)** — repeatable
+  USB-only API v2 timing, heap-stability, and physical-render parity gates.
 - **[remote-workbench-access.md](remote-workbench-access.md)** — authenticated
   remote mobile access to a physical workbench: tunnel, Google login, ACL,
   controller lease, frames, audio, input, deployment, and verification.
@@ -64,6 +66,10 @@ shape and the rules that keep biting.
 - **[menu-sprite-corruption.md](menu-sprite-corruption.md)** — main-menu
   sprite corruption after ~70-75s idle; two bugs found and fixed by static
   analysis, neither yet verified on hardware.
+- **[rom-width-sentinel.md](rom-width-sentinel.md)** — the ROM `width` byte's
+  "255 means 256" sentinel collides with genuinely 255px art and reads out of
+  bounds in two shipped ROMs; audit, bias-by-one replacement, and work order.
+  Planned, not implemented.
 
 ## Where the code lives
 

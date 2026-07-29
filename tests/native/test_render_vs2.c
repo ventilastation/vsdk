@@ -23,6 +23,11 @@ extern uint8_t deepspace[256];
 #define HUD_LED(dest_y) (PIXELS - 1 - (dest_y))
 
 static int failures = 0;
+static int service_calls = 0;
+
+static void count_service(void) {
+    service_calls++;
+}
 
 #define CHECK_EQ(actual, expected, message) \
     do { \
@@ -149,6 +154,19 @@ int main(void) {
         CHECK_EQ(render_led(&scene, 14, 13), 0, "viewport window width");
     }
 
+    /* Flip flags mirror the complete tilemap viewport, including tile order
+     * and the pixels inside each tile. Labels inherit this exact path. */
+    {
+        vs2_tilemap_t tilemap = default_tilemap();
+        tilemap.flags = 0x01 | 0x02 | 0x04;
+        const vs2_tilemap_t* records[] = { &tilemap };
+        vs2_scene_t scene = tilemap_scene(records, 1);
+        CHECK_EQ(render_led(&scene, 10, 13), 0, "flipped top-left is empty bottom-right");
+        CHECK_EQ(render_led(&scene, 10, 9), 30, "flip y reverses tile rows");
+        CHECK_EQ(render_led(&scene, 14, 13), 40, "flip x reverses tile columns");
+        CHECK_EQ(render_led(&scene, 17, 6), 10, "flipped opposite corner");
+    }
+
     /* Vertical viewport pan */
     {
         vs2_tilemap_t tilemap = default_tilemap();
@@ -221,6 +239,40 @@ int main(void) {
         order[0].kind = VS2_DRAW_SPRITE;
         order[1].kind = VS2_DRAW_TILEMAP;
         CHECK_EQ(render_led(&scene, 10, 13), 10, "native draw table tilemap on top");
+    }
+
+    /* Cooperative front-buffer service does not alter the projected pixels.
+     * It yields after four sprites and after every tilemap so one expensive
+     * scene column cannot hide a physical angular edge. */
+    {
+        vs2_tilemap_t tilemap = default_tilemap();
+        const vs2_tilemap_t* tilemap_records[] = { &tilemap };
+        vs2_sprite_t sprite = {
+            .layer = 255, .image_strip = 8, .frame = 0, .mode = 2,
+            .flags = 0x01, .x = 10 * 256, .y = 40 * 256,
+        };
+        const vs2_sprite_t* sprite_records[] = { &sprite };
+        vs2_draw_ref_t order[] = {
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+            { .kind = VS2_DRAW_TILEMAP, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+        };
+        vs2_scene_t scene = tilemap_scene(tilemap_records, 1);
+        scene.sprite_count = 1;
+        scene.sprites = sprite_records;
+        scene.draw_order = order;
+        scene.draw_order_count = 6;
+        uint32_t expected[PIXELS];
+        uint32_t actual[PIXELS];
+        render_vs2(10, expected, &scene);
+        service_calls = 0;
+        render_vs2_cooperative(10, actual, &scene, count_service);
+        CHECK_EQ(service_calls, 2, "cooperative renderer service cadence");
+        CHECK_EQ(memcmp(expected, actual, sizeof(expected)), 0,
+                 "cooperative renderer preserves pixels");
     }
 
     /* Layer visibility and mode override */

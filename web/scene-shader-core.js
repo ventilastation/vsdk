@@ -46,7 +46,8 @@
 //                      [2]=strip [3]=frame [4]=mode [5]=flags(1=flipX,2=flipY)
 //             tilemap: [0]=x [1]=y [2]=strip [3]=mode [4]=mapColumns
 //                      [5]=mapRows [6]=tileWidth [7]=tileHeight
-//                      [8..11]=viewport x/y/w/h [12]=cells byte offset;
+//                      [8..11]=viewport x/y/w/h [12]=cells byte offset
+//                      [13]=flags(1=flipX,2=flipY);
 //             [15]=kind (0=sprite, 1=tilemap).
 //             mode is canonical: 0=planet/fullscreen, 1=tunnel, 2=HUD
 //             (pack time maps every other value the way the CPU renderers
@@ -232,6 +233,7 @@
     lanes[10] = tilemap.viewport[2];
     lanes[11] = tilemap.viewport[3];
     lanes[12] = offset;
+    lanes[13] = (tilemap.flipX ? 1 : 0) | (tilemap.flipY ? 2 : 0);
     lanes[15] = 1;
     packer.drawables.push(lanes);
     packer.tilemapCount += 1;
@@ -402,6 +404,8 @@
           view.getUint16(recordOffset + 18, true),
         ],
         frames: bytes.subarray(framesOffset, framesOffset + cellsLength),
+        flipX: Boolean(flags & 2),
+        flipY: Boolean(flags & 4),
       };
     }
     if (version === 3) {
@@ -467,6 +471,8 @@
         tileHeight: value.tile_height,
         viewport: value.viewport,
         frames: value.frames,
+        flipX: Boolean(value.vs2 ? value.vs2.flip_x : value.flip_x),
+        flipY: Boolean(value.vs2 ? value.vs2.flip_y : value.flip_y),
       });
     };
     if (Array.isArray(scene?.drawables)) {
@@ -699,6 +705,9 @@
     const viewportW = Math.min(sceneLane(context.scene, entityRow, 10), mapWidth - viewportX);
     const viewportH = Math.min(sceneLane(context.scene, entityRow, 11), mapHeight - viewportY);
     const cellsOffset = sceneLane(context.scene, entityRow, 12);
+    const flags = sceneLane(context.scene, entityRow, 13);
+    const flipX = (flags & 1) !== 0;
+    const flipY = (flags & 2) !== 0;
 
     const x = asInt32(sceneLane(context.scene, entityRow, 0));
     const y = asInt32(sceneLane(context.scene, entityRow, 1));
@@ -708,7 +717,8 @@
     if (delta >= viewportW) {
       return null;
     }
-    const sx = viewportX + delta;
+    const sourceDelta = flipX ? viewportW - 1 - delta : delta;
+    const sx = viewportX + sourceDelta;
     const tileCol = Math.floor(sx / tileWidth);
     // strip data columns are stored mirrored, same as sprites
     const sourceColumn = tileWidth - 1 - (sx % tileWidth);
@@ -717,7 +727,8 @@
       if (destY < Math.max(y, 0) || destY >= Math.min(y + viewportH, ROWS)) {
         return null;
       }
-      const sy = viewportY + (destY - y);
+      const viewDeltaY = flipY ? viewportH - 1 - (destY - y) : destY - y;
+      const sy = viewportY + viewDeltaY;
       let frameId = cellByte(context.scene, cellsOffset + Math.floor(sy / tileHeight) * mapColumns + tileCol);
       if (frameId === EMPTY_TILE) {
         return null;
@@ -959,14 +970,15 @@ bool probeSprite(int row, int renderColumn, int led, out vec4 color) {
   return false;
 }
 
-bool probeTilemapRow(int destY, int y, int viewportY, int viewportH, int tileHeight,
+bool probeTilemapRow(int destY, int y, int viewportY, int viewportH, bool flipY, int tileHeight,
                      int mapColumns, int tileCol, int cellsOffset, int totalFrames,
                      int stripOffset, int sourceColumn, int tileWidth, int paletteIndex,
                      out vec4 color) {
   if (destY < max(y, 0) || destY >= min(y + viewportH, ROWS)) {
     return false;
   }
-  int sy = viewportY + (destY - y);
+  int viewDeltaY = flipY ? viewportH - 1 - (destY - y) : destY - y;
+  int sy = viewportY + viewDeltaY;
   int frameId = cellByte(cellsOffset + (sy / tileHeight) * mapColumns + tileCol);
   if (frameId == EMPTY_TILE) {
     return false;
@@ -1014,6 +1026,9 @@ bool probeTilemap(int row, int renderColumn, int led, out vec4 color) {
   int viewportW = min(int(texel2.z), mapWidth - viewportX);
   int viewportH = min(int(texel2.w), mapHeight - viewportY);
   int cellsOffset = int(texel3.x);
+  int flags = int(texel3.y);
+  bool flipX = (flags & 1) != 0;
+  bool flipY = (flags & 2) != 0;
 
   int x = int(texel0.x);
   int y = int(texel0.y);
@@ -1023,13 +1038,14 @@ bool probeTilemap(int row, int renderColumn, int led, out vec4 color) {
   if (delta >= viewportW) {
     return false;
   }
-  int sx = viewportX + delta;
+  int sourceDelta = flipX ? viewportW - 1 - delta : delta;
+  int sx = viewportX + sourceDelta;
   int tileCol = sx / tileWidth;
   // strip data columns are stored mirrored, same as sprites
   int sourceColumn = tileWidth - 1 - (sx % tileWidth);
 
   if (mode != MODE_TUNNEL) {
-    return probeTilemapRow(PIXELS - 1 - led, y, viewportY, viewportH, tileHeight,
+    return probeTilemapRow(PIXELS - 1 - led, y, viewportY, viewportH, flipY, tileHeight,
                            mapColumns, tileCol, cellsOffset, totalFrames,
                            stripOffset, sourceColumn, tileWidth, paletteIndex, color);
   }
@@ -1038,7 +1054,7 @@ bool probeTilemap(int row, int renderColumn, int led, out vec4 color) {
   }
   ivec2 range = deepspaceRange(led);
   for (int destY = range.y; destY >= range.x; destY--) {
-    if (probeTilemapRow(destY, y, viewportY, viewportH, tileHeight,
+    if (probeTilemapRow(destY, y, viewportY, viewportH, flipY, tileHeight,
                         mapColumns, tileCol, cellsOffset, totalFrames,
                         stripOffset, sourceColumn, tileWidth, paletteIndex, color)) {
       return true;

@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "vs2_wire.h" /* pulls in gpu.h; gpu.h/sprites.h have no include guards */
+#include "color_pipeline.h"
 
 /* Not declared in gpu.h (only render_vs2() is); all four are defined in
  * gpu.c with external linkage. render() is the pre-VS2 fixed 100-sprite-slot
@@ -55,6 +56,18 @@ void emu_gpu_init(void) {
 
 void emu_gpu_step_starfield(void) {
     step_starfield();
+}
+
+void emu_gpu_set_starfield(bool enabled) {
+    starfield_enabled = enabled;
+}
+
+bool emu_gpu_set_color_profile(const uint8_t* data, int length) {
+    return color_pipeline_apply(data, (size_t)length);
+}
+
+bool emu_gpu_set_color_pipeline_enabled(bool enabled) {
+    return color_pipeline_set_enabled(enabled);
 }
 
 /* `data` is the raw wire palette payload: 4 bytes per entry, [A, B, G, R]
@@ -139,6 +152,15 @@ void emu_gpu_render_frame(uint32_t* out_pixels) {
         for (int n = 0; n < PIXELS; n++) {
             dest[n] = to_preview_pixel(column_buf[n]);
         }
+    }
+}
+
+/* Hardware-oracle form of emu_gpu_render_frame(): retains gpu.c's native
+ * little-endian APA102 words, whose memory bytes are [GB, B, G, R]. */
+void emu_gpu_render_frame_apa102(uint32_t* out_pixels) {
+    const vs2_scene_t* scene = g_scene_active ? &g_scene.scene : NULL;
+    for (int column = 0; column < 256; column++) {
+        render_vs2(column, out_pixels + (size_t)column * PIXELS, scene);
     }
 }
 

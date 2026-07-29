@@ -4,6 +4,7 @@ idf_component_register(
         "reset_ctl.c"
         "hall_sim.c"
         "led_capture.c"
+        "frame_snapshot.c"
         "serial_bridge.c"
         "telemetry.c"
     INCLUDE_DIRS "."

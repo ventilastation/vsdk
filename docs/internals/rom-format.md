@@ -35,6 +35,13 @@ u8  palette             palette group index this strip's pixels refer to
 u8  pixels[width * height * frames]
 ```
 
+> **The `width` sentinel and the `frames` clamp are both known-broken and
+> scheduled for replacement.** A genuinely 255px-wide strip is read as 256 and
+> over-reads its record (two shipped ROMs do this today), and a 256-frame font
+> silently loses its last glyph. See
+> [rom-width-sentinel.md](rom-width-sentinel.md) for the audit and the
+> bias-by-one replacement. This section stays normative until that lands.
+
 The strip id is what game code looks up in `director.stripes` after
 `load_rom()`. Builders derive it from the `id:` field in
 `__images__.yaml`, defaulting to the image's basename; the

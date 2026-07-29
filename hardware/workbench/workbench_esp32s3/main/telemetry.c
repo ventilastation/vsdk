@@ -38,7 +38,7 @@
 
 #include "telemetry.h"
 #include "config.h"
-#include "led_capture.h"
+#include "frame_snapshot.h"
 #include "hall_sim.h"
 #include "reset_ctl.h"
 
@@ -63,7 +63,6 @@
 
 static const char *TAG = "telemetry";
 
-static uint8_t s_frame_buf[WB_FRAME_BYTES];
 static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 
@@ -301,7 +300,7 @@ static void telemetry_task(void *arg) {
 
         if (have_client && now - last_frame_us >= (int64_t)WB_TELEMETRY_FRAME_INTERVAL_MS * 1000) {
             last_frame_us = now;
-            led_capture_snapshot(s_frame_buf);
+            const uint8_t *frame_buf = frame_snapshot_acquire();
             frame_seq++;
 
             for (int chunk = 0; chunk < WB_NUM_CHUNKS; chunk++) {
@@ -309,7 +308,7 @@ static void telemetry_task(void *arg) {
                 memcpy(packet + 1, &frame_seq, sizeof(frame_seq));
                 packet[5] = (uint8_t)chunk;
                 memcpy(packet + WB_CHUNK_HEADER_BYTES,
-                       s_frame_buf + chunk * WB_CHUNK_PAYLOAD_BYTES,
+                       frame_buf + chunk * WB_CHUNK_PAYLOAD_BYTES,
                        WB_CHUNK_PAYLOAD_BYTES);
                 // Fire-and-forget by design: a failed/lost send just leaves
                 // this chunk's columns showing stale data until the next
@@ -317,6 +316,7 @@ static void telemetry_task(void *arg) {
                 sendto(sock, packet, sizeof(packet), 0,
                        (struct sockaddr *)&client_addr, sizeof(client_addr));
             }
+            frame_snapshot_release();
         }
 
         // Explicit yield once per loop iteration: recvfrom()'s SO_RCVTIMEO

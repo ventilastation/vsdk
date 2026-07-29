@@ -192,7 +192,11 @@ class Director:
             color_calibration.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
         elif cmd == "povperf":
             from ventilastation import pov_profiling
-            pov_profiling.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
+            scene = self.scene_stack[-1] if self.scene_stack else None
+            pov_profiling.handle_command(
+                parts[1:], self.platform.comms.send, self.platform.display,
+                scene=scene,
+            )
         elif cmd == "hallfilter":
             from ventilastation import hall_filter_control
             hall_filter_control.handle_command(parts[1:], self.platform.comms.send, self.platform.display)

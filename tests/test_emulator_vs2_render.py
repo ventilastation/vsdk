@@ -213,6 +213,25 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         pixels_column_18 = povrender.render(18)
         self.assertEqual(pixels_column_18, [0] * povrender.led_count)
 
+    def test_vs2_tilemap_flip_x_and_flip_y_mirror_complete_viewport(self):
+        povrender.all_strips[9] = make_tile_strip()
+        payload = make_vs2_scene([], [], [
+            default_tilemap(flags=1 | 2 | 4),
+        ])
+        decoded = povrender.decode_vs2_scene(payload)
+        self.assertTrue(decoded["tilemaps"][0]["flip_x"])
+        self.assertTrue(decoded["tilemaps"][0]["flip_y"])
+        povrender.set_vs2_scene(payload)
+
+        # Destination top-left samples the original bottom-right empty tile.
+        self.assertEqual(povrender.render(10)[13], 0)
+        # Four rows down reaches the original top-right solid frame.
+        self.assertEqual(povrender.render(10)[9], 30)
+        # Four columns across reaches the original bottom-left frame.
+        self.assertEqual(povrender.render(14)[13], 40)
+        # The opposite corner reaches the original top-left pixel.
+        self.assertEqual(povrender.render(17)[6], 10)
+
     def test_vs2_tilemap_viewport_pans_horizontally(self):
         povrender.all_strips[9] = make_tile_strip()
         povrender.set_vs2_scene(make_vs2_scene([], [], [

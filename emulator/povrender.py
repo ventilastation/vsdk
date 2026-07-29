@@ -281,6 +281,8 @@ def decode_vs2_scene(data):
             "tile_height": tile_height,
             "viewport": (viewport_x, viewport_y, viewport_w, viewport_h),
             "perspective": mode,
+            "flip_x": bool(flags & 0x02),
+            "flip_y": bool(flags & 0x04),
         }
         tilemaps.append(tilemap)
         tilemap_by_slot[slot] = tilemap
@@ -423,6 +425,8 @@ def render_tilemap(pixels, column, tilemap):
     delta = (column - x0) % COLUMNS
     if delta >= viewport_w:
         return
+    if tilemap.get("flip_x"):
+        delta = viewport_w - 1 - delta
     sx = viewport_x + delta
     tile_col = sx // tile_w
     # strip data columns are stored mirrored, same as sprites
@@ -431,7 +435,10 @@ def render_tilemap(pixels, column, tilemap):
     frames = tilemap["frames"]
     y0 = _floor_coord(tilemap["y"])
     for dest_y in range(max(y0, 0), min(y0 + viewport_h, ROWS)):
-        sy = viewport_y + (dest_y - y0)
+        view_delta_y = dest_y - y0
+        if tilemap.get("flip_y"):
+            view_delta_y = viewport_h - 1 - view_delta_y
+        sy = viewport_y + view_delta_y
         frame = frames[(sy // tile_h) * map_columns + tile_col]
         if frame == 255:
             continue

@@ -71,6 +71,11 @@ class Mover:
 
 
 class PovStress(vs2.Scene):
+    # This hidden scene is a hardware soak fixture. It must remain active
+    # without synthetic joystick traffic, which would otherwise perturb heap
+    # and timing measurements.
+    idle_timeout = None
+
     def build(self):
         self.depth = self.camera_theta = self.area = self.tick = 0
         self.score = 0

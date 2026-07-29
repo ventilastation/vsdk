@@ -78,6 +78,10 @@ typedef struct {
 extern bool vs2_render_active;
 extern vs2_scene_t vs2_active_scene;
 
+typedef void (*vs2_service_fn_t)(void);
+
 void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene);
+void render_vs2_cooperative(int column, uint32_t* led_buffer,
+    const vs2_scene_t* scene, vs2_service_fn_t service);
 
 const char* memoryview_data(mp_obj_t mv_obj);

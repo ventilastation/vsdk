@@ -80,6 +80,7 @@ class PovStressVs2Tests(unittest.TestCase):
         )
 
         self.assertEqual(scene._vs_declared_api, "vs2")
+        self.assertIsNone(scene.idle_timeout)
 
         field_layers = [l for l in scene.layers if l.name and l.name.startswith("field")]
         self.assertEqual(len(field_layers), NUM_LAYERS)
