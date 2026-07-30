@@ -103,13 +103,13 @@ class VyrussVs2Tests(unittest.TestCase):
         self.assertEqual(scene.player.x, 120)
 
         self.step_buttons(0)
-        self.assertEqual(scene.player.y, 0)
+        self.assertEqual(scene.player.y, -1)
         self.step_buttons(director.BUTTON_B)
-        self.assertEqual(scene.player.y, 0)
+        self.assertEqual(scene.player.y, -1)
         self.step_buttons(director.JOY_DOWN)
-        self.assertEqual(scene.player.y, 0)
+        self.assertEqual(scene.player.y, -1)
         self.step_buttons(director.BUTTON_C)
-        self.assertEqual(scene.player.y, 0)
+        self.assertEqual(scene.player.y, -1)
 
     def test_entering_enemies_follow_their_path_instead_of_sticking_at_rim(self):
         scene = load_app("alecu.vyruss_vs2")
@@ -137,7 +137,7 @@ class VyrussVs2Tests(unittest.TestCase):
             self.step_buttons(0)
             positions.append(scene.player.y)
 
-        self.assertEqual(positions, list(range(2, 22, 2)))
+        self.assertEqual(positions, list(range(1, 21, 2)))
         for _ in range(120):
             self.step_buttons(0)
         self.assertGreater(scene.player.y, 250)

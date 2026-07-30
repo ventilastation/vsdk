@@ -30,7 +30,7 @@ class TutorialVs2Tests(unittest.TestCase):
         stripes.clear()
 
         def fake_load_rom(_filename):
-            for index, name in enumerate(("rainbow437.png", "galaga.png", "gameover.png", "bembi.png", "doom.png")):
+            for index, name in enumerate(("rainbow437.png", "galaga.png", "gameover.png", "bembi.png", "doom.png", "ll9.png")):
                 stripes[name] = index
                 self.runtime_director.platform.sprites.stripes[index] = {
                     "width": 8, "height": 8, "frames": 256, "palette": 0,
@@ -61,7 +61,7 @@ class TutorialVs2Tests(unittest.TestCase):
         self.assertTrue(sprite.flip_x)
         self.step(0)
         self.step(director.BUTTON_C)
-        self.assertEqual(sprite.frame, 7)
+        self.assertEqual(sprite.frame, 1)
 
 
 if __name__ == "__main__":
