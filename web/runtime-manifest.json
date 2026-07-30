@@ -1419,6 +1419,7 @@
     "system/vs2_hardware/meta.json",
     "system/shared/other/images/vs2_environment.png",
     "apps/micropython/vs2/__init__.py",
-    "apps/micropython/vs2/controls.py"
+    "apps/micropython/vs2/controls.py",
+    "system/shared/other/images/ll9.png"
   ]
 }

@@ -112,6 +112,105 @@ def test_joy2_and_exit_return_to_root_scene():
     assert director.buttons2 == 0
 
 
+def test_exit_does_not_restart_vladfarty_style_controller():
+    runtime = fresh_runtime()
+    commands = []
+    runtime.platform.comms.next_command = lambda: commands.pop(0) if commands else None
+    events = []
+
+    class Menu(Scene):
+        def on_enter(self):
+            events.append("menu-enter")
+
+        def step(self):
+            events.append("menu-step")
+
+    class Child(Scene):
+        pass
+
+    class VladFartyController(Scene):
+        def __init__(self):
+            super().__init__()
+            self.scene_index = 0
+
+        def on_enter(self):
+            events.append("vladfarty-enter")
+            if self.scene_index == 0:
+                self.scene_index += 1
+                director.push(Child())
+            else:
+                director.pop()
+                raise StopIteration()
+
+    menu = Menu()
+    director.push(menu)
+    director.push(VladFartyController())
+    commands.append("exit")
+    director.step_once()
+
+    assert runtime.scene_stack == [menu]
+    assert events.count("vladfarty-enter") == 1, events
+    assert events[-2:] == ["menu-enter", "menu-step"], events
+
+
+def test_exit_does_not_restart_gallery_style_controller():
+    runtime = fresh_runtime()
+    commands = []
+    runtime.platform.comms.next_command = lambda: commands.pop(0) if commands else None
+    events = []
+
+    class Menu(Scene):
+        def on_enter(self):
+            events.append("menu-enter")
+
+        def step(self):
+            events.append("menu-step")
+
+    class Child(Scene):
+        pass
+
+    class GalleryController(Scene):
+        def on_enter(self):
+            events.append("gallery-enter")
+            # Bound the regression failure: the real Gallery would keep
+            # replacing the child forever if return_to_menu() re-entered it.
+            if events.count("gallery-enter") > 3:
+                raise RuntimeError("gallery controller re-entered while exiting")
+            director.push(Child())
+
+    menu = Menu()
+    director.push(menu)
+    director.push(GalleryController())
+    commands.append("exit")
+    director.step_once()
+
+    assert runtime.scene_stack == [menu]
+    assert events.count("gallery-enter") == 1, events
+    assert events[-2:] == ["menu-enter", "menu-step"], events
+
+
+def test_exit_at_root_does_not_reenter_root_scene():
+    runtime = fresh_runtime()
+    commands = []
+    runtime.platform.comms.next_command = lambda: commands.pop(0) if commands else None
+    events = []
+
+    class Menu(Scene):
+        def on_enter(self):
+            events.append("menu-enter")
+
+        def step(self):
+            events.append("menu-step")
+
+    menu = Menu()
+    director.push(menu)
+    commands.append("exit")
+    director.step_once()
+
+    assert runtime.scene_stack == [menu]
+    assert events == ["menu-enter", "menu-step"], events
+
+
 def test_push_rollback_on_failing_enter():
     fresh_runtime()
 

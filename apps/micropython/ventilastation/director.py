@@ -164,8 +164,11 @@ class Director:
         MicroPython game can: the launcher is always the root scene and the
         rest of the stack is transient UI or game state.
         """
+        returning = len(self.scene_stack) > 1
         while len(self.scene_stack) > 1:
-            self.pop()
+            self._pop_scene(enter_below=False)
+        if returning and self.scene_stack:
+            self._enter_scene(self.scene_stack[-1])
         self.buttons = 0
         self.last_buttons = 0
         self.buttons2 = 0
@@ -308,7 +311,7 @@ class Director:
         self.scene_stack.append(scene)
         self._enter_top_scene()
 
-    def pop(self):
+    def _pop_scene(self, enter_below):
         scene = self.scene_stack.pop()
         self._exit_scene(scene)
         below = self.scene_stack[-1] if self.scene_stack else None
@@ -321,9 +324,12 @@ class Director:
             self.music_off()
         self.platform.sprites.reset_sprites()
         gc.collect()
-        if self.scene_stack:
-            self._enter_scene(self.scene_stack[-1])
+        if enter_below and below is not None:
+            self._enter_scene(below)
         return scene
+
+    def pop(self):
+        return self._pop_scene(enter_below=True)
 
     def switch(self, scene):
         """Replace the showing V2 scene without interrupting app music."""
