@@ -20,6 +20,11 @@ MAX_BADDIES = MAX_GROUPS * BADDIES_PER_GROUP
 MAX_EXPLOSIONS = 8
 X_SPEED = 3
 Y_SPEED = 2
+RIM_Y = -1
+BADDIE_START_Y = 154
+BADDIE_FINAL_Y = (119, 100, 81, 62)
+LASER_FAR_Y = 164
+PLANET_CENTER_Y = 255
 
 ENTERING = 0
 ATTACKING = 1
@@ -126,9 +131,9 @@ class VyrusGame(vs2.Scene):
         self.hud = self.layer("hud", projection=vs2.HUD)
 
         self.planet = self.fullscreen.sprite(
-            LEVELS[0][1], x=0, y=62, visible=False)
+            LEVELS[0][1], x=0, y=PLANET_CENTER_Y, visible=False)
         self.player = self.world.sprite(
-            "ll9.png", x=vs2.display.width - 8, y=16)
+            "ll9.png", x=vs2.display.width - 8, y=RIM_Y)
         self.laser = self.world.sprite_pool("disparo.png", 1)
         self.bombs = self.world.sprite_pool("disparo.png", MAX_BOMBS)
         self.baddies = self.world.sprite_pool("galaga.png", MAX_BADDIES)
@@ -152,7 +157,7 @@ class VyrusGame(vs2.Scene):
         self.player_explosion.hide()
         self.player.show()
         self.player.x = vs2.display.width - self.player.width // 2
-        self.player.y = 16
+        self.player.y = RIM_Y
         self.player.frame = 0
         self.player_frame_clock = -1
         self.player_exploded = False
@@ -183,7 +188,7 @@ class VyrusGame(vs2.Scene):
             0, 128, 55, 183, 18, 73, 146,
             201, 37, 91, 238, 110, 165, 219,
         )
-        final_y_positions = (128, 110, 92, 74)
+        final_y_positions = BADDIE_FINAL_Y
         bases = (120, 216, 24, 248, 120)
         number = self.num_baddies
         final_x = final_x_positions[number % len(final_x_positions)]
@@ -194,7 +199,7 @@ class VyrusGame(vs2.Scene):
         odd = len(self.groups[-1]) % 2
         start_x = base_x + (16 if odd else -16)
         baddie = self.baddies.spawn(
-            start_x, 160, frame=frame)
+            start_x, BADDIE_START_Y, frame=frame)
         if baddie is None:
             return
         baddie.base_frame = frame
@@ -203,15 +208,15 @@ class VyrusGame(vs2.Scene):
         baddie.finished = False
         if odd:
             baddie.movements = [
-                TravelCloser(80), TravelX(112),
-                TravelCloser(32), TravelX(-96),
-                TravelAway(42), TravelTo(final_x, final_y),
+                TravelCloser(85), TravelX(112),
+                TravelCloser(34), TravelX(-96),
+                TravelAway(45), TravelTo(final_x, final_y),
             ]
         else:
             baddie.movements = [
-                TravelCloser(80), TravelX(-112),
-                TravelCloser(32), TravelX(96),
-                TravelAway(42), TravelTo(final_x, final_y),
+                TravelCloser(85), TravelX(-112),
+                TravelCloser(34), TravelX(96),
+                TravelAway(45), TravelTo(final_x, final_y),
             ]
         self.groups[-1].append(baddie)
         self.everyone.append(baddie)
@@ -267,7 +272,7 @@ class VyrusGame(vs2.Scene):
         if len(self.attacking) < self.max_attacking:
             baddie = choice(self.everyone)
             if baddie not in self.attacking:
-                distance = max(0, baddie.y - 16)
+                distance = max(0, baddie.y - RIM_Y)
                 baddie.movements = [
                     TravelCloser(distance), TravelAway(distance)]
                 baddie.finished = False
@@ -276,7 +281,7 @@ class VyrusGame(vs2.Scene):
 
     def start_defeated(self):
         self.state = DEFEATED
-        self.planet.y = 0
+        self.planet.y = PLANET_CENTER_Y
         self.planet.frame = 0
         self.planet.show()
         self.planet_animating = True
@@ -296,9 +301,9 @@ class VyrusGame(vs2.Scene):
 
     def update_defeated(self):
         if self.planet_animating:
-            self.planet.y += 1
-            if self.planet.y >= 255:
-                self.planet.y = 255
+            self.planet.y -= 1
+            if self.planet.y <= RIM_Y:
+                self.planet.y = RIM_Y
                 self.planet_animating = False
                 self.call_later(1500, self.finish_level)
         if self.ship_warping:
@@ -340,7 +345,7 @@ class VyrusGame(vs2.Scene):
             # accidentally also treated DOWN as radial movement, so steering
             # down changed two axes at once. Once a wave is defeated, the warp
             # sequence owns Y and flies the fighter inward toward the planet.
-            self.player.y = 16
+            self.player.y = RIM_Y
 
     def animate_player(self):
         if self.player_exploded:
@@ -401,7 +406,7 @@ class VyrusGame(vs2.Scene):
         self.player_explosion.hide()
         self.player_exploded = False
         self.player.x = vs2.display.width - self.player.width // 2
-        self.player.y = 16
+        self.player.y = RIM_Y
         self.player.frame = 0
         self.player_frame_clock = -1
         self.player.show()
@@ -409,7 +414,7 @@ class VyrusGame(vs2.Scene):
     def update_projectiles(self):
         for laser in self.laser:
             laser.y += 6
-            if laser.y > 170:
+            if laser.y > LASER_FAR_Y:
                 self.laser.despawn(laser)
                 continue
             hit = None
@@ -422,7 +427,7 @@ class VyrusGame(vs2.Scene):
                 self.kill_baddie(hit)
         for bomb in self.bombs:
             bomb.y -= 3
-            if bomb.y < 6:
+            if bomb.y < RIM_Y:
                 self.bombs.despawn(bomb)
         for boom in self.explosions:
             boom.age += 1

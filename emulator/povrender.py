@@ -10,7 +10,7 @@ import math
 import threading
 from struct import pack, unpack, unpack_from
 
-from deepspace import deepspace, PIXELS
+from deepspace import deepspace, vs2_deepspace, PIXELS
 from apa102 import decode_frame
 from color_profile import ColorProfile, DEFAULT_PROFILE
 import native_render
@@ -447,13 +447,14 @@ def render_tilemap(pixels, column, tilemap):
         if index != TRANSPARENT_INDEX:
             color = upalette[index + pal_base]
             if perspective == 1:
-                led = deepspace[dest_y]
+                led = vs2_deepspace[dest_y]
             else:
                 led = led_count - 1 - dest_y
             set_pixel(pixels, led, color)
 
 
-def render_sprite(pixels, column, x, y, image, frame, perspective, flip_x=False, flip_y=False):
+def render_sprite(pixels, column, x, y, image, frame, perspective,
+                  flip_x=False, flip_y=False, vs2_coordinates=False):
     x = _floor_coord(x)
     y = _floor_coord(y)
     strip = all_strips.get(image)
@@ -473,9 +474,18 @@ def render_sprite(pixels, column, x, y, image, frame, perspective, flip_x=False,
             index = pixeldata[base + source_row]
             if index != TRANSPARENT_INDEX:
                 color = upalette[index + pal_base]
-                set_pixel(pixels, deepspace[dest_y] if perspective == 1 else led_count - 1 - dest_y, color)
+                depth_map = vs2_deepspace if vs2_coordinates else deepspace
+                set_pixel(
+                    pixels,
+                    depth_map[dest_y]
+                    if perspective == 1 else led_count - 1 - dest_y,
+                    color,
+                )
     else:
-        zleds = deepspace[_clamp(255 - y, 0, ROWS - 1)]
+        if vs2_coordinates:
+            zleds = vs2_deepspace[_clamp(y, 0, ROWS - 1)] + 1
+        else:
+            zleds = deepspace[_clamp(255 - y, 0, ROWS - 1)]
         for led in range(zleds):
             source_row = led * led_count // zleds
             if source_row >= h:
@@ -535,7 +545,8 @@ def render(column, vs2_scene=_CURRENT_VS2_SCENE):
             if kind == 0:
                 render_sprite(pixels, column, drawable["x"], drawable["y"],
                               drawable["image"], drawable["frame"], drawable["perspective"],
-                              drawable.get("flip_x", False), drawable.get("flip_y", False))
+                              drawable.get("flip_x", False), drawable.get("flip_y", False),
+                              True)
             else:
                 render_tilemap(pixels, column, drawable)
         return pixels

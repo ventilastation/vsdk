@@ -48,6 +48,7 @@
 //                      [5]=mapRows [6]=tileWidth [7]=tileHeight
 //                      [8..11]=viewport x/y/w/h [12]=cells byte offset
 //                      [13]=flags(1=flipX,2=flipY);
+//             [14]=1 for VS2's rim-origin Y projection, 0 for legacy;
 //             [15]=kind (0=sprite, 1=tilemap).
 //             mode is canonical: 0=planet/fullscreen, 1=tunnel, 2=HUD
 //             (pack time maps every other value the way the CPU renderers
@@ -57,9 +58,11 @@
 // u_stars     R32UI, STARS x 1. Per star: x | (y << 8) -- positions already
 //             animated for this frame (see computeStarPositions / the
 //             desktop's live starfield list).
-// u_deepspace R32UI, 256 wide x 2 tall.
-//             Row 0, texel y:   deepspace[y] (the forward LUT; 54 = off).
-//             Row 1, texel led: yLo | (yHi << 8), the inclusive range of y
+// u_deepspace R32UI, 256 wide x 4 tall.
+//             Rows 0/1 hold the legacy forward/inverse projection and rows
+//             2/3 hold VS2's rim-origin forward/inverse projection.
+//             Forward texel y is the LED index (54 = off for legacy only).
+//             Inverse texel led is yLo | (yHi << 8), the inclusive range of y
 //             values with deepspace[y]==led (deepspace is monotonic, so the
 //             range is contiguous); 255|0<<8 marks an empty range.
 //
@@ -103,6 +106,14 @@
     const n = ROWS - 1 - index;
     DEEPSPACE[index] = Math.floor(PIXELS * Math.pow(n / DEEPSPACE_ROWS, 1 / GAMMA) + 0.5);
   }
+  const VS2_DEEPSPACE = new Uint8Array(ROWS);
+  for (let y = 0; y < ROWS; y += 1) {
+    VS2_DEEPSPACE[y] = Math.floor(
+      (PIXELS - 1)
+      * Math.pow((ROWS - 1 - y) / (ROWS - 1), 1 / GAMMA)
+      + 0.5
+    );
+  }
 
   function positiveMod(value, modulo) {
     return ((value % modulo) + modulo) % modulo;
@@ -113,28 +124,30 @@
   // ---------------------------------------------------------------------
 
   function packDeepspace() {
-    const data = new Uint32Array(256 * 2);
-    for (let y = 0; y < ROWS; y += 1) {
-      data[y] = DEEPSPACE[y];
-    }
-    const lo = new Array(PIXELS).fill(255);
-    const hi = new Array(PIXELS).fill(0);
-    for (let y = 0; y < ROWS; y += 1) {
-      const led = DEEPSPACE[y];
-      if (led >= PIXELS) {
-        continue;
+    const data = new Uint32Array(256 * 4);
+    const packProjection = (projection, forwardRow, inverseRow) => {
+      const lo = new Array(PIXELS).fill(255);
+      const hi = new Array(PIXELS).fill(0);
+      for (let y = 0; y < ROWS; y += 1) {
+        const led = projection[y];
+        data[forwardRow * 256 + y] = led;
+        if (led >= PIXELS) {
+          continue;
+        }
+        if (y < lo[led]) {
+          lo[led] = y;
+        }
+        if (y > hi[led]) {
+          hi[led] = y;
+        }
       }
-      if (y < lo[led]) {
-        lo[led] = y;
+      for (let led = 0; led < PIXELS; led += 1) {
+        data[inverseRow * 256 + led] = lo[led] | (hi[led] << 8);
       }
-      if (y > hi[led]) {
-        hi[led] = y;
-      }
-    }
-    for (let led = 0; led < PIXELS; led += 1) {
-      data[256 + led] = lo[led] | (hi[led] << 8);
-    }
-    return { data, width: 256, height: 2 };
+    };
+    packProjection(DEEPSPACE, 0, 1);
+    packProjection(VS2_DEEPSPACE, 2, 3);
+    return { data, width: 256, height: 4 };
   }
 
   // assets: iterable of [slot, asset] where asset has width/height/frames/
@@ -199,7 +212,10 @@
     return { drawables: [], spriteCount: 0, tilemapCount: 0, cells: [] };
   }
 
-  function pushSprite(packer, { x, y, strip, frame, mode, flipX, flipY }) {
+  function pushSprite(
+    packer,
+    { x, y, strip, frame, mode, flipX, flipY, vs2Coordinates = false },
+  ) {
     const lanes = new Uint32Array(SCENE_LANES_PER_ENTITY);
     lanes[0] = x >>> 0;
     lanes[1] = y >>> 0;
@@ -207,6 +223,7 @@
     lanes[3] = frame & 0xff;
     lanes[4] = canonicalMode(mode);
     lanes[5] = (flipX ? 1 : 0) | (flipY ? 2 : 0);
+    lanes[14] = vs2Coordinates ? 1 : 0;
     lanes[15] = 0;
     packer.drawables.push(lanes);
     packer.spriteCount += 1;
@@ -234,6 +251,7 @@
     lanes[11] = tilemap.viewport[3];
     lanes[12] = offset;
     lanes[13] = (tilemap.flipX ? 1 : 0) | (tilemap.flipY ? 2 : 0);
+    lanes[14] = tilemap.vs2Coordinates ? 1 : 0;
     lanes[15] = 1;
     packer.drawables.push(lanes);
     packer.tilemapCount += 1;
@@ -360,6 +378,7 @@
         mode: layer ? layer.mode : bytes[recordOffset + 3],
         flipX: Boolean(flags & 2),
         flipY: Boolean(flags & 4),
+        vs2Coordinates: true,
       };
     }
 
@@ -406,6 +425,7 @@
         frames: bytes.subarray(framesOffset, framesOffset + cellsLength),
         flipX: Boolean(flags & 2),
         flipY: Boolean(flags & 4),
+        vs2Coordinates: true,
       };
     }
     if (version === 3) {
@@ -456,6 +476,7 @@
         mode: value.perspective,
         flipX: Boolean(value.vs2 ? value.vs2.flip_x : value.flip_x),
         flipY: Boolean(value.vs2 ? value.vs2.flip_y : value.flip_y),
+        vs2Coordinates: true,
       });
     };
     const tilemap = (value) => {
@@ -473,6 +494,7 @@
         frames: value.frames,
         flipX: Boolean(value.vs2 ? value.vs2.flip_x : value.flip_x),
         flipY: Boolean(value.vs2 ? value.vs2.flip_y : value.flip_y),
+        vs2Coordinates: true,
       });
     };
     if (Array.isArray(scene?.drawables)) {
@@ -584,12 +606,13 @@
     return flipX ? width - 1 - spriteColumn : spriteColumn;
   }
 
-  function deepspaceAt(context, y) {
-    return context.deepspace.data[y];
+  function deepspaceAt(context, y, vs2Coordinates = false) {
+    return context.deepspace.data[(vs2Coordinates ? 2 : 0) * 256 + y];
   }
 
-  function deepspaceRange(context, led) {
-    const packedRange = context.deepspace.data[256 + led];
+  function deepspaceRange(context, led, vs2Coordinates = false) {
+    const row = vs2Coordinates ? 3 : 1;
+    const packedRange = context.deepspace.data[row * 256 + led];
     return [packedRange & 0xff, (packedRange >> 8) & 0xff];
   }
 
@@ -612,6 +635,7 @@
     const mode = sceneLane(context.scene, entityRow, 4);
     const flags = sceneLane(context.scene, entityRow, 5);
     const flipY = (flags & 2) !== 0;
+    const vs2Coordinates = sceneLane(context.scene, entityRow, 14) !== 0;
 
     const sourceColumn = sourceColumnFor(x, width, renderColumn, (flags & 1) !== 0);
     if (sourceColumn === -1) {
@@ -620,7 +644,13 @@
     const base = stripOffset + sourceColumn * height + frame * width * height;
 
     if (mode === MODE_PLANET) {
-      const zleds = deepspaceAt(context, Math.max(0, Math.min(255 - y, ROWS - 1)));
+      const zleds = vs2Coordinates
+        ? deepspaceAt(
+          context, Math.max(0, Math.min(y, ROWS - 1)), true,
+        ) + 1
+        : deepspaceAt(
+          context, Math.max(0, Math.min(255 - y, ROWS - 1)),
+        );
       if (led >= zleds) {
         return null;
       }
@@ -659,7 +689,9 @@
     if (led >= PIXELS) {
       return null;
     }
-    const [rangeLo, rangeHi] = deepspaceRange(context, led);
+    const [rangeLo, rangeHi] = deepspaceRange(
+      context, led, vs2Coordinates,
+    );
     const scanLo = Math.max(rangeLo, y, 0);
     const scanHi = Math.min(rangeHi, y + height - 1, ROWS - 1);
     for (let destY = scanHi; destY >= scanLo; destY -= 1) {
@@ -712,6 +744,7 @@
     const x = asInt32(sceneLane(context.scene, entityRow, 0));
     const y = asInt32(sceneLane(context.scene, entityRow, 1));
     const mode = sceneLane(context.scene, entityRow, 3);
+    const vs2Coordinates = sceneLane(context.scene, entityRow, 14) !== 0;
 
     const delta = positiveMod(renderColumn - x, COLUMNS);
     if (delta >= viewportW) {
@@ -750,7 +783,9 @@
     if (led >= PIXELS) {
       return null;
     }
-    const [rangeLo, rangeHi] = deepspaceRange(context, led);
+    const [rangeLo, rangeHi] = deepspaceRange(
+      context, led, vs2Coordinates,
+    );
     for (let destY = rangeHi; destY >= rangeLo; destY -= 1) {
       const color = probeRow(destY);
       if (color) {
@@ -856,12 +891,14 @@ uvec4 sceneTexel(int row, int texel) {
   return texelFetch(u_scene, ivec2(texel, row), 0);
 }
 
-int deepspaceAt(int y) {
-  return int(texelFetch(u_deepspace, ivec2(y, 0), 0).r);
+int deepspaceAt(int y, bool vs2Coordinates) {
+  return int(texelFetch(
+    u_deepspace, ivec2(y, vs2Coordinates ? 2 : 0), 0).r);
 }
 
-ivec2 deepspaceRange(int led) {
-  uint packedRange = texelFetch(u_deepspace, ivec2(led, 1), 0).r;
+ivec2 deepspaceRange(int led, bool vs2Coordinates) {
+  uint packedRange = texelFetch(
+    u_deepspace, ivec2(led, vs2Coordinates ? 3 : 1), 0).r;
   return ivec2(int(packedRange & 255u), int((packedRange >> 8) & 255u));
 }
 
@@ -904,6 +941,7 @@ bool probeSprite(int row, int renderColumn, int led, out vec4 color) {
   int mode = int(texel1.x);
   int flags = int(texel1.y);
   bool flipY = (flags & 2) != 0;
+  bool vs2Coordinates = sceneTexel(row, 3).z != 0u;
 
   int sourceColumn = sourceColumnFor(x, width, renderColumn, (flags & 1) != 0);
   if (sourceColumn == -1) {
@@ -912,7 +950,9 @@ bool probeSprite(int row, int renderColumn, int led, out vec4 color) {
   int base = stripOffset + sourceColumn * height + frame * width * height;
 
   if (mode == MODE_PLANET) {
-    int zleds = deepspaceAt(clamp(255 - y, 0, ROWS - 1));
+    int zleds = vs2Coordinates
+      ? deepspaceAt(clamp(y, 0, ROWS - 1), true) + 1
+      : deepspaceAt(clamp(255 - y, 0, ROWS - 1), false);
     if (led >= zleds) {
       return false;
     }
@@ -953,7 +993,7 @@ bool probeSprite(int row, int renderColumn, int led, out vec4 color) {
   if (led >= PIXELS) {
     return false;
   }
-  ivec2 range = deepspaceRange(led);
+  ivec2 range = deepspaceRange(led, vs2Coordinates);
   int scanLo = max(range.x, max(y, 0));
   int scanHi = min(range.y, min(y + height - 1, ROWS - 1));
   for (int destY = scanHi; destY >= scanLo; destY--) {
@@ -1033,6 +1073,7 @@ bool probeTilemap(int row, int renderColumn, int led, out vec4 color) {
   int x = int(texel0.x);
   int y = int(texel0.y);
   int mode = int(texel0.w);
+  bool vs2Coordinates = texel3.z != 0u;
 
   int delta = positiveMod(renderColumn - x, COLUMNS);
   if (delta >= viewportW) {
@@ -1052,7 +1093,7 @@ bool probeTilemap(int row, int renderColumn, int led, out vec4 color) {
   if (led >= PIXELS) {
     return false;
   }
-  ivec2 range = deepspaceRange(led);
+  ivec2 range = deepspaceRange(led, vs2Coordinates);
   for (int destY = range.y; destY >= range.x; destY--) {
     if (probeTilemapRow(destY, y, viewportY, viewportH, flipY, tileHeight,
                         mapColumns, tileCol, cellsOffset, totalFrames,
@@ -1069,7 +1110,7 @@ bool probeStars(int renderColumn, int led, out vec4 color) {
     if (int(packedStar & 255u) != renderColumn) {
       continue;
     }
-    if (deepspaceAt(int((packedStar >> 8) & 255u)) == led) {
+    if (deepspaceAt(int((packedStar >> 8) & 255u), false) == led) {
       color = vec4(vec3(64.0 / 255.0), 1.0);
       return true;
     }
@@ -1122,6 +1163,7 @@ void main() {
     SCENE_TEXELS_PER_ENTITY,
     SCENE_LANES_PER_ENTITY,
     DEEPSPACE,
+    VS2_DEEPSPACE,
     packDeepspace,
     packStrips,
     packPalette,

@@ -30,6 +30,14 @@
       return Math.round(PIXELS * Math.pow(n / DEEPSPACE_ROWS, 1 / GAMMA));
     }),
   ]);
+  const VS2_DEEPSPACE = new Uint8Array(
+    Array.from({ length: ROWS }, (_, y) => (
+      Math.round(
+        (PIXELS - 1)
+        * Math.pow((ROWS - 1 - y) / (ROWS - 1), 1 / GAMMA)
+      )
+    )),
+  );
 
   function createRng(seed) {
     let state = seed >>> 0;
@@ -386,7 +394,8 @@
       if (colorIndex === TRANSPARENT_INDEX) {
         continue;
       }
-      const led = perspective === 1 ? DEEPSPACE[y] : PIXELS - 1 - y;
+      const depthMap = tilemap?.vs2 ? VS2_DEEPSPACE : DEEPSPACE;
+      const led = perspective === 1 ? depthMap[y] : PIXELS - 1 - y;
       if (led < PIXELS) {
         setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);
       }
@@ -408,13 +417,16 @@
       for (let y = Math.max(spriteY, 0); y < Math.min(spriteY + height, ROWS); y += 1) {
         const colorIndex = asset.data[base + getSourceRow(sprite, y - spriteY, height)];
         if (colorIndex === TRANSPARENT_INDEX) continue;
-        const led = sprite.perspective === 1 ? DEEPSPACE[y] : PIXELS - 1 - y;
+        const depthMap = sprite?.vs2 ? VS2_DEEPSPACE : DEEPSPACE;
+        const led = sprite.perspective === 1 ? depthMap[y] : PIXELS - 1 - y;
         if (led < PIXELS) setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);
       }
       return;
     }
     const spriteY = spritePixelY(sprite);
-    const zleds = DEEPSPACE[clamp(255 - spriteY, 0, ROWS - 1)];
+    const zleds = sprite?.vs2
+      ? VS2_DEEPSPACE[clamp(spriteY, 0, ROWS - 1)] + 1
+      : DEEPSPACE[clamp(255 - spriteY, 0, ROWS - 1)];
     for (let led = 0; led < zleds; led += 1) {
       let sourceRow = Math.floor((led * PIXELS) / zleds);
       if (sourceRow >= height) break;
@@ -596,6 +608,7 @@
     PIXELS,
     TRANSPARENT_INDEX,
     DEEPSPACE,
+    VS2_DEEPSPACE,
     getVisibleColumn,
     decodeVs2SceneBuffer,
     computeLedFramePixels,

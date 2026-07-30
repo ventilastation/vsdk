@@ -2,7 +2,7 @@
 // scene into integer textures and lets scene-shader-core's fragment shader
 // write the complete 256-column LED frame into the ring renderer's texture.
 
-import "./scene-shader-core.js?v=20260717a";
+import "./scene-shader-core.js?v=20260729a";
 
 const SceneShaderCore = globalThis.VentilastationSceneShaderCore;
 

@@ -365,7 +365,38 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         povrender.set_vs2_scene(make_vs2_scene([], [], [default_tilemap(mode=1)]))
 
         pixels_column_10 = povrender.render(10)
-        self.assertEqual(pixels_column_10[povrender.deepspace[40]], 10)
+        self.assertEqual(pixels_column_10[povrender.vs2_deepspace[40]], 10)
+
+    def test_vs2_modes_share_a_rim_origin_and_fullscreen_contracts_inward(self):
+        povrender.all_strips[8] = bytes(
+            [1, povrender.led_count, 1, 0]
+            + [1] * povrender.led_count
+        )
+
+        for mode in (1, 2):
+            with self.subTest(mode=mode):
+                povrender.set_vs2_scene(make_vs2_scene([], [
+                    {"image": 8, "mode": mode, "flags": 1, "x": 20, "y": 0},
+                ]))
+                self.assertEqual(
+                    povrender.render(20)[povrender.led_count - 1],
+                    10,
+                )
+
+        povrender.set_vs2_scene(make_vs2_scene([], [
+            {"image": 8, "mode": 0, "flags": 1, "x": 20, "y": 0},
+        ]))
+        self.assertEqual(
+            povrender.render(20)[povrender.led_count - 1],
+            10,
+        )
+
+        povrender.set_vs2_scene(make_vs2_scene([], [
+            {"image": 8, "mode": 0, "flags": 1, "x": 20, "y": 255},
+        ]))
+        pixels = povrender.render(20)
+        self.assertEqual(pixels[0], 10)
+        self.assertEqual(pixels[1:], [0] * (povrender.led_count - 1))
 
     def test_vs2_fullscreen_tilemap_is_skipped(self):
         povrender.all_strips[9] = make_tile_strip()

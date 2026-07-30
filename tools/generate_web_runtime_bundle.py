@@ -16,11 +16,12 @@ def iter_python_sources():
     micropython_dir = ROOT_DIR / "apps" / "micropython"
     for path in sorted(micropython_dir.glob("*.py")):
         yield path.relative_to(ROOT_DIR).as_posix()
-    package_dir = ROOT_DIR / "apps" / "micropython" / "ventilastation"
-    for path in sorted(package_dir.rglob("*.py")):
-        if "__pycache__" in path.parts:
-            continue
-        yield path.relative_to(ROOT_DIR).as_posix()
+    for package_name in ("ventilastation", "vs2"):
+        package_dir = ROOT_DIR / "apps" / "micropython" / package_name
+        for path in sorted(package_dir.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            yield path.relative_to(ROOT_DIR).as_posix()
     for root_name in ("games", "system"):
         root_dir = ROOT_DIR / root_name
         if not root_dir.is_dir():

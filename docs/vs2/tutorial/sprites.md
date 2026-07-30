@@ -6,7 +6,7 @@ impossible to have a sprite that nothing draws:
 ```python
 def build(self):
     world = self.layer("world", projection=vs2.TUNNEL)
-    self.ship = world.sprite("ship.png", x=128, y=16)
+    self.ship = world.sprite("ship.png", x=128, y=0)
 ```
 
 ## Moving and animating
@@ -17,7 +17,7 @@ enough to do on every drawable, every tick:
 ```python
 def update(self):
     self.ship.x += 0.5              # angle; wraps at 256
-    self.ship.y = 20                # depth on a TUNNEL layer; 16 is the rim
+    self.ship.y = 20                # depth on a TUNNEL layer; 0 is the rim
     self.ship.frame = (self.ship.frame + 1) % self.ship.image.frames
     self.ship.flip_x = self.moving_left
 ```

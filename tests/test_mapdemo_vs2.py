@@ -68,11 +68,15 @@ class MapDemoTests(unittest.TestCase):
     def test_mapdemo_pans_viewport_and_edits_cells(self):
         scene = load_app("alecu.mapdemo")
         import vs2
-        from games.alecu.mapdemo.code.mapdemo import MAP_COLUMNS, MAP_ROWS, VIEW_H, WALL
+        from games.alecu.mapdemo.code.mapdemo import (
+            MAP_COLUMNS, MAP_ROWS, MAP_Y, VIEW_H, WALL,
+        )
 
         self.assertEqual(scene._vs_declared_api, "vs2")
         self.assertEqual(len(scene.map_data), MAP_COLUMNS * MAP_ROWS)
         self.assertIs(scene.map.cells, scene.map_data)
+        self.assertEqual(scene.map.y, MAP_Y)
+        self.assertEqual(MAP_Y, 51)
 
         payload = vs2.export_scene_payload(scene)
         self.assertEqual(payload[4], 3)

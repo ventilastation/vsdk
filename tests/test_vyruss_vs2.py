@@ -103,13 +103,13 @@ class VyrussVs2Tests(unittest.TestCase):
         self.assertEqual(scene.player.x, 120)
 
         self.step_buttons(0)
-        self.assertEqual(scene.player.y, 16)
+        self.assertEqual(scene.player.y, 0)
         self.step_buttons(director.BUTTON_B)
-        self.assertEqual(scene.player.y, 16)
+        self.assertEqual(scene.player.y, 0)
         self.step_buttons(director.JOY_DOWN)
-        self.assertEqual(scene.player.y, 16)
+        self.assertEqual(scene.player.y, 0)
         self.step_buttons(director.BUTTON_C)
-        self.assertEqual(scene.player.y, 16)
+        self.assertEqual(scene.player.y, 0)
 
     def test_entering_enemies_follow_their_path_instead_of_sticking_at_rim(self):
         scene = load_app("alecu.vyruss_vs2")
@@ -123,8 +123,8 @@ class VyrussVs2Tests(unittest.TestCase):
             positions.append((baddie.x, baddie.y))
 
         self.assertGreater(len(set(positions)), 80)
-        self.assertGreaterEqual(min(y for _x, y in positions), 48)
-        self.assertNotIn(baddie.y, (30, 31))
+        self.assertGreaterEqual(min(y for _x, y in positions), 35)
+        self.assertNotIn(baddie.y, (14, 15))
         self.assertLess(len(baddie.movements), 6)
 
     def test_defeated_ship_flies_inward_toward_planet(self):
@@ -137,11 +137,22 @@ class VyrussVs2Tests(unittest.TestCase):
             self.step_buttons(0)
             positions.append(scene.player.y)
 
-        self.assertEqual(positions, list(range(18, 38, 2)))
+        self.assertEqual(positions, list(range(2, 22, 2)))
         for _ in range(120):
             self.step_buttons(0)
         self.assertGreater(scene.player.y, 250)
         self.assertFalse(scene.ship_warping)
+
+    def test_defeated_planet_expands_toward_y_zero(self):
+        scene = load_app("alecu.vyruss_vs2")
+        scene.start_defeated()
+
+        self.assertEqual(scene.planet.y, 255)
+        positions = []
+        for _ in range(4):
+            self.step_buttons(0)
+            positions.append(scene.planet.y)
+        self.assertEqual(positions, [254, 253, 252, 251])
 
     def test_scoreboard_keeps_score_then_lives_in_screen_order(self):
         import vs2

@@ -161,6 +161,9 @@ function decodeLegacyTable(table) {
 }
 
 const deepspace = core.packDeepspace();
+assert.equal(deepspace.height, 4, "projection texture carries legacy and VS2 rows");
+assert.equal(deepspace.data[2 * 256], PIXELS - 1, "VS2 y=0 maps to the outer LED");
+assert.equal(deepspace.data[2 * 256 + 255], 0, "VS2 y=255 maps to the centre");
 
 function compareScene(label, { assets, paletteBytes, frame, sceneData }) {
   const expected = computeLedFramePixels(frame, assets, paletteBytes);

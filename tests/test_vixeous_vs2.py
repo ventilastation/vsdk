@@ -131,12 +131,26 @@ class VixeousVs2Tests(unittest.TestCase):
 
     def test_ground_targets_and_boss_are_present_and_advance(self):
         scene = load_app("alecu.vixeous")
-        from games.alecu.vixeous.code.vixeous import TERRAIN_TILE_H
+        from games.alecu.vixeous.code.vixeous import (
+            BOSS_START_Y,
+            ENEMY_START_Y,
+            PLAYER_START_Y,
+            TARGET_START_Y,
+            TERRAIN_TILE_H,
+        )
+
+        self.assertEqual(scene.terrain.y, 0)
+        self.assertEqual(scene.player.y, PLAYER_START_Y)
+        self.assertEqual(scene.aim_y(), PLAYER_START_Y + 66)
+
+        scene.spawn_wave()
+        self.assertEqual(min(enemy.y for enemy in scene.enemies), ENEMY_START_Y)
 
         scene.depth = scene.next_target_row * TERRAIN_TILE_H
         scene.spawn_target_if_needed()
         self.assertEqual(len(scene.targets), 1)
         target = next(iter(scene.targets))
+        self.assertEqual(target.y, TARGET_START_Y)
         original_y = target.y
         scene.update_targets(1)
         self.assertEqual(target.y, original_y - 1)
@@ -146,6 +160,7 @@ class VixeousVs2Tests(unittest.TestCase):
         scene.score = 120
         scene.maybe_start_boss()
         self.assertTrue(scene.boss.visible)
+        self.assertEqual(scene.boss.y, BOSS_START_Y)
         self.assertEqual(scene.boss.hp, 18)
 
     def test_scoreboard_flips_complete_label_for_top_hud(self):

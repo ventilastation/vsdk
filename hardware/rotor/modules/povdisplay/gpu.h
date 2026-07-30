@@ -22,6 +22,8 @@
 extern uint32_t* palette_pal;
 extern int gamma_mode;
 extern bool starfield_enabled;
+extern uint8_t deepspace[256];
+extern uint8_t vs2_deepspace[256];
 
 typedef struct {
     uint8_t id;

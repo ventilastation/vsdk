@@ -1315,7 +1315,6 @@
     "games/other/aaa/sounds/out.mp3",
     "games/other/aaa/sounds/out_special.mp3",
     "games/other/aaa/sounds/pass.mp3",
-    "apps/micropython/vs2.py",
     "apps/micropython/ventilastation/api_guard.py",
     "games/alecu/vyruss_vs2/code/vyruss_vs2.py",
     "games/alecu/vyruss_vs2/meta.json",
@@ -1409,12 +1408,17 @@
     "games/demos/povstress/code/povstress.py",
     "games/demos/povstress/meta.json",
     "apps/micropython/roms/demos.povstress.rom",
-    "apps/micropython/roms/ventap.rom",
     "games/demos/povstress/images/__images__.yaml",
     "games/demos/povstress/images/digits.png",
     "games/demos/povstress/images/explosion.png",
     "games/demos/povstress/images/ship.png",
     "games/demos/povstress/images/shots.png",
-    "games/demos/povstress/images/terrain.png"
+    "games/demos/povstress/images/terrain.png",
+    "apps/micropython/ventilastation/display_geometry.py",
+    "system/vs2_hardware/code/__init__.py",
+    "system/vs2_hardware/meta.json",
+    "system/shared/other/images/vs2_environment.png",
+    "apps/micropython/vs2/__init__.py",
+    "apps/micropython/vs2/controls.py"
   ]
 }

@@ -7,9 +7,9 @@ import vs2
 from vs2.controls import A, B, DOWN, LEFT, RIGHT, UP, joy1
 
 
-PLAYER_START_Y = 22
-PLAYER_MIN_Y = 12
-PLAYER_MAX_Y = 54
+PLAYER_START_Y = 6
+PLAYER_MIN_Y = 0
+PLAYER_MAX_Y = 40
 PLAYER_Y_SPEED = 2
 PLAYER_SIDE_LIMIT = 32
 PLAYER_SIDE_SPEED = 4
@@ -23,7 +23,12 @@ TERRAIN_BUFFER_ROWS = TERRAIN_ROWS + 1
 TERRAIN_VIEW_H = TERRAIN_ROWS * TERRAIN_TILE_H
 MAX_SHOTS, MAX_BOMBS, MAX_ENEMIES, MAX_TARGETS, MAX_EXPLOSIONS = 4, 3, 6, 5, 5
 SHOT_SPEED, BOMB_SPEED, ENEMY_SPEED = 8, 4, 1
-RETICLE_DISTANCE = 62
+RETICLE_DISTANCE = 66
+ENEMY_START_Y = 164
+TARGET_START_Y = 158
+BOSS_START_Y = 143
+BOSS_STOP_Y = 107
+SHOT_FAR_Y = 179
 STATE_READY, STATE_PLAYING, STATE_AREA_CLEAR, STATE_GAME_OVER = range(4)
 
 
@@ -204,7 +209,10 @@ class Vixeous(vs2.Scene):
     def spawn_wave(self):
         base = (self.camera_theta + 44 + randrange(168)) % vs2.display.width
         for number in range(3 + self.area % 2):
-            enemy = self.enemies.spawn(0, 170 + number * 7, frame=(self.area + number) % 3 * 2)
+            enemy = self.enemies.spawn(
+                0, ENEMY_START_Y + number * 7,
+                frame=(self.area + number) % 3 * 2,
+            )
             if enemy is not None:
                 enemy.theta = (base + number * 22) % vs2.display.width
                 enemy.kind = (self.area + number) % 3
@@ -229,7 +237,7 @@ class Vixeous(vs2.Scene):
         theta = terrain_theta_for(col, target_row, self.area)
         kind = 3 if col in pad_cols else randrange(3)
         target = self.targets.spawn(
-            screen_x(theta, self.camera_theta, 14), 164, frame=kind)
+            screen_x(theta, self.camera_theta, 14), TARGET_START_Y, frame=kind)
         if target is not None:
             target.theta, target.kind = theta, kind
         self.next_target_row = row + 5 + randrange(4)
@@ -239,7 +247,7 @@ class Vixeous(vs2.Scene):
             return
         self.boss_started = True
         self.boss.theta = self.camera_theta
-        self.boss.y = 150
+        self.boss.y = BOSS_START_Y
         self.boss.hp = 18
         self.boss.phase = 0
         self.boss.frame = 0
@@ -297,7 +305,7 @@ class Vixeous(vs2.Scene):
     def update_targets(self, dy):
         for target in self.targets:
             target.y -= dy
-            if target.y < 5:
+            if target.y < 0:
                 self.targets.despawn(target)
             else:
                 target.x = screen_x(
@@ -306,7 +314,7 @@ class Vixeous(vs2.Scene):
     def update_entities(self):
         for shot in self.shots:
             shot.y += SHOT_SPEED
-            if shot.y > 184:
+            if shot.y > SHOT_FAR_Y:
                 self.shots.despawn(shot)
             else:
                 shot.x = screen_x(shot.theta, self.camera_theta, shot.width)
@@ -317,7 +325,7 @@ class Vixeous(vs2.Scene):
             enemy.phase = (enemy.phase + 1) % 128
             enemy.theta = (enemy.theta + (2 if enemy.phase < 64 else -2)) % vs2.display.width
             enemy.y -= ENEMY_SPEED
-            if enemy.y < 8:
+            if enemy.y < 0:
                 self.enemies.despawn(enemy)
             else:
                 enemy.x = screen_x(enemy.theta, self.camera_theta, enemy.width)
@@ -328,7 +336,7 @@ class Vixeous(vs2.Scene):
                 self.boss.theta
                 + (2 if self.boss.phase < 96 else -2)
             ) % vs2.display.width
-            if self.boss.y > 116:
+            if self.boss.y > BOSS_STOP_Y:
                 self.boss.y -= 1
             self.boss.x = screen_x(
                 self.boss.theta, self.camera_theta, self.boss.width)

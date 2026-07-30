@@ -74,10 +74,9 @@ decide how a layer maps Y to LEDs.
 .. py:data:: vs2.TUNNEL
    :value: 1
 
-   Perspective. Y is depth, ``0..255``: 0 sits just outside the display and is
-   not drawn, around 16 an object is fully visible at the rim, and it shrinks
-   and converges toward the centre, reached at 255. The usual choice for a game
-   world.
+   Perspective. Y is depth, ``0..255``: 0 is the outermost ring, and increasing
+   values shrink and converge toward the centre, reached at 255. The usual
+   choice for a game world.
 
 .. py:data:: vs2.HUD
    :value: 2
@@ -90,9 +89,11 @@ decide how a layer maps Y to LEDs.
 .. py:data:: vs2.FULLSCREEN
    :value: 0
 
-   One image over the whole disc, for backdrops and planets. Always centred: Y
-   scales it down from full size and X rotates it. Sprites only — creating a
-   tilemap or label on a ``FULLSCREEN`` layer raises during ``build()``.
+   One centred image, for backdrops and planets. It uses the TUNNEL radial
+   curve: ``y = 0`` fills all 54 LEDs, and increasing Y contracts the image
+   toward the centre until only its centre LED remains at 255. X rotates it.
+   Sprites only — creating a tilemap or label on a ``FULLSCREEN`` layer raises
+   during ``build()``.
 ```
 
 ### Tiles and pools

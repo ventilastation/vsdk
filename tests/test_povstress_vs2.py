@@ -76,7 +76,7 @@ class PovStressVs2Tests(unittest.TestCase):
     def test_scene_shape_is_6_layers_of_10_plus_terrain_and_scoreboard(self):
         scene = load_app("demos.povstress")
         from games.demos.povstress.code.povstress import (
-            NUM_LAYERS, SPRITES_PER_LAYER,
+            NUM_LAYERS, SPRITES_PER_LAYER, SPRITE_Y_MIN,
         )
 
         self.assertEqual(scene._vs_declared_api, "vs2")
@@ -87,6 +87,8 @@ class PovStressVs2Tests(unittest.TestCase):
         for layer in field_layers:
             self.assertEqual(len(layer.sprites), SPRITES_PER_LAYER)
         self.assertEqual(len(scene.movers), NUM_LAYERS * SPRITES_PER_LAYER)
+        self.assertEqual(min(mover.y for mover in scene.movers), SPRITE_Y_MIN)
+        self.assertEqual(SPRITE_Y_MIN, 0)
 
         # Terrain and score label are tilemaps; labels no longer spend slots.
         self.assertEqual(len(scene.terrain_layer.tilemaps), 1)

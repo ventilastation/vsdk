@@ -111,8 +111,8 @@ class _Display:
     width = DISPLAY_WIDTH
 
     #: Number of LEDs on the bar, from the outer rim inward. This is the Y
-    #: range of a :data:`~vs2.HUD` layer; a :data:`~vs2.TUNNEL` layer's Y is
-    #: depth and runs to 255.
+    #: range of a :data:`~vs2.HUD` layer; :data:`~vs2.TUNNEL` and
+    #: :data:`~vs2.FULLSCREEN` use depth from 0 through 255.
     height = DISPLAY_HEIGHT
 
     @property
@@ -445,7 +445,7 @@ class Scene(_Scene):
         class MyGame(vs2.Scene):
             def build(self):
                 self.world = self.layer("world", projection=vs2.TUNNEL)
-                self.ship = self.world.sprite("ship.png", x=128, y=16)
+                self.ship = self.world.sprite("ship.png", x=128, y=0)
 
             def update(self):
                 self.ship.x += 0.5
@@ -916,7 +916,7 @@ class Layer:
                 192 right; wraps at :data:`vs2.display.width`.
             y: Distance inward from the rim, where 0 is the outermost LED.
                 Its range follows the layer's projection: ``0..53`` on HUD,
-                ``0..255`` (depth) on TUNNEL.
+                ``0..255`` (depth) on TUNNEL and FULLSCREEN.
             frame: Initial frame, validated against the image's frame count.
             visible: Whether it draws. Independent of ``frame``.
             flip_x: Mirror horizontally.
@@ -1197,10 +1197,11 @@ class Sprite:
 
         What it means follows the layer's projection. On a
         :data:`~vs2.HUD` layer it is a direct LED index, ``0..53``. On a
-        :data:`~vs2.TUNNEL` layer it is depth, ``0..255``: 0 sits just
-        outside the display, around 16 is fully visible at the rim, and 255
-        is the centre. Out-of-range values clip. Fractional values are
-        kept."""
+        :data:`~vs2.TUNNEL` layer it is depth, ``0..255``: 0 is the outer
+        rim and 255 is the centre. :data:`~vs2.FULLSCREEN` uses that same
+        curve as radial extent: 0 fills the disc and increasing values
+        contract toward the centre. Out-of-range values clip. Fractional
+        values are kept."""
         return self._y
 
     @y.setter

@@ -111,6 +111,8 @@ class Vs2HardwareFixtureTests(unittest.TestCase):
                 for layer in scene.layers[:TUNNEL_LAYER_COUNT]
             )
         )
+        self.assertEqual(TUNNEL_DEPTH_MIN, 0)
+        self.assertEqual(TUNNEL_DEPTH_MAX, 256)
         self.assertEqual(scene.label_layer.projection, vs2.HUD)
         self.assertIs(scene.layers[-1], scene.label_layer)
         self.assertEqual(

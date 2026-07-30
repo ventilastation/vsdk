@@ -35,20 +35,21 @@ What Y means — and how far it goes — depends on the layer's projection:
   - A direct LED index. `y = 0` is the outermost LED, `y = 53` is the centre.
     A sprite `h` tall stays fully on screen up to `y = 54 - h`.
 * - {py:data}`vs2.TUNNEL`
-  - Depth, running **0 to 255**. `y = 0` sits just outside the display and is
-    not drawn; around `y = 16` an object is fully visible at the rim; from
-    there it shrinks and converges toward the centre, reached at `y = 255`.
+  - Depth, running **0 to 255**. `y = 0` is the outermost ring. Increasing Y
+    shrinks objects and moves them toward the centre, reached at `y = 255`.
 * - {py:data}`vs2.FULLSCREEN`
-  - Always centred. Y scales the image down from full size, X rotates it.
+  - Always centred. It uses the same radial curve as `TUNNEL`: `y = 0`
+    expands across all 54 LEDs, and increasing Y contracts it toward the
+    centre, down to one LED at `y = 255`. X rotates it.
 :::
 
-So a tunnel object at the player's end of the world sits near `y = 16`, and
-things move *away* by counting up:
+So a tunnel object at the player's end of the world sits at `y = 0`, and things
+move *away* by counting up:
 
 ```python
-self.player.y = 16                  # at the rim, where the player lives
+self.player.y = 0                   # at the rim, where the player lives
 laser.y += 6                        # flying off down the tunnel
-if laser.y > 170:
+if laser.y > 164:
     self.laser.despawn(laser)       # far enough away to retire
 ```
 
@@ -93,9 +94,9 @@ sprite state, so attaching a drawable can never silently change how it is drawn.
   - A direct LED index, no perspective. y=0 is the outermost LED. The usual
     choice for scores, messages and overlays.
 * - {py:data}`vs2.FULLSCREEN`
-  - One image stretched across the whole disc, for backdrops and planets.
-    Sprites only — a tilemap or label on a `FULLSCREEN` layer raises during
-    `build()`.
+  - One centred image, for backdrops and planets. At `y = 0` it fills the
+    disc; increasing Y contracts it with the tunnel depth curve. Sprites only
+    — a tilemap or label on a `FULLSCREEN` layer raises during `build()`.
 :::
 
 ```python

@@ -29,7 +29,9 @@ X is an angle: 0 at the bottom, 64 left, 128 top, 192 right, wrapping at
 Y is measured **inward from the rim**, so `y = 0` is the outermost LED. Its
 range depends on the layer's projection — `0..53` on a {py:data}`vs2.HUD`
 layer, where it is a direct LED index, and `0..255` on a {py:data}`vs2.TUNNEL`
-layer, where it is depth and the centre is 255. Out-of-range values clip.
+layer, where it is depth and the centre is 255. {py:data}`vs2.FULLSCREEN`
+uses that same `0..255` depth curve as radial extent: 0 fills the disc and
+larger values contract toward the centre. Out-of-range values clip.
 See [the circular display](../tutorial/display.md) for the full picture.
 
 ## Layer

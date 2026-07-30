@@ -137,6 +137,12 @@ console.log(JSON.stringify({
         self.assertIn("uniform highp usampler2D u_scene", fragment)
         self.assertIn("u_led_axis", fragment)
 
+    def test_projection_texture_carries_legacy_and_vs2_tables(self):
+        packed = scene_shader.pack_deepspace()
+        self.assertEqual((packed["width"], packed["height"]), (256, 4))
+        self.assertEqual(packed["data"][2 * 256], 53)
+        self.assertEqual(packed["data"][2 * 256 + 255], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

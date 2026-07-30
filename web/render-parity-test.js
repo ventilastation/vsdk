@@ -3,6 +3,7 @@ const {
   COLUMNS,
   PIXELS,
   DEEPSPACE,
+  VS2_DEEPSPACE,
   computeLedFramePixels,
   computeLedFramePixelsFromRgb,
   decodeVs2SceneBuffer,
@@ -288,7 +289,7 @@ function runTests() {
       [7, makeAsset({ width: 1, height: 1, data: [1] })],
     ]);
     const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
-    assert.deepEqual(getLedColor(pixels, 42, 7), [1, 2, 3, 255], "VS2 decoded sprite should render through LED core");
+    assert.deepEqual(getLedColor(pixels, 42, VS2_DEEPSPACE[120]), [1, 2, 3, 255], "VS2 decoded sprite should render through LED core");
     assert.deepEqual(getLedColor(pixels, 10, 53), [0, 0, 0, 255], "hidden VS2 layer should not render");
   }
 
@@ -296,7 +297,7 @@ function runTests() {
     const payload = makeVs2ScenePayload({
       layers: [],
       sprites: [
-        { layer: 255, image_strip: 3, frame: 0, mode: 0, flags: 1, x: 30, y: 255 },
+        { layer: 255, image_strip: 3, frame: 0, mode: 0, flags: 1, x: 30, y: 0 },
         { layer: 255, image_strip: 7, frame: 0, mode: 2, flags: 1, x: 42, y: 0 },
       ],
     });
@@ -308,12 +309,32 @@ function runTests() {
 
     const palette = createPalette({ 1: [9, 8, 7] });
     const assets = new Map([
-      [3, makeAsset({ width: 1, height: 4, data: [1, 1, 1, 1] })],
+      [3, makeAsset({ width: 1, height: PIXELS, data: new Array(PIXELS).fill(1) })],
       [7, makeAsset({ width: 1, height: 1, data: [1] })],
     ]);
     const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
-    assert.deepEqual(getLedColor(pixels, 30, 0), [9, 8, 7, 255], "unlayered VS2 FULLSCREEN sprite should use fullscreen projection");
+    assert.deepEqual(getLedColor(pixels, 30, PIXELS - 1), [9, 8, 7, 255], "VS2 FULLSCREEN y=0 should be fully expanded");
     assert.deepEqual(getLedColor(pixels, 42, 53), [9, 8, 7, 255], "unlayered VS2 HUD sprite should use HUD projection");
+  }
+
+  {
+    const payload = makeVs2ScenePayload({
+      layers: [],
+      sprites: [
+        { layer: 255, image_strip: 3, frame: 0, mode: 0, flags: 1, x: 30, y: 255 },
+        { layer: 255, image_strip: 7, frame: 0, mode: 1, flags: 1, x: 42, y: 0 },
+      ],
+    });
+    const decoded = decodeVs2SceneBuffer(payload);
+    const palette = createPalette({ 1: [9, 8, 7] });
+    const assets = new Map([
+      [3, makeAsset({ width: 1, height: PIXELS, data: new Array(PIXELS).fill(1) })],
+      [7, makeAsset({ width: 1, height: 1, data: [1] })],
+    ]);
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 30, 0), [9, 8, 7, 255], "VS2 FULLSCREEN y=255 should reach the center");
+    assert.deepEqual(getLedColor(pixels, 30, 1), [0, 0, 0, 255], "VS2 FULLSCREEN y=255 should contract to one LED");
+    assert.deepEqual(getLedColor(pixels, 42, PIXELS - 1), [9, 8, 7, 255], "VS2 TUNNEL y=0 should share the HUD rim");
   }
 
   {
@@ -459,7 +480,7 @@ function runTests() {
     const { pixels } = renderTilemapScene({
       layers: [], sprites: [], tilemaps: [defaultTilemap({ mode: 1 })],
     });
-    assert.deepEqual(getLedColor(pixels, 10, DEEPSPACE[40]), [10, 0, 0, 255], "tilemap TUNNEL projection uses deepspace");
+    assert.deepEqual(getLedColor(pixels, 10, VS2_DEEPSPACE[40]), [10, 0, 0, 255], "tilemap TUNNEL projection uses VS2 deepspace");
   }
 
   {

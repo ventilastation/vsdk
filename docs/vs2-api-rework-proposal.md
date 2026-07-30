@@ -177,7 +177,7 @@ class MyGame(vs2.Scene):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
 
-        self.ship = self.world.sprite("ship.png", x=120.5, y=16)
+        self.ship = self.world.sprite("ship.png", x=120.5, y=0)
         self.bullets = self.world.sprite_pool("shot.png", count=8)
         self.score = self.hud.label("digits.png", columns=5, x=100, y=1)
 
@@ -324,13 +324,17 @@ nothing, which is what happens today.
 
 All drawables share `x`, `y`, `visible`, `show()`, `hide()`. Coordinates are
 signed 8.8 fixed point in the native records; X wraps at
-`vs2.display.width`, Y clips at `vs2.display.height`. Projection defines how
-a renderer maps Y to LEDs, not whether negative values are accepted.
+`vs2.display.width`, while Y clips rather than wrapping. `HUD` uses direct
+LED coordinates from 0 at the outer rim through 53 at the centre. `TUNNEL`
+uses depth 0 through 255 with the same endpoints. `FULLSCREEN` uses the
+TUNNEL curve as radial extent: 0 fills the disc and increasing Y contracts
+toward the centre. Projection defines how a renderer maps Y to LEDs, not
+whether negative values are accepted.
 
 ### Sprites
 
 ```python
-ship = world.sprite("ship.png", x=128, y=16, frame=0, visible=True,
+ship = world.sprite("ship.png", x=128, y=0, frame=0, visible=True,
                     flip_x=False, flip_y=False)
 ```
 

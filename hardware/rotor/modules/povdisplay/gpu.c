@@ -21,6 +21,7 @@
 
 const uint8_t TRANSPARENT = 0xFF;
 uint8_t deepspace[ROWS];
+uint8_t vs2_deepspace[ROWS];
 // Drawn unconditionally by both render() and render_vs2() below -- normally
 // desirable ambient decoration, but it visually competes with anything else
 // on screen (confirmed: it's what made an earlier on-device progress
@@ -90,6 +91,15 @@ void calculate_deepspace() {
   for (int j=VISIBLE_ROWS-1; j>-1; j--) { 
     deepspace[n++] = PIXELS * pow((double)j / VISIBLE_ROWS, 1/GAMMA) + 0.5;
   }
+
+  // VS2 has one Y convention in every projection: zero is the outer rim and
+  // increasing values travel inward. Keep the legacy LUT above unchanged for
+  // V1 games and the starfield, but give VS2 all 256 depth values with no
+  // historical 16-row lead-in.
+  for (int y = 0; y < ROWS; y++) {
+    double depth = (double)(ROWS - 1 - y) / (ROWS - 1);
+    vs2_deepspace[y] = (PIXELS - 1) * pow(depth, 1/GAMMA) + 0.5;
+  }
 }
 
 void init_sprites() {
@@ -139,6 +149,10 @@ static int clamp_int(int value, int minimum, int maximum) {
   if (value < minimum) return minimum;
   if (value > maximum) return maximum;
   return value;
+}
+
+static int vs2_project_depth(int y) {
+  return vs2_deepspace[clamp_int(y, 0, ROWS - 1)];
 }
 
 static int fixed_floor_to_int(int32_t value) {
@@ -281,7 +295,7 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
           + (frame % total_frames) * tile_width * tile_height;
       uint8_t color = is->data[strip_base + (sy % tile_height)];
       if (color != TRANSPARENT) {
-        int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
+        int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
         set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
       }
     }
@@ -308,7 +322,7 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
       for (; y < run_end; y++, source_row++) {
         uint8_t color = is->data[strip_base + source_row];
         if (color != TRANSPARENT) {
-          int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
+          int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
           set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
         }
       }
@@ -367,12 +381,12 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
         }
         uint8_t color = is->data[base + source_row];
         if (color != TRANSPARENT) {
-          int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
+          int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
           set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
         }
       }
     } else {
-      int zleds = deepspace[clamp_int(255 - sprite_y, 0, ROWS - 1)];
+      int zleds = vs2_project_depth(sprite_y) + 1;
       for (int led=0; led < zleds; led++) {
         int source_row = led * PIXELS / zleds;
         if (source_row >= height) {

@@ -7,7 +7,7 @@ import {
   createLedRingGeometry,
   DEFAULT_WEBGL_RESOLUTION_SCALE,
 } from "./app-support.js?v=20260717b";
-import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260717e";
+import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260729a";
 
 const VIDEO_PLANE_GUARD = 2;
 const VIDEO_PLANE_STRIDE = PIXELS + VIDEO_PLANE_GUARD;
