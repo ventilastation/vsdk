@@ -1,701 +1,477 @@
+"""Vyruss on the sealed VS2 API."""
+
 from urandom import choice, randrange, seed
 import utime
-import gc
 
-from ventilastation.director import director, stripes
-from vs2 import FULLSCREEN, HUD, Scene, Sprite, reset_sprites
+import vs2
+from vs2.controls import A, DOWN, LEFT, RIGHT, UP, joy1
 
 
-LEVELS = [
-    # oleadas, planeta, disparos_simultaneos
+LEVELS = (
     (2, "saturno.png", 3),
     (3, "jupiter.png", 4),
     (4, "marte.png", 6),
     (5, "tierra.png", 8),
-]
-
-MAX_BOMBS = max(l[2] for l in LEVELS)
-MAX_GROUPS = max(l[0] for l in LEVELS)
+)
+MAX_BOMBS = max(level[2] for level in LEVELS)
+MAX_GROUPS = max(level[0] for level in LEVELS)
 BADDIES_PER_GROUP = 10
+MAX_BADDIES = MAX_GROUPS * BADDIES_PER_GROUP
+MAX_EXPLOSIONS = 8
+X_SPEED = 3
+Y_SPEED = 2
+RIM_Y = -1
+BADDIE_START_Y = 154
+BADDIE_FINAL_Y = (119, 100, 81, 62)
+LASER_FAR_Y = 164
+PLANET_CENTER_Y = 255
 
-def calculate_direction(current, destination):
-    current %= 256
-    destination %= 256
-    center_delta = 128 - current
-    new_destination = (destination + center_delta) % 256
-    if new_destination < 128:
-        return -1
-    if new_destination > 128:
-        return +1
-    return 0
+ENTERING = 0
+ATTACKING = 1
+DEFEATED = 2
 
 
-def new_heading(up, down, left, right):
-    """
-       128
-    96↖ ↑ ↗ 160
-    64←   → 192
-    32↙ ↓ ↘ 224
-        0
-    """
+def heading(up, down, left, right):
+    """Return the angular heading selected by the eight-way controls."""
     if up:
-        if left:
-            return 96
-        elif right:
-            return 160
-        else:
-            return 128
-
+        return 128 if not left and not right else (96 if left else 160)
     if down:
-        if left:
-            return 32
-        elif right:
-            return 224
-        else:
-            return 0
-
+        return 0 if not left and not right else (32 if left else 224)
     if left:
         return 64
-
     if right:
         return 192
-
     return None
 
 
-def rotar(desde, hasta):
-    desde %= 256
-    hasta %= 256
-    delta_centro = 128 - desde
-    nuevo_hasta = (hasta + delta_centro) % 256
+def angle_delta(destination, current):
+    """Shortest signed distance from ``current`` to ``destination``."""
+    half = vs2.display.width // 2
+    return ((destination - current + half) % vs2.display.width) - half
 
-    if nuevo_hasta < 128:
-        return -1
-    if nuevo_hasta > 128:
-        return +1
 
-    return 0
+def turn_toward(current, destination):
+    delta = angle_delta(destination, current)
+    return -1 if delta < 0 else (1 if delta > 0 else 0)
 
 
-def make_me_a_planet(strip):
-    planet = Sprite()
-    planet.strip = strip
-    planet.mode = FULLSCREEN
-    planet.x = 0
-    y = 62
-    planet.y = y
-    return planet
+def move_toward_angle(current, destination, speed):
+    delta = angle_delta(destination, current)
+    if abs(delta) <= speed:
+        return destination % vs2.display.width
+    return (current + (-speed if delta < 0 else speed)) % vs2.display.width
 
-class ScoreBoard:
-    def __init__(self):
-        self.chars = []
-        for n in range(9):
-            s = Sprite()
-            s.strip = stripes["numerals.png"]
-            s.x = 110 + n * 4
-            s.y = 0
-            s.frame = 10
-            s.mode = HUD
-            self.chars.append(s)
 
-        self.setscore(0)
-        self.setlives(3)
+def move_toward_depth(current, destination, speed):
+    delta = destination - current
+    if abs(delta) <= speed:
+        return destination
+    return current + (-speed if delta < 0 else speed)
 
-    def setscore(self, value):
-        for n, l in enumerate("%05d" % value):
-            v = ord(l) - 0x30
-            self.chars[n].frame = v
 
-    def setlives(self, lives):
-        for n in range(6, 9):
-            if lives > n-6:
-                self.chars[n].frame = 11
-            else:
-                self.chars[n].frame = 10
-
-class StarfleetState:
-    def __init__(self, scene):
-        self.game_over_sprite = Sprite()
-        self.game_over_sprite.x = 256-32
-        self.game_over_sprite.y = 0
-        self.game_over_sprite.mode = HUD
-        self.game_over_sprite.strip = stripes["gameover.png"]
-
-        self.fighters = [StarFighter() for n in range(3)]
-        self.destroyed = []
-        self.fighter = self.fighters[0]
-        self.exploded = False
-        self.scene = scene
-
-    def step(self):
-        self.fighter.step()
-
-    def game_over(self):
-        director.music_play("alecu.vyruss/vy-gameover")
-        self.game_over_sprite.frame = 0
-        self.scene.call_later(8333, self.scene.finished)
-
-    def respawn(self):
-        gc.collect()
-        self.destroyed.append(self.fighters.pop(0))
-        self.fighter = self.fighters[0]
-        self.fighter.frame = 0
-        self.exploded = False
-
-    def explode(self):
-        self.fighter.explode()
-        remaining_lives = len(self.fighters) - 1
-        self.scene.scoreboard.setlives(remaining_lives)
-        self.exploded = True
-        director.sound_play(b"alecu.vyruss/explosion3")
-        if remaining_lives:
-            self.scene.call_later(1500, self.respawn)
-        else:
-            self.game_over()
-
-    def collision(self, others):
-        if self.fighter:
-            return self.fighter.collision(others)
-
-    def slide(self, where):
-        if not self.exploded:
-            self.fighter.slide(where)
-
-    def accel(self, accel, decel):
-        pass
-        # if not self.exploded:
-        #     self.fighter.accel(accel, decel)
-
-class VyrusGame(Scene):
-    stripes_rom = "alecu.vyruss_vs2"
-
-    def __init__(self):
-        super(VyrusGame, self).__init__()
-        seed(utime.ticks_ms())
-
-    def on_enter(self):
-        super(VyrusGame, self).on_enter()
-        self.scoreboard = ScoreBoard()
-        self.hiscore = 0
-        self.starfleet = StarfleetState(self)
-        self.killed = []
-        self.laser = Laser()
-        self.level = 0
-        self.active_bombs = []
-        total_buddies = MAX_GROUPS * BADDIES_PER_GROUP
-        self.all_baddies = [Baddie() for _ in range(total_buddies)]
-        self.all_bombs = [Bomb() for _ in range(MAX_BOMBS)]
-        self.planet = make_me_a_planet(stripes["saturno.png"])
-        self.used_baddie = 0
-        self.start_level()
-
-    def start_level(self):
-        self.state = StateEntering(self)
-        self.waves, planet_strip, unfired_bombs = LEVELS[self.level]
-        self.unfired_bombs = self.all_bombs[0:unfired_bombs]
-        self.starfleet.fighter.reset()
-        self.planet.disable()
-        self.planet.strip = stripes[planet_strip]
-        self.used_baddie = 0
-        self.everyone = []
-        self.explosions = []
-        director.music_play("alecu.vyruss/vy-main")
-
-    def getBaddie(self, base_picture):
-        b = self.all_baddies[self.used_baddie]
-        b.reset(base_picture)
-        self.used_baddie += 1
-        return b
-
-    def change_state(self):
-        self.state = self.state.next_state(self)
-
-    def explode_baddie(self, baddie):
-        self.hiscore += randrange(10, 19)
-        self.scoreboard.setscore(self.hiscore)
-        self.everyone.remove(baddie)
-        self.state.remove_baddie(baddie)
-        explosion = baddie.explode()
-        self.explosions.append(explosion)
-
-    def process_input(self):
-        if director.was_pressed(director.BUTTON_A):
-            self.fire()
-
-        accel = director.is_pressed(director.BUTTON_B)
-        decel = director.is_pressed(director.BUTTON_C)
-        self.starfleet.accel(accel, decel)
-
-        up = director.is_pressed(director.JOY_UP)
-        down = director.is_pressed(director.JOY_DOWN)
-        left = director.is_pressed(director.JOY_LEFT)
-        right = director.is_pressed(director.JOY_RIGHT)
-        self.heading(up, down, left, right)
-
-        if director.was_pressed(director.BUTTON_D) or director.timedout:
-            director.pop()
-            raise StopIteration()
-
-    def step(self):
-        self.process_input()
-
-        self.state.step()
-        if self.laser.enabled:
-            self.laser.step()
-            hit = self.laser.collision(self.everyone)
-            if hit:
-                self.laser.finish()
-                director.sound_play(b"alecu.vyruss/explosion2")
-                self.explode_baddie(hit)
-
-        self.starfleet.step()
-        if not self.starfleet.exploded:
-            bomb = self.starfleet.collision(self.active_bombs)
-            if bomb:
-                self.starfleet.explode()
-                bomb.disable()
-                self.active_bombs.remove(bomb)
-                self.unfired_bombs.append(bomb)
-            else:
-                baddie = self.starfleet.collision(self.everyone)
-                if baddie:
-                    self.starfleet.explode()
-                    if isinstance(baddie, Explodable):
-                        self.explode_baddie(baddie)
-
-        for e in self.explosions:
-            if not e.finished:
-                e.step()
-                # por ahora no lo removemos, para que no se vaya de scope
-                # self.explosions.remove(e)
-
-        for bomb in self.active_bombs:
-            bomb.step()
-            if not bomb.enabled:
-                self.active_bombs.remove(bomb)
-                self.unfired_bombs.append(bomb)
-
-    def fire(self):
-        if not self.laser.enabled and not self.starfleet.exploded:
-            self.laser.fire(self.starfleet.fighter)
-
-    def drop_bomb(self):
-        if self.everyone and self.unfired_bombs:
-            bomb = self.unfired_bombs.pop()
-            bomb.fire(choice(self.everyone))
-            self.active_bombs.append(bomb)
-
-    def heading(self, up, down, left, right):
-        where = new_heading(up, down, left, right)
-        if where is not None:
-            where = where - 8 # ancho de la nave
-            self.starfleet.slide(where)
-
-    def finished(self):
-        director.pop()
-        raise StopIteration()
-
-    def advance_level(self):
-        gc.collect()
-        self.level += 1
-        if self.level >= len(LEVELS):
-            director.pop()
-            raise StopIteration()
-        self.start_level()
-
-
-class FleetState:
-    def __init__(self, fleet):
-        self.fleet = fleet
-        self.setup()
-
-    def remove_baddie(self, baddie):
-        pass
-
-    def step(self):
-        pass
-
-
-class StateDefeated(FleetState):
-    def setup(self):
-        director.music_play("alecu.vyruss/vy-3warps")
-        self.fleet.planet.y = 0
-        self.fleet.planet.frame = 0
-        self.animating_planet = True
-        self.animating_ship = False
-        self.fleet.call_later(4000, self.warp_ahead)
-
-    def step(self):
-        if self.animating_planet:
-            new_y = self.fleet.planet.y + 1
-            self.fleet.planet.y = new_y
-            if new_y == 255:
-                self.animating_planet = False
-                self.fleet.call_later(1500, self.finished)
-        if self.animating_ship:
-            sf = self.fleet.starfleet.fighter
-            new_y = sf.y + 2
-            if new_y > 250:
-                self.animating_ship = False
-            sf.y = new_y
-
-    def warp_ahead(self):
-        self.animating_ship = True
-
-    def finished(self):
-        self.fleet.advance_level()
-
-
-class StateResetting(FleetState):
-    def setup(self):
-        pass
-
-    def step(self):
-        StateResetting.next_state = StateEntering
-        reset_sprites()
-        self.fleet.setup()
-
-
-class StateAttacking(FleetState):
-    next_state = StateDefeated
-
-    def setup(self):
-        self.attacking = []
-        self.max_attacking = 1
-
-    def remove_baddie(self, baddie):
-        if baddie in self.attacking:
-            self.attacking.remove(baddie)
-            self.max_attacking += 1
-
-    def step(self):
-        for baddie in self.fleet.everyone:
-            baddie.step()
-            if baddie.finished:
-                self.remove_baddie(baddie)
-
-        if len(self.fleet.everyone) == 0:
-            self.fleet.change_state()
-        elif len(self.attacking) < self.max_attacking:
-            baddie = choice(self.fleet.everyone)
-            if baddie not in self.attacking:
-                delta = baddie.y - 16
-                baddie.movements = [TravelCloser(delta), TravelAway(delta)]
-                self.attacking.append(baddie)
-                self.fleet.drop_bomb()
-
-
-class StateEntering(FleetState):
-    next_state = StateAttacking
-
-    def setup(self):
-        self.phase = 0
-        self.steps = 0
-        self.groups = []
-        self.fleet.everyone = []
-        self.create_group()
-        # [int(x * 18.285714285714285 + 0.5) for x in range(14) ], shuffled by hand
-        self.final_x_pos = [0, 128, 55, 183, 18, 73, 146, 201, 37, 91, 238, 110, 165, 219]
-        self.final_y_pos = [128, 110, 92, 74]
-        self.bases = [128-8, 224-8, 32-8, 256-8, 128-8]
-        self.num_baddies = 0
-        self.next_bomb = 37
-
-    def create_group(self):
-        self.groups.append([])
-
-    def add_baddie(self):
-        final_x = self.final_x_pos[self.num_baddies % 14]
-        final_y = self.final_y_pos[self.num_baddies // 14]
-        self.num_baddies += 1
-
-        picture = (self.num_baddies % 5) * 2 + 2
-
-        base_x = self.bases[len(self.groups)-1]
-
-        baddie = self.fleet.getBaddie(picture)
-        baddie.y = 128 + 32
-        if len(self.groups[-1]) % 2:
-            baddie.x = base_x + 16
-            baddie.movements = [
-                TravelCloser(80), TravelX(112),
-                TravelCloser(32), TravelX(-96),
-                TravelAway(42), TravelTo(final_x, final_y),
-            ]
-        else:
-            baddie.x = base_x - 16
-            baddie.movements = [
-                TravelCloser(80), TravelX(-112),
-                TravelCloser(32), TravelX(96),
-                TravelAway(42), TravelTo(final_x, final_y),
-            ]
-
-        self.groups[-1].append(baddie)
-        self.fleet.everyone.append(baddie)
-
-    def all_baddies_in_last_group_exploded(self):
-        g = self.groups[-1]
-        return g and all(b.exploded for b in g)
-
-    def all_baddies_in_last_group_finished(self):
-        g = self.groups[-1]
-        return g and all(b.finished for b in g)
-
-    def step(self):
-        for baddie in self.fleet.everyone:
-            baddie.step()
-
-        self.steps += 1
-
-        if self.steps % 8 == 0 and len(self.groups[-1]) < BADDIES_PER_GROUP:
-            self.add_baddie()
-
-        if self.all_baddies_in_last_group_finished() or \
-           self.all_baddies_in_last_group_exploded():
-            self.steps = 0
-            if len(self.groups) < self.fleet.waves:
-                self.create_group()
-            else:
-                self.fleet.change_state()
-
-        self.next_bomb -= 1
-        if self.next_bomb == 0:
-            self.fleet.drop_bomb()
-            self.next_bomb = 20 + randrange(30)
-
-
-class Explodable(Sprite):
-    explosion_strip = "explosion.png"
-    explosion_steps = 5
-
-    def __init__(self):
-        super().__init__()
-        self.exploded = False
-        self.step = self.dummy_step
-    
-    def reset(self):
-        self.exploded = False
-        self.step = self.dummy_step
-
-    def explode(self):
-        self.exploded = True
-        # hay que apagar mientras se cambia el stripe y reubica
-        self.disable()
-        # es necesario calcular el centro antes de cambiar el strip
-        center_x = self.x + self.width // 2
-        center_y = self.y + self.height // 2
-        self.strip = stripes[self.explosion_strip]
-        self.x = center_x - self.width // 2
-        self.y = center_y - self.height // 2
-        # recién ahora arranca el contador de frames
-        self.frame = 0
-        self.finished = False
-        self.step = self.exploded_step
-        return self
-
-    def dummy_step(self):
-        pass
-
-    def exploded_step(self):
-        if self.finished:
-            return
-        self.frame = self.frame + 1
-        if self.frame == self.explosion_steps:
-            self.disable()
-            self.finished = True
-
-
-class StarFighter(Explodable):
-    explosion_strip = "explosion_nave.png"
-    explosion_steps = 4
-
-    BLINK_RATE = int(30.0 * 1.5)
-    keyframes = {
-        int(BLINK_RATE * 0) : 0,
-        int(BLINK_RATE * 0.333333333): 1,
-        int(BLINK_RATE * 0.5): 2,
-        int(BLINK_RATE * 0.833333333): 3,
-    }
-
-    def __init__(self):
-        super().__init__()
-        self.reset()
-
-    def reset(self):
-        super().reset()
-        self.x = 256-8
-        self.y = 16
-        self.strip = stripes["ll9.png"]
-        self.frame_counter = -1
-        self.step = self.starship_step
-
-    def starship_step(self):
-        if not self.exploded:
-            self.frame_counter = (self.frame_counter + 1) % self.BLINK_RATE
-            if self.frame_counter in self.keyframes:
-                self.frame = self.keyframes[self.frame_counter]
-
-    def slide(self, where):
-        if not self.exploded:
-            current_x = self.x
-            self.x = (current_x + rotar(current_x, where) * 2) % 256
-
-    def accel(self, accel, decel):
-        if self.exploded:
-            return
-
-        if accel:
-            self.y = self.y - 1
-
-        if decel:
-            self.y = self.y + 1
-
-        if not accel and not decel:
-            self.y = 16
-
-
-class Baddie(Explodable):
-    def reset(self, base_frame):
-        super().reset()
-        self.strip = stripes["galaga.png"]
-        self.base_frame = base_frame
-        self.frame_step = 0
-        self.step = self.baddie_step
-        self.finished = False
-
-    def baddie_step(self):
-        self.frame_step += 1
-        self.frame = (not (self.frame_step & 8)) + self.base_frame
-        if self.movements:
-            self.finished = False
-            movement = self.movements[0]
-            movement.step(self)
-            if movement.finished(self):
-                self.movements.pop(0)
-        elif not self.finished:
-            self.finished = True
-
-
-class Laser(Sprite):
-    def __init__(self):
-        super().__init__()
-        self.strip = stripes["disparo.png"]
-        self.enabled = False
-
-    def fire(self, starfighter):
-        director.sound_play(b"alecu.vyruss/shoot1")
-        self.enabled = True
-        self.y = starfighter.y + 11
-        self.x = starfighter.x + 6
-        self.frame = 0
-
-    def finish(self):
-        self.enabled = False
-        self.disable()
-
-    def step(self):
-        LASER_SPEED = 6
-        self.y = self.y + LASER_SPEED
-        if self.y > 170:
-            self.finish()
-
-
-class Bomb(Sprite):
-    def __init__(self):
-        super().__init__()
-        self.strip = stripes["disparo.png"]
-        self.enabled = False
-
-    def fire(self, baddie):
-        director.sound_play(b"alecu.vyruss/shoot3")
-        self.enabled = True
-        self.y = baddie.y + 11
-        self.x = baddie.x + 6
-        self.frame = 1
-
-    def finish(self):
-        self.enabled = False
-        self.disable()
-
-    def step(self):
-        BOMB_SPEED = 3
-        self.y = self.y - BOMB_SPEED
-        if self.y < 6:
-            self.finish()
-
-
-class Movement:
-    pass
-
-
-class FollowPath(Movement):
-    pass
-
-
-X_SPEED = 3
-Y_SPEED = 2
-
-
-class TravelTo(Movement):
+class TravelTo:
     def __init__(self, x, y):
         self.dest_x = x
         self.dest_y = y
 
     def step(self, sprite):
-        sprite.x = (sprite.x + calculate_direction(sprite.x, self.dest_x) * X_SPEED) % 256
-        sprite.y = sprite.y + calculate_direction(sprite.y, self.dest_y) * Y_SPEED
+        sprite.x = move_toward_angle(sprite.x, self.dest_x, X_SPEED)
+        sprite.y = move_toward_depth(sprite.y, self.dest_y, Y_SPEED)
 
     def finished(self, sprite):
-        return abs(sprite.x - self.dest_x) < X_SPEED and abs(sprite.y - self.dest_y) < Y_SPEED
+        return sprite.x == self.dest_x and sprite.y == self.dest_y
 
 
-class TravelBy(Movement):
-    def __init__(self, count, speed=None):
-        self.count = abs(count)
-        self.speed = -1 if count < 0 else 1
+class TravelBy:
+    def __init__(self, count):
+        self.remaining = abs(count)
+        self.direction = -1 if count < 0 else 1
 
-    def finished(self, sprite):
-        return self.count <= 0
+    def finished(self, _sprite):
+        return self.remaining <= 0
 
 
 class TravelX(TravelBy):
     def step(self, sprite):
-        if self.count > 0:
-            sprite.x = (sprite.x + X_SPEED * self.speed) % 256
-
-        self.count -= X_SPEED
+        distance = min(X_SPEED, self.remaining)
+        sprite.x = (
+            sprite.x + distance * self.direction
+        ) % vs2.display.width
+        self.remaining -= distance
 
 
 class TravelCloser(TravelBy):
     def step(self, sprite):
-        sprite.y = sprite.y - Y_SPEED
-        self.count -= Y_SPEED
+        distance = min(Y_SPEED, self.remaining)
+        sprite.y -= distance
+        self.remaining -= distance
 
 
 class TravelAway(TravelBy):
     def step(self, sprite):
-        sprite.y = sprite.y + Y_SPEED
-        self.count -= Y_SPEED
+        distance = min(Y_SPEED, self.remaining)
+        sprite.y += distance
+        self.remaining -= distance
 
 
-class Hover(Movement):
-    """Hover around the current position."""
+class VyrusGame(vs2.Scene):
+    BLINK_RATE = 45
+    BLINK_FRAMES = {0: 0, 14: 1, 22: 2, 37: 3}
 
     def __init__(self):
-        self.dx = 0
-        self.dy = 0
-        self.vx = 1
-        self.vy = 1
+        vs2.Scene.__init__(self)
+        seed(utime.ticks_ms())
 
-    def step(self, sprite):
-        pass
+    def build(self):
+        self.level = 0
+        self.score = 0
+        self.lives = 3
+        self.fullscreen = self.layer("planet", projection=vs2.FULLSCREEN)
+        self.world = self.layer("world", projection=vs2.TUNNEL)
+        self.hud = self.layer("hud", projection=vs2.HUD)
 
-    def finished(self, sprite):
-        return False
+        self.planet = self.fullscreen.sprite(
+            LEVELS[0][1], x=0, y=PLANET_CENTER_Y, visible=False)
+        self.player = self.world.sprite(
+            "ll9.png", x=vs2.display.width - 8, y=RIM_Y)
+        self.laser = self.world.sprite_pool("disparo.png", 1)
+        self.bombs = self.world.sprite_pool("disparo.png", MAX_BOMBS)
+        self.baddies = self.world.sprite_pool("galaga.png", MAX_BADDIES)
+        self.explosions = self.world.sprite_pool(
+            "explosion.png", MAX_EXPLOSIONS, on_empty=vs2.RECYCLE)
+        self.player_explosion = self.world.sprite(
+            "explosion_nave.png", visible=False)
+        self.scoreboard = self.hud.label(
+            "numerals.png", columns=9, x=110, y=0,
+            flip_x=True, flip_y=True)
+        self.game_over = self.hud.sprite(
+            "gameover.png", x=vs2.display.width - 32, y=0,
+            visible=False)
+        self.start_level()
 
+    def start_level(self):
+        self.waves, planet, self.simultaneous_bombs = LEVELS[self.level]
+        self.planet.image = planet
+        self.planet.hide()
+        self.game_over.hide()
+        self.player_explosion.hide()
+        self.player.show()
+        self.player.x = vs2.display.width - self.player.width // 2
+        self.player.y = RIM_Y
+        self.player.frame = 0
+        self.player_frame_clock = -1
+        self.player_exploded = False
+        self.baddies.despawn_all()
+        self.bombs.despawn_all()
+        self.laser.despawn_all()
+        self.explosions.despawn_all()
+        self.everyone = []
+        self.groups = [[]]
+        self.attacking = []
+        self.max_attacking = 1
+        self.group_steps = 0
+        self.num_baddies = 0
+        self.next_bomb = 37
+        self.state = ENTERING
+        self.planet_animating = False
+        self.ship_warping = False
+        self.update_scoreboard()
+        vs2.audio.music("vy-main")
 
-class Chase(Movement):
-    pass
+    def update_scoreboard(self):
+        self.scoreboard.set_number(self.score, width=5, pad="0")
+        self.scoreboard.write(
+            6, 0, "***"[:self.lives], pad=True)
+
+    def add_baddie(self):
+        final_x_positions = (
+            0, 128, 55, 183, 18, 73, 146,
+            201, 37, 91, 238, 110, 165, 219,
+        )
+        final_y_positions = BADDIE_FINAL_Y
+        bases = (120, 216, 24, 248, 120)
+        number = self.num_baddies
+        final_x = final_x_positions[number % len(final_x_positions)]
+        final_y = final_y_positions[number // len(final_x_positions)]
+        self.num_baddies += 1
+        frame = (self.num_baddies % 5) * 2 + 2
+        base_x = bases[len(self.groups) - 1]
+        odd = len(self.groups[-1]) % 2
+        start_x = base_x + (16 if odd else -16)
+        baddie = self.baddies.spawn(
+            start_x, BADDIE_START_Y, frame=frame)
+        if baddie is None:
+            return
+        baddie.base_frame = frame
+        baddie.frame_clock = 0
+        baddie.dead = False
+        baddie.finished = False
+        if odd:
+            baddie.movements = [
+                TravelCloser(85), TravelX(112),
+                TravelCloser(34), TravelX(-96),
+                TravelAway(45), TravelTo(final_x, final_y),
+            ]
+        else:
+            baddie.movements = [
+                TravelCloser(85), TravelX(-112),
+                TravelCloser(34), TravelX(96),
+                TravelAway(45), TravelTo(final_x, final_y),
+            ]
+        self.groups[-1].append(baddie)
+        self.everyone.append(baddie)
+
+    def update_one_baddie(self, baddie):
+        if baddie.dead:
+            return
+        baddie.frame_clock += 1
+        baddie.frame = (
+            baddie.base_frame + (0 if baddie.frame_clock & 8 else 1)
+        )
+        if baddie.movements:
+            baddie.finished = False
+            movement = baddie.movements[0]
+            movement.step(baddie)
+            if movement.finished(baddie):
+                baddie.movements.pop(0)
+        elif not baddie.finished:
+            baddie.finished = True
+
+    def group_finished(self):
+        group = self.groups[-1]
+        return bool(group) and all(
+            baddie.dead or baddie.finished for baddie in group)
+
+    def update_entering(self):
+        for baddie in self.everyone:
+            self.update_one_baddie(baddie)
+        self.group_steps += 1
+        if (self.group_steps % 8 == 0
+                and len(self.groups[-1]) < BADDIES_PER_GROUP):
+            self.add_baddie()
+        if self.group_finished():
+            self.group_steps = 0
+            if len(self.groups) < self.waves:
+                self.groups.append([])
+            else:
+                self.state = ATTACKING
+        self.next_bomb -= 1
+        if self.next_bomb <= 0:
+            self.drop_bomb()
+            self.next_bomb = 20 + randrange(30)
+
+    def update_attacking(self):
+        for baddie in self.everyone:
+            self.update_one_baddie(baddie)
+            if baddie.finished and baddie in self.attacking:
+                self.attacking.remove(baddie)
+                self.max_attacking += 1
+        if not self.everyone:
+            self.start_defeated()
+            return
+        if len(self.attacking) < self.max_attacking:
+            baddie = choice(self.everyone)
+            if baddie not in self.attacking:
+                distance = max(0, baddie.y - RIM_Y)
+                baddie.movements = [
+                    TravelCloser(distance), TravelAway(distance)]
+                baddie.finished = False
+                self.attacking.append(baddie)
+                self.drop_bomb()
+
+    def start_defeated(self):
+        self.state = DEFEATED
+        self.planet.y = PLANET_CENTER_Y
+        self.planet.frame = 0
+        self.planet.show()
+        self.planet_animating = True
+        self.ship_warping = False
+        vs2.audio.music("vy-3warps")
+        self.call_later(4000, self.warp_player)
+
+    def warp_player(self):
+        self.ship_warping = True
+
+    def finish_level(self):
+        self.level += 1
+        if self.level >= len(LEVELS):
+            self.pop()
+        else:
+            self.start_level()
+
+    def update_defeated(self):
+        if self.planet_animating:
+            self.planet.y -= 1
+            if self.planet.y <= RIM_Y:
+                self.planet.y = RIM_Y
+                self.planet_animating = False
+                self.call_later(1500, self.finish_level)
+        if self.ship_warping:
+            self.player.y += 2
+            if self.player.y > 250:
+                self.ship_warping = False
+
+    def fire(self):
+        if len(self.laser) or self.player_exploded:
+            return
+        laser = self.laser.spawn(
+            self.player.x + 6, self.player.y + 11, frame=0)
+        if laser is not None:
+            vs2.audio.sound("shoot1")
+
+    def drop_bomb(self):
+        if not self.everyone or len(self.bombs) >= self.simultaneous_bombs:
+            return
+        source = choice(self.everyone)
+        bomb = self.bombs.spawn(
+            source.x + 6, source.y + 11, frame=1)
+        if bomb is not None:
+            vs2.audio.sound("shoot3")
+
+    def update_input(self):
+        if joy1.just_pressed(A):
+            self.fire()
+        target = heading(
+            joy1.held(UP), joy1.held(DOWN),
+            joy1.held(LEFT), joy1.held(RIGHT))
+        if target is not None and not self.player_exploded:
+            target = (
+                target - self.player.width // 2
+            ) % vs2.display.width
+            self.player.x = move_toward_angle(
+                self.player.x, target, 2)
+        if not self.player_exploded and self.state != DEFEATED:
+            # The original game keeps the fighter on the rim. The rework port
+            # accidentally also treated DOWN as radial movement, so steering
+            # down changed two axes at once. Once a wave is defeated, the warp
+            # sequence owns Y and flies the fighter inward toward the planet.
+            self.player.y = RIM_Y
+
+    def animate_player(self):
+        if self.player_exploded:
+            return
+        self.player_frame_clock = (
+            self.player_frame_clock + 1
+        ) % self.BLINK_RATE
+        frame = self.BLINK_FRAMES.get(self.player_frame_clock)
+        if frame is not None:
+            self.player.frame = frame
+
+    def kill_baddie(self, baddie):
+        if baddie.dead:
+            return
+        x = baddie.x + baddie.width // 2 - 16
+        y = baddie.y + baddie.height // 2 - 16
+        baddie.dead = True
+        baddie.hide()
+        if baddie in self.everyone:
+            self.everyone.remove(baddie)
+        if baddie in self.attacking:
+            self.attacking.remove(baddie)
+            self.max_attacking += 1
+        boom = self.explosions.spawn(x, y)
+        if boom is not None:
+            boom.age = 0
+        self.score += randrange(10, 19)
+        self.update_scoreboard()
+        vs2.audio.sound("explosion2")
+
+    def explode_player(self):
+        if self.player_exploded:
+            return
+        self.player_exploded = True
+        self.player.hide()
+        self.player_explosion.x = (
+            self.player.x + self.player.width // 2
+            - self.player_explosion.width // 2
+        )
+        self.player_explosion.y = (
+            self.player.y + self.player.height // 2
+            - self.player_explosion.height // 2
+        )
+        self.player_explosion.frame = 0
+        self.player_explosion.age = 0
+        self.player_explosion.show()
+        self.lives -= 1
+        self.update_scoreboard()
+        vs2.audio.sound("explosion3")
+        if self.lives:
+            self.call_later(1500, self.respawn_player)
+        else:
+            self.game_over.show()
+            vs2.audio.music("vy-gameover")
+            self.call_later(8333, self.pop)
+
+    def respawn_player(self):
+        self.player_explosion.hide()
+        self.player_exploded = False
+        self.player.x = vs2.display.width - self.player.width // 2
+        self.player.y = RIM_Y
+        self.player.frame = 0
+        self.player_frame_clock = -1
+        self.player.show()
+
+    def update_projectiles(self):
+        for laser in self.laser:
+            laser.y += 6
+            if laser.y > LASER_FAR_Y:
+                self.laser.despawn(laser)
+                continue
+            hit = None
+            for baddie in self.everyone:
+                if laser.overlaps(baddie):
+                    hit = baddie
+                    break
+            if hit is not None:
+                self.laser.despawn(laser)
+                self.kill_baddie(hit)
+        for bomb in self.bombs:
+            bomb.y -= 3
+            if bomb.y < RIM_Y:
+                self.bombs.despawn(bomb)
+        for boom in self.explosions:
+            boom.age += 1
+            if boom.age >= boom.image.frames:
+                self.explosions.despawn(boom)
+            else:
+                boom.frame = boom.age
+
+    def update_player_collision(self):
+        if self.player_exploded:
+            return
+        hit = self.player.first_overlap(self.bombs)
+        if hit is not None:
+            self.bombs.despawn(hit)
+            self.explode_player()
+            return
+        for baddie in self.everyone:
+            if self.player.overlaps(baddie):
+                self.kill_baddie(baddie)
+                self.explode_player()
+                return
+
+    def update_player_explosion(self):
+        if not self.player_explosion.visible:
+            return
+        self.player_explosion.age += 1
+        if self.player_explosion.age >= self.player_explosion.image.frames:
+            self.player_explosion.hide()
+        else:
+            self.player_explosion.frame = self.player_explosion.age
+
+    def update(self):
+        self.update_input()
+        if self.state == ENTERING:
+            self.update_entering()
+        elif self.state == ATTACKING:
+            self.update_attacking()
+        else:
+            self.update_defeated()
+        self.animate_player()
+        self.update_projectiles()
+        self.update_player_collision()
+        self.update_player_explosion()
+
 
 def main():
     return VyrusGame()

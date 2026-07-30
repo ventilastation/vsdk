@@ -44,7 +44,7 @@ function makeAsset({ width, height, frames = 1, palette = 0, data }) {
   };
 }
 
-function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
+function makeVs2ScenePayload({ layers, sprites, tilemaps = [], drawOrder = null }) {
   const headerSize = 16;
   const layerSize = 8;
   const spriteSize = 24;
@@ -56,13 +56,14 @@ function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
     + sprites.length * spriteSize
     + tilemaps.length * 32
     + framesBytes
+    + (drawOrder ? drawOrder.length * 2 : 0)
   );
   const view = new DataView(payload.buffer);
   payload[0] = "V".charCodeAt(0);
   payload[1] = "S".charCodeAt(0);
   payload[2] = "2".charCodeAt(0);
   payload[3] = 0;
-  payload[4] = tilemaps.length ? 2 : 1;
+  payload[4] = drawOrder ? 3 : tilemaps.length ? 2 : 1;
   payload[5] = layers.length;
   payload[6] = sprites.length;
   payload[7] = tilemaps.length;
@@ -110,6 +111,13 @@ function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
     payload.set(Uint8Array.from(tilemap.frames), framesOffset);
     framesOffset += tilemap.frames.length;
   }
+  if (drawOrder) {
+    for (const [kind, slot] of drawOrder) {
+      payload[framesOffset] = kind;
+      payload[framesOffset + 1] = slot;
+      framesOffset += 2;
+    }
+  }
   return payload;
 }
 
@@ -153,6 +161,9 @@ function decodeLegacyTable(table) {
 }
 
 const deepspace = core.packDeepspace();
+assert.equal(deepspace.height, 4, "projection texture carries legacy and VS2 rows");
+assert.equal(deepspace.data[2 * 256], PIXELS - 1, "VS2 y=0 maps to the outer LED");
+assert.equal(deepspace.data[2 * 256 + 255], 0, "VS2 y=255 maps to the centre");
 
 function compareScene(label, { assets, paletteBytes, frame, sceneData }) {
   const expected = computeLedFramePixels(frame, assets, paletteBytes);
@@ -341,6 +352,7 @@ function blankFrame(overrides = {}) {
       },
       {
         image_strip: 10,
+        flags: 1 | 2 | 4,
         frames: [2, 0, 255, 1],
         columns: 2,
         rows: 2,
@@ -359,11 +371,53 @@ function blankFrame(overrides = {}) {
     [9, makeAsset({ width: 4, height: 4, frames: 3, data: tileData })],
     [10, makeAsset({ width: 4, height: 4, frames: 3, palette: 1, data: tileData })],
   ]);
-  compareScene("vs2 tilemaps: tunnel + HUD, empty tiles, viewport, palette group", {
+  compareScene("vs2 tilemaps: tunnel + flipped HUD, empty tiles, viewport, palette group", {
     assets,
     paletteBytes: TWO_GROUP_PALETTE,
     frame: blankFrame({ sprites: decoded.sprites, tilemaps: decoded.tilemaps, frame: 3, column_offset: 17 }),
     sceneData: core.packSceneVs2(decoded),
+  });
+}
+
+{
+  // V3's tagged records preserve creation order across kinds.  The middle
+  // tilemap must stay between the two sprites; the final sprite is on top.
+  const payload = makeVs2ScenePayload({
+    layers: [],
+    sprites: [
+      { layer: 255, image_strip: 1, frame: 0, mode: 2, flags: 1, x: 4, y: 53 },
+      { layer: 255, image_strip: 3, frame: 0, mode: 2, flags: 1, x: 4, y: 53 },
+    ],
+    tilemaps: [{
+      image_strip: 2,
+      frames: [0],
+      columns: 1,
+      rows: 1,
+      tile_width: 1,
+      tile_height: 1,
+      viewport: [0, 0, 1, 1],
+      mode: 2,
+      x: 4,
+      y: 53,
+    }],
+    drawOrder: [[0, 0], [1, 0], [0, 1]],
+  });
+  const decoded = decodeVs2SceneBuffer(payload);
+  const assets = new Map([
+    [1, makeAsset({ width: 1, height: 1, data: [1] })],
+    [2, makeAsset({ width: 1, height: 1, data: [2] })],
+    [3, makeAsset({ width: 1, height: 1, data: [3] })],
+  ]);
+  const sceneData = core.packSceneVs2(payload);
+  assert.deepEqual(
+    [sceneData.scene[15], sceneData.scene[31], sceneData.scene[47]], [0, 1, 0],
+    "the shader must probe top sprite, then tilemap, then bottom sprite",
+  );
+  compareScene("vs2 v3 interleaved drawable order", {
+    assets,
+    paletteBytes: PALETTE,
+    frame: blankFrame({ sprites: decoded.sprites, tilemaps: decoded.tilemaps, drawables: decoded.drawables }),
+    sceneData,
   });
 }
 

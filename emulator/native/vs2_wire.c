@@ -32,7 +32,7 @@ bool vs2_wire_decode_scene(const uint8_t* data, size_t len, vs2_wire_scene_t* ou
     uint16_t sprite_size = rd_u16(data + 12);
     uint16_t tilemap_size = rd_u16(data + 14);
 
-    if (version != 1 && version != 2) {
+    if (version != 1 && version != 2 && version != 3) {
         return false;
     }
     if (version < 2) {
@@ -81,6 +81,7 @@ bool vs2_wire_decode_scene(const uint8_t* data, size_t len, vs2_wire_scene_t* ou
     }
 
     /* Wire layout "<BBBBHHHHHHHHiiI". */
+    size_t frames_end = offset + (size_t)tilemap_count * tilemap_size;
     for (int i = 0; i < tilemap_count; i++) {
         if (offset + tilemap_size > len) {
             return false;
@@ -106,6 +107,9 @@ bool vs2_wire_decode_scene(const uint8_t* data, size_t len, vs2_wire_scene_t* ou
         if ((size_t)frames_offset + cells > len) {
             return false;
         }
+        if ((size_t)frames_offset + cells > frames_end) {
+            frames_end = (size_t)frames_offset + cells;
+        }
         tilemap->frames = data + frames_offset;
         tilemap->frames_len = cells;
         out->tilemap_ptrs[i] = tilemap;
@@ -115,8 +119,38 @@ bool vs2_wire_decode_scene(const uint8_t* data, size_t len, vs2_wire_scene_t* ou
     out->scene.layer_count = layer_count;
     out->scene.sprite_count = sprite_count;
     out->scene.tilemap_count = tilemap_count;
+    out->scene.draw_order_count = sprite_count + tilemap_count;
+    if (out->scene.draw_order_count > VS2_MAX_DRAWABLES) {
+        return false;
+    }
+    if (version == 3) {
+        if (frames_end + (size_t)out->scene.draw_order_count * 2 > len) {
+            return false;
+        }
+        for (uint8_t i = 0; i < out->scene.draw_order_count; i++) {
+            const uint8_t* ref = data + frames_end + (size_t)i * 2;
+            if ((ref[0] == VS2_DRAW_SPRITE && ref[1] >= sprite_count) ||
+                (ref[0] == VS2_DRAW_TILEMAP && ref[1] >= tilemap_count) ||
+                (ref[0] != VS2_DRAW_SPRITE && ref[0] != VS2_DRAW_TILEMAP)) {
+                return false;
+            }
+            out->draw_order[i].kind = ref[0];
+            out->draw_order[i].index = ref[1];
+        }
+    } else {
+        uint8_t draw = 0;
+        for (int i = tilemap_count - 1; i >= 0; i--) {
+            out->draw_order[draw].kind = VS2_DRAW_TILEMAP;
+            out->draw_order[draw++].index = i;
+        }
+        for (int i = sprite_count - 1; i >= 0; i--) {
+            out->draw_order[draw].kind = VS2_DRAW_SPRITE;
+            out->draw_order[draw++].index = i;
+        }
+    }
     out->scene.layers = out->layer_ptrs;
     out->scene.sprites = out->sprite_ptrs;
     out->scene.tilemaps = out->tilemap_ptrs;
+    out->scene.draw_order = out->draw_order;
     return true;
 }

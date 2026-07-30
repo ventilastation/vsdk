@@ -5,6 +5,7 @@ This keeps the intentionally original pixel art and synth sounds reproducible.
 Run from the VSDK root or directly from this script's folder:
 
     python3 games/alecu/vixeous/tools/generate_assets.py
+    python3 games/alecu/vixeous/tools/generate_assets.py --text-only
 """
 
 import argparse
@@ -19,16 +20,72 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
+VSDK_ROOT = Path(__file__).resolve().parents[4]
 IMAGES = ROOT / "images"
 SOUNDS = ROOT / "sounds"
+TINYFONT = VSDK_ROOT / "system/shared/other/images/tinyfont_white.png"
 TRANSPARENT = (255, 0, 255, 0)
 RATE = 22050
+
+PIXEL_FONT = {
+    " ": ("00000",) * 7,
+    "0": ("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
+    "1": ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
+    "2": ("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
+    "3": ("11110", "00001", "00001", "01110", "00001", "00001", "11110"),
+    "4": ("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
+    "5": ("11111", "10000", "10000", "11110", "00001", "00001", "11110"),
+    "6": ("01110", "10000", "10000", "11110", "10001", "10001", "01110"),
+    "7": ("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
+    "8": ("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
+    "9": ("01110", "10001", "10001", "01111", "00001", "00001", "01110"),
+    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "E": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
+    "G": ("01110", "10001", "10000", "10111", "10001", "10001", "01110"),
+    "I": ("11111", "00100", "00100", "00100", "00100", "00100", "11111"),
+    "M": ("10001", "11011", "10101", "10101", "10001", "10001", "10001"),
+    "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
+    "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
+    "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "V": ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
+    "X": ("10001", "10001", "01010", "00100", "01010", "10001", "10001"),
+}
+DIGIT_COLOR = (0, 0, 0, 255)
+LIFE_COLOR = (232, 32, 42, 255)
+MESSAGE_BG = (20, 24, 26, 255)
+MESSAGE_BORDER = (180, 188, 184, 255)
+MESSAGE_TEXT = (255, 238, 158, 255)
+MESSAGE_ACCENT = (232, 32, 42, 255)
+TINY_HEART = (
+    "101",
+    "111",
+    "010",
+)
 
 
 try:
     FONT = ImageFont.load_default()
 except Exception:
     FONT = None
+
+
+def draw_pixel_glyph(draw, char, x, y, color):
+    """Draw one hard-edged 5x7 glyph without font rasterization."""
+    for row, pixels in enumerate(PIXEL_FONT[char]):
+        for column, pixel in enumerate(pixels):
+            if pixel == "1":
+                draw.point((x + column, y + row), fill=color)
+
+
+def pixel_text_width(text, spacing=1):
+    return len(text) * (5 + spacing) - spacing if text else 0
+
+
+def draw_pixel_text(draw, text, x, y, color, spacing=1):
+    for char in text:
+        draw_pixel_glyph(draw, char, x, y, color)
+        x += 5 + spacing
 
 
 def save_strip(name, frame_w, frame_h, frames, draw_frame):
@@ -198,16 +255,29 @@ def draw_terrain(draw, frame, w, h):
 
 
 def draw_digits():
-    width, height, frames = 5, 7, 12
+    width, height, frames = 4, 6, 12
     image = Image.new("RGBA", (width * frames, height), TRANSPARENT)
     glyphs = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", " ", "*")
+    tinyfont = Image.open(TINYFONT).convert("RGBA")
+    if tinyfont.size != (width * 256, height):
+        raise ValueError("tinyfont source must contain 256 4x6 frames")
+
     for index, char in enumerate(glyphs):
         tile = Image.new("RGBA", (width, height), TRANSPARENT)
-        draw = ImageDraw.Draw(tile)
         if char == "*":
-            draw.polygon([(2, 0), (4, 3), (3, 6), (1, 6), (0, 3)], fill=(232, 32, 42, 255))
+            for y, row in enumerate(TINY_HEART):
+                for x, pixel in enumerate(row):
+                    if pixel == "1":
+                        tile.putpixel((x, y), LIFE_COLOR)
         elif char != " ":
-            draw.text((0, -2), char, font=FONT, fill=(220, 230, 224, 255))
+            source_x = ord(char) * width
+            source = tinyfont.crop((source_x, 0, source_x + width, height))
+            # Preserve TinyFont's ordinary orientation and one-pixel spacing
+            # column. The label API handles display orientation at runtime.
+            for y in range(height):
+                for x in range(width):
+                    if source.getpixel((x, y))[3]:
+                        tile.putpixel((x, y), DIGIT_COLOR)
         image.alpha_composite(tile, (index * width, 0))
     image.save(IMAGES / "digits.png")
 
@@ -219,10 +289,21 @@ def draw_messages():
     for index, label in enumerate(labels):
         tile = Image.new("RGBA", (width, height), TRANSPARENT)
         draw = ImageDraw.Draw(tile)
-        draw.rectangle((0, 2, width - 1, height - 3), fill=(28, 32, 36, 235), outline=(180, 188, 184, 255))
-        draw.line((2, height - 3, width - 3, height - 3), fill=(232, 32, 42, 255))
-        text_w = draw.textlength(label, font=FONT) if hasattr(draw, "textlength") else len(label) * 6
-        draw.text(((width - int(text_w)) // 2, 1), label, font=FONT, fill=(245, 235, 170, 255))
+        draw.rectangle(
+            (0, 0, width - 1, height - 1),
+            fill=MESSAGE_BG,
+        )
+        draw.rectangle(
+            (0, 0, width - 1, height - 2),
+            outline=MESSAGE_BORDER,
+        )
+        draw.line(
+            (2, height - 1, width - 3, height - 1),
+            fill=MESSAGE_ACCENT,
+        )
+        text_w = pixel_text_width(label)
+        draw_pixel_text(
+            draw, label, (width - text_w) // 2, 2, MESSAGE_TEXT)
         image.alpha_composite(tile, (index * width, 0))
     image.save(IMAGES / "messages.png")
 
@@ -342,7 +423,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-sounds", action="store_true", help="only regenerate PNG assets")
     parser.add_argument("--skip-images", action="store_true", help="only regenerate MP3 assets")
+    parser.add_argument(
+        "--text-only", action="store_true",
+        help="only regenerate digits.png and messages.png",
+    )
     args = parser.parse_args()
+    if args.text_only:
+        IMAGES.mkdir(parents=True, exist_ok=True)
+        draw_digits()
+        draw_messages()
+        return
     if not args.skip_images:
         generate_images()
     if not args.skip_sounds:

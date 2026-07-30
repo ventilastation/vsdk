@@ -7,6 +7,7 @@ import utime
 
 from ventilastation import settings
 from ventilastation import api_guard
+from ventilastation.display_geometry import DISPLAY_HEIGHT
 from ventilastation.platforms import create_platform
 from ventilastation.runtime import (
     RuntimeContext,
@@ -19,7 +20,7 @@ from ventilastation.runtime import (
 
 DEBUG = False
 INPUT_TIMEOUT = 30 * 1000  # after 30s without input, show the how-to-play attract screens
-PIXELS = 54
+PIXELS = DISPLAY_HEIGHT
 stripes = {}
 TRACE_AUTO_GC_FRAME = 32
 
@@ -33,6 +34,16 @@ class _DirectorProxy:
 
     def __getattr__(self, name):
         return getattr(get_director(), name)
+
+    def __setattr__(self, name, value):
+        # Keep ``from ventilastation.director import director`` useful for
+        # tests and small apps that mutate input or palette state.  Without
+        # forwarding, an assignment sticks to this long-lived proxy and leaks
+        # across subsequently configured runtimes.
+        setattr(get_director(), name, value)
+
+    def __delattr__(self, name):
+        delattr(get_director(), name)
 
 
 class _CommsProxy:
@@ -111,6 +122,10 @@ class Director:
         self.timedout = False
         self.romdata = None
         self.palette_data = None
+        # Parsed alongside ``stripes`` so the V2 asset bank can validate frame
+        # writes and infer tile sizes without asking a native sprite record.
+        # V1 keeps using the existing name -> slot mapping unchanged.
+        self.image_metadata = {}
         # vshw_sprites.set_imagestrip() (the real hardware backend) only
         # stores the raw buffer pointer, not the owning Python object -- it
         # never roots it against the GC. Without a live reference here, the
@@ -177,7 +192,11 @@ class Director:
             color_calibration.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
         elif cmd == "povperf":
             from ventilastation import pov_profiling
-            pov_profiling.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
+            scene = self.scene_stack[-1] if self.scene_stack else None
+            pov_profiling.handle_command(
+                parts[1:], self.platform.comms.send, self.platform.display,
+                scene=scene,
+            )
         elif cmd == "hallfilter":
             from ventilastation import hall_filter_control
             hall_filter_control.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
@@ -292,13 +311,28 @@ class Director:
     def pop(self):
         scene = self.scene_stack.pop()
         self._exit_scene(scene)
-        if not scene.keep_music:
+        below = self.scene_stack[-1] if self.scene_stack else None
+        keeps_v2_app_music = (
+            getattr(scene, "_vs_declared_api", None) == "vs2"
+            and getattr(below, "_vs_declared_api", None) == "vs2"
+            and getattr(scene, "_vs_api_slug", None) == getattr(below, "_vs_api_slug", None)
+        )
+        if not scene.keep_music and not keeps_v2_app_music:
             self.music_off()
         self.platform.sprites.reset_sprites()
         gc.collect()
         if self.scene_stack:
             self._enter_scene(self.scene_stack[-1])
         return scene
+
+    def switch(self, scene):
+        """Replace the showing V2 scene without interrupting app music."""
+        previous = self.scene_stack.pop()
+        self._exit_scene(previous)
+        self.platform.sprites.reset_sprites()
+        gc.collect()
+        self.scene_stack.append(scene)
+        self._enter_top_scene()
 
     def is_pressed(self, button):
         return bool(button & self.buttons)
@@ -367,6 +401,7 @@ class Director:
 
     def _load_rom_streaming(self, filename, romlength):
         stripes.clear()
+        self.image_metadata.clear()
         romfile = open(filename, "rb")
         try:
             header = romfile.read(4)
@@ -431,9 +466,22 @@ class Director:
                 strip_buf[0:4] = metadata_view[filename_len:filename_len + 4]
                 romfile.readinto(memoryview(strip_buf)[4:])
                 stripmap = memoryview(strip_buf)
+                record_end = (stripes_offsets[n + 1] if n + 1 < num_stripes
+                              else palette_offsets[0])
+                trailer_size = record_end - (off + 1 + filename_len + 4 + width * h * frames)
+                glyphs = None
+                if trailer_size >= 2:
+                    glyph_length = struct.unpack("<H", romfile.read(2))[0]
+                    if glyph_length <= trailer_size - 2:
+                        glyphs = romfile.read(glyph_length).decode("utf-8")
                 self._stripe_buffers[n] = stripmap
                 self.platform.sprites.set_imagestrip(n, stripmap)
                 stripes[filename_bytes.decode("utf-8")] = n
+                self.image_metadata[n] = {
+                    "width": width, "height": int(h), "frames": int(frames),
+                    "palette": int(metadata_view[filename_len + 3]),
+                    "glyphs": glyphs,
+                }
         finally:
             romfile.close()
 
@@ -441,6 +489,7 @@ class Director:
         # Parse a fully-loaded ROM held in self.romdata (a bytes/bytearray
         # memoryview), wiring its palettes and image strips into the display.
         stripes.clear()
+        self.image_metadata.clear()
         num_stripes, num_palettes = struct.unpack("<HH", self.romdata)
         offsets = struct.unpack_from("<%dL%dL" % (num_stripes, num_palettes), self.romdata, 4)
         stripes_offsets = offsets[:num_stripes]
@@ -458,9 +507,22 @@ class Director:
 
             image_data = off + 1 + filename_len
             strip = self.romdata[image_data:image_data + w * h * frames + 4]
+            record_end = (stripes_offsets[n + 1] if n + 1 < num_stripes
+                          else palette_offsets[0])
+            trailer_start = image_data + 4 + w * h * frames
+            glyphs = None
+            if record_end - trailer_start >= 2:
+                glyph_length = struct.unpack_from("<H", self.romdata, trailer_start)[0]
+                if glyph_length <= record_end - trailer_start - 2:
+                    glyphs = bytes(self.romdata[trailer_start + 2:trailer_start + 2 + glyph_length]).decode("utf-8")
             self._stripe_buffers[n] = strip
             self.platform.sprites.set_imagestrip(n, strip)
             stripes[filename.decode("utf-8")] = n
+            self.image_metadata[n] = {
+                "width": int(w), "height": int(h), "frames": int(frames),
+                "palette": int(pal),
+                "glyphs": glyphs,
+            }
 
     def load_rom(self, filename):
         # On the board, ROMs are stored gzip-compressed as "<name>.romz" in the
@@ -576,9 +638,17 @@ class Director:
             self._report_exception(error, "step", scene)
             raise
 
-        if self.last_buttons != self.buttons:
+        # A V2 transition is committed at the end of scene_step().  Render the
+        # new showing scene rather than the callback's now-closed scene.
+        if not self.scene_stack:
+            return
+        scene = self.scene_stack[-1]
+
+        if (self.last_buttons != self.buttons
+                or self.last_buttons2 != self.buttons2
+                or self.last_extra_buttons != self.extra_buttons):
             self.last_player_action = now
-            self.last_buttons = self.buttons
+        self.last_buttons = self.buttons
         self.last_buttons2      = self.buttons2
         self.last_extra_buttons = self.extra_buttons
 

@@ -15,14 +15,20 @@
 
 #include "serial_bridge.h"
 #include "config.h"
+#include "frame_snapshot.h"
+#include "hall_sim.h"
 
 #include "driver/uart.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
+#include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define DUT_UART_PORT UART_NUM_1
 #define BRIDGE_BUF_SIZE 256
@@ -35,6 +41,93 @@
 #define WB_GIT_HASH "unknown"
 #endif
 #define WB_VERSION "v1.0"
+
+// Bytes sent by the emulator/button protocol are seven-bit values. 0xD3 is
+// therefore an unambiguous escape into a small command channel that is
+// consumed by the workbench and never forwarded to the DUT:
+//
+//   0xD3 "rpm <n>\n" -> "wb_ok rpm=<clamped-n>\n"
+//   0xD3 "capture\n" -> "wb_frame <bytes> <crc32>\n" + raw frame bytes
+//
+// A CRC covers the binary payload so a host test cannot accidentally accept
+// a truncated or interleaved capture as a rendering result.
+#define WB_USB_CONTROL_ESCAPE 0xD3
+#define WB_USB_COMMAND_BYTES 48
+#define WB_USB_WRITE_CHUNK_BYTES 512
+
+static bool usb_write_all(const void *data, size_t len) {
+    const uint8_t *cursor = data;
+    int64_t deadline_us = esp_timer_get_time() + 3000000;
+    while (len > 0 && esp_timer_get_time() < deadline_us) {
+        size_t chunk = len > WB_USB_WRITE_CHUNK_BYTES ? WB_USB_WRITE_CHUNK_BYTES : len;
+        int written = usb_serial_jtag_write_bytes(cursor, chunk, pdMS_TO_TICKS(100));
+        if (written > 0) {
+            cursor += written;
+            len -= (size_t)written;
+        }
+    }
+    return len == 0;
+}
+
+static uint32_t crc32_bytes(const uint8_t *data, size_t len) {
+    uint32_t crc = 0xffffffffU;
+    for (size_t i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; bit++) {
+            uint32_t mask = 0U - (crc & 1U);
+            crc = (crc >> 1) ^ (0xedb88320U & mask);
+        }
+    }
+    return ~crc;
+}
+
+static void usb_reply_line(const char *line) {
+    usb_write_all(line, strlen(line));
+}
+
+static void handle_workbench_command(char *command) {
+    if (strncmp(command, "rpm ", 4) == 0) {
+        char *end = NULL;
+        long rpm = strtol(command + 4, &end, 10);
+        if (end == command + 4 || *end != '\0' || rpm < 0) {
+            usb_reply_line("wb_error invalid_rpm\n");
+            return;
+        }
+        hall_sim_set_rpm((uint32_t)rpm);
+        char response[40];
+        snprintf(response, sizeof(response), "wb_ok rpm=%lu\n",
+                 (unsigned long)hall_sim_get_rpm());
+        usb_reply_line(response);
+        return;
+    }
+
+    if (strcmp(command, "capture") == 0) {
+        const uint8_t *frame = frame_snapshot_acquire();
+        uint32_t crc = crc32_bytes(frame, WB_FRAME_BYTES);
+        char header[48];
+        snprintf(header, sizeof(header), "wb_frame %u %08lx\n",
+                 (unsigned)WB_FRAME_BYTES, (unsigned long)crc);
+
+        // Stop diagnostics from entering the USB transmit ring between the
+        // framing line and binary payload. DUT UART forwarding also pauses
+        // because this command executes synchronously in bridge_task.
+        esp_log_level_t old_level = esp_log_level_get("*");
+        esp_log_level_set("*", ESP_LOG_NONE);
+        bool ok = usb_write_all(header, strlen(header));
+        if (ok) {
+            ok = usb_write_all(frame, WB_FRAME_BYTES);
+        }
+        usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(3000));
+        esp_log_level_set("*", old_level);
+        frame_snapshot_release();
+        if (!ok) {
+            usb_reply_line("wb_error capture_timeout\n");
+        }
+        return;
+    }
+
+    usb_reply_line("wb_error unknown_command\n");
+}
 
 // RESYNC / device identification (see
 // docs/internals/input-protocol-v2.md#resync--device-identification).
@@ -80,6 +173,10 @@ static void forward_to_dut(const uint8_t *buf, size_t len) {
 static uint8_t s_candidate[sizeof(RESYNC_SEQUENCE)];
 static size_t s_candidate_len;
 static int64_t s_candidate_started_us;
+static char s_workbench_command[WB_USB_COMMAND_BYTES];
+static size_t s_workbench_command_len;
+static bool s_in_workbench_command;
+static bool s_workbench_command_overflow;
 
 #define CANDIDATE_FLUSH_TIMEOUT_US 5000
 
@@ -93,6 +190,41 @@ static void flush_stale_candidate(void) {
 static void handle_host_bytes(const uint8_t *buf, size_t len) {
     for (size_t i = 0; i < len; i++) {
         uint8_t byte = buf[i];
+
+        if (s_in_workbench_command) {
+            if (byte == '\n') {
+                if (s_workbench_command_len > 0 &&
+                    s_workbench_command[s_workbench_command_len - 1] == '\r') {
+                    s_workbench_command_len--;
+                }
+                s_workbench_command[s_workbench_command_len] = '\0';
+                if (s_workbench_command_overflow) {
+                    usb_reply_line("wb_error command_too_long\n");
+                } else {
+                    handle_workbench_command(s_workbench_command);
+                }
+                s_in_workbench_command = false;
+                s_workbench_command_len = 0;
+                s_workbench_command_overflow = false;
+            } else if (!s_workbench_command_overflow) {
+                if (s_workbench_command_len + 1 < sizeof(s_workbench_command)) {
+                    s_workbench_command[s_workbench_command_len++] = (char)byte;
+                } else {
+                    s_workbench_command_overflow = true;
+                }
+            }
+            continue;
+        }
+
+        if (byte == WB_USB_CONTROL_ESCAPE) {
+            forward_to_dut(s_candidate, s_candidate_len);
+            s_candidate_len = 0;
+            s_in_workbench_command = true;
+            s_workbench_command_len = 0;
+            s_workbench_command_overflow = false;
+            continue;
+        }
+
         if (byte == RESYNC_SEQUENCE[s_candidate_len]) {
             if (s_candidate_len == 0) {
                 s_candidate_started_us = esp_timer_get_time();

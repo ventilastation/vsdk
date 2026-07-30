@@ -14,6 +14,7 @@ GAMES_ROOT = ROOT_DIR / "games"
 SYSTEM_ROOT = ROOT_DIR / "system"
 ROMS_FOLDER = ROOT_DIR / "apps" / "micropython" / "roms"
 SEARCH_ROOTS = (GAMES_ROOT, SYSTEM_ROOT)
+MAX_IMAGE_STRIPS = 100
 
 os.makedirs(ROMS_FOLDER, exist_ok=True)
 
@@ -90,6 +91,7 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
     rom_strips = []
     palettes = []
     attributes = {}
+    strip_ids = set()
 
     for palnumber, group in enumerate(palettegroups):
         images = {}
@@ -152,6 +154,12 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
 
             b = i_paletted.transpose(Image.ROTATE_270).tobytes()
             filename = images_opts[fn].get("id", fn.rsplit("/", 1)[-1])
+            if filename in strip_ids:
+                raise ValueError("%s defines duplicate image id %s" % (rom_name, filename))
+            strip_ids.add(filename)
+            if len(rom_strips) >= MAX_IMAGE_STRIPS:
+                raise ValueError("%s defines %d images; this target supports %d"
+                                 % (rom_name, len(rom_strips) + 1, MAX_IMAGE_STRIPS))
             frames, palette = attributes[fn][2:4]
             width = i.width // frames
             if width > 255:
@@ -165,7 +173,14 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
 
             fnb = filename.encode("utf-8")
             pascal_filename = struct.pack("B", len(fnb)) + fnb
-            rom_strips.append(pascal_filename + attrbytes + b)
+            glyphs = images_opts[fn].get("glyphs", "")
+            glyph_bytes = glyphs.encode("utf-8")
+            if len(glyph_bytes) > 0xFFFF:
+                raise ValueError("glyph map for %s is too long" % filename)
+            # Strip offsets already delimit every record, so the optional V2
+            # glyph table can trail the established V1 image data without
+            # changing its header or the bytes V1 registers with the GPU.
+            rom_strips.append(pascal_filename + attrbytes + b + struct.pack("<H", len(glyph_bytes)) + glyph_bytes)
         
     with open(rom_filename, "wb") as rom:
         offset = 4 + len(rom_strips) * 4 + len(palettes) * 4
@@ -247,6 +262,13 @@ def _normalize_item(item, source_path, palettegroup_index, item_index):
                 f"{source_path}: palette group {palettegroup_index} item {item_index} has invalid id {strip_id!r}"
             )
         options["id"] = strip_id
+    if "glyphs" in item:
+        glyphs = item.get("glyphs")
+        if not isinstance(glyphs, str):
+            raise ValueError(
+                f"{source_path}: palette group {palettegroup_index} item {item_index} has invalid glyphs"
+            )
+        options["glyphs"] = glyphs
     if item_type == "fullscreen":
         radius = item.get("radius", 54)
         if not isinstance(radius, int) or radius < 1:

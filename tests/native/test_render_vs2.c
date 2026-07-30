@@ -18,11 +18,15 @@ uint8_t brillos[PIXELS];
 uint8_t intensidades_por_led[PIXELS];
 
 void calculate_deepspace(void);
-extern uint8_t deepspace[256];
 
 #define HUD_LED(dest_y) (PIXELS - 1 - (dest_y))
 
 static int failures = 0;
+static int service_calls = 0;
+
+static void count_service(void) {
+    service_calls++;
+}
 
 #define CHECK_EQ(actual, expected, message) \
     do { \
@@ -41,6 +45,7 @@ static int failures = 0;
  * tile's screen pixel (0, 0) transparent. */
 static uint8_t tile_strip_bytes[4 + 3 * 16];
 static uint8_t sprite_strip_bytes[4 + 4] = { 2, 2, 1, 0, 1, 2, 3, 4 };
+static uint8_t fullscreen_strip_bytes[4 + PIXELS];
 static uint32_t palette_storage[256];
 
 /* 2x2 map: top row = frame 0 | frame 1, bottom row = frame 2 | empty cell (255) */
@@ -121,6 +126,23 @@ int main(void) {
     palette_storage[4] = 40u << 24;
     image_stripes[8] = (const ImageStrip*)sprite_strip_bytes;
     image_stripes[9] = (const ImageStrip*)tile_strip_bytes;
+    fullscreen_strip_bytes[0] = 1;
+    fullscreen_strip_bytes[1] = PIXELS;
+    fullscreen_strip_bytes[2] = 1;
+    fullscreen_strip_bytes[3] = 0;
+    memset(fullscreen_strip_bytes + 4, 1, PIXELS);
+    image_stripes[10] = (const ImageStrip*)fullscreen_strip_bytes;
+
+    /* VS2 projections share a rim-origin Y axis. */
+    CHECK_EQ(vs2_deepspace[0], PIXELS - 1, "TUNNEL y=0 is outermost");
+    CHECK_EQ(vs2_deepspace[255], 0, "TUNNEL y=255 is center");
+    for (int y = 1; y < 256; y++) {
+        if (vs2_deepspace[y] > vs2_deepspace[y - 1]) {
+            printf("FAIL VS2 tunnel projection is not monotonic at y=%d\n", y);
+            failures++;
+            break;
+        }
+    }
 
     /* HUD mode at y=40: dest rows 40..47 land on leds 13..6. */
     {
@@ -147,6 +169,19 @@ int main(void) {
         vs2_scene_t scene = tilemap_scene(records, 1);
         CHECK_EQ(render_led(&scene, 10, 13), 30, "viewport pans horizontally");
         CHECK_EQ(render_led(&scene, 14, 13), 0, "viewport window width");
+    }
+
+    /* Flip flags mirror the complete tilemap viewport, including tile order
+     * and the pixels inside each tile. Labels inherit this exact path. */
+    {
+        vs2_tilemap_t tilemap = default_tilemap();
+        tilemap.flags = 0x01 | 0x02 | 0x04;
+        const vs2_tilemap_t* records[] = { &tilemap };
+        vs2_scene_t scene = tilemap_scene(records, 1);
+        CHECK_EQ(render_led(&scene, 10, 13), 0, "flipped top-left is empty bottom-right");
+        CHECK_EQ(render_led(&scene, 10, 9), 30, "flip y reverses tile rows");
+        CHECK_EQ(render_led(&scene, 14, 13), 40, "flip x reverses tile columns");
+        CHECK_EQ(render_led(&scene, 17, 6), 10, "flipped opposite corner");
     }
 
     /* Vertical viewport pan */
@@ -198,6 +233,65 @@ int main(void) {
         CHECK_EQ(render_led(&scene, 10, 11), 10, "tilemap shows below the sprite");
     }
 
+    /* The sealed V2 draw table is the board path: it must honor tagged
+     * sprite/tilemap order instead of falling back to the legacy two passes. */
+    {
+        vs2_tilemap_t tilemap = default_tilemap();
+        const vs2_tilemap_t* tilemap_records[] = { &tilemap };
+        vs2_sprite_t sprite = {
+            .layer = 255, .image_strip = 8, .frame = 0, .mode = 2,
+            .flags = 0x01, .x = 10 * 256, .y = 40 * 256,
+        };
+        const vs2_sprite_t* sprite_records[] = { &sprite };
+        vs2_draw_ref_t order[] = {
+            { .kind = VS2_DRAW_TILEMAP, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+        };
+        vs2_scene_t scene = tilemap_scene(tilemap_records, 1);
+        scene.sprite_count = 1;
+        scene.sprites = sprite_records;
+        scene.draw_order = order;
+        scene.draw_order_count = 2;
+        CHECK_EQ(render_led(&scene, 10, 13), 30, "native draw table sprite on top");
+        order[0].kind = VS2_DRAW_SPRITE;
+        order[1].kind = VS2_DRAW_TILEMAP;
+        CHECK_EQ(render_led(&scene, 10, 13), 10, "native draw table tilemap on top");
+    }
+
+    /* Cooperative front-buffer service does not alter the projected pixels.
+     * It yields after four sprites and after every tilemap so one expensive
+     * scene column cannot hide a physical angular edge. */
+    {
+        vs2_tilemap_t tilemap = default_tilemap();
+        const vs2_tilemap_t* tilemap_records[] = { &tilemap };
+        vs2_sprite_t sprite = {
+            .layer = 255, .image_strip = 8, .frame = 0, .mode = 2,
+            .flags = 0x01, .x = 10 * 256, .y = 40 * 256,
+        };
+        const vs2_sprite_t* sprite_records[] = { &sprite };
+        vs2_draw_ref_t order[] = {
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+            { .kind = VS2_DRAW_TILEMAP, .index = 0 },
+            { .kind = VS2_DRAW_SPRITE, .index = 0 },
+        };
+        vs2_scene_t scene = tilemap_scene(tilemap_records, 1);
+        scene.sprite_count = 1;
+        scene.sprites = sprite_records;
+        scene.draw_order = order;
+        scene.draw_order_count = 6;
+        uint32_t expected[PIXELS];
+        uint32_t actual[PIXELS];
+        render_vs2(10, expected, &scene);
+        service_calls = 0;
+        render_vs2_cooperative(10, actual, &scene, count_service);
+        CHECK_EQ(service_calls, 2, "cooperative renderer service cadence");
+        CHECK_EQ(memcmp(expected, actual, sizeof(expected)), 0,
+                 "cooperative renderer preserves pixels");
+    }
+
     /* Layer visibility and mode override */
     {
         vs2_tilemap_t tilemap = default_tilemap();
@@ -212,7 +306,8 @@ int main(void) {
 
         vs2_layer_t tunnel_layer = { .id = 0, .mode = 1, .flags = 0x01 };
         layer_records[0] = &tunnel_layer;
-        CHECK_EQ(render_led(&scene, 10, deepspace[40]), 10, "layer mode overrides tilemap mode");
+        CHECK_EQ(render_led(&scene, 10, vs2_deepspace[40]), 10,
+                 "layer mode overrides tilemap mode");
     }
 
     /* TUNNEL projection uses deepspace */
@@ -221,7 +316,8 @@ int main(void) {
         tilemap.mode = 1;
         const vs2_tilemap_t* records[] = { &tilemap };
         vs2_scene_t scene = tilemap_scene(records, 1);
-        CHECK_EQ(render_led(&scene, 10, deepspace[40]), 10, "TUNNEL projection");
+        CHECK_EQ(render_led(&scene, 10, vs2_deepspace[40]), 10,
+                 "TUNNEL projection");
     }
 
     /* FULLSCREEN tilemaps are skipped */
@@ -259,6 +355,34 @@ int main(void) {
         CHECK_EQ(render_led(&scene, 20, HUD_LED(51)), 20, "sprite flip_x+flip_y");
         CHECK_EQ(render_led(&scene, 20, HUD_LED(52)), 10, "sprite flip_y row");
         CHECK_EQ(render_led(&scene, 21, HUD_LED(51)), 40, "sprite flip_x column");
+    }
+
+    /* TUNNEL and HUD agree exactly at the rim, while FULLSCREEN y=0 reaches
+     * that same outer LED and increasing Y contracts toward the center. */
+    {
+        vs2_sprite_t sprite = {
+            .layer = 255, .image_strip = 10, .frame = 0, .mode = 1,
+            .flags = 0x01, .x = 20 * 256, .y = 0,
+        };
+        const vs2_sprite_t* records[] = { &sprite };
+        vs2_scene_t scene = {
+            .layer_count = 0, .sprite_count = 1, .tilemap_count = 0,
+            .layers = NULL, .sprites = records, .tilemaps = NULL,
+        };
+        CHECK_EQ(render_led(&scene, 20, PIXELS - 1), 10,
+                 "TUNNEL y=0 outermost LED");
+        sprite.mode = 2;
+        CHECK_EQ(render_led(&scene, 20, PIXELS - 1), 10,
+                 "HUD y=0 outermost LED");
+
+        sprite.mode = 0;
+        CHECK_EQ(render_led(&scene, 20, PIXELS - 1), 10,
+                 "FULLSCREEN y=0 fully expanded");
+        sprite.y = 255 * 256;
+        CHECK_EQ(render_led(&scene, 20, 0), 10,
+                 "FULLSCREEN y=255 reaches center");
+        CHECK_EQ(render_led(&scene, 20, 1), 0,
+                 "FULLSCREEN y=255 is one center LED");
     }
 
     if (failures) {

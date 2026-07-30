@@ -38,9 +38,9 @@ POVSTRESS_STRIPS = ("ship.png", "shots.png", "explosion.png", "terrain.png", "di
 
 # Renderer capacities from hardware/rotor/modules/povdisplay/gpu.h -- the demo
 # is a stress test, so it must stay inside them.
-VS2_MAX_LAYERS = 16
+VS2_MAX_LAYERS = 8
 VS2_MAX_SPRITES = 100
-VS2_MAX_TILEMAPS = 8
+VS2_MAX_TILEMAPS = 16
 
 
 class PovStressVs2Tests(unittest.TestCase):
@@ -76,21 +76,25 @@ class PovStressVs2Tests(unittest.TestCase):
     def test_scene_shape_is_6_layers_of_10_plus_terrain_and_scoreboard(self):
         scene = load_app("demos.povstress")
         from games.demos.povstress.code.povstress import (
-            NUM_LAYERS, SPRITES_PER_LAYER,
+            NUM_LAYERS, SPRITES_PER_LAYER, SPRITE_Y_MIN,
         )
 
         self.assertEqual(scene._vs_declared_api, "vs2")
+        self.assertIsNone(scene.idle_timeout)
 
         field_layers = [l for l in scene.layers if l.name and l.name.startswith("field")]
         self.assertEqual(len(field_layers), NUM_LAYERS)
         for layer in field_layers:
             self.assertEqual(len(layer.sprites), SPRITES_PER_LAYER)
         self.assertEqual(len(scene.movers), NUM_LAYERS * SPRITES_PER_LAYER)
+        self.assertEqual(min(mover.y for mover in scene.movers), SPRITE_Y_MIN)
+        self.assertEqual(SPRITE_Y_MIN, 0)
 
-        # one base tilemap, scoreboard = 5 digits + 3 life icons
+        # Terrain and score label are tilemaps; labels no longer spend slots.
         self.assertEqual(len(scene.terrain_layer.tilemaps), 1)
-        self.assertIs(scene.terrain.frames, scene.terrain_data)
-        self.assertEqual(len(scene.hud.sprites), 8)
+        self.assertIs(scene.terrain.cells, scene.terrain_data)
+        self.assertEqual(len(scene.hud.sprites), 0)
+        self.assertEqual(len(scene.hud.tilemaps), 1)
 
     def test_terrain_is_identical_to_vixeous(self):
         scene = load_app("demos.povstress")
@@ -114,11 +118,11 @@ class PovStressVs2Tests(unittest.TestCase):
 
         payload = vs2.export_scene_payload(scene)
         version, layers, sprites, tilemaps = payload[4], payload[5], payload[6], payload[7]
-        self.assertEqual(version, 2)  # tilemap-carrying payload
+        self.assertEqual(version, 3)  # ordered tilemap-carrying payload
         self.assertLessEqual(layers, VS2_MAX_LAYERS)
         self.assertLessEqual(sprites, VS2_MAX_SPRITES)
         self.assertLessEqual(tilemaps, VS2_MAX_TILEMAPS)
-        self.assertEqual(sprites, 68)  # 60 movers + 8 scoreboard
+        self.assertEqual(sprites, 60)
 
     def test_stepping_moves_every_sprite_and_scrolls_terrain(self):
         scene = load_app("demos.povstress")

@@ -8,8 +8,8 @@
 // #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 // #include "esp_log.h"
 
-#define COLUMNS 256
-#define PIXELS 54
+#define COLUMNS VS_DISPLAY_COLUMNS
+#define PIXELS VS_DISPLAY_PIXELS
 #define ROWS 256
 #define VS2_FLAG_VISIBLE 0x01
 #define VS2_FLAG_FLIP_X 0x02
@@ -17,9 +17,11 @@
 #define VS2_MODE_FULLSCREEN 0
 #define VS2_NO_LAYER 255
 #define VS2_EMPTY_TILE 255
+#define VS2_SERVICE_DRAW_INTERVAL 4
 
 const uint8_t TRANSPARENT = 0xFF;
 uint8_t deepspace[ROWS];
+uint8_t vs2_deepspace[ROWS];
 // Drawn unconditionally by both render() and render_vs2() below -- normally
 // desirable ambient decoration, but it visually competes with anything else
 // on screen (confirmed: it's what made an earlier on-device progress
@@ -89,6 +91,15 @@ void calculate_deepspace() {
   for (int j=VISIBLE_ROWS-1; j>-1; j--) { 
     deepspace[n++] = PIXELS * pow((double)j / VISIBLE_ROWS, 1/GAMMA) + 0.5;
   }
+
+  // VS2 has one Y convention in every projection: zero is the outer rim and
+  // increasing values travel inward. Keep the legacy LUT above unchanged for
+  // V1 games and the starfield, but give VS2 all 256 depth values with no
+  // historical 16-row lead-in.
+  for (int y = 0; y < ROWS; y++) {
+    double depth = (double)(ROWS - 1 - y) / (ROWS - 1);
+    vs2_deepspace[y] = (PIXELS - 1) * pow(depth, 1/GAMMA) + 0.5;
+  }
 }
 
 void init_sprites() {
@@ -138,6 +149,10 @@ static int clamp_int(int value, int minimum, int maximum) {
   if (value < minimum) return minimum;
   if (value > maximum) return maximum;
   return value;
+}
+
+static int vs2_project_depth(int y) {
+  return vs2_deepspace[clamp_int(y, 0, ROWS - 1)];
 }
 
 static int fixed_floor_to_int(int32_t value) {
@@ -257,7 +272,8 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   if (delta >= viewport_w) {
     return;
   }
-  int sx = viewport_x + delta;
+  int sx = viewport_x + (
+      (t->flags & VS2_FLAG_FLIP_X) != 0 ? viewport_w - 1 - delta : delta);
   int tile_col = sx / tile_width;
   // strip data columns are stored mirrored, same as sprites
   int source_column = tile_width - 1 - (sx % tile_width);
@@ -267,85 +283,71 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   int desde = MAX(y0, 0);
   int hasta = MIN(y0 + viewport_h, ROWS);
 
-  // Walk the visible column of the map one source row at a time. sy advances
-  // by 1 per output row, so the per-row division/modulo and tile lookup of the
-  // naive form are replaced by counters that only touch t->frames (and the
-  // frame's strip base) when crossing a tile boundary -- a big compute cut for
-  // a full-height tilemap like the terrain (up to ~128 rows per column).
-  int sy = viewport_y + (desde - y0);
-  int tile_row = sy / tile_height;
-  int row_in_tile = sy - tile_row * tile_height;
-  int frame = t->frames[tile_row * t->columns + tile_col];
-  int strip_base = frame == VS2_EMPTY_TILE ? -1
-      : source_column * tile_height + (frame % total_frames) * tile_width * tile_height;
-  for (int y = desde; y < hasta; y++) {
-    if (strip_base >= 0) {
-      uint8_t color = is->data[strip_base + row_in_tile];
+  if ((t->flags & VS2_FLAG_FLIP_Y) != 0) {
+    for (int y = desde; y < hasta; y++) {
+      int sy = viewport_y + viewport_h - 1 - (y - y0);
+      int tile_row = sy / tile_height;
+      int frame = t->frames[tile_row * t->columns + tile_col];
+      if (frame == VS2_EMPTY_TILE) {
+        continue;
+      }
+      int strip_base = source_column * tile_height
+          + (frame % total_frames) * tile_width * tile_height;
+      uint8_t color = is->data[strip_base + (sy % tile_height)];
       if (color != TRANSPARENT) {
-        int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
+        int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
         set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
       }
     }
-    if (++row_in_tile == tile_height) {
-      row_in_tile = 0;
-      tile_row++;
-      frame = t->frames[tile_row * t->columns + tile_col];
-      strip_base = frame == VS2_EMPTY_TILE ? -1
-          : source_column * tile_height + (frame % total_frames) * tile_width * tile_height;
+    return;
+  }
+
+  // Walk the visible column one tile-row run at a time. Besides avoiding the
+  // per-pixel division/modulo of the naive form, this makes an EMPTY_TILE cost
+  // one iteration regardless of tile height. Sparse overlays such as clouds
+  // and scenery therefore do not consume a full-height scan just to discover
+  // that most source rows are transparent.
+  int sy = viewport_y + (desde - y0);
+  int tile_row = sy / tile_height;
+  int row_in_tile = sy - tile_row * tile_height;
+  int y = desde;
+  while (y < hasta) {
+    int run = MIN(tile_height - row_in_tile, hasta - y);
+    int frame = t->frames[tile_row * t->columns + tile_col];
+    if (frame != VS2_EMPTY_TILE) {
+      int strip_base = source_column * tile_height
+          + (frame % total_frames) * tile_width * tile_height;
+      int source_row = row_in_tile;
+      int run_end = y + run;
+      for (; y < run_end; y++, source_row++) {
+        uint8_t color = is->data[strip_base + source_row];
+        if (color != TRANSPARENT) {
+          int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
+          set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
+        }
+      }
+    } else {
+      y += run;
     }
+    row_in_tile = 0;
+    tile_row++;
   }
 }
 
-void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
-  uint32_t colorbuf[PIXELS];
-
-  column = column % COLUMNS;
-  for (int y=0; y<PIXELS; y++) {
-    colorbuf[y] = 0x000000ff;
-  }
-  if (starfield_enabled) {
-    for (int f=0; f<STARS; f++) {
-      if (starfield[f].x == column) {
-        set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
-      }
-    }
-  }
-
-  if (scene == NULL) {
-    finish_colorbuf(colorbuf, led_buffer);
-    return;
-  }
-
-  // first slice: all tilemaps draw behind all sprites
-  if (scene->tilemaps != NULL) {
-    for (int n=scene->tilemap_count - 1; n>=0; n--) {
-      const vs2_tilemap_t* t = scene->tilemaps[n];
-      if (t == NULL) {
-        continue;
-      }
-      render_vs2_tilemap(column, colorbuf, scene, t);
-    }
-  }
-
-  if (scene->sprites == NULL) {
-    finish_colorbuf(colorbuf, led_buffer);
-    return;
-  }
-
-  for (int n=scene->sprite_count - 1; n>=0; n--) {
-    const vs2_sprite_t* s = scene->sprites[n];
+static void render_vs2_sprite(int column, uint32_t* colorbuf,
+                              const vs2_scene_t* scene, const vs2_sprite_t* s) {
     if (s == NULL) {
-      continue;
+      return;
     }
     if ((s->flags & VS2_FLAG_VISIBLE) == 0 || !vs2_slot_visible(scene, s->layer)) {
-      continue;
+      return;
     }
     if (s->image_strip >= NUM_IMAGES) {
-      continue;
+      return;
     }
     const ImageStrip* is = image_stripes[s->image_strip];
     if ((uintptr_t)is < 1000) {
-      continue;
+      return;
     }
 
     uint32_t* current_palette = palette_pal + 256 * is->palette;
@@ -358,7 +360,7 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
       (s->flags & VS2_FLAG_FLIP_X) != 0
     );
     if (visible_column == -1) {
-      continue;
+      return;
     }
 
     uint8_t height = is->frame_height;
@@ -379,12 +381,12 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
         }
         uint8_t color = is->data[base + source_row];
         if (color != TRANSPARENT) {
-          int px_y = mode == 1 ? deepspace[y] : PIXELS - 1 - y;
+          int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
           set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
         }
       }
     } else {
-      int zleds = deepspace[clamp_int(255 - sprite_y, 0, ROWS - 1)];
+      int zleds = vs2_project_depth(sprite_y) + 1;
       for (int led=0; led < zleds; led++) {
         int source_row = led * PIXELS / zleds;
         if (source_row >= height) {
@@ -399,9 +401,89 @@ void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
         }
       }
     }
+}
+
+static void render_vs2_impl(int column, uint32_t* led_buffer,
+                            const vs2_scene_t* scene,
+                            vs2_service_fn_t service) {
+  uint32_t colorbuf[PIXELS];
+
+  column = column % COLUMNS;
+  for (int y=0; y<PIXELS; y++) {
+    colorbuf[y] = 0x000000ff;
+  }
+  if (starfield_enabled) {
+    for (int f=0; f<STARS; f++) {
+      if (starfield[f].x == column) {
+        set_colorbuf_pixel(colorbuf, deepspace[starfield[f].y], 0x808080ff);
+      }
+    }
+  }
+
+  if (scene == NULL) {
+    finish_colorbuf(colorbuf, led_buffer);
+    return;
+  }
+
+  // Compatibility for pre-rework wire fixtures only.  Every V2 scene built
+  // by vs2_native or decoded from payload v3 has a tagged draw table.
+  if (scene->draw_order == NULL) {
+    if (scene->tilemaps != NULL) {
+      for (int n = scene->tilemap_count - 1; n >= 0; n--) {
+        render_vs2_tilemap(column, colorbuf, scene, scene->tilemaps[n]);
+      }
+    }
+    if (scene->sprites != NULL) {
+      for (int n = scene->sprite_count - 1; n >= 0; n--) {
+        render_vs2_sprite(column, colorbuf, scene, scene->sprites[n]);
+      }
+    }
+    finish_colorbuf(colorbuf, led_buffer);
+    return;
+  }
+
+  // Draw references are emitted in layer and creation order (bottom to top).
+  // Each later drawable overwrites the prior one, so sprites and tilemaps can
+  // genuinely interleave without a renderer pass privileging either kind.
+  uint8_t draws_since_service = 0;
+  for (uint8_t draw = 0; draw < scene->draw_order_count; draw++) {
+    const vs2_draw_ref_t* ref = &scene->draw_order[draw];
+    bool rendered_tilemap = false;
+    if (ref->kind == VS2_DRAW_SPRITE) {
+      if (scene->sprites != NULL && ref->index < scene->sprite_count) {
+        render_vs2_sprite(column, colorbuf, scene, scene->sprites[ref->index]);
+      }
+    } else if (ref->kind == VS2_DRAW_TILEMAP) {
+      rendered_tilemap = true;
+      if (scene->tilemaps != NULL && ref->index < scene->tilemap_count) {
+        render_vs2_tilemap(column, colorbuf, scene, scene->tilemaps[ref->index]);
+      }
+    }
+    draws_since_service++;
+    // The physical LEDs read only the published front buffer, so servicing
+    // them here cannot expose this partially built back-buffer column. Yield
+    // after every tilemap (the largest indivisible drawable) and small sprite
+    // groups so a worst-case VS2 column cannot hide an angular edge until the
+    // entire scene has projected.
+    if (service != NULL
+        && (rendered_tilemap
+            || draws_since_service >= VS2_SERVICE_DRAW_INTERVAL)) {
+      service();
+      draws_since_service = 0;
+    }
   }
 
   finish_colorbuf(colorbuf, led_buffer);
+}
+
+void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene) {
+  render_vs2_impl(column, led_buffer, scene, NULL);
+}
+
+void render_vs2_cooperative(int column, uint32_t* led_buffer,
+                            const vs2_scene_t* scene,
+                            vs2_service_fn_t service) {
+  render_vs2_impl(column, led_buffer, scene, service);
 }
 
 

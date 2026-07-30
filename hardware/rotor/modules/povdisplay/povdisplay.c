@@ -29,32 +29,47 @@ int led_mosi;
 int led_cs;
 uint32_t led_freq;
 
-#define COLUMNS 256
+#include "display_geometry.h"
+#define COLUMNS VS_DISPLAY_COLUMNS
 #define FASTEST_CREDIBLE_TURN 10000 // if the fan is going over 100 FPS, then I don't believe it, and discard the reading
+// The maximum API-v2 fixture projection observed on the ESP32-S3 is below
+// 265 us. Leave additional margin for timer reads and loop bookkeeping, and
+// do not begin a projection slice inside that window before an angular edge.
+#define PROJECT_GUARD_US 300
 
 #define DEBUG_ROTATION 0
 #define PROFILE_GPU_STEP 0
 
-// This profiler is deliberately opt-in. It measures the real GPU task's
-// overlapped queue/render/wait/copy sequence without printf traffic on that
-// task. A control command reads the accumulated snapshot from the other core.
+// This profiler is deliberately opt-in. It measures both halves of the
+// double-buffered renderer without printf traffic on either hot path:
+//   - physical-column service (SPI wait + framebuffer copy/queue), and
+//   - off-path scene projection, per column and per complete 256-column frame.
+// A control command reads the accumulated snapshot from the other core.
 typedef struct {
     uint32_t samples;
     uint32_t skipped_updates;
     uint32_t deadline_misses;
     uint32_t deadline_us;
     uint64_t total_us;
-    uint64_t render_us;
     uint64_t spi_wait_us;
     uint64_t copy_us;
     uint32_t max_total_us;
-    uint32_t max_render_us;
-    uint32_t max_arm_render_us;
     uint32_t max_spi_wait_us;
     uint32_t max_copy_us;
     int32_t worst_slack_us;
     bool have_column;
     uint8_t last_column;
+    uint32_t last_hall_generation;
+    uint32_t project_samples;
+    uint64_t project_us;
+    uint32_t max_project_us;
+    uint32_t frames;
+    uint32_t frame_deadline_misses;
+    uint32_t frame_deadline_us;
+    uint64_t frame_project_us;
+    uint32_t max_frame_project_us;
+    uint32_t partial_project_columns;
+    uint64_t partial_project_us;
 } pov_performance_t;
 
 static portMUX_TYPE performance_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -76,16 +91,17 @@ static void performance_reset(void) {
     portEXIT_CRITICAL(&performance_lock);
 }
 
-static void performance_record(uint8_t column, uint32_t deadline_us,
-        uint32_t total_us, uint32_t render_us, uint32_t arm0_render_us,
-        uint32_t arm1_render_us, uint32_t spi_wait_us, uint32_t copy_us) {
+static void performance_record_serve(uint8_t column, uint32_t hall_generation,
+        uint32_t deadline_us, uint32_t total_us, uint32_t spi_wait_us,
+        uint32_t copy_us) {
     if (!performance_is_enabled()) {
         return;
     }
     int32_t slack_us = deadline_us > (uint32_t)INT32_MAX
         ? INT32_MAX : (int32_t)deadline_us - (int32_t)total_us;
     portENTER_CRITICAL(&performance_lock);
-    if (performance.have_column) {
+    if (performance.have_column
+            && performance.last_hall_generation == hall_generation) {
         uint8_t delta = (column - performance.last_column) & 0xff;
         if (delta > 1) {
             performance.skipped_updates += delta - 1;
@@ -94,20 +110,53 @@ static void performance_record(uint8_t column, uint32_t deadline_us,
         performance.have_column = true;
     }
     performance.last_column = column;
+    performance.last_hall_generation = hall_generation;
     performance.samples++;
     performance.deadline_us = deadline_us;
     performance.total_us += total_us;
-    performance.render_us += render_us;
     performance.spi_wait_us += spi_wait_us;
     performance.copy_us += copy_us;
     if (total_us > performance.max_total_us) performance.max_total_us = total_us;
-    if (render_us > performance.max_render_us) performance.max_render_us = render_us;
-    if (arm0_render_us > performance.max_arm_render_us) performance.max_arm_render_us = arm0_render_us;
-    if (arm1_render_us > performance.max_arm_render_us) performance.max_arm_render_us = arm1_render_us;
     if (spi_wait_us > performance.max_spi_wait_us) performance.max_spi_wait_us = spi_wait_us;
     if (copy_us > performance.max_copy_us) performance.max_copy_us = copy_us;
     if (total_us > deadline_us) performance.deadline_misses++;
     if (slack_us < performance.worst_slack_us) performance.worst_slack_us = slack_us;
+    portEXIT_CRITICAL(&performance_lock);
+}
+
+static void performance_record_project(uint32_t project_us, bool frame_complete,
+        uint32_t frame_deadline_us) {
+    if (!performance_is_enabled()) {
+        return;
+    }
+    portENTER_CRITICAL(&performance_lock);
+    performance.project_samples++;
+    performance.project_us += project_us;
+    performance.partial_project_columns++;
+    performance.partial_project_us += project_us;
+    if (project_us > performance.max_project_us) {
+        performance.max_project_us = project_us;
+    }
+    if (frame_complete) {
+        // Profiling may be enabled halfway through a back-buffer pass. Do
+        // not call that first partial interval a frame; discard it and start
+        // the first complete 256-column measurement at this boundary.
+        if (performance.partial_project_columns == COLUMNS) {
+            uint32_t elapsed = performance.partial_project_us > UINT32_MAX
+                ? UINT32_MAX : (uint32_t)performance.partial_project_us;
+            performance.frames++;
+            performance.frame_deadline_us = frame_deadline_us;
+            performance.frame_project_us += elapsed;
+            if (elapsed > performance.max_frame_project_us) {
+                performance.max_frame_project_us = elapsed;
+            }
+            if (frame_deadline_us > 0 && elapsed > frame_deadline_us) {
+                performance.frame_deadline_misses++;
+            }
+        }
+        performance.partial_project_columns = 0;
+        performance.partial_project_us = 0;
+    }
     portEXIT_CRITICAL(&performance_lock);
 }
 
@@ -166,6 +215,10 @@ static volatile int64_t hall_pending_edge = 0;
 static volatile bool hall_pending = false;
 static int64_t hall_raw_last_edge = 0;  // ISR-only: previous edge that passed the coarse floor
 static hall_filter_t hall_filter_state;
+// Increments whenever an accepted hall edge republishes the angular origin.
+// The profiler uses this to avoid calling that deliberate phase correction a
+// 255-column skip when the new estimate moves the computed column backwards.
+static uint32_t hall_generation;
 
 // Diagnostic bypass: when false, hall_filter_drain() reproduces the
 // pre-filter behavior exactly (raw carry-forward, no classification) so the
@@ -301,11 +354,13 @@ static void hall_filter_drain(void) {
     if (!__atomic_load_n(&hall_filter_enabled, __ATOMIC_ACQUIRE)) {
         last_turn_duration = edge - last_turn;
         last_turn = edge;
+        hall_generation++;
         return;
     }
     if (hall_filter_submit(&hall_filter_state, edge)) {
         last_turn = hall_filter_state.last_turn_us;
         last_turn_duration = hall_filter_state.period_us;
+        hall_generation++;
     }
 }
 
@@ -315,6 +370,7 @@ int column_offset = 0;
 int64_t last_starfield_step = 0;
 
 static int render_col = 0;
+static void gpu_serve(void);
 
 // Render one framebuffer column into fb_back, publishing a fresh
 // double-buffered frame each time the whole ring has been covered. Runs
@@ -323,20 +379,35 @@ static int render_col = 0;
 // the per-column serve deadline.
 static void project_next_column() {
     uint32_t* back = fb_back;
+    bool measuring = performance_is_enabled();
+    int64_t measurement_start = measuring ? esp_timer_get_time() : 0;
     if (vs2_render_active) {
-        render_vs2(render_col, back + (size_t)render_col * num_pixels_g, &vs2_active_scene);
+        render_vs2_cooperative(
+            render_col,
+            back + (size_t)render_col * num_pixels_g,
+            &vs2_active_scene,
+            gpu_serve);
     } else {
         render(render_col, back + (size_t)render_col * num_pixels_g);
     }
-    if (++render_col >= COLUMNS) {
+    bool frame_complete = ++render_col >= COLUMNS;
+    if (frame_complete) {
         render_col = 0;
         fb_front = back;
         fb_back = (back == fb_a) ? fb_b : fb_a;
         int64_t now = esp_timer_get_time();
-        if (now > last_starfield_step + 20000) {
+        // VS2 scenes disable the legacy starfield by default. Avoid charging
+        // its 128-star update to an otherwise unrelated frame boundary.
+        if (starfield_enabled && now > last_starfield_step + 20000) {
             step_starfield();
             last_starfield_step = now;
         }
+    }
+    if (measuring) {
+        performance_record_project(
+            elapsed_us(measurement_start, esp_timer_get_time()),
+            frame_complete,
+            last_turn_duration > 0 ? (uint32_t)last_turn_duration : 0);
     }
 }
 
@@ -377,13 +448,37 @@ static void gpu_serve() {
         int64_t queue_end = measuring ? esp_timer_get_time() : 0;
         last_column = column;
         if (measuring) {
-            performance_record(column, column_deadline_us,
+            performance_record_serve(column, hall_generation, column_deadline_us,
                 elapsed_us(measurement_start, queue_end),  // total
-                0, 0, 0,                                    // render is off-path now
                 elapsed_us(measurement_start, wait_end),   // spi wait
                 elapsed_us(wait_end, queue_end));           // framebuffer copy
         }
     }
+}
+
+// Scene projection is intentionally lower priority than the physical output
+// cadence. A projection slice is indivisible, so only start one when the
+// current angular bin has enough time left for the measured worst case. At
+// unsupported speeds whose whole bin is shorter than the guard, preserve the
+// old best-effort behaviour instead of starving frame production entirely.
+static bool project_has_slack() {
+    int64_t duration = last_turn_duration;
+    if (duration <= 0) {
+        return true;
+    }
+    uint32_t column_period_us = (uint32_t)(duration / COLUMNS);
+    if (column_period_us <= PROJECT_GUARD_US) {
+        return true;
+    }
+
+    int64_t scaled_phase = (esp_timer_get_time() - last_turn) * COLUMNS;
+    int64_t remainder = scaled_phase % duration;
+    if (remainder < 0) {
+        remainder += duration;
+    }
+    uint32_t until_next_column_us =
+        (uint32_t)((duration - remainder + COLUMNS - 1) / COLUMNS);
+    return until_next_column_us > PROJECT_GUARD_US;
 }
 
 
@@ -401,7 +496,9 @@ void coreTask( void * pvParameters ){
             ventilagon_loop();
         } else {
             gpu_serve();
-            project_next_column();
+            if (project_has_slack()) {
+                project_next_column();
+            }
         }
     }
     vTaskDelete(NULL);
@@ -565,7 +662,9 @@ static mp_obj_t povdisplay_get_performance_stats(void) {
     portEXIT_CRITICAL(&performance_lock);
 
     uint32_t samples = snapshot.samples;
-    mp_obj_t dict = mp_obj_new_dict(29);
+    uint32_t project_samples = snapshot.project_samples;
+    uint32_t frames = snapshot.frames;
+    mp_obj_t dict = mp_obj_new_dict(36);
     performance_dict_int(dict, MP_QSTR_enabled, performance_is_enabled());
     performance_dict_int(dict, MP_QSTR_calibrated, color_pipeline_is_active());
     performance_dict_int(dict, MP_QSTR_vs2, vs2_render_active);
@@ -578,9 +677,22 @@ static mp_obj_t povdisplay_get_performance_stats(void) {
     performance_dict_int(dict, MP_QSTR_deadline_us, snapshot.deadline_us);
     performance_dict_int(dict, MP_QSTR_avg_total_us, samples ? snapshot.total_us / samples : 0);
     performance_dict_int(dict, MP_QSTR_max_total_us, snapshot.max_total_us);
-    performance_dict_int(dict, MP_QSTR_avg_render_us, samples ? snapshot.render_us / samples : 0);
-    performance_dict_int(dict, MP_QSTR_max_render_us, snapshot.max_render_us);
-    performance_dict_int(dict, MP_QSTR_max_arm_render_us, snapshot.max_arm_render_us);
+    performance_dict_int(dict, MP_QSTR_project_samples, project_samples);
+    performance_dict_int(dict, MP_QSTR_frames, frames);
+    performance_dict_int(dict, MP_QSTR_frame_deadline_misses, snapshot.frame_deadline_misses);
+    performance_dict_int(dict, MP_QSTR_frame_deadline_us, snapshot.frame_deadline_us);
+    performance_dict_int(dict, MP_QSTR_avg_project_us,
+        project_samples ? snapshot.project_us / project_samples : 0);
+    performance_dict_int(dict, MP_QSTR_max_project_us, snapshot.max_project_us);
+    performance_dict_int(dict, MP_QSTR_avg_frame_render_us,
+        frames ? snapshot.frame_project_us / frames : 0);
+    performance_dict_int(dict, MP_QSTR_max_frame_render_us, snapshot.max_frame_project_us);
+    // Backward-compatible names for report consumers written before
+    // framebuffer projection moved off the physical-column serve path.
+    performance_dict_int(dict, MP_QSTR_avg_render_us,
+        project_samples ? snapshot.project_us / project_samples : 0);
+    performance_dict_int(dict, MP_QSTR_max_render_us, snapshot.max_project_us);
+    performance_dict_int(dict, MP_QSTR_max_arm_render_us, 0);
     performance_dict_int(dict, MP_QSTR_avg_spi_wait_us, samples ? snapshot.spi_wait_us / samples : 0);
     performance_dict_int(dict, MP_QSTR_max_spi_wait_us, snapshot.max_spi_wait_us);
     performance_dict_int(dict, MP_QSTR_avg_copy_us, samples ? snapshot.copy_us / samples : 0);

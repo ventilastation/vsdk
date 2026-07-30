@@ -29,6 +29,11 @@ _lib = None
 # borrows pointers into it (tilemap frame tables), the same convention
 # vs2_tilemap_t.frames uses on real hardware.
 _active_scene_bytes = None
+# emu_gpu_set_image_strip() is also deliberately zero-copy.  The caller often
+# supplies a memoryview into Director.romdata, and bytes(data) below creates a
+# temporary object; without retaining that exact object the C image_stripes[]
+# pointers become dangling as soon as the ctypes call returns.
+_image_strip_bytes = {}
 
 
 def _load():
@@ -42,6 +47,12 @@ def _load():
     lib.emu_gpu_init.restype = None
     lib.emu_gpu_step_starfield.argtypes = []
     lib.emu_gpu_step_starfield.restype = None
+    lib.emu_gpu_set_starfield.argtypes = [ctypes.c_bool]
+    lib.emu_gpu_set_starfield.restype = None
+    lib.emu_gpu_set_color_profile.argtypes = [ctypes.c_char_p, ctypes.c_int]
+    lib.emu_gpu_set_color_profile.restype = ctypes.c_bool
+    lib.emu_gpu_set_color_pipeline_enabled.argtypes = [ctypes.c_bool]
+    lib.emu_gpu_set_color_pipeline_enabled.restype = ctypes.c_bool
     lib.emu_gpu_set_palette.argtypes = [ctypes.c_char_p, ctypes.c_int]
     lib.emu_gpu_set_palette.restype = ctypes.c_bool
     lib.emu_gpu_set_image_strip.argtypes = [ctypes.c_int, ctypes.c_char_p]
@@ -54,6 +65,8 @@ def _load():
     lib.emu_gpu_clear_scene.restype = None
     lib.emu_gpu_render_frame.argtypes = [ctypes.POINTER(ctypes.c_uint32)]
     lib.emu_gpu_render_frame.restype = None
+    lib.emu_gpu_render_frame_apa102.argtypes = [ctypes.POINTER(ctypes.c_uint32)]
+    lib.emu_gpu_render_frame_apa102.restype = None
     lib.emu_gpu_set_legacy_sprites.argtypes = [ctypes.c_char_p]
     lib.emu_gpu_set_legacy_sprites.restype = None
     lib.emu_gpu_render_legacy_frame.argtypes = [ctypes.POINTER(ctypes.c_uint32)]
@@ -83,6 +96,24 @@ def step_starfield():
         _lib.emu_gpu_step_starfield()
 
 
+def set_starfield(enabled):
+    if available:
+        _lib.emu_gpu_set_starfield(bool(enabled))
+
+
+def set_color_profile(payload):
+    if not available:
+        return False
+    payload = bytes(payload)
+    return bool(_lib.emu_gpu_set_color_profile(payload, len(payload)))
+
+
+def set_color_pipeline_enabled(enabled):
+    if not available:
+        return False
+    return bool(_lib.emu_gpu_set_color_pipeline_enabled(bool(enabled)))
+
+
 def set_palette(paldata):
     if available:
         _lib.emu_gpu_set_palette(bytes(paldata), len(paldata))
@@ -90,12 +121,15 @@ def set_palette(paldata):
 
 def set_image_strip(slot, data):
     if available:
-        _lib.emu_gpu_set_image_strip(slot, bytes(data))
+        payload = bytes(data)
+        if _lib.emu_gpu_set_image_strip(slot, payload):
+            _image_strip_bytes[slot] = payload
 
 
 def clear_image_strip(slot):
     if available:
         _lib.emu_gpu_clear_image_strip(slot)
+        _image_strip_bytes.pop(slot, None)
 
 
 def decode_scene(data):
@@ -126,6 +160,19 @@ def render_frame():
         return None
     _ensure_frame_buffer()
     _lib.emu_gpu_render_frame(_frame_buffer_ptr)
+    return _frame_buffer
+
+
+def render_frame_apa102():
+    """Render all 256 VS2 columns as native little-endian APA102 words.
+
+    The returned numpy uint32 buffer has the exact workbench capture layout:
+    column-major, 54 LEDs per column, memory bytes [GB, B, G, R].
+    """
+    if not available:
+        return None
+    _ensure_frame_buffer()
+    _lib.emu_gpu_render_frame_apa102(_frame_buffer_ptr)
     return _frame_buffer
 
 

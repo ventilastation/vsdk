@@ -8,15 +8,22 @@
 #include "py/objtype.h"
 
 #include "sprites.h"
+#include "display_geometry.h"
 
-#define PIXELS 54
-#define VS2_MAX_LAYERS 16
+#define PIXELS VS_DISPLAY_PIXELS
+#define VS2_MAX_LAYERS 8
 #define VS2_MAX_SPRITES 100
-#define VS2_MAX_TILEMAPS 8
+#define VS2_MAX_TILEMAPS 16
+#define VS2_MAX_DRAWABLES (VS2_MAX_SPRITES + VS2_MAX_TILEMAPS)
+
+#define VS2_DRAW_SPRITE 0
+#define VS2_DRAW_TILEMAP 1
 
 extern uint32_t* palette_pal;
 extern int gamma_mode;
 extern bool starfield_enabled;
+extern uint8_t deepspace[256];
+extern uint8_t vs2_deepspace[256];
 
 typedef struct {
     uint8_t id;
@@ -55,17 +62,28 @@ typedef struct {
 } vs2_tilemap_t;
 
 typedef struct {
+    uint8_t kind;
+    uint8_t index;
+} vs2_draw_ref_t;
+
+typedef struct {
     uint8_t layer_count;
     uint8_t sprite_count;
     uint8_t tilemap_count;
+    uint8_t draw_order_count;
     const vs2_layer_t* const* layers;
     const vs2_sprite_t* const* sprites;
     const vs2_tilemap_t* const* tilemaps;
+    const vs2_draw_ref_t* draw_order;
 } vs2_scene_t;
 
 extern bool vs2_render_active;
 extern vs2_scene_t vs2_active_scene;
 
+typedef void (*vs2_service_fn_t)(void);
+
 void render_vs2(int column, uint32_t* led_buffer, const vs2_scene_t* scene);
+void render_vs2_cooperative(int column, uint32_t* led_buffer,
+    const vs2_scene_t* scene, vs2_service_fn_t service);
 
 const char* memoryview_data(mp_obj_t mv_obj);

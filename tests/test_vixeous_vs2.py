@@ -39,6 +39,19 @@ VIXEOUS_STRIPS = (
     "targets.png", "reticle.png", "terrain.png", "digits.png", "messages.png",
 )
 
+VIXEOUS_METADATA = {
+    "ship.png": (18, 13, 4),
+    "enemy.png": (14, 11, 6),
+    "boss.png": (36, 19, 2),
+    "shots.png": (6, 10, 3),
+    "explosion.png": (20, 20, 6),
+    "targets.png": (14, 10, 4),
+    "reticle.png": (18, 6, 3),
+    "terrain.png": (32, 16, 16),
+    "digits.png": (4, 6, 12),
+    "messages.png": (64, 12, 3),
+}
+
 
 class VixeousVs2Tests(unittest.TestCase):
     def setUp(self):
@@ -50,11 +63,13 @@ class VixeousVs2Tests(unittest.TestCase):
         def fake_load_rom(_filename):
             for index, name in enumerate(VIXEOUS_STRIPS):
                 stripes[name] = index
+                width, height, frames = VIXEOUS_METADATA[name]
                 runtime_director.platform.sprites.stripes[index] = {
-                    "width": 32 if name == "terrain.png" else 16,
-                    "height": 16,
-                    "frames": 16,
+                    "width": width,
+                    "height": height,
+                    "frames": frames,
                     "palette": 0,
+                    "glyphs": "0123456789 *" if name == "digits.png" else None,
                 }
 
         runtime_director.load_rom = fake_load_rom
@@ -79,7 +94,7 @@ class VixeousVs2Tests(unittest.TestCase):
         )
 
         self.assertEqual(scene._vs_declared_api, "vs2")
-        self.assertIs(scene.terrain.frames, scene.terrain_data)
+        self.assertIs(scene.terrain.cells, scene.terrain_data)
         self.assertEqual(len(scene.world.tilemaps), 1)
 
         for row in range(TERRAIN_BUFFER_ROWS):
@@ -90,8 +105,83 @@ class VixeousVs2Tests(unittest.TestCase):
                 )
 
         payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[4], 2)
-        self.assertEqual(payload[7], 1)
+        self.assertEqual(payload[4], 3)
+        self.assertEqual(payload[7], 2)  # terrain + score label
+
+    def test_ground_is_below_objects_and_startup_message_is_centered(self):
+        scene = load_app("alecu.vixeous")
+        import vs2
+        from games.alecu.vixeous.code.vixeous import centered_x
+
+        self.assertIs(scene.world._drawables[0], scene.terrain)
+        self.assertGreater(
+            scene.world._drawables.index(scene.player),
+            scene.world._drawables.index(scene.terrain),
+        )
+        self.assertGreater(
+            scene.world._drawables.index(scene.reticle),
+            scene.world._drawables.index(scene.terrain),
+        )
+        self.assertIs(scene.message.layer, scene.hud)
+        self.assertEqual(scene.hud.projection, vs2.HUD)
+        self.assertEqual(
+            scene.message.x, centered_x(0, scene.message.width))
+        self.assertEqual(scene.message.y, 12)
+        self.assertTrue(scene.message.visible)
+
+    def test_ground_targets_and_boss_are_present_and_advance(self):
+        scene = load_app("alecu.vixeous")
+        from games.alecu.vixeous.code.vixeous import (
+            BOSS_START_Y,
+            ENEMY_START_Y,
+            PLAYER_START_Y,
+            TARGET_START_Y,
+            TERRAIN_TILE_H,
+        )
+
+        self.assertEqual(scene.terrain.y, 0)
+        self.assertEqual(scene.player.y, PLAYER_START_Y)
+        self.assertEqual(scene.aim_y(), PLAYER_START_Y + 66)
+
+        scene.spawn_wave()
+        self.assertEqual(min(enemy.y for enemy in scene.enemies), ENEMY_START_Y)
+
+        scene.depth = scene.next_target_row * TERRAIN_TILE_H
+        scene.spawn_target_if_needed()
+        self.assertEqual(len(scene.targets), 1)
+        target = next(iter(scene.targets))
+        self.assertEqual(target.y, TARGET_START_Y)
+        original_y = target.y
+        scene.update_targets(1)
+        self.assertEqual(target.y, original_y - 1)
+        self.assertTrue(target.visible)
+
+        scene.depth = 901
+        scene.score = 120
+        scene.maybe_start_boss()
+        self.assertTrue(scene.boss.visible)
+        self.assertEqual(scene.boss.y, BOSS_START_Y)
+        self.assertEqual(scene.boss.hp, 18)
+
+    def test_scoreboard_flips_complete_label_for_top_hud(self):
+        scene = load_app("alecu.vixeous")
+
+        scene.scoreboard.set_score(120)
+        scene.scoreboard.set_lives(2)
+
+        self.assertEqual(scene.scoreboard.label.text, "00120 **")
+        self.assertTrue(scene.scoreboard.label.flip_x)
+        self.assertTrue(scene.scoreboard.label.flip_y)
+        self.assertEqual(scene.scoreboard.label.image.width, 4)
+        self.assertEqual(scene.scoreboard.label.image.height, 6)
+        self.assertEqual(
+            scene.scoreboard.label.x,
+            (
+                256
+                - scene.scoreboard.label.columns
+                * scene.scoreboard.label.image.width
+            ) // 2,
+        )
 
     def test_vixeous_terrain_scrolls_by_panning_the_viewport(self):
         scene = load_app("alecu.vixeous")
@@ -108,8 +198,8 @@ class VixeousVs2Tests(unittest.TestCase):
             self.step_buttons(0)
         self.assertEqual(scene.depth, TERRAIN_TILE_H // 2)
         self.assertEqual(
-            scene.terrain.viewport,
-            (0, TERRAIN_TILE_H // 2, 256, TERRAIN_VIEW_H),
+            scene.terrain.view_y,
+            TERRAIN_TILE_H // 2,
         )
         self.assertEqual(scene.terrain_base_row, 0)
 
@@ -117,7 +207,7 @@ class VixeousVs2Tests(unittest.TestCase):
         for _ in range(TERRAIN_SCROLL_TICKS * (TERRAIN_TILE_H // 2)):
             self.step_buttons(0)
         self.assertEqual(scene.depth, TERRAIN_TILE_H)
-        self.assertEqual(scene.terrain.viewport, (0, 0, 256, TERRAIN_VIEW_H))
+        self.assertEqual(scene.terrain.view_y, 0)
         self.assertEqual(scene.terrain_base_row, 1)
         for col in range(TERRAIN_COLS):
             self.assertEqual(
@@ -131,6 +221,75 @@ class VixeousVs2Tests(unittest.TestCase):
         self.assertNotEqual(scene.camera_theta, 0)
         expected_x = (-scene.camera_theta - TERRAIN_TILE_W // 2) % 256
         self.assertEqual(scene.terrain.x, expected_x)
+
+
+class VixeousAssetTests(unittest.TestCase):
+    def test_text_strips_use_only_hard_edged_pixels_and_black_digits(self):
+        from PIL import Image
+
+        images = os.path.join(ROOT, "games", "alecu", "vixeous", "images")
+        digits = Image.open(os.path.join(images, "digits.png")).convert("RGBA")
+        messages = Image.open(os.path.join(images, "messages.png")).convert("RGBA")
+
+        self.assertEqual(digits.size, (48, 6))
+        self.assertEqual(messages.size, (192, 12))
+
+        tinyfont = Image.open(
+            os.path.join(
+                ROOT, "system", "shared", "other", "images",
+                "tinyfont_white.png",
+            )
+        ).convert("RGBA")
+        for frame in range(10):
+            tile = digits.crop((frame * 4, 0, frame * 4 + 4, 6))
+            opaque = {
+                pixel for pixel in tile.get_flattened_data() if pixel[3]
+            }
+            self.assertEqual(opaque, {(0, 0, 0, 255)})
+            expected = tinyfont.crop(
+                ((ord("0") + frame) * 4, 0, (ord("0") + frame + 1) * 4, 6)
+            )
+            self.assertEqual(
+                tuple(pixel[3] for pixel in tile.get_flattened_data()),
+                tuple(pixel[3] for pixel in expected.get_flattened_data()),
+            )
+            self.assertTrue(all(tile.getpixel((3, y))[3] == 0 for y in range(6)))
+
+        life = digits.crop((11 * 4, 0, 12 * 4, 6))
+        self.assertEqual(
+            {pixel for pixel in life.get_flattened_data() if pixel[3]},
+            {(232, 32, 42, 255)},
+        )
+        self.assertEqual(
+            sum(pixel[3] != 0 for pixel in life.get_flattened_data()),
+            6,
+        )
+        self.assertEqual(
+            tuple(
+                "".join(
+                    "#" if life.getpixel((x, y))[3] else "."
+                    for x in range(4)
+                )
+                for y in range(6)
+            ),
+            ("#.#.", "###.", ".#..", "....", "....", "...."),
+        )
+        self.assertTrue(all(life.getpixel((3, y))[3] == 0 for y in range(6)))
+
+        allowed_message_colors = {
+            (20, 24, 26, 255),
+            (180, 188, 184, 255),
+            (255, 238, 158, 255),
+            (232, 32, 42, 255),
+        }
+        message_colors = set(messages.get_flattened_data())
+        self.assertEqual(message_colors, allowed_message_colors)
+        self.assertEqual(
+            {pixel[3] for pixel in digits.get_flattened_data()} | {
+                pixel[3] for pixel in messages.get_flattened_data()
+            },
+            {0, 255},
+        )
 
 
 if __name__ == "__main__":

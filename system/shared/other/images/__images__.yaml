@@ -18,6 +18,8 @@ palettegroups:
       frames: 255
     - strip: galaga.png
       frames: 12
+    - strip: vs2_environment.png
+      frames: 16
     - strip: gameover.png
     - fullscreen: tecno_estructuras.png
     - fullscreen: ventilastation.png
@@ -29,6 +31,8 @@ palettegroups:
     - fullscreen: ventilagon-empezar2.png
     - strip: empeza.png
     - strip: super-ventilagon.png
+    - strip: ll9.png
+      frames: 4
   palette2:
     - fullscreen: bembi.png
     - strip: pollitos.png

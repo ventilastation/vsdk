@@ -36,15 +36,18 @@ const mp_obj_type_t vs2_tilemap_type;
 static const vs2_layer_t* vs2_layer_records[VS2_MAX_LAYERS];
 static const vs2_sprite_t* vs2_sprite_records[VS2_MAX_SPRITES];
 static const vs2_tilemap_t* vs2_tilemap_records[VS2_MAX_TILEMAPS];
+static vs2_draw_ref_t vs2_draw_order[VS2_MAX_DRAWABLES];
 
 bool vs2_render_active = false;
 vs2_scene_t vs2_active_scene = {
     .layer_count = 0,
     .sprite_count = 0,
     .tilemap_count = 0,
+    .draw_order_count = 0,
     .layers = vs2_layer_records,
     .sprites = vs2_sprite_records,
     .tilemaps = vs2_tilemap_records,
+    .draw_order = vs2_draw_order,
 };
 
 static uint8_t alloc_layer_slot(const vs2_layer_t* layer) {
@@ -103,14 +106,23 @@ static vs2_layer_obj_t* to_vs2_layer(mp_obj_t obj) {
     return MP_OBJ_TO_PTR(obj);
 }
 
+static vs2_tilemap_obj_t* to_vs2_tilemap(mp_obj_t obj) {
+    if (!mp_obj_is_type(obj, &vs2_tilemap_type)) {
+        mp_raise_TypeError(MP_ERROR_TEXT("expected vs2 Tilemap"));
+    }
+    return MP_OBJ_TO_PTR(obj);
+}
+
 static mp_obj_t vs2_reset_scene(void) {
     vs2_render_active = false;
     memset(vs2_layer_records, 0, sizeof(vs2_layer_records));
     memset(vs2_sprite_records, 0, sizeof(vs2_sprite_records));
     memset(vs2_tilemap_records, 0, sizeof(vs2_tilemap_records));
+    memset(vs2_draw_order, 0, sizeof(vs2_draw_order));
     vs2_active_scene.layer_count = 0;
     vs2_active_scene.sprite_count = 0;
     vs2_active_scene.tilemap_count = 0;
+    vs2_active_scene.draw_order_count = 0;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(vs2_reset_scene_obj, vs2_reset_scene);
@@ -444,6 +456,30 @@ static mp_obj_t vs2_tilemap_set_layer(mp_obj_t self_in, mp_obj_t layer_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(vs2_tilemap_set_layer_obj, vs2_tilemap_set_layer);
 
+static mp_obj_t vs2_set_draw_order(mp_obj_t drawables_in) {
+    size_t count;
+    mp_obj_t* drawables;
+    mp_obj_get_array(drawables_in, &count, &drawables);
+    if (count > VS2_MAX_DRAWABLES) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("too many vs2 drawables"));
+    }
+    for (size_t index = 0; index < count; index++) {
+        vs2_draw_ref_t* ref = &vs2_draw_order[index];
+        if (mp_obj_is_type(drawables[index], &vs2_sprite_type)) {
+            ref->kind = VS2_DRAW_SPRITE;
+            ref->index = to_vs2_sprite(drawables[index])->slot;
+        } else if (mp_obj_is_type(drawables[index], &vs2_tilemap_type)) {
+            ref->kind = VS2_DRAW_TILEMAP;
+            ref->index = to_vs2_tilemap(drawables[index])->slot;
+        } else {
+            mp_raise_TypeError(MP_ERROR_TEXT("draw order must contain vs2 sprites or tilemaps"));
+        }
+    }
+    vs2_active_scene.draw_order_count = count;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(vs2_set_draw_order_obj, vs2_set_draw_order);
+
 static const mp_rom_map_elem_t vs2_tilemap_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_set_viewport), MP_ROM_PTR(&vs2_tilemap_set_viewport_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_x_fixed), MP_ROM_PTR(&vs2_tilemap_set_x_fixed_obj) },
@@ -471,6 +507,7 @@ static const mp_rom_map_elem_t vs2_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_reset_scene), MP_ROM_PTR(&vs2_reset_scene_obj) },
     { MP_ROM_QSTR(MP_QSTR_reset_sprites), MP_ROM_PTR(&vs2_reset_scene_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_active), MP_ROM_PTR(&vs2_set_active_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_draw_order), MP_ROM_PTR(&vs2_set_draw_order_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(mp_module_vs2_globals, vs2_globals_table);

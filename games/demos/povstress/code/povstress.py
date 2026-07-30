@@ -1,71 +1,25 @@
-"""POV render stress demo.
+"""Constant heavy V2 scene used for real render-timing profiling."""
 
-A deliberately heavy, *constant and reproducible* vs2 scene for profiling the
-rotor's render pipeline (see tools/pov_profile_report.py). Unlike a real game,
-the load here doesn't vary with play: the same terrain scrolls, the same 60
-sprites always stay on screen, and the scoreboard keeps ticking, so every
-profiling window sees the same drawing cost.
-
-It reuses Vixeous's assets and terrain so the pieces are the exact sizes of a
-real game:
-  - a base terrain tilemap identical to Vixeous (games/alecu/vixeous),
-  - a scoreboard (5 score digits + 3 life icons),
-  - 6 layers of 10 sprites each (60 total), sized like Vixeous's ship,
-    bullet, missile and explosion, moving through the screen at a different
-    speed per layer.
-"""
-
-from vs2 import HUD, TUNNEL, Scene, Sprite, Tilemap
-
-from ventilastation.director import director
+import vs2
 
 
-COLUMNS = 256
-
-# --- terrain: identical to games/alecu/vixeous ---
 TERRAIN_COLS = 8
 TERRAIN_ROWS = 8
 TERRAIN_TILE_W = 32
 TERRAIN_TILE_H = 16
 TERRAIN_NEAR_Y = 0
-# one extra buffer row scrolls in from the far edge
 TERRAIN_BUFFER_ROWS = TERRAIN_ROWS + 1
 TERRAIN_VIEW_H = TERRAIN_ROWS * TERRAIN_TILE_H
 TERRAIN_SCROLL_SPEED = 2
-
-# --- scoreboard: identical placement to Vixeous ---
 TOP_SCORE_X = 93
-TOP_LIVES_X = 140
-
-# --- moving sprite field ---
 NUM_LAYERS = 6
 SPRITES_PER_LAYER = 10
-SPRITE_Y_MIN = 10
-SPRITE_Y_MAX = 190
+SPRITE_Y_MIN = 0
+SPRITE_Y_MAX = 186
 SPRITE_Y_SPAN = SPRITE_Y_MAX - SPRITE_Y_MIN
-
-KIND_SHIP = 0
-KIND_BULLET = 1
-KIND_MISSILE = 2
-KIND_EXPLOSION = 3
-# Repeating mix so each 10-sprite layer carries every Vixeous object size.
+KIND_SHIP, KIND_BULLET, KIND_MISSILE, KIND_EXPLOSION = range(4)
 KIND_PATTERN = (KIND_SHIP, KIND_BULLET, KIND_MISSILE, KIND_EXPLOSION)
-
-# strip name + fixed/animated frame behaviour per kind, sized like Vixeous:
-#   ship.png      18x13 (4 frames)   shots.png     6x10 (frame 0 shot, 1 bomb)
-#   explosion.png 20x20 (6 frames)
-_KIND_STRIP = {
-    KIND_SHIP: "ship.png",
-    KIND_BULLET: "shots.png",
-    KIND_MISSILE: "shots.png",
-    KIND_EXPLOSION: "explosion.png",
-}
-_EXPLOSION_FRAMES = 6
-_SHIP_FRAMES = 4
-
-
-def clamp(value, low, high):
-    return max(low, min(high, value))
+_KIND_IMAGE = ("ship.png", "shots.png", "shots.png", "explosion.png")
 
 
 def terrain_river_center(row, area):
@@ -74,11 +28,9 @@ def terrain_river_center(row, area):
 
 def terrain_frame_for(col, row, area):
     river = terrain_river_center(row, area)
-    delta = abs(col - river)
-    delta = min(delta, TERRAIN_COLS - delta)
+    delta = min(abs(col - river), TERRAIN_COLS - abs(col - river))
     next_river = terrain_river_center(row + 3, area)
-    next_delta = abs(col - next_river)
-    next_delta = min(next_delta, TERRAIN_COLS - next_delta)
+    next_delta = min(abs(col - next_river), TERRAIN_COLS - abs(col - next_river))
     if delta == 0:
         return (row + col) & 1
     if delta == 1 and next_delta == 0:
@@ -100,151 +52,76 @@ def terrain_frame_for(col, row, area):
     return 6 + ((row + col + area) & 1)
 
 
-class ScoreBoard:
-    """Identical to Vixeous's scoreboard: 5 score digits + 3 life icons."""
-
-    def __init__(self, hud):
-        self.score_digits = [
-            hud.add(Sprite("digits.png", x=TOP_SCORE_X + n * 5, y=1, frame=0))
-            for n in range(5)
-        ]
-        self.life_icons = [
-            hud.add(Sprite("digits.png", x=TOP_LIVES_X + n * 6, y=1, frame=11))
-            for n in range(3)
-        ]
-
-    def set_score(self, value):
-        text = "%05d" % clamp(value, 0, 99999)
-        for n, digit in enumerate(text):
-            self.score_digits[n].frame = ord(digit) - 48
-
-    def set_lives(self, lives):
-        for n, icon in enumerate(self.life_icons):
-            icon.frame = 11 if n < lives else 10
-
-
 class Mover:
-    """One always-visible sprite that loops through the screen at a fixed
-    per-layer speed. Kept deterministic (no RNG) so the render load is
-    identical on every run."""
-
     def __init__(self, sprite, kind, theta, y, dy, dtheta, frame_base):
-        self.sprite = sprite
-        self.kind = kind
-        self.theta = theta
-        self.y = y
-        self.dy = dy
-        self.dtheta = dtheta
-        self.frame_base = frame_base
-        self.anim = 0
+        self.sprite, self.kind, self.theta, self.y = sprite, kind, theta, y
+        self.dy, self.dtheta, self.frame_base, self.anim = dy, dtheta, frame_base, 0
 
-    def step(self):
-        y = self.y + self.dy
-        if y >= SPRITE_Y_MAX:
-            y -= SPRITE_Y_SPAN
-        elif y < SPRITE_Y_MIN:
-            y += SPRITE_Y_SPAN
-        self.y = y
-        self.theta = (self.theta + self.dtheta) % COLUMNS
+    def update(self):
+        self.y += self.dy
+        if self.y >= SPRITE_Y_MAX:
+            self.y -= SPRITE_Y_SPAN
+        self.theta = (self.theta + self.dtheta) % vs2.display.width
         self.anim += 1
-
-        sprite = self.sprite
-        sprite.x = self.theta
-        sprite.y = y
+        self.sprite.x, self.sprite.y = self.theta, self.y
         if self.kind == KIND_EXPLOSION:
-            sprite.frame = (self.anim // 3) % _EXPLOSION_FRAMES
+            self.sprite.frame = (self.anim // 3) % self.sprite.image.frames
         elif self.kind == KIND_SHIP:
-            # slow orientation cycle so ships aren't visually frozen
-            sprite.frame = (self.frame_base + (self.anim // 12)) % _SHIP_FRAMES
+            self.sprite.frame = (self.frame_base + self.anim // 12) % self.sprite.image.frames
 
 
-class PovStress(Scene):
-    stripes_rom = "demos.povstress"
-    keep_music = False
+class PovStress(vs2.Scene):
+    # This hidden scene is a hardware soak fixture. It must remain active
+    # without synthetic joystick traffic, which would otherwise perturb heap
+    # and timing measurements.
+    idle_timeout = None
 
-    def on_enter(self):
-        super().on_enter()
-
-        self.depth = 0
-        self.camera_theta = 0
-        self.area = 0
+    def build(self):
+        self.depth = self.camera_theta = self.area = self.tick = 0
         self.score = 0
-        self.lives = 3
-        self.tick = 0
-
-        # Base terrain tilemap, identical to Vixeous.
-        self.terrain_layer = self.layer("terrain", mode=TUNNEL)
+        self.terrain_layer = self.layer("terrain", projection=vs2.TUNNEL)
         self.terrain_data = bytearray(TERRAIN_COLS * TERRAIN_BUFFER_ROWS)
         self.terrain_base_row = None
-        self.terrain = self.terrain_layer.add(Tilemap(
-            "terrain.png", self.terrain_data,
-            columns=TERRAIN_COLS, rows=TERRAIN_BUFFER_ROWS,
-            tile_width=TERRAIN_TILE_W, tile_height=TERRAIN_TILE_H,
-            x=0, y=TERRAIN_NEAR_Y,
-            viewport=(0, 0, COLUMNS, TERRAIN_VIEW_H),
-        ))
+        self.terrain = self.terrain_layer.tilemap(
+            "terrain.png", columns=TERRAIN_COLS, rows=TERRAIN_BUFFER_ROWS,
+            cells=self.terrain_data, x=0, y=TERRAIN_NEAR_Y,
+            view_width=vs2.display.width, view_height=TERRAIN_VIEW_H)
         self.update_terrain()
-
-        # Scoreboard on a HUD layer.
-        self.hud = self.layer("hud", mode=HUD)
-        self.scoreboard = ScoreBoard(self.hud)
-        self.scoreboard.set_score(self.score)
-        self.scoreboard.set_lives(self.lives)
-
-        # 6 layers x 10 sprites, each layer at its own speed.
+        self.hud = self.layer("hud", projection=vs2.HUD)
+        self.scoreboard = self.hud.label("digits.png", columns=5, x=TOP_SCORE_X, y=1,
+                                         glyphs="0123456789")
+        self.scoreboard.set_number(0, width=5, pad="0")
         self.movers = []
         for layer_index in range(NUM_LAYERS):
-            layer = self.layer("field%d" % layer_index, mode=TUNNEL)
-            # distinct per-layer speeds: dy 1..6 outward, theta drift spread
-            # across -2..+3 so both movement axes vary between layers.
-            dy = layer_index + 1
-            dtheta = layer_index - 2
-            for i in range(SPRITES_PER_LAYER):
-                kind = KIND_PATTERN[i % len(KIND_PATTERN)]
-                theta = (i * (COLUMNS // SPRITES_PER_LAYER) + layer_index * 8) % COLUMNS
-                y = SPRITE_Y_MIN + (i * (SPRITE_Y_SPAN // SPRITES_PER_LAYER)
-                                    + layer_index * 9) % SPRITE_Y_SPAN
-                frame_base = i % _SHIP_FRAMES
-                initial_frame = 1 if kind == KIND_MISSILE else 0
-                sprite = layer.add(Sprite(
-                    _KIND_STRIP[kind], x=theta, y=y, frame=initial_frame))
-                self.movers.append(
-                    Mover(sprite, kind, theta, y, dy, dtheta, frame_base))
+            layer = self.layer("field%d" % layer_index, projection=vs2.TUNNEL)
+            for index in range(SPRITES_PER_LAYER):
+                kind = KIND_PATTERN[index % len(KIND_PATTERN)]
+                theta = (index * (vs2.display.width // SPRITES_PER_LAYER) + layer_index * 8) % vs2.display.width
+                y = SPRITE_Y_MIN + (index * (SPRITE_Y_SPAN // SPRITES_PER_LAYER) + layer_index * 9) % SPRITE_Y_SPAN
+                frame = 1 if kind == KIND_MISSILE else 0
+                sprite = layer.sprite(_KIND_IMAGE[kind], x=theta, y=y, frame=frame)
+                self.movers.append(Mover(sprite, kind, theta, y, layer_index + 1,
+                                         layer_index - 2, index % sprite.image.frames))
 
     def update_terrain(self):
         base_row = self.depth // TERRAIN_TILE_H
         if base_row != self.terrain_base_row:
             self.terrain_base_row = base_row
             for row in range(TERRAIN_BUFFER_ROWS):
-                world_row = base_row + row
-                offset = row * TERRAIN_COLS
                 for col in range(TERRAIN_COLS):
-                    self.terrain_data[offset + col] = terrain_frame_for(
-                        col, world_row, self.area)
-        self.terrain.x = (self.area * 13 - self.camera_theta
-                          - TERRAIN_TILE_W // 2) % COLUMNS
-        self.terrain.viewport = (
-            0, self.depth % TERRAIN_TILE_H, COLUMNS, TERRAIN_VIEW_H)
+                    self.terrain[col, row] = terrain_frame_for(col, base_row + row, self.area)
+        self.terrain.x = (self.area * 13 - self.camera_theta - TERRAIN_TILE_W // 2) % vs2.display.width
+        self.terrain.view_y = self.depth % TERRAIN_TILE_H
 
-    def step(self):
-        if director.was_pressed(director.BUTTON_D):
-            director.pop()
-            raise StopIteration()
-
+    def update(self):
         self.tick += 1
         self.depth += TERRAIN_SCROLL_SPEED
-        self.camera_theta = (self.camera_theta + 1) % COLUMNS
+        self.camera_theta = (self.camera_theta + 1) % vs2.display.width
         self.update_terrain()
-
         for mover in self.movers:
-            mover.step()
-
-        # keep the HUD live so the whole scene is in motion
+            mover.update()
         self.score = (self.score + 7) % 100000
-        self.scoreboard.set_score(self.score)
-        if self.tick % 40 == 0:
-            self.lives = (self.lives + 1) % 4
-            self.scoreboard.set_lives(self.lives)
+        self.scoreboard.set_number(self.score, width=5, pad="0")
 
 
 def main():

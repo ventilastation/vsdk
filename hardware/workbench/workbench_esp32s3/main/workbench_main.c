@@ -14,6 +14,7 @@
 #include "reset_ctl.h"
 #include "hall_sim.h"
 #include "led_capture.h"
+#include "frame_snapshot.h"
 #include "serial_bridge.h"
 #include "telemetry.h"
 
@@ -30,13 +31,14 @@ void app_main(void) {
     // this used to print here.
 
     reset_ctl_begin();
-    serial_bridge_begin();
+    hall_sim_begin();
     led_capture_begin();
+    frame_snapshot_begin();
+    serial_bridge_begin();
     telemetry_begin();
 
     ESP_LOGI(TAG, "pulsing DUT reset");
     reset_ctl_pulse(WB_RESET_PULSE_MS);
 
     ESP_LOGI(TAG, "starting hall pulse simulation at %d RPM", WB_HALL_RPM_DEFAULT);
-    hall_sim_begin();
 }

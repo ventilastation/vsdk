@@ -61,13 +61,12 @@ class InputDemoTests(unittest.TestCase):
         self.assertEqual(scene._vs_declared_api, "vs2")
         self.assertEqual(len(scene.hud.sprites), 0)
         self.assertEqual(len(scene.hud.tilemaps), 1)
-        self.assertEqual(len(scene.text_frames), 63)
-        self.assertIs(scene.text.frames, scene.text_frames)
+        self.assertEqual(len(scene.text.cells), 63)
         self.assertEqual(scene.line_values[0], "     LRUD ABXY S B")
         self.assertEqual(scene.text.y, 0)
         import vs2
         payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[4], 2)  # tilemap-capable VS2 payload
+        self.assertEqual(payload[4], 3)  # ordered V2 payload
         self.assertEqual(payload[7], 1)
 
         comms = director.platform.comms
@@ -87,15 +86,15 @@ class InputDemoTests(unittest.TestCase):
         self.assertEqual(scene.line_values[2], "J2:.R.D .B.Y .B")
         # Tilemap columns are stored in the clockwise order used by sprites.
         row = 1 * 21
-        self.assertEqual(scene.text_frames[row + 20], ord("J"))
-        self.assertEqual(scene.text_frames[row + 19], ord("1"))
+        self.assertEqual(scene.text.cells[row + 20], ord("J"))
+        self.assertEqual(scene.text.cells[row + 19], ord("1"))
         # The ROM menu strip keeps white ASCII at 0..127 and red at 128..254.
-        self.assertEqual(scene.text_frames[row + 17], ord("L") | 0x80)
-        self.assertEqual(scene.text_frames[row + 16], ord("."))
-        self.assertEqual(scene.text_frames[row + 12], ord("A") | 0x80)
+        self.assertEqual(scene.text.cells[row + 17], ord("L") | 0x80)
+        self.assertEqual(scene.text.cells[row + 16], ord("."))
+        self.assertEqual(scene.text.cells[row + 12], ord("A") | 0x80)
         joy2_row = 2 * 21
-        self.assertEqual(scene.text_frames[joy2_row + 11], ord("B") | 0x80)
-        self.assertEqual(scene.text_frames[joy2_row + 9], ord("Y") | 0x80)
+        self.assertEqual(scene.text.cells[joy2_row + 11], ord("B") | 0x80)
+        self.assertEqual(scene.text.cells[joy2_row + 9], ord("Y") | 0x80)
 
 
 if __name__ == "__main__":

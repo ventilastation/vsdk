@@ -1,0 +1,5 @@
+# Documentation toolchain for the VS2 game developer docs.
+# Used by .readthedocs.yaml and by `make -C docs/vs2 html` locally.
+sphinx>=8,<10
+myst-parser>=4,<5
+furo>=2024.8

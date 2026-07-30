@@ -1,11 +1,31 @@
 import os
+import random
 import struct
 import sys
+import time
 import unittest
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "emulator"))
+sys.path.insert(0, os.path.join(ROOT, "apps", "micropython"))
+sys.modules.setdefault("uos", os)
+sys.modules.setdefault("urandom", random)
+if "utime" not in sys.modules:
+    class _Utime:
+        @staticmethod
+        def ticks_ms():
+            return int(time.time() * 1000)
+
+        @staticmethod
+        def ticks_add(value, delta):
+            return value + delta
+
+        @staticmethod
+        def ticks_diff(end, start):
+            return end - start
+
+    sys.modules["utime"] = _Utime
 
 import povrender
 
@@ -193,6 +213,25 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         pixels_column_18 = povrender.render(18)
         self.assertEqual(pixels_column_18, [0] * povrender.led_count)
 
+    def test_vs2_tilemap_flip_x_and_flip_y_mirror_complete_viewport(self):
+        povrender.all_strips[9] = make_tile_strip()
+        payload = make_vs2_scene([], [], [
+            default_tilemap(flags=1 | 2 | 4),
+        ])
+        decoded = povrender.decode_vs2_scene(payload)
+        self.assertTrue(decoded["tilemaps"][0]["flip_x"])
+        self.assertTrue(decoded["tilemaps"][0]["flip_y"])
+        povrender.set_vs2_scene(payload)
+
+        # Destination top-left samples the original bottom-right empty tile.
+        self.assertEqual(povrender.render(10)[13], 0)
+        # Four rows down reaches the original top-right solid frame.
+        self.assertEqual(povrender.render(10)[9], 30)
+        # Four columns across reaches the original bottom-left frame.
+        self.assertEqual(povrender.render(14)[13], 40)
+        # The opposite corner reaches the original top-left pixel.
+        self.assertEqual(povrender.render(17)[6], 10)
+
     def test_vs2_tilemap_viewport_pans_horizontally(self):
         povrender.all_strips[9] = make_tile_strip()
         povrender.set_vs2_scene(make_vs2_scene([], [], [
@@ -254,7 +293,7 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(povrender.render(10)[13], 0)
         self.assertEqual(povrender.render(30)[13], 10)
 
-    def test_vs2_tilemap_draws_behind_sprites(self):
+    def test_legacy_vs2_tilemap_renders_before_sprites(self):
         povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
         povrender.all_strips[9] = make_tile_strip()
         povrender.set_vs2_scene(make_vs2_scene([], [
@@ -266,6 +305,51 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(pixels_column_10[13], 30)
         # rows below the 2x2 sprite still show the tilemap
         self.assertEqual(pixels_column_10[11], 10)
+
+    def test_v3_scene_round_trips_from_vs2_api_into_desktop_renderer(self):
+        from ventilastation import api_guard
+        from ventilastation.director import configure_runtime, director, reset_runtime, stripes
+        import vs2
+
+        reset_runtime()
+        api_guard.reset()
+        self.addCleanup(reset_runtime)
+        self.addCleanup(api_guard.reset)
+        runtime = configure_runtime("headless")
+        stripes.clear()
+        stripes["ship.png"] = 8
+        stripes["terrain.png"] = 9
+        runtime.platform.sprites.stripes[8] = {
+            "width": 2, "height": 2, "frames": 1, "palette": 0,
+        }
+        runtime.platform.sprites.stripes[9] = {
+            "width": 4, "height": 4, "frames": 3, "palette": 0,
+        }
+        povrender.all_strips[8] = bytes([2, 2, 1, 0, 3, 3, 3, 3])
+        povrender.all_strips[9] = make_tile_strip()
+        api_guard.begin_app("games.desktop_v3", "vs2")
+
+        class Game(vs2.Scene):
+            def build(self):
+                world = self.layer("world", projection=vs2.HUD)
+                hud = self.layer("hud", projection=vs2.HUD)
+                # Allocate topmost HUD first: v3 draw refs, not allocation
+                # order, must leave it above the map.
+                self.ship = hud.sprite("ship.png", x=10, y=40)
+                self.map = world.tilemap("terrain.png", columns=2, rows=2,
+                                         cells=bytearray((0, 1, 2, 255)),
+                                         x=10, y=40, view_width=8, view_height=8)
+
+        game = Game()
+        director.push(game)
+        payload = vs2.export_scene_payload(game)
+        self.assertEqual(payload[4], 3)
+        decoded = povrender.decode_vs2_scene(payload)
+        self.assertEqual([kind for kind, _drawable in decoded["drawables"]], [1, 0])
+        povrender.set_vs2_scene(payload)
+        pixels = povrender.render(10)
+        self.assertEqual(pixels[13], 30)  # HUD sprite is above the tilemap.
+        self.assertEqual(pixels[11], 10)  # Map remains visible below it.
 
     def test_vs2_tilemap_on_hidden_layer_is_dropped(self):
         povrender.all_strips[9] = make_tile_strip()
@@ -281,7 +365,38 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         povrender.set_vs2_scene(make_vs2_scene([], [], [default_tilemap(mode=1)]))
 
         pixels_column_10 = povrender.render(10)
-        self.assertEqual(pixels_column_10[povrender.deepspace[40]], 10)
+        self.assertEqual(pixels_column_10[povrender.vs2_deepspace[40]], 10)
+
+    def test_vs2_modes_share_a_rim_origin_and_fullscreen_contracts_inward(self):
+        povrender.all_strips[8] = bytes(
+            [1, povrender.led_count, 1, 0]
+            + [1] * povrender.led_count
+        )
+
+        for mode in (1, 2):
+            with self.subTest(mode=mode):
+                povrender.set_vs2_scene(make_vs2_scene([], [
+                    {"image": 8, "mode": mode, "flags": 1, "x": 20, "y": 0},
+                ]))
+                self.assertEqual(
+                    povrender.render(20)[povrender.led_count - 1],
+                    10,
+                )
+
+        povrender.set_vs2_scene(make_vs2_scene([], [
+            {"image": 8, "mode": 0, "flags": 1, "x": 20, "y": 0},
+        ]))
+        self.assertEqual(
+            povrender.render(20)[povrender.led_count - 1],
+            10,
+        )
+
+        povrender.set_vs2_scene(make_vs2_scene([], [
+            {"image": 8, "mode": 0, "flags": 1, "x": 20, "y": 255},
+        ]))
+        pixels = povrender.render(20)
+        self.assertEqual(pixels[0], 10)
+        self.assertEqual(pixels[1:], [0] * (povrender.led_count - 1))
 
     def test_vs2_fullscreen_tilemap_is_skipped(self):
         povrender.all_strips[9] = make_tile_strip()

@@ -86,6 +86,7 @@ class FakeVs2:
     def __init__(self):
         self.created = []
         self.active = None
+        self.draw_order = None
 
     def set_active(self, value):
         self.active = bool(value)
@@ -94,6 +95,9 @@ class FakeVs2:
         sprite = FakeSprite()
         self.created.append(sprite)
         return sprite
+
+    def set_draw_order(self, drawables):
+        self.draw_order = tuple(drawables)
 
 
 def _install_fakes(nvs_values=None):
@@ -135,6 +139,7 @@ def _install_fakes(nvs_values=None):
     vs2_module = types.ModuleType("vshw_vs2")
     vs2_module.set_active = vs2.set_active
     vs2_module.Sprite = vs2.Sprite
+    vs2_module.set_draw_order = vs2.set_draw_order
     sys.modules["vshw_vs2"] = vs2_module
 
     return esp32, display, sprites, vs2
@@ -182,6 +187,7 @@ class StartupTests(unittest.TestCase):
         self.assertIs(display.starfield_enabled, False)
         self.assertIs(vs2.active, True)
         self.assertEqual(len(vs2.created), len(rings._Z_ORDER))
+        self.assertEqual(vs2.draw_order, tuple(reversed(vs2.created)))
         # All start disabled -- nothing shows until a phase actually begins.
         self.assertTrue(all(s.disabled for s in vs2.created))
 

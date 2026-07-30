@@ -126,6 +126,32 @@ def test_menu_rom_builder_parity():
     print("builder parity: %d strips match" % len(py_strips))
 
 
+def test_builder_rejects_image_strip_cap():
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from PIL import Image
+        import generate_roms
+    except ModuleNotFoundError as error:
+        print("SKIP builder cap check: missing", error.name)
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp)
+        manifest = folder / "__images__.yaml"
+        manifest.write_text("palettegroups: []\n")
+        group = []
+        for index in range(generate_roms.MAX_IMAGE_STRIPS + 1):
+            name = "image%d.png" % index
+            Image.new("RGBA", (1, 1), (0, 0, 0, 255)).save(folder / name)
+            group.append((name, {"frames": 1}))
+        try:
+            generate_roms.generate_rom(folder, [group], manifest, folder / "too-many.rom")
+        except ValueError as error:
+            assert "defines 101 images; this target supports 100" in str(error), error
+        else:
+            raise AssertionError("ROM builder accepted more than 100 image strips")
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for test in tests:

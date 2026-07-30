@@ -2,7 +2,7 @@
 // scene into integer textures and lets scene-shader-core's fragment shader
 // write the complete 256-column LED frame into the ring renderer's texture.
 
-import "./scene-shader-core.js?v=20260717a";
+import "./scene-shader-core.js?v=20260729a";
 
 const SceneShaderCore = globalThis.VentilastationSceneShaderCore;
 
@@ -68,8 +68,7 @@ class LedSceneWebGLCompositor {
         cells: gl.getUniformLocation(this.program, "u_cells"),
         stars: gl.getUniformLocation(this.program, "u_stars"),
         deepspace: gl.getUniformLocation(this.program, "u_deepspace"),
-        spriteCount: gl.getUniformLocation(this.program, "u_sprite_count"),
-        tilemapCount: gl.getUniformLocation(this.program, "u_tilemap_count"),
+        drawableCount: gl.getUniformLocation(this.program, "u_drawable_count"),
         starCount: gl.getUniformLocation(this.program, "u_star_count"),
         columnOffset: gl.getUniformLocation(this.program, "u_column_offset"),
         ledAxis: gl.getUniformLocation(this.program, "u_led_axis"),
@@ -228,8 +227,7 @@ class LedSceneWebGLCompositor {
     this.bindTexture(4, this.textures.cells, this.uniforms.cells);
     this.bindTexture(5, this.textures.stars, this.uniforms.stars);
     this.bindTexture(6, this.textures.deepspace, this.uniforms.deepspace);
-    gl.uniform1i(this.uniforms.spriteCount, scene.spriteCount);
-    gl.uniform1i(this.uniforms.tilemapCount, scene.tilemapCount);
+    gl.uniform1i(this.uniforms.drawableCount, scene.drawableCount);
     gl.uniform1i(this.uniforms.starCount, stars.count);
     gl.uniform1i(this.uniforms.columnOffset, Number(input.columnOffset || 0) & 255);
     gl.uniform1i(this.uniforms.ledAxis, 0);
@@ -245,6 +243,7 @@ class LedSceneWebGLCompositor {
       sceneKind: input.sceneKind,
       spriteCount: scene.spriteCount,
       tilemapCount: scene.tilemapCount,
+      drawableCount: scene.drawableCount,
       sceneBytes: input.sceneBytes.length,
     };
     return true;

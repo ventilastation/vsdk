@@ -1,3 +1,4 @@
 {
-  "api": "vs2"
+  "api": "vs2",
+  "api_revision": 2
 }

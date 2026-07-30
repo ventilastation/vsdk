@@ -245,7 +245,7 @@ void spiStartBuses(int led_spi_host, uint32_t led_freq, int led_clk, int led_mos
         //vTaskDelay( xDelay );
 
     spi_device_interface_config_t devcfg = {
-            .clock_speed_hz = led_freq,     //Clock out at 20 MHz
+            .clock_speed_hz = led_freq,     //Clock out at the configured LED rate
             .mode = 0,                              //SPI mode 0
             .spics_io_num = led_cs, //CS pin (workbench framing; strips ignore it)
             .queue_size=10,
@@ -285,7 +285,13 @@ void spiWriteNL(const void * data_in, size_t len){
     // ret = spi_device_polling_transmit(spi_handle, &transaction);
 
     spi_ongoing = true;
-    ret = spi_device_queue_trans(spi_handle, &spi_trans, pdMS_TO_TICKS(10));
+    // The bus is permanently acquired by the dedicated GPU task. The split
+    // polling API starts DMA directly without the interrupt transaction
+    // queue's scheduler hop, while polling_end() on the next angular update
+    // preserves the same render/transfer overlap as queue_trans/get_result.
+    // ESP-IDF currently requires portMAX_DELAY here; because this task owns the
+    // bus permanently, acquiring it does not block behind another device.
+    ret = spi_device_polling_start(spi_handle, &spi_trans, portMAX_DELAY);
     ESP_ERROR_CHECK(ret);
 }
 
@@ -294,8 +300,7 @@ void spiWaitComplete() {
         return;
     }
     esp_err_t ret;
-    spi_transaction_t *completed_trans = NULL;
-    ret = spi_device_get_trans_result(spi_handle, &completed_trans, pdMS_TO_TICKS(100));
+    ret = spi_device_polling_end(spi_handle, pdMS_TO_TICKS(100));
     ESP_ERROR_CHECK(ret);
     spi_ongoing = false;
 }

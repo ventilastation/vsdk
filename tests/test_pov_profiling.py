@@ -1,5 +1,6 @@
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, "apps/micropython")
 
@@ -30,14 +31,22 @@ class FakeDisplay:
             "sprites": 19,
             "tilemaps": 1,
             "samples": 256,
+            "project_samples": 512,
+            "frames": 2,
             "deadline_us": 3906,
+            "frame_deadline_us": 100000,
             "skipped_updates": 0,
             "deadline_misses": 0,
+            "frame_deadline_misses": 0,
             "avg_total_us": 180,
             "max_total_us": 220,
             "avg_render_us": 130,
             "max_render_us": 170,
             "max_arm_render_us": 91,
+            "avg_project_us": 130,
+            "max_project_us": 170,
+            "avg_frame_render_us": 33280,
+            "max_frame_render_us": 34000,
             "avg_spi_wait_us": 30,
             "max_spi_wait_us": 40,
             "avg_copy_us": 6,
@@ -47,9 +56,14 @@ class FakeDisplay:
 
 
 class PovProfilingTests(unittest.TestCase):
-    def command(self, parts, display=None):
+    def command(self, parts, display=None, scene=None):
         sent = []
-        pov_profiling.handle_command(parts, lambda line: sent.append(line), display or FakeDisplay())
+        pov_profiling.handle_command(
+            parts,
+            lambda line: sent.append(line),
+            display or FakeDisplay(),
+            scene=scene,
+        )
         return sent
 
     def test_start_resets_and_reports_vs2_timing(self):
@@ -60,6 +74,8 @@ class PovProfilingTests(unittest.TestCase):
         self.assertIn(b"scene=vs2", sent[0])
         self.assertIn(b"complete=1", sent[0])
         self.assertIn(b"max_arm_render_us=91", sent[1])
+        self.assertIn(b"frames=2", sent[1])
+        self.assertIn(b"max_frame_render_us=34000", sent[1])
 
     def test_mode_switch_resets_without_persisting_profile(self):
         display = FakeDisplay()
@@ -67,8 +83,32 @@ class PovProfilingTests(unittest.TestCase):
         self.assertFalse(display.calibrated)
         self.assertEqual(display.reset_count, 1)
 
+    def test_heap_baseline_and_stop_sample_use_the_same_allocation_point(self):
+        display = FakeDisplay()
+        sent = []
+        with mock.patch.object(
+            pov_profiling, "_heap_free", side_effect=[1000, 1000, 1000]
+        ):
+            pov_profiling.handle_command(["start"], sent.append, display)
+            pov_profiling.handle_command(["stop"], sent.append, display)
+        state_lines = [line for line in sent if line.startswith(b"povperf_state ")]
+        self.assertEqual(len(state_lines), 2)
+        # The start response is a warm-up and precedes the baseline.
+        self.assertIn(b"heap_delta=", state_lines[0])
+        self.assertIn(b"heap_delta=0", state_lines[1])
+
     def test_invalid_command_is_reported(self):
         sent = self.command(["mode", "fast"])
+        self.assertEqual(sent, [b"povperf_error invalid_command"])
+
+    def test_capture_prepares_an_opt_in_scene(self):
+        scene = mock.Mock()
+        sent = self.command(["capture"], scene=scene)
+        scene.prepare_capture.assert_called_once_with()
+        self.assertEqual(sent, [b"povperf_capture ready=1"])
+
+    def test_capture_rejects_a_scene_without_fixture_hook(self):
+        sent = self.command(["capture"], scene=object())
         self.assertEqual(sent, [b"povperf_error invalid_command"])
 
 

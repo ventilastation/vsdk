@@ -18,6 +18,7 @@ typedef struct {
     const vs2_layer_t* layer_ptrs[VS2_MAX_LAYERS];
     const vs2_sprite_t* sprite_ptrs[VS2_MAX_SPRITES];
     const vs2_tilemap_t* tilemap_ptrs[VS2_MAX_TILEMAPS];
+    vs2_draw_ref_t draw_order[VS2_MAX_DRAWABLES];
     vs2_scene_t scene;
 } vs2_wire_scene_t;
 

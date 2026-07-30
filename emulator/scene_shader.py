@@ -23,7 +23,7 @@ import re
 from pathlib import Path
 from struct import unpack_from
 
-from deepspace import deepspace
+from deepspace import deepspace, vs2_deepspace
 
 COLUMNS = 256
 PIXELS = 54
@@ -39,7 +39,7 @@ MODE_HUD = 2
 
 
 def _empty_scene():
-    return {"sprites": [], "tilemaps": [], "cells": []}
+    return {"drawables": [], "sprite_count": 0, "tilemap_count": 0, "cells": []}
 
 
 def canonical_mode(mode):
@@ -55,7 +55,8 @@ def _as_u32(value):
     return int(value) & 0xFFFFFFFF
 
 
-def _push_sprite(packer, *, x, y, strip, frame, mode, flip_x=False, flip_y=False):
+def _push_sprite(packer, *, x, y, strip, frame, mode, flip_x=False,
+                 flip_y=False, vs2_coordinates=False):
     import numpy as np
     lanes = np.zeros(SCENE_LANES_PER_ENTITY, dtype=np.uint32)
     lanes[0] = _as_u32(x)
@@ -64,11 +65,15 @@ def _push_sprite(packer, *, x, y, strip, frame, mode, flip_x=False, flip_y=False
     lanes[3] = int(frame) & 0xFF
     lanes[4] = canonical_mode(mode)
     lanes[5] = (1 if flip_x else 0) | (2 if flip_y else 0)
-    packer["sprites"].append(lanes)
+    lanes[14] = 1 if vs2_coordinates else 0
+    lanes[15] = 0
+    packer["drawables"].append(lanes)
+    packer["sprite_count"] += 1
 
 
 def _push_tilemap(packer, *, x, y, strip, mode, columns, rows, tile_width,
-                  tile_height, viewport, frames):
+                  tile_height, viewport, frames, flip_x=False, flip_y=False,
+                  vs2_coordinates=False):
     import numpy as np
     offset = sum(len(cells) for cells in packer["cells"])
     raw_cells = bytes(frames)
@@ -81,14 +86,18 @@ def _push_tilemap(packer, *, x, y, strip, mode, columns, rows, tile_width,
     lanes[4:8] = (columns, rows, tile_width, tile_height)
     lanes[8:12] = viewport
     lanes[12] = offset
-    packer["tilemaps"].append(lanes)
+    lanes[13] = (1 if flip_x else 0) | (2 if flip_y else 0)
+    lanes[14] = 1 if vs2_coordinates else 0
+    lanes[15] = 1
+    packer["drawables"].append(lanes)
+    packer["tilemap_count"] += 1
 
 
 def _finish_scene(packer):
     import numpy as np
-    entity_count = len(packer["sprites"]) + len(packer["tilemaps"])
+    entity_count = len(packer["drawables"])
     scene = np.zeros((max(entity_count, 1), SCENE_LANES_PER_ENTITY), dtype=np.uint32)
-    for row, lanes in enumerate(packer["sprites"] + packer["tilemaps"]):
+    for row, lanes in enumerate(packer["drawables"]):
         scene[row] = lanes
 
     cell_length = sum(len(cells) for cells in packer["cells"])
@@ -102,8 +111,9 @@ def _finish_scene(packer):
         "scene": scene.reshape(-1),
         "scene_width": SCENE_TEXELS_PER_ENTITY,
         "scene_height": max(entity_count, 1),
-        "sprite_count": len(packer["sprites"]),
-        "tilemap_count": len(packer["tilemaps"]),
+        "sprite_count": packer["sprite_count"],
+        "tilemap_count": packer["tilemap_count"],
+        "drawable_count": entity_count,
         "cells": cells,
         "cells_width": ATLAS_WIDTH,
         "cells_height": cells_height,
@@ -132,7 +142,7 @@ def pack_scene_vs2_bytes(scene_bytes):
     """Decode raw VS2 directly into the fixed GPU records, allocation-light."""
     packer = _empty_scene()
     data = bytes(scene_bytes or b"")
-    if len(data) < 16 or data[:4] != b"VS2\0" or data[4] not in (1, 2):
+    if len(data) < 16 or data[:4] != b"VS2\0" or data[4] not in (1, 2, 3):
         return _finish_scene(packer)
 
     version, layer_count, sprite_count = data[4:7]
@@ -150,7 +160,8 @@ def pack_scene_vs2_bytes(scene_bytes):
         layers[data[offset]] = (data[offset + 1], bool(data[offset + 2] & 1))
         offset += layer_size
 
-    for _slot in range(sprite_count):
+    sprite_by_slot = [None] * sprite_count
+    for slot in range(sprite_count):
         if offset + sprite_size > len(data):
             return _finish_scene(packer)
         record = offset
@@ -161,8 +172,7 @@ def pack_scene_vs2_bytes(scene_bytes):
             continue
         x_fixed = unpack_from("<i", data, record + 10)[0]
         y_fixed = unpack_from("<i", data, record + 14)[0]
-        _push_sprite(
-            packer,
+        sprite_by_slot[slot] = dict(
             x=x_fixed // 256,
             y=y_fixed // 256,
             strip=data[record + 1],
@@ -170,9 +180,12 @@ def pack_scene_vs2_bytes(scene_bytes):
             mode=layer[0] if layer is not None else data[record + 3],
             flip_x=bool(flags & 2),
             flip_y=bool(flags & 4),
+            vs2_coordinates=True,
         )
 
-    for _slot in range(tilemap_count):
+    frames_end = offset + tilemap_count * tilemap_size
+    tilemap_by_slot = [None] * tilemap_count
+    for slot in range(tilemap_count):
         if offset + tilemap_size > len(data):
             return _finish_scene(packer)
         record = offset
@@ -186,11 +199,11 @@ def pack_scene_vs2_bytes(scene_bytes):
         frames_offset = unpack_from("<I", data, record + 28)[0]
         if frames_offset + cells_length > len(data):
             continue
+        frames_end = max(frames_end, frames_offset + cells_length)
         mode = layer[0] if layer is not None else data[record + 3]
         if canonical_mode(mode) == MODE_PLANET:
             continue
-        _push_tilemap(
-            packer,
+        tilemap_by_slot[slot] = dict(
             x=unpack_from("<i", data, record + 20)[0] // 256,
             y=unpack_from("<i", data, record + 24)[0] // 256,
             strip=data[record + 1], mode=mode,
@@ -199,7 +212,32 @@ def pack_scene_vs2_bytes(scene_bytes):
             tile_height=unpack_from("<H", data, record + 10)[0],
             viewport=unpack_from("<HHHH", data, record + 12),
             frames=data[frames_offset:frames_offset + cells_length],
+            flip_x=bool(flags & 2),
+            flip_y=bool(flags & 4),
+            vs2_coordinates=True,
         )
+    if version == 3:
+        draw_count = sprite_count + tilemap_count
+        if frames_end + draw_count * 2 > len(data):
+            return _finish_scene(_empty_scene())
+        for index in range(draw_count - 1, -1, -1):
+            kind = data[frames_end + index * 2]
+            slot = data[frames_end + index * 2 + 1]
+            if kind not in (0, 1) or (kind == 0 and slot >= sprite_count) or (kind == 1 and slot >= tilemap_count):
+                return _finish_scene(_empty_scene())
+            drawable = sprite_by_slot[slot] if kind == 0 else tilemap_by_slot[slot]
+            if drawable is not None:
+                if kind == 0:
+                    _push_sprite(packer, **drawable)
+                else:
+                    _push_tilemap(packer, **drawable)
+    else:
+        for sprite in sprite_by_slot:
+            if sprite is not None:
+                _push_sprite(packer, **sprite)
+        for tilemap in tilemap_by_slot:
+            if tilemap is not None:
+                _push_tilemap(packer, **tilemap)
     return _finish_scene(packer)
 
 
@@ -260,17 +298,24 @@ def pack_stars(positions):
 
 def pack_deepspace():
     import numpy as np
-    packed = np.zeros(256 * 2, dtype=np.uint32)
-    packed[:ROWS] = deepspace
-    lo = [255] * PIXELS
-    hi = [0] * PIXELS
-    for y, led in enumerate(deepspace):
-        if led < PIXELS:
-            lo[led] = min(lo[led], y)
-            hi[led] = max(hi[led], y)
-    for led in range(PIXELS):
-        packed[256 + led] = lo[led] | (hi[led] << 8)
-    return {"data": packed, "width": 256, "height": 2}
+    packed = np.zeros(256 * 4, dtype=np.uint32)
+
+    def pack_projection(projection, forward_row, inverse_row):
+        lo = [255] * PIXELS
+        hi = [0] * PIXELS
+        for y, led in enumerate(projection):
+            packed[forward_row * 256 + y] = led
+            if led < PIXELS:
+                lo[led] = min(lo[led], y)
+                hi[led] = max(hi[led], y)
+        for led in range(PIXELS):
+            packed[inverse_row * 256 + led] = (
+                lo[led] | (hi[led] << 8)
+            )
+
+    pack_projection(deepspace, 0, 1)
+    pack_projection(vs2_deepspace, 2, 3)
+    return {"data": packed, "width": 256, "height": 4}
 
 
 def _shared_shader_source(name):
@@ -388,7 +433,7 @@ class DesktopSceneCompositor:
 
         if not self._deepspace_uploaded:
             deepspace_data = pack_deepspace()
-            self._upload("deepspace", deepspace_data["data"], 256, 2,
+            self._upload("deepspace", deepspace_data["data"], 256, 4,
                          gl["GL_R32UI"], gl["GL_RED_INTEGER"], gl["GL_UNSIGNED_INT"])
             self._deepspace_uploaded = True
 
@@ -415,8 +460,7 @@ class DesktopSceneCompositor:
         gl["glViewport"](0, 0, COLUMNS, PIXELS)
         gl["glDisable"](0x0BE2)  # GL_BLEND; do not let ring-display blend state leak in.
         self._set_uniforms()
-        self.program["u_sprite_count"] = scene["sprite_count"]
-        self.program["u_tilemap_count"] = scene["tilemap_count"]
+        self.program["u_drawable_count"] = scene["drawable_count"]
         self.program["u_star_count"] = stars["count"]
         self.vertex_list.draw(gl["GL_TRIANGLES"])
         self.program.stop()

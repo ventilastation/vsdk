@@ -73,7 +73,7 @@ def compress_sprite_rom(data):
 def iter_copy_jobs(vsdk_root):
     roots = [
         ("main.py", vsdk_root / "apps/micropython/main.py"),
-        ("vs2.py", vsdk_root / "apps/micropython/vs2.py"),
+        ("vs2", vsdk_root / "apps/micropython/vs2"),
         ("ventilastation", vsdk_root / "apps/micropython/ventilastation"),
         ("roms", vsdk_root / "apps/micropython/roms"),
         ("roms/doom", vsdk_root / "apps/retro-go/prboom-go/components/prboom/data"),

@@ -68,14 +68,18 @@ class MapDemoTests(unittest.TestCase):
     def test_mapdemo_pans_viewport_and_edits_cells(self):
         scene = load_app("alecu.mapdemo")
         import vs2
-        from games.alecu.mapdemo.code.mapdemo import MAP_COLUMNS, MAP_ROWS, VIEW_H, WALL
+        from games.alecu.mapdemo.code.mapdemo import (
+            MAP_COLUMNS, MAP_ROWS, MAP_Y, VIEW_H, WALL,
+        )
 
         self.assertEqual(scene._vs_declared_api, "vs2")
         self.assertEqual(len(scene.map_data), MAP_COLUMNS * MAP_ROWS)
-        self.assertIs(scene.map.frames, scene.map_data)
+        self.assertIs(scene.map.cells, scene.map_data)
+        self.assertEqual(scene.map.y, MAP_Y)
+        self.assertEqual(MAP_Y, 51)
 
         payload = vs2.export_scene_payload(scene)
-        self.assertEqual(payload[4], 2)
+        self.assertEqual(payload[4], 3)
         self.assertEqual(payload[7], 1)
         tilemap_size = struct.unpack_from("<H", payload, 14)[0]
         self.assertEqual(tilemap_size, 32)
@@ -84,11 +88,11 @@ class MapDemoTests(unittest.TestCase):
         self.step_buttons(director.JOY_RIGHT)
         self.assertEqual(scene.map.x, 1)
         self.step_buttons(director.JOY_DOWN)
-        self.assertEqual(scene.map.viewport[1], 1)
+        self.assertEqual(scene.map.view_y, 1)
         self.step_buttons(director.JOY_UP)
         self.step_buttons(director.JOY_UP)
-        self.assertEqual(scene.map.viewport[1], 0)
-        self.assertEqual(scene.map.viewport[3], VIEW_H)
+        self.assertEqual(scene.map.view_y, 0)
+        self.assertEqual(scene.map.view_height, VIEW_H)
 
         # button A writes a WALL into the live buffer, visible on re-export
         col, row = scene.cursor_cell()

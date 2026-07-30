@@ -59,8 +59,8 @@ render()/render_vs2() both draw it unconditionally otherwise, which is what
 made an earlier attempt at this feature look like it was doing nothing at
 all: the progress indicator was rendering correctly underneath, but the
 ever-present, visually busy starfield buried it. vshw_vs2 is a native
-module with no dependency on the vfs-resident vs2.py package (the layer/
-sprite/tilemap primitives it exposes are exactly what vs2.py itself builds
+module with no dependency on the vfs-resident vs2 package (the layer/
+sprite/tilemap primitives it exposes are exactly what vs2 itself builds
 on) -- see vs2_native.c -- so using it here doesn't compromise this module's
 own vfs-independence requirement, below.
 
@@ -351,6 +351,10 @@ def ensure_started():
             sprite.disable()
             _sprite[name] = sprite
             _row[name] = None
+        # vshw_vs2 records are no longer ordered as a constructor side
+        # effect: publish this frozen overlay explicitly.  gpu.c paints
+        # bottom-to-top, so reverse the human-facing top-first _Z_ORDER.
+        _vs2.set_draw_order(tuple(_sprite[name] for name in reversed(_Z_ORDER)))
     except Exception as error:
         print("vsdk_ota_rings: display unavailable, continuing without it:", error)
         return False

@@ -20,5 +20,6 @@ palettegroups:
   hud:
     - strip: digits.png
       frames: 12
+      glyphs: "0123456789 *"
     - strip: messages.png
       frames: 3

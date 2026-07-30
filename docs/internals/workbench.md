@@ -12,8 +12,8 @@ It plays three roles at once:
    exactly like the DUT would see spinning on a real fan. Both the reset
    and the RPM are controllable live from the pyglet emulator's UI over
    Wi-Fi.
-2. **LED bus spy** — taps the DUT's LED SPI bus (clock + data only, no CS,
-   no MISO) as a passive SPI slave, decodes the APA102-style frames the DUT
+2. **LED bus spy** — taps the DUT's LED SPI bus (clock + data + CS, no MISO)
+   as a passive SPI slave, decodes the APA102-style frames the DUT
    is already driving out to its physical LED strips, and re-streams them
    over Wi-Fi to a desktop `vsdk/emulator` (pyglet) instance using its own
    UDP telemetry protocol (see [Why UDP](#why-udp-not-tcp)) — deliberately
@@ -25,6 +25,10 @@ It plays three roles at once:
    requests out) to the workbench's USB port, so the pyglet emulator can
    stand in for the base over serial without being wired to the DUT
    directly.
+
+The same USB endpoint also provides a reserved, checksummed on-demand capture
+channel for the automated [VS2 real-hardware acceptance
+test](vs2-hardware-acceptance.md). That test does not depend on Wi-Fi.
 
 The workbench joins an existing Wi-Fi network (station mode, like the DUT
 itself does) rather than running its own access point, so the PC running
@@ -422,6 +426,12 @@ firmware share that same USB endpoint, so they're interleaved with raw DUT
 traffic on whatever terminal is watching the workbench's USB port. This is
 the link the pyglet emulator's `workbench_conn` (above) uses for button
 state and audio requests.
+
+Bytes in the normal seven-bit joystick/command protocol remain transparent.
+The otherwise-unused byte `0xD3` starts a workbench-local command: `rpm <n>`
+sets the hall simulator and `capture` returns a CRC32-framed raw APA102
+snapshot. See [VS2 real-hardware acceptance](vs2-hardware-acceptance.md) for
+the exact framing and acceptance gates.
 
 ## Device identification (RESYNC)
 
