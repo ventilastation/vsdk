@@ -31,6 +31,8 @@ palettegroups:
     - fullscreen: ventilagon-empezar2.png
     - strip: empeza.png
     - strip: super-ventilagon.png
+    - strip: ll9.png
+      frames: 4
   palette2:
     - fullscreen: bembi.png
     - strip: pollitos.png

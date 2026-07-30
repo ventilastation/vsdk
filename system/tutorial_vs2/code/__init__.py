@@ -40,8 +40,8 @@ class TutorialVs2(vs2.Scene):
         self.flags = TextDisplay(self.hud, 28)
 
         self.entries = [
-            {"name": "BICHOS", "sprite": self.world.sprite("galaga.png", x=-8, y=0, frame=6), "xq": -32, "yq": 0},
-            {"name": "SIGN", "sprite": self.hud.sprite("gameover.png", x=224, y=16), "xq": 896, "yq": 64},
+            {"name": "BICHOS", "sprite": self.world.sprite("ll9.png", x=-8, y=0, frame=0), "xq": -32, "yq": 0},
+            {"name": "SIGN", "sprite": self.hud.sprite("gameover.png", x=224, y=0), "xq": 896, "yq": 0},
             {"name": "PLANET", "sprite": self.fullscreen.sprite("bembi.png", x=0, y=0), "xq": 0, "yq": 0},
             {"name": "VOOM", "sprite": self.fullscreen.sprite("doom.png", x=0, y=0), "xq": 0, "yq": 0},
         ]
