@@ -29,6 +29,10 @@ guides are in [docs/](docs/README.md). There is also a browser-based
 emulator with a built-in code editor and sprite editor, served from
 `web/` (see [docs/internals/deploying-web-emulator.md](docs/internals/deploying-web-emulator.md)).
 
+The native iOS emulator lives in [`ios/`](ios/). Run
+`tools/update-ios-runtime.sh` to publish runtime assets into `dist/emulator`,
+then open `ios/VentilastationEmulator.xcodeproj` in Xcode.
+
 ### Desktop scene-renderer comparison
 
 The Pyglet 2 desktop emulator can compose raw `sprites` or `VS2` scene bytes

@@ -1,0 +1,10 @@
+--- dist/emulator/system/launcher/code/__init__.py
++++ dist/emulator/system/launcher/code/__init__.py
+@@ -17,6 +17,8 @@ STATIC_MENU_ENTRIES = [
+ SYS_MENU_OPTIONS = [
+     # Retro-Go launcher disabled for now — its on-screen text is unreadable at the
+     # POV display's resolution. Emulators are launched directly (see native.genesis).
+     # ("native.launcher", "voom.png", 0),
++    # Diagnostics are reachable only through the hidden system menu.
++    ("vs2_hardware", "menu.png", 10),
+     ("debugmode", "menu.png", 9),
