@@ -51,7 +51,6 @@ extensions = [
     "sphinx.ext.intersphinx",
 ]
 
-templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 source_suffix = {".md": "markdown", ".rst": "restructuredtext"}
@@ -77,7 +76,11 @@ napoleon_use_rtype = False
 
 html_theme = "furo"
 html_title = "Ventilastation VS2"
-html_static_path = ["_static"]
+# No html_static_path or templates_path on purpose: there are no custom assets
+# or template overrides yet, and git does not track empty directories -- so
+# naming one here builds fine locally and then fails the Read the Docs build
+# (which runs with fail_on_warning) on its clean checkout. Add the directory
+# and the setting together, in the same commit, if assets are ever needed.
 html_theme_options = {
     "source_repository": "https://github.com/ventilastation/vsdk/",
     "source_branch": "main",
