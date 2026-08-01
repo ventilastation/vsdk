@@ -312,7 +312,30 @@ fragment float4 ringFragment(
     }
     if (!hit) return float4(0.0);
 
+    // Match the desktop GLSL compositor's procedural LED geometry.  Each
+    // physical LED occupies a five-step radial quad and roughly seven
+    // columns of tangential space; the visible emitter is a small pill in
+    // that quad with a soft bloom around it.  The previous Metal path only
+    // faded an entire radial band, producing flat wedges instead of pills.
     float ledCenter = ringStart + (float(led) + 0.5) / float(PIXELS) * ringSpan;
-    float radial = 1.0 - smoothstep(0.018, 0.040, abs(normalizedRadius - ledCenter));
-    return float4(color.rgb * max(radial, 0.35), 1.0);
+    float ledStep = ringSpan / float(PIXELS);
+    float localY = (normalizedRadius - ledCenter) / (ledStep * 5.0) + 0.5;
+    float columnTheta = twoPi / float(COLUMNS);
+    float columnCenter = (float(column) + 0.5) * columnTheta;
+    float angularDelta = angle - columnCenter;
+    if (angularDelta > pi) angularDelta -= twoPi;
+    if (angularDelta < -pi) angularDelta += twoPi;
+    float localX = angularDelta / (columnTheta * 7.0) + 0.5;
+
+    float2 uv = float2(localX, localY);
+    float2 p = uv - 0.5;
+    constexpr float pillWidth = 0.1;
+    constexpr float pillHeight = 0.05;
+    constexpr float pillRadius = pillHeight;
+    float2 q = abs(p) - float2(pillWidth - pillRadius, pillHeight - pillRadius);
+    float distanceToPill = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - pillRadius;
+    float pill = smoothstep(0.01, -0.01, distanceToPill);
+    float glow = exp(-distanceToPill * distanceToPill * 10.0) * 0.3;
+    float intensity = min(pill + glow, 1.0);
+    return float4(color.rgb * intensity, intensity);
 }

@@ -11,12 +11,12 @@ struct EmulatorScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            // Keep the ring nearly edge-to-edge.  The old fixed 220pt cap
-            // made the actual game occupy only a small island in the middle
-            // of an iPhone display.
-            let displayWidth = min(proxy.size.width - 24, proxy.size.height * 0.58)
+            // The display is the primary surface: use the complete phone
+            // width, with no side gutters.  Its square frame still leaves
+            // ample room for the controls below on a portrait iPhone.
+            let displayWidth = proxy.size.width
 
-            VStack(spacing: 10) {
+            VStack(spacing: 4) {
                 ZStack(alignment: .topTrailing) {
                     NativeMetalRingView(frameStore: frameStore)
                         .frame(width: displayWidth, height: displayWidth)
@@ -48,8 +48,12 @@ struct EmulatorScreen: View {
 
                 EmulatorControls(engine: emulator, input: input)
                     .padding(.horizontal, 6)
+                    // The full-width ring consumes the upper game area; lift
+                    // the controls into the remaining visible portion so the
+                    // larger D-pad and the lower A/D buttons are not clipped.
+                    .offset(y: -80)
             }
-            .padding(.top, 8)
+            .padding(.top, 0)
             .padding(.bottom, 8)
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .background(Color.black.ignoresSafeArea())
