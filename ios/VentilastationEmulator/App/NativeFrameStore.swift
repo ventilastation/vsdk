@@ -78,6 +78,17 @@ final class NativeFrameStore: ObservableObject {
             sceneData = Array(payload)
             packScene()
             sceneRevision &+= 1
+        case "sprites":
+            // Older games publish their draw list through the original
+            // `sprites` command.  The iOS host normally receives the same
+            // list through the present callback, but keep this path working
+            // too for runtimes which do not expose pointer callbacks.
+            if !payload.isEmpty {
+                legacySprites = Array(payload)
+            }
+            sceneData.removeAll(keepingCapacity: true)
+            packLegacySprites()
+            sceneRevision &+= 1
         default:
             return
         }
@@ -91,10 +102,14 @@ final class NativeFrameStore: ObservableObject {
             frameNumber = Int(bytes[0]) | Int(bytes[1]) << 8 | Int(bytes[2]) << 16 | Int(bytes[3]) << 24
             columnOffset = Int(bytes[6])
         }
-        if sceneData.isEmpty {
-            packLegacySprites()
-            sceneRevision &+= 1
-        }
+        // A legacy present must replace a previous VS2 scene.  The VM emits
+        // the present callback before a possible `vs2_scene` command for the
+        // same tick, so VS2 frames are repacked immediately afterwards; when
+        // no command follows (the old API/menu case), the stale VS2 records
+        // are cleared here instead of remaining on screen indefinitely.
+        sceneData.removeAll(keepingCapacity: true)
+        packLegacySprites()
+        sceneRevision &+= 1
         revision &+= 1
     }
 

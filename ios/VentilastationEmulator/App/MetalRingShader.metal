@@ -108,6 +108,39 @@ bool probeSprite(texture2d<uint, access::read> strips,
         return true;
     }
 
+    // Legacy perspective values are not the same enum as VS2 layer modes.
+    // In the old API, +1 means depth-mapped (the menu uses this for its
+    // scrolling icons), while -1 is canonicalized to 2 and means a linear
+    // reversed HUD projection.  VS2 mode 1 is the tunnel projection below.
+    if (!vs2 && mode == MODE_TUNNEL) {
+        int2 range = deepspaceRange(deepspace, led, false);
+        int scanLo = max(range.x, max(y, 0));
+        int scanHi = min(range.y, min(y + height - 1, ROWS - 1));
+        // render_sprite() visits destination rows in ascending order, so the
+        // highest row is the final writer when several rows share one LED.
+        for (int destY = scanHi; destY >= scanLo; --destY) {
+            int sourceRow = destY - y;
+            if (flipY) sourceRow = height - 1 - sourceRow;
+            int index = int(stripByte(strips, base + sourceRow));
+            if (index != TRANSPARENT_INDEX) {
+                color = paletteColor(palette, paletteIndex, index);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    if (!vs2) {
+        int destY = PIXELS - 1 - led;
+        if (destY < y || destY >= y + height || destY >= ROWS) return false;
+        int sourceRow = destY - y;
+        if (flipY) sourceRow = height - 1 - sourceRow;
+        int index = int(stripByte(strips, base + sourceRow));
+        if (index == TRANSPARENT_INDEX) return false;
+        color = paletteColor(palette, paletteIndex, index);
+        return true;
+    }
+
     if (mode != MODE_TUNNEL) {
         int destY = PIXELS - 1 - led;
         if (destY < y || destY >= y + height || destY >= ROWS) return false;
