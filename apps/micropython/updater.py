@@ -75,11 +75,35 @@ _NVS_KEYS = {
 }
 
 _comms_send = None   # set by run()
+_feed_wdt = None     # set by run()
 
 
 def _send(line):
     if _comms_send:
         _comms_send(line.encode() if isinstance(line, str) else line)
+
+
+def _prep_checkpoint():
+    """One step of the long, quiet stretch between "WiFi connecting" and the
+    first real file/partition total: bounce the on-device activity ring *and*
+    feed the caller's watchdog.
+
+    The two belong together. Everywhere else in this file the watchdog is fed
+    as a side effect of emitting a progress line (recovery's handler feeds on
+    every line it receives -- see vsdk_recovery._make_progress_handler), but
+    this phase deliberately emits none, so it used to feed nothing at all:
+    WiFi connect, address resolution, the manifest fetch and the .tmp scan
+    together ran for as long as they needed with recovery's 30s watchdog
+    counting down untouched, and anything slower than that rebooted the board
+    mid-attempt instead of failing into recovery's own backoff retry. That
+    also made _wifi_connect()'s indefinite retry unreachable in practice: its
+    red "wifi problem" ring needs three attempts (~24-36s), so the reboot
+    always won first. Keeping the ring pulse and the feed in one call is what
+    stops them drifting apart again.
+    """
+    vsdk_ota_rings.pulse_prep_activity()
+    if _feed_wdt:
+        _feed_wdt()
 
 
 def _progress(stage, detail, pct):
@@ -154,19 +178,153 @@ def _is_ipv4_literal(host):
     return True
 
 
-def _resolve_base_url(base_url):
+# mDNS multicast group/port, and how patiently to ask. Three tries at 2s
+# each keeps a whole resolution attempt well inside recovery's 30s watchdog
+# (see vsdk_recovery._WDT_TIMEOUT_MS) even when nothing answers at all.
+_MDNS_GROUP = "224.0.0.251"
+_MDNS_PORT = 5353
+_MDNS_TIMEOUT_MS = 2000
+_MDNS_ATTEMPTS = 3
+
+
+def _dns_skip_name(buf, i):
+    """Advance past the encoded name starting at i, returning the next index."""
+    while i < len(buf):
+        length = buf[i]
+        if length == 0:
+            return i + 1
+        if length & 0xC0 == 0xC0:
+            return i + 2  # a compression pointer is always the whole name
+        i += 1 + length
+    raise ValueError("truncated name")
+
+
+def _dns_read_name(buf, i, depth=0):
+    parts = []
+    while i < len(buf):
+        length = buf[i]
+        if length == 0:
+            break
+        if length & 0xC0 == 0xC0:
+            if depth > 4:
+                raise ValueError("compression pointer loop")
+            parts.append(_dns_read_name(buf, ((length & 0x3F) << 8) | buf[i + 1], depth + 1))
+            break
+        parts.append(bytes(buf[i + 1:i + 1 + length]).decode())
+        i += 1 + length
+    return ".".join(parts)
+
+
+def _mdns_parse_a(buf, host):
+    """Pull host's A record out of an mDNS response, or None if it has none.
+
+    Records are matched by name rather than taking the first A record in the
+    packet: a responder is free to bundle unrelated records (its own other
+    services, another host's announcement it happened to be sending) into the
+    same message, and answering with one of those would send the whole OTA
+    session to the wrong machine.
+    """
+    if len(buf) < 12:
+        return None
+    questions = (buf[4] << 8) | buf[5]
+    records = ((buf[6] << 8) | buf[7]) + ((buf[8] << 8) | buf[9]) + ((buf[10] << 8) | buf[11])
+    i = 12
+    for _ in range(questions):
+        i = _dns_skip_name(buf, i) + 4  # + QTYPE, QCLASS
+    wanted = host.lower().rstrip(".")
+    for _ in range(records):
+        name = _dns_read_name(buf, i)
+        i = _dns_skip_name(buf, i)
+        rtype = (buf[i] << 8) | buf[i + 1]
+        rdlength = (buf[i + 8] << 8) | buf[i + 9]
+        i += 10
+        if rtype == 1 and rdlength == 4 and name.lower().rstrip(".") == wanted:
+            return "%d.%d.%d.%d" % (buf[i], buf[i + 1], buf[i + 2], buf[i + 3])
+        i += rdlength
+    return None
+
+
+def _mdns_resolve(host, feed=None):
+    """Resolve a .local hostname with our own bounded mDNS query.
+
+    Not socket.getaddrinfo(): that call has no timeout of its own on this
+    port (unlike the socket itself), and on hardware it does not merely run
+    slowly -- while the POV display's GPU task is running (which in recovery
+    it always is, drawing the progress rings) a `.local` lookup never returns
+    at all. Measured on a rotor board, same session and network, seconds
+    apart: display off, `ventilastation-base.local` resolved in 0.4-0.5s
+    three times running; display on, the identical call never came back
+    (still blocked after ten minutes). Plain unicast DNS (10ms) and TCP to
+    the base station by IP (0.5s, HTTP 200) both stayed fine throughout, so
+    it is the multicast path specifically -- consistent with the GPU task
+    being a `while(true)` loop that never yields, pinned to a core at
+    priority 10 (see coreTask() in modules/povdisplay/povdisplay.c), and with
+    director.py's existing note that the normal OTA path reboots so the
+    transfer runs *before* that task starts.
+
+    Asking for a *unicast* response (the QU bit below) is what makes this
+    work where getaddrinfo doesn't: the reply comes back as an ordinary UDP
+    datagram to our own ephemeral port instead of arriving on the multicast
+    group, so nothing here depends on the receive path that breaks. The
+    socket timeout then bounds the whole thing, turning "base station is off"
+    into a normal ota_error and a recovery backoff retry rather than a hang.
+
+    feed, if given, is called between attempts -- a resolution that takes all
+    three tries still has to keep the caller's watchdog fed.
+    """
+    import utime
+
+    labels = b""
+    for part in host.split("."):
+        raw = part.encode()
+        labels += bytes([len(raw)]) + raw
+    labels += b"\x00"
+    # id 0 (mDNS responders ignore it), no flags, one question, QTYPE=A(1),
+    # QCLASS=IN(1) with the top "unicast response requested" bit set.
+    query = b"\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00" + labels + b"\x00\x01\x80\x01"
+    group = socket.getaddrinfo(_MDNS_GROUP, _MDNS_PORT)[0][-1]
+
+    for attempt in range(_MDNS_ATTEMPTS):
+        if feed:
+            feed()
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.settimeout(_MDNS_TIMEOUT_MS / 1000)
+            s.sendto(query, group)
+            deadline = utime.ticks_add(utime.ticks_ms(), _MDNS_TIMEOUT_MS)
+            while utime.ticks_diff(deadline, utime.ticks_ms()) > 0:
+                try:
+                    data, _addr = s.recvfrom(512)
+                except OSError:
+                    break  # timed out waiting for this attempt's answer
+                try:
+                    addr = _mdns_parse_a(data, host)
+                except (ValueError, IndexError):
+                    continue  # malformed packet from someone else on the group
+                if addr:
+                    return addr
+        except OSError as e:
+            print("updater: mDNS attempt %d failed:" % (attempt + 1), e)
+        finally:
+            s.close()
+    return None
+
+
+def _resolve_base_url(base_url, feed=None):
     """Resolve base_url's hostname to a numeric IP once, so every subsequent
     per-file/per-partition connection this session reuses it instead of
-    repeating a fresh DNS/mDNS lookup. socket.getaddrinfo() has no timeout of
-    its own on this port (unlike the socket itself), so a flaky mDNS
-    resolution can stall indefinitely; resolving once here -- right after
-    WiFi connects, before hundreds of per-file connections each get their own
-    chance to hit that -- bounds the exposure to one lookup per session
-    instead of one per file."""
+    repeating a fresh DNS/mDNS lookup -- bounding the exposure to one lookup
+    per session instead of one per file."""
     host, port, _path = _parse_url(base_url)
     if _is_ipv4_literal(host):
         return base_url
-    addr = socket.getaddrinfo(host, port)[0][-1][0]
+    if host.lower().endswith(".local"):
+        addr = _mdns_resolve(host, feed)
+        if not addr:
+            raise OSError("mDNS lookup for %s found nothing" % host)
+    else:
+        # Ordinary unicast DNS, which works fine alongside the GPU task.
+        addr = socket.getaddrinfo(host, port)[0][-1][0]
     print("updater: resolved", host, "->", addr)
     return base_url.replace(host, addr, 1)
 
@@ -219,12 +377,13 @@ def _cleanup_tmp_files():
     stack = ["/"]
     while stack:
         d = stack.pop()
-        # One pulse per directory -- this walk is the other real source of
-        # "quiet time" between WiFi connecting and file-sync's own progress
-        # ring (see run()'s prep-ring comment); most boards have few enough
-        # directories that this barely matters, but it keeps the ring alive
-        # instead of static on any board with more of them.
-        vsdk_ota_rings.pulse_prep_activity()
+        # One checkpoint per directory -- this walk is the other real source
+        # of "quiet time" between WiFi connecting and file-sync's own
+        # progress ring (see run()'s prep-ring comment); most boards have few
+        # enough directories that this barely matters, but it keeps the ring
+        # alive (and the watchdog fed) instead of static on any board with
+        # more of them.
+        _prep_checkpoint()
         try:
             for name, ftype, *_ in os.ilistdir(d):
                 full = d.rstrip("/") + "/" + name
@@ -704,6 +863,8 @@ def _wifi_connect():
             vsdk_ota_rings.show_wifi_problem()
         else:
             vsdk_ota_rings.show_wifi_connecting()
+        if _feed_wdt:
+            _feed_wdt()
         print("updater: connecting WiFi to", ssid, "(attempt %d)" % attempt)
         try:
             # A bad password or a driver-level hiccup (e.g. repeated failed
@@ -721,6 +882,8 @@ def _wifi_connect():
                     return True
                 utime.sleep_ms(500)
                 waited_ms += 500
+                if _feed_wdt:
+                    _feed_wdt()
         except Exception as e:
             print("updater: WiFi attempt %d failed:" % attempt, e)
             # Also confirmed on hardware: without this, an immediately-
@@ -743,14 +906,29 @@ def _wifi_disconnect():
         pass
 
 
-def run(base_url, send_fn):
+def run(base_url, send_fn, feed_fn=None, disconnect_wifi=True):
     """Run the full 3-tier OTA update.
 
     base_url  — e.g. "http://192.168.1.5:5653"
     send_fn   — callable that sends a bytes line back over the comms channel
+    feed_fn   — optional zero-arg callable that feeds the caller's watchdog.
+                Needed for the prep phase specifically (see
+                _prep_checkpoint()); every later stage already feeds it
+                indirectly, by way of the progress lines it sends.
+    disconnect_wifi — tear the link down again on the way out (only if we
+                brought it up). False for a caller that is about to retry
+                anyway: recovery loops here every few seconds, and bringing
+                WiFi down and straight back up each time costs real seconds
+                and, with the GPU task running, is where an attempt that had
+                already failed cleanly still went on to trip the watchdog --
+                measured on hardware, ota_error at t+16s then a WDT reset at
+                t+46s, exactly 30s later, with nothing in between. Nothing in
+                recovery needs the link down: it either retries or reboots,
+                and a reboot drops WiFi regardless.
     """
-    global _comms_send
+    global _comms_send, _feed_wdt
     _comms_send = send_fn
+    _feed_wdt = feed_fn
 
     print("updater: starting OTA from", base_url)
     _send("ota_progress start fetching_manifest 0\n")
@@ -776,14 +954,14 @@ def run(base_url, send_fn):
     # stall. pulse_prep_activity() gives this stretch its own bouncing
     # ring, pulsed at each checkpoint below; hide_prep_activity() below
     # retires it once _sync_lfs_files() takes over with real progress.
-    vsdk_ota_rings.pulse_prep_activity()
+    _prep_checkpoint()
 
     try:
         try:
-            base_url = _resolve_base_url(base_url)
-            vsdk_ota_rings.pulse_prep_activity()
+            base_url = _resolve_base_url(base_url, feed=_prep_checkpoint)
+            _prep_checkpoint()
             manifest = _http_get_json(base_url + "/manifest")
-            vsdk_ota_rings.pulse_prep_activity()
+            _prep_checkpoint()
         except Exception as e:
             _send(("ota_error manifest_fetch_failed: %s\n" % e).encode())
             return
@@ -796,10 +974,18 @@ def run(base_url, send_fn):
         _send("ota_done ok\n")
         print("updater: OTA complete")
     finally:
+        # Feed on the way out too: this teardown runs after the last progress
+        # line, so without it the caller's watchdog is already counting down
+        # untouched by the time we get here.
+        if _feed_wdt:
+            _feed_wdt()
         # Only disconnect if we brought WiFi up — don't kill a pre-existing connection
-        # (e.g. desktop mode where comms.py already holds the link).
+        # (e.g. desktop mode where comms.py already holds the link) — and only
+        # if the caller isn't about to reconnect anyway (see disconnect_wifi).
         # Note: if _update_partitions flashed micropython and called machine.reset(),
         # we never reach here — that's fine, the reboot drops WiFi anyway.
-        if _newly_connected:
+        if _newly_connected and disconnect_wifi:
             _wifi_disconnect()
         vsdk_ota_rings.clear()
+        if _feed_wdt:
+            _feed_wdt()

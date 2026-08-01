@@ -14,6 +14,32 @@ class _FakeReset(Exception):
     """Raised by the fake machine.reset() so tests can observe it fired."""
 
 
+def _fake_utime(clock=None):
+    """A `utime` stand-in whose clock only moves when a test moves it, so a
+    deadline loop under test runs its full iteration count rather than
+    however many happen to fit in real elapsed time."""
+    ticks = clock if clock is not None else [0]
+
+    class FakeUtime:
+        @staticmethod
+        def ticks_ms():
+            return ticks[0]
+
+        @staticmethod
+        def ticks_add(a, delta):
+            return a + delta
+
+        @staticmethod
+        def ticks_diff(a, b):
+            return a - b
+
+        @staticmethod
+        def sleep_ms(ms):
+            ticks[0] += ms
+
+    return FakeUtime
+
+
 def _install_fakes(running_label, nvs_blobs=None, find_results=None):
     """Install minimal esp32/machine stand-ins for updater.py's tier-3 tests.
 
@@ -427,7 +453,7 @@ class ResolveBaseUrlTests(unittest.TestCase):
                 "http://192.168.1.5:5653",
             )
 
-    def test_resolves_hostname_to_ip_once(self):
+    def test_resolves_ordinary_hostname_through_getaddrinfo(self):
         import updater
         calls = []
 
@@ -436,9 +462,122 @@ class ResolveBaseUrlTests(unittest.TestCase):
             return [(0, 0, 0, "", ("192.168.1.42", port))]
 
         with unittest.mock.patch.object(updater.socket, "getaddrinfo", fake_getaddrinfo):
-            resolved = updater._resolve_base_url("http://ventilastation-base.local:5653")
+            resolved = updater._resolve_base_url("http://base.example.com:5653")
         self.assertEqual(resolved, "http://192.168.1.42:5653")
-        self.assertEqual(calls, [("ventilastation-base.local", 5653)])
+        self.assertEqual(calls, [("base.example.com", 5653)])
+
+    def test_dot_local_goes_through_mdns_not_getaddrinfo(self):
+        """The .local path must not reach socket.getaddrinfo(): on hardware
+        that call never returns while the GPU task runs (see _mdns_resolve)."""
+        import updater
+
+        def _unexpected(host, *a):
+            raise AssertionError("getaddrinfo called for a .local name: %r" % host)
+
+        with unittest.mock.patch.object(updater, "_mdns_resolve", lambda h, f=None: "192.168.1.42"):
+            with unittest.mock.patch.object(updater.socket, "getaddrinfo", _unexpected):
+                resolved = updater._resolve_base_url("http://ventilastation-base.local:5653")
+        self.assertEqual(resolved, "http://192.168.1.42:5653")
+
+    def test_raises_when_mdns_finds_nothing(self):
+        """A base station that is off/unreachable has to surface as an error
+        the caller can retry after, not as a silent hang."""
+        import updater
+
+        with unittest.mock.patch.object(updater, "_mdns_resolve", lambda h, f=None: None):
+            with self.assertRaises(OSError):
+                updater._resolve_base_url("http://ventilastation-base.local:5653")
+
+
+class MdnsResolveTests(unittest.TestCase):
+    """_mdns_resolve() asks for a unicast response and gives up on a timer,
+    rather than relying on socket.getaddrinfo()'s unbounded .local lookup."""
+
+    def setUp(self):
+        sys.modules.pop("updater", None)
+        sys.modules["utime"] = _fake_utime()
+
+    def tearDown(self):
+        sys.modules.pop("utime", None)
+
+    @staticmethod
+    def _response(name, ip, qname=None):
+        """Minimal mDNS answer: one question echoed back, one A record."""
+        def labels(n):
+            out = b""
+            for part in n.split("."):
+                out += bytes([len(part)]) + part.encode()
+            return out + b"\x00"
+
+        header = b"\x00\x00\x84\x00\x00\x01\x00\x01\x00\x00\x00\x00"
+        question = labels(qname or name) + b"\x00\x01\x00\x01"
+        answer = labels(name) + b"\x00\x01\x00\x01\x00\x00\x00\x78\x00\x04" + bytes(
+            int(o) for o in ip.split(".")
+        )
+        return header + question + answer
+
+    def _resolve_with(self, packets):
+        import updater
+        sent = []
+
+        class FakeSock:
+            def __init__(self, *a):
+                self._queue = list(packets)
+
+            def settimeout(self, t):
+                self.timeout = t
+
+            def sendto(self, data, addr):
+                sent.append((data, addr))
+
+            def recvfrom(self, n):
+                if not self._queue:
+                    raise OSError("timed out")
+                return self._queue.pop(0), ("192.168.1.102", 5353)
+
+            def close(self):
+                pass
+
+        with unittest.mock.patch.object(updater.socket, "socket", FakeSock):
+            with unittest.mock.patch.object(
+                updater.socket, "getaddrinfo",
+                lambda h, p: [(0, 0, 0, "", (h, p))],
+            ):
+                return updater._mdns_resolve("ventilastation-base.local"), sent
+
+    def test_returns_the_address_from_a_matching_a_record(self):
+        addr, sent = self._resolve_with([self._response("ventilastation-base.local", "192.168.1.102")])
+        self.assertEqual(addr, "192.168.1.102")
+
+    def test_query_asks_for_a_unicast_response(self):
+        """The QU bit is the whole point: it makes the answer arrive as an
+        ordinary datagram on our own port instead of on the multicast group,
+        which is the path that breaks while the GPU task runs."""
+        _addr, sent = self._resolve_with([self._response("ventilastation-base.local", "192.168.1.102")])
+        query = sent[0][0]
+        self.assertEqual(query[-4:], b"\x00\x01\x80\x01")  # QTYPE=A, QCLASS=IN|QU
+        self.assertEqual(sent[0][1], ("224.0.0.251", 5353))
+
+    def test_ignores_an_a_record_for_a_different_host(self):
+        """Responders bundle unrelated records into the same message; taking
+        the first A record would point the OTA session at another machine."""
+        addr, _sent = self._resolve_with([
+            self._response("someone-else.local", "10.0.0.9", qname="ventilastation-base.local"),
+        ])
+        self.assertIsNone(addr)
+
+    def test_gives_up_after_the_attempt_budget_instead_of_blocking(self):
+        addr, sent = self._resolve_with([])
+        self.assertIsNone(addr)
+        import updater
+        self.assertEqual(len(sent), updater._MDNS_ATTEMPTS)
+
+    def test_survives_a_malformed_packet_and_keeps_reading(self):
+        addr, _sent = self._resolve_with([
+            b"\x00\x00\x84\x00\x00\x01\x00\x01",  # truncated garbage
+            self._response("ventilastation-base.local", "192.168.1.102"),
+        ])
+        self.assertEqual(addr, "192.168.1.102")
 
 
 class UrlQuoteTests(unittest.TestCase):
@@ -831,6 +970,139 @@ class WifiConnectRetryTests(unittest.TestCase):
         )
 
         self.assertTrue(updater._wifi_connect())
+
+
+class PrepPhaseWatchdogTests(unittest.TestCase):
+    """Everything between "WiFi connecting" and the first file/partition
+    total has to keep the caller's watchdog fed.
+
+    This stretch sends no progress lines, and recovery's handler only feeds
+    on lines it receives -- so before run() took a feed_fn it fed nothing at
+    all here. On a board whose base station was unreachable that showed up as
+    a 30s reboot cycle (recovery's WDT timeout, to the millisecond) with the
+    log stopping right after "WiFi connected", never reaching the retry
+    backoff it was supposed to fall into.
+    """
+
+    def setUp(self):
+        sys.modules.pop("updater", None)
+        sys.modules["utime"] = _fake_utime()
+
+    def tearDown(self):
+        for name in ("updater", "utime", "network", "machine", "esp32"):
+            sys.modules.pop(name, None)
+
+    def _run_prep(self, wifi_attempts_before_connecting=1, resolve=None, sent=None,
+                  disconnect_wifi=True, disconnects=None):
+        _install_fakes(
+            running_label="factory",
+            nvs_blobs={"ssid": "myssid", "password": "mypass"},
+        )
+        network = types.ModuleType("network")
+        network.STA_IF = "STA_IF"
+        state = {"attempt": 0}
+
+        class FakeWLAN:
+            def __init__(self, mode):
+                pass
+
+            def active(self, value=None):
+                pass
+
+            def isconnected(self):
+                return state["attempt"] >= wifi_attempts_before_connecting
+
+            def connect(self, ssid, password):
+                state["attempt"] += 1
+
+            def disconnect(self):
+                if disconnects is not None:
+                    disconnects.append(True)
+
+            def ifconfig(self):
+                return ("1.2.3.4",)
+
+        network.WLAN = FakeWLAN
+        sys.modules["network"] = network
+
+        import updater
+        feeds = []
+        updater.vsdk_ota_rings = types.SimpleNamespace(
+            clear=lambda: None,
+            show_wifi_problem=lambda: None,
+            show_wifi_connecting=lambda: None,
+            hide_wifi=lambda: None,
+            pulse_prep_activity=lambda: None,
+            hide_prep_activity=lambda: None,
+        )
+
+        def _resolve(url, feed=None):
+            if resolve is not None:
+                return resolve(url, feed)
+            return url
+
+        with unittest.mock.patch.object(updater, "_resolve_base_url", _resolve), \
+                unittest.mock.patch.object(
+                    updater, "_http_get_json",
+                    lambda url: (_ for _ in ()).throw(OSError("base station is off"))):
+            updater.run("http://ventilastation-base.local:5653",
+                        lambda line: sent.append(line) if sent is not None else None,
+                        feed_fn=lambda: feeds.append(True),
+                        disconnect_wifi=disconnect_wifi)
+        return feeds
+
+    def test_feeds_while_wifi_retries(self):
+        # Each attempt is ~10s of waiting; three of them already outlast a
+        # 30s watchdog, which is exactly why the red "wifi problem" ring
+        # (attempt 3 onward) could never actually be reached on hardware.
+        feeds = self._run_prep(wifi_attempts_before_connecting=4)
+        self.assertGreater(len(feeds), 10)
+
+    def test_feeds_while_resolving_the_base_station(self):
+        """The lookup itself gets the feeder, so all three mDNS attempts
+        against an absent base station stay inside the watchdog window."""
+        seen = []
+
+        def resolve(url, feed=None):
+            for _ in range(3):
+                feed()
+                seen.append(True)
+            return url
+
+        self._run_prep(resolve=resolve)
+        self.assertEqual(len(seen), 3)
+
+    def test_unreachable_base_station_reports_an_error_rather_than_hanging(self):
+        # _http_get_json above always raises: run() must come back with
+        # ota_error so recovery can back off and retry, not sit there.
+        sent = []
+        feeds = self._run_prep(sent=sent)
+        self.assertTrue(feeds)
+        joined = b"".join(
+            line if isinstance(line, bytes) else line.encode() for line in sent
+        )
+        self.assertIn(b"ota_error manifest_fetch_failed", joined)
+
+    def test_recovery_keeps_wifi_up_between_retries(self):
+        """The teardown runs after the last progress line, so it is the one
+        stretch a feed can't cover -- and on hardware it was where an attempt
+        that had already failed cleanly went on to trip the watchdog anyway.
+        Recovery reconnects seconds later regardless, so it skips it."""
+        disconnects = []
+        self._run_prep(disconnect_wifi=False, disconnects=disconnects)
+        self.assertEqual(disconnects, [])
+
+    def test_other_callers_still_tear_the_link_down(self):
+        # The normal OTA boot path must not leave WiFi on for the launcher.
+        disconnects = []
+        self._run_prep(disconnect_wifi=True, disconnects=disconnects)
+        self.assertEqual(disconnects, [True])
+
+    def test_feeds_after_the_teardown(self):
+        """A feed on the way out, so the caller's own loop doesn't inherit a
+        watchdog that has already been counting down since the last stage."""
+        feeds = self._run_prep(disconnect_wifi=False)
+        self.assertGreaterEqual(len(feeds), 2)
 
 
 if __name__ == "__main__":
