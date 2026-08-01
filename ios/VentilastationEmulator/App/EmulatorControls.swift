@@ -120,23 +120,38 @@ struct EmulatorControls: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let controlsWidth: CGFloat = 410
+            let controlsWidth: CGFloat = 390
             let scale = min(1, (proxy.size.width - 4) / controlsWidth)
-            HStack(alignment: .center, spacing: 30) {
+            HStack(alignment: .center, spacing: 12) {
                 DPad(engine: engine, input: input)
                 Spacer(minLength: 0)
-                HStack(spacing: 13) {
-                    ControlButton(title: "C", tint: .purple, control: .c, engine: engine, input: input)
-                    ControlButton(title: "D", tint: .pink, control: .d, engine: engine, input: input)
-                    ControlButton(title: "B", tint: .orange, control: .b, engine: engine, input: input)
-                    ControlButton(title: "A", tint: .cyan, control: .a, engine: engine, input: input)
-                }
+                FaceButtons(engine: engine, input: input)
             }
-            .frame(width: controlsWidth, height: 154)
+            .frame(width: controlsWidth, height: 184)
             .scaleEffect(scale)
-            .frame(width: proxy.size.width, height: 154)
+            .frame(width: proxy.size.width, height: 184)
         }
-        .frame(height: 154)
+        .frame(height: 184)
+    }
+}
+
+private struct FaceButtons: View {
+    @ObservedObject var engine: VentilastationEngine
+    @ObservedObject var input: NativeInputController
+
+    var body: some View {
+        // Xbox-style diamond: D/top, C/left, B/right, A/bottom.
+        ZStack {
+            ControlButton(title: "D", tint: .pink, control: .d, engine: engine, input: input)
+                .offset(y: -57)
+            ControlButton(title: "C", tint: .purple, control: .c, engine: engine, input: input)
+                .offset(x: -57)
+            ControlButton(title: "B", tint: .orange, control: .b, engine: engine, input: input)
+                .offset(x: 57)
+            ControlButton(title: "A", tint: .cyan, control: .a, engine: engine, input: input)
+                .offset(y: 57)
+        }
+        .frame(width: 174, height: 174)
     }
 }
 
@@ -151,18 +166,18 @@ private struct DPad: View {
         // simulator layout.
         ZStack {
             Color.white.opacity(0.1)
-                .frame(width: 44, height: 44)
+                .frame(width: 54, height: 54)
                 .clipShape(RoundedRectangle(cornerRadius: 11))
             ControlButton(title: "▲", tint: .white, control: .up, engine: engine, input: input, small: true)
-                .offset(y: -49)
+                .offset(y: -59)
             ControlButton(title: "▼", tint: .white, control: .down, engine: engine, input: input, small: true)
-                .offset(y: 49)
+                .offset(y: 59)
             ControlButton(title: "◀", tint: .white, control: .left, engine: engine, input: input, small: true)
-                .offset(x: -49)
+                .offset(x: -59)
             ControlButton(title: "▶", tint: .white, control: .right, engine: engine, input: input, small: true)
-                .offset(x: 49)
+                .offset(x: 59)
         }
-        .frame(width: 150, height: 150)
+        .frame(width: 174, height: 174)
     }
 }
 
@@ -192,7 +207,7 @@ private struct ControlButton: View {
     var body: some View {
         Text(title)
             .font(.system(size: small ? 17 : 19, weight: .black, design: .rounded))
-            .frame(width: small ? 44 : 48, height: small ? 44 : 48)
+            .frame(width: small ? 54 : 54, height: small ? 54 : 54)
             .foregroundStyle(tint)
             .background(tint.opacity(pressed ? 0.42 : 0.18), in: Circle())
             .overlay(Circle().stroke(tint.opacity(0.8), lineWidth: 1.5))
