@@ -156,7 +156,13 @@ static uint32_t target_scale_q10(const color_pipeline_state_t *state,
     uint64_t value = (uint64_t)state->master_milli * state->white_balance[channel]
         * state->led_trims[led] * state->radial_lut[led];
     uint64_t divisor = 1000ULL * 1000ULL * COLOR_Q15_ONE;
-    return (uint32_t)((value + divisor / 2) / divisor);
+    // Round upward: this compact scale is used before selecting whether to
+    // fall back to APA102 global-brightness PWM. Rounding down can move a
+    // target just below the RGB-PWM handoff and introduce the low-frequency
+    // global PWM for an otherwise ordinary colour. A one-sided rounding error
+    // instead keeps the value in the RGB-PWM path; the inverse-PWM LUT already
+    // rounds its light index upward for the same reason.
+    return (uint32_t)((value + divisor - 1) / divisor);
 }
 
 static uint16_t scaled_target(uint16_t source, uint32_t scale_q10) {
