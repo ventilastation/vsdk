@@ -117,7 +117,13 @@ def _boot_into_micropython_if_ready():
 
 def _attempt(wdt):
     handle, outcome = _make_progress_handler(wdt)
-    updater.run(_OTA_URL, handle)
+    # The handler above only feeds the watchdog when a progress line actually
+    # arrives, and updater.run()'s prep phase (WiFi connect, address
+    # resolution, manifest fetch, .tmp scan) deliberately sends none -- pass
+    # the feeder in directly so that stretch stays covered too. Without it a
+    # base station that is slow, unreachable or simply switched off rebooted
+    # the board every 30s instead of failing into the backoff retry below.
+    updater.run(_OTA_URL, handle, feed_fn=lambda: _feed(wdt), disconnect_wifi=False)
     # updater.run() calls machine.reset() itself on a successful micropython
     # write; reaching here means either nothing needed a firmware write, or
     # something failed before that point.

@@ -153,7 +153,7 @@ class RecoveryTests(unittest.TestCase):
         import updater
 
         recovery._BOOT_GRACE_MS = 0  # skip the real boot grace period in tests
-        def _boom(url, send_fn):
+        def _boom(url, send_fn, **kwargs):
             raise RuntimeError("network stack exploded")
         original_run = updater.run
         updater.run = _boom
