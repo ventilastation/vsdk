@@ -1,150 +1,245 @@
-import utime
+import vs2
+from vs2.controls import A, BACK, DOWN, LEFT, RIGHT, UP, Y, joy1
 
-from ventilastation import menu
+from ventilastation import catalog
 from ventilastation import native_apps
-from ventilastation import sprites
 from ventilastation.app_loader import load_app
-from ventilastation.catalog import build_menu_options
 from ventilastation.director import director, stripes
-from ventilastation.scene import Scene
-from ventilastation.shuffler import shuffled
 
 def game_menu_strip(game_slug):
     return game_slug.replace(".", "/") + "/menu.png"
 
-# Games are discovered from games/<group>/<name>/ and positioned by the
-# "order" field in each game's meta.json (see ventilastation/catalog.py).
-# Only the non-game entries -- native apps and system scenes -- are listed
-# here, with the order values that interleave them among the games.
+# Entries that aren't part of any games/<group>/ folder -- system scenes
+# with no group to move into. Everything else (games, native apps) is
+# reached through a group tile built by _build_groups_and_tiles() below.
+# These strips are real, dedicated art (a pollitos.png icon, wordmark
+# frames inside menu.png) so they render as icons rather than labels.
 STATIC_MENU_ENTRIES = [
-    (2, "tutorial_vs2", "menu.png", 10),
-    (20, "native.voom", "voom.png", 0),
-    (30, "native.nes", "nes.png", 0),
-    (40, "native.sms", "sms.png", 0),
-    (50, "native.gb", "gameboy.png", 0),
-    (60, "native.msx", "msx.png", 0),
-    (70, "gallery", "pollitos.png", 0),
-    (240, "credits", "menu.png", 3),
+    (2, "tutorial_vs2", "menu.png", 10, "Tutorial"),
+    (70, "gallery", "pollitos.png", 0, "Gallery"),
+    (240, "credits", "menu.png", 3, "Credits"),
 ]
 
-# Text rows use one combined 4x6 strip.  Frames 0..127 are white ASCII and
-# frames 128..254 are the matching red glyphs.  Four rows x 21 glyphs stay
-# within the hardware's 100-sprite limit.
-FONT_STRIP = "tinyfont_menu.png"
-FONT_WIDTH = 4
-FONT_HEIGHT = 6
-ROM_LABEL_CHARS = 21
-VISIBLE_ROM_ROWS = 4
-SELECTED_ROM_Y = FONT_HEIGHT
-ROM_ROW_STEP = FONT_HEIGHT * 2
+GROUP_PREFIX = "group:"
 
-MAIN_MENU_OPTIONS = build_menu_options(STATIC_MENU_ENTRIES)
+# Order and label for each games/<group>/ folder's top-level tile. A folder
+# not listed here (a new group added later) still gets a tile -- just at the
+# end of the menu, labelled from its folder name (see _build_groups_and_tiles).
+FOLDER_GROUP_ORDER = {
+    "alecu": 30,
+    "other": 35,
+    "vsjam-may25": 40,
+    "vsjam-oct25": 50,
+    "pycamp-mar25": 60,
+}
+GROUP_LABELS = {
+    "emulators": "Emulators",
+    "alecu": "Alecu",
+    "other": "Other",
+    "vsjam-may25": "VS Jam May 25",
+    "vsjam-oct25": "VS Jam Oct 25",
+    "pycamp-mar25": "PyCamp Mar 25",
+    "tech_demos": "Tech Demos",
+}
 
+# Renamed from the old "native" group -- these are the only slugs that hand
+# off to a native (non-MicroPython) partition. Icons predate per-game
+# menu.png discovery so they're hand-picked here rather than derived.
+EMULATOR_ICONS = {
+    "emulators.voom": "voom.png",
+    "emulators.nes": "nes.png",
+    "emulators.sms": "sms.png",
+    "emulators.gb": "gameboy.png",
+    "emulators.msx": "msx.png",
+}
+
+# VS2 Hardware Acceptance lives under system/, not games/, so it isn't found
+# by catalog.discover_tech_demo_entries() -- it's the one hand-added member
+# of the synthetic Tech Demos group.
+TECH_DEMO_STATIC_ENTRIES = [
+    (0, "vs2_hardware", "menu.png", 0, "VS2 Hardware Acceptance"),
+]
+
+# The secret debug menu (see GroupsMenu's button-combo check). Two entries
+# borrow real game icons; the rest fall back to a label like a group tile.
 SYS_MENU_OPTIONS = [
-    # Retro-Go launcher disabled for now — its on-screen text is unreadable at the
-    # POV display's resolution. Emulators are launched directly (see native.genesis).
-    # ("native.launcher", "voom.png", 0),
-    ("debugmode", "menu.png", 9),
-    # ("calibrate", "menu.png", 8),
-    ("tutorial", "menu.png", 10),
-    ("tutorial_vs2", "menu.png", 10),
-    ("settings", "menu.png", 8),
-    ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0),
-    ("alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0),
-    ("credits", "menu.png", 3),
+    ("debugmode", "menu.png", 9, "Debug Mode"),
+    ("tutorial", "menu.png", 10, "Tutorial"),
+    ("tutorial_vs2", "menu.png", 10, "Tutorial VS2"),
+    ("settings", "menu.png", 8, "Settings"),
+    ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0, "Vyruss"),
+    ("alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0, "Ventilagon"),
+    ("credits", "menu.png", 3, "Credits"),
 ]
 
 
-def make_me_a_planet(strip):
-    planet = sprites.Sprite()
-    planet.set_strip(stripes[strip])
-    planet.set_perspective(0)
-    planet.set_x(0)
-    planet.set_y(220)
-    return planet
+def group_tile_id(group_name):
+    return GROUP_PREFIX + group_name
 
 
-class RomTextRow:
-    """A fixed-width, one-colour line rendered from the combined tiny font."""
-
-    def __init__(self):
-        self.sprites = []
-        for index in range(ROM_LABEL_CHARS):
-            sprite = sprites.Sprite()
-            sprite.set_strip(stripes[FONT_STRIP])
-            # Coordinate zero is the display's bottom centre.  Descending x
-            # matches the existing font renderer's clockwise POV orientation.
-            sprite.set_x((ROM_LABEL_CHARS * FONT_WIDTH // 2 - index * FONT_WIDTH) % 256)
-            sprite.set_perspective(2)
-            sprite.set_frame(0)
-            self.sprites.append(sprite)
-
-    def hide(self):
-        for sprite in self.sprites:
-            sprite.disable()
-
-    def show(self, text, y, red=False):
-        text = text[:ROM_LABEL_CHARS]
-        for index, sprite in enumerate(self.sprites):
-            sprite.set_y(y)
-            if index < len(text):
-                code = ord(text[index])
-                # The packed strip has ASCII glyphs only.  ROM discovery has
-                # already normalised labels, but retain this guard for status
-                # strings and future callers.
-                if code < 32 or code > 126:
-                    code = ord("?")
-                if red:
-                    code |= 0x80
-                sprite.set_frame(code)
-            else:
-                sprite.set_frame(0)
+def is_group_tile(option_id):
+    return option_id.startswith(GROUP_PREFIX)
 
 
-class RomLibraryMenu(Scene):
-    """A virtualised ROM list that keeps the selection at the readable bottom."""
+def _group_label(group_name):
+    return GROUP_LABELS.get(group_name, catalog.prettify_name(group_name))
 
-    stripes_rom = "other"
 
-    def __init__(self, slug, selected_rom=None):
+def _emulator_options():
+    options = []
+    for slug, spec in native_apps.APP_REGISTRY.items():
+        strip = EMULATOR_ICONS.get(slug)
+        options.append((slug, strip, 0, spec["title"]))
+    return options
+
+
+def _build_groups_and_tiles():
+    """Return (tiles, members): tiles are (order, id, strip, frame, title)
+    entries merged into MAIN_MENU_OPTIONS; members maps each group's tile id
+    to its own sorted (slug, strip, frame, title) option list, built once so
+    opening/closing a group never re-walks the filesystem. Group tiles get
+    strip=None -- there's no dedicated art for "a folder of games", and
+    borrowing another image for it is exactly what looked wrong before."""
+    tiles = []
+    members = {}
+
+    emulators_id = group_tile_id("emulators")
+    members[emulators_id] = _emulator_options()
+    tiles.append((20, emulators_id, None, 0, _group_label("emulators")))
+
+    for group_name, entries in catalog.discover_groups():
+        tile_id = group_tile_id(group_name)
+        members[tile_id] = catalog.build_menu_options([], entries)
+        order = FOLDER_GROUP_ORDER.get(group_name, catalog.DEFAULT_ORDER)
+        tiles.append((order, tile_id, None, 0, _group_label(group_name)))
+
+    tech_demos_id = group_tile_id("tech_demos")
+    members[tech_demos_id] = catalog.build_menu_options(
+        TECH_DEMO_STATIC_ENTRIES, catalog.discover_tech_demo_entries())
+    tiles.append((80, tech_demos_id, None, 0, _group_label("tech_demos")))
+
+    return tiles, members
+
+
+GROUP_TILES, GROUP_MEMBERS = _build_groups_and_tiles()
+MAIN_MENU_OPTIONS = catalog.build_menu_options(STATIC_MENU_ENTRIES, GROUP_TILES)
+
+
+def _option_index(options, option_id):
+    for index, option in enumerate(options):
+        if option[0] == option_id:
+            return index
+    return 0
+
+
+# Pool size and cascade math below port menu.py's Menu.step() (deleted --
+# no callers remain once this file no longer uses it) to vs2: entries are
+# no longer capped around 30 games sharing one preloaded rom (a ROM library
+# can hold arbitrarily many files), so instead of one drawable per option,
+# a fixed pool of slots is reused, each showing whichever entry currently
+# sits at that slot's offset from the selection.
+POOL_SIZE = 12
+Y_STEP = 20
+ICON_X = -32
+LABEL_COLUMNS = 21
+LABEL_FONT_WIDTH = 4
+LABEL_X = -(LABEL_COLUMNS * LABEL_FONT_WIDTH // 2)
+LABEL_FONT = "tinyfont_menu.png"
+PLACEHOLDER_IMAGE = "menu.png"
+
+
+class ListMenu(vs2.Scene):
+    """A virtualised, cascading list: entries scroll toward the rim as they
+    approach the selection, each slot showing a real icon when the entry has
+    one and a text label otherwise. Used for every launcher screen -- the
+    top-level groups, a group's members, a ROM library, and the debug menu
+    -- so there is exactly one place that owns this animation and the
+    icon-or-label decision, instead of a hand-rolled icon wheel plus a
+    separate hand-rolled text renderer.
+    """
+
+    asset_pack = "menu"
+    back_button = False
+    enable_back = True
+    empty_message = None
+
+    def __init__(self, entries, selected_index=0):
         super().__init__()
-        self.slug = slug
-        self.selected_rom = selected_rom
-        self.entries = []
+        # app_loader.load_app() is normally what tags a pushed scene with
+        # these two attributes (read from the app's meta.json) -- the
+        # browser platform's prepare_frame() (platforms/browser.py) only
+        # exports a scene's vs2 render payload when _vs_declared_api ==
+        # "vs2", so a launcher scene constructed and pushed directly, never
+        # going through load_app(), needs to tag itself or it renders
+        # nothing at all in the web emulator (desktop/hardware are
+        # unaffected -- only the browser's frame export gates on this).
+        self._vs_api_slug = "system.launcher"
+        self._vs_declared_api = "vs2"
+        self.entries = entries
         self.selected_index = 0
-        self.rows = []
+        if entries:
+            self.selected_index = min(max(selected_index, 0), len(entries) - 1)
 
-    def on_enter(self):
-        super().on_enter()
-        self.entries = native_apps.list_roms(self.slug)
-        self.selected_index = self._selected_entry_index()
-        self.rows = [RomTextRow() for _ in range(VISIBLE_ROM_ROWS)]
-        self._render_rows()
+    def build(self):
+        self.world = self.layer("world", projection=vs2.TUNNEL)
+        self.slots = []
+        for index in range(POOL_SIZE):
+            sprite = self.world.sprite(PLACEHOLDER_IMAGE, x=ICON_X, y=index * Y_STEP)
+            sprite.hide()
+            label = self.world.label(LABEL_FONT, columns=LABEL_COLUMNS,
+                                     x=LABEL_X, y=index * Y_STEP)
+            label.hide()
+            self.slots.append({
+                "sprite": sprite,
+                "label": label,
+                "entry_index": self.selected_index + index,
+                "y": float(index * Y_STEP),
+            })
+        self._render_all()
+        self._garbage_collect()
 
-    def _selected_entry_index(self):
-        if not self.selected_rom:
-            return 0
-        for index, entry in enumerate(self.entries):
-            if entry["path"] == self.selected_rom:
-                return index
-        return 0
+    def _garbage_collect(self):
+        import gc
 
-    def _render_rows(self):
+        gc.collect()
+        self.call_later(60000, self._garbage_collect)
+
+    def _entry_icon(self, entry):
+        strip = entry[1]
+        if strip and strip in stripes:
+            return strip
+        return None
+
+    def _render_slot(self, slot):
+        entry_index = slot["entry_index"]
+        sprite, label = slot["sprite"], slot["label"]
         if not self.entries:
-            self.rows[0].show("NO ROMS", SELECTED_ROM_Y, red=True)
-            for row in self.rows[1:]:
-                row.hide()
+            if entry_index == 0 and self.empty_message:
+                label.text = self.empty_message
+                label.show()
+            else:
+                label.hide()
+            sprite.hide()
             return
-        for row_index, row in enumerate(self.rows):
-            entry_index = self.selected_index + row_index
-            if entry_index >= len(self.entries):
-                row.hide()
-                continue
-            row.show(
-                self.entries[entry_index]["label"],
-                SELECTED_ROM_Y + row_index * ROM_ROW_STEP,
-                red=row_index == 0,
-            )
+        if entry_index is None or not (0 <= entry_index < len(self.entries)):
+            sprite.hide()
+            label.hide()
+            return
+        entry = self.entries[entry_index]
+        icon = self._entry_icon(entry)
+        if icon:
+            sprite.image = icon
+            sprite.frame = entry[2] or 0
+            sprite.show()
+            label.hide()
+        else:
+            label.text = entry[3]
+            label.show()
+            sprite.hide()
+
+    def _render_all(self):
+        for slot in self.slots:
+            self._render_slot(slot)
 
     def _move(self, delta):
         if not self.entries:
@@ -156,200 +251,193 @@ class RomLibraryMenu(Scene):
             new_index = len(self.entries) - 1
         if new_index != self.selected_index:
             self.selected_index = new_index
-            native_apps.remember_rom_selection(
-                self.slug, self.entries[self.selected_index]["path"]
-            )
-            director.sound_play(b"alecu.vyruss/shoot3")
-            self._render_rows()
+            vs2.audio.sound("alecu.vyruss/shoot3")
 
-    def _launch_selected(self):
+    def _select(self):
         if not self.entries:
             return
-        entry = self.entries[self.selected_index]
-        native_apps.remember_rom_selection(self.slug, entry["path"])
-        director.sound_play(b"alecu.vyruss/shoot1")
-        native_apps.launch_native_scene(self.slug, entry["path"])
-        raise StopIteration()
+        vs2.audio.sound("alecu.vyruss/shoot1")
+        self.on_select(self.entries[self.selected_index])
 
-    def step(self):
-        # Match the main menu's controller direction convention.
-        if director.was_pressed(director.JOY_DOWN):
-            self._move(-1)
-        if director.was_pressed(director.JOY_UP):
+    def _update_positions(self):
+        for slot in self.slots:
+            entry_index = slot["entry_index"]
+            offset = entry_index - self.selected_index if entry_index is not None else -1
+            if offset < 0:
+                # Scrolled past: recycle this slot to the far end of the
+                # cascade, same as a legacy sprite jumping straight to
+                # y=255/hidden once its entry is behind the selection.
+                slot["entry_index"] = self.selected_index + (POOL_SIZE - 1)
+                slot["y"] = 255.0
+                self._render_slot(slot)
+                offset = POOL_SIZE - 1
+            elif offset >= POOL_SIZE:
+                # Scrolled backward past the near end: this slot becomes the
+                # new selection outright, matching the legacy snap-to-front
+                # (no easing) for whatever is newly selected.
+                slot["entry_index"] = self.selected_index
+                slot["y"] = 0.0
+                self._render_slot(slot)
+                offset = 0
+
+            if offset == 0:
+                y = 0.0
+            else:
+                dest_y = min(offset * Y_STEP + 45, 255)
+                curr_y = slot["y"]
+                y = curr_y - (curr_y - dest_y) / 4
+            slot["y"] = y
+            slot["sprite"].y = y
+            slot["label"].y = y
+
+    def update(self):
+        if joy1.just_pressed(A):
+            self._select()
+            return
+        if self.enable_back and (joy1.just_pressed(Y) or joy1.just_pressed(BACK)):
+            self.on_back()
+            return self.pop()
+        if joy1.just_pressed(UP):
             self._move(1)
-        if director.was_pressed(director.BUTTON_A):
-            self._launch_selected()
-        if director.was_pressed(director.BUTTON_D):
-            native_apps.leave_rom_menu(self.slug)
-            director.pop()
-            raise StopIteration()
+        if joy1.just_pressed(DOWN):
+            self._move(-1)
+        self._update_positions()
+
+    def on_idle(self):
+        if self.enable_back:
+            self.on_back()
+        self.pop()
+
+    def on_select(self, entry):
+        """Called with the selected (id, strip, frame, title) entry."""
+
+    def on_back(self):
+        """Called just before popping back one level."""
 
 
-class SystemMenu(menu.Menu):
-    stripes_rom = "menu"
+class GroupsMenu(ListMenu):
+    """Root: one tile per group plus the standalone system entries."""
 
-    def on_enter(self):
-        self.garbage_collect()
-        super().on_enter()
+    enable_back = False
+    idle_timeout = None
 
-    def garbage_collect(self):
-        import gc
+    def __init__(self, selected_index=0):
+        super().__init__(MAIN_MENU_OPTIONS, selected_index)
 
-        gc.collect()
-        self.call_later(60000, self.garbage_collect)
+    def on_select(self, entry):
+        option_id = entry[0]
+        if is_group_tile(option_id):
+            native_apps.write_launcher_state({"group_id": option_id, "slug": None, "rom_path": None})
+            self.push(GroupMenu(option_id))
+            return
+        native_apps.write_launcher_state({"group_id": None, "slug": option_id, "rom_path": None})
+        load_app(option_id)
 
-    def on_option_pressed(self, option_index):
-        app_chosen = self.options[option_index][0]
-        load_app(app_chosen)
-        raise StopIteration()
+    def update(self):
+        if self._check_debug_combo():
+            return
+        super().update()
 
-    def step(self):
-        super().step()
-        if director.was_pressed(director.BUTTON_D):
-            self.finished()
-
-    def finished(self):
-        director.pop()
-        raise StopIteration()
-
-
-class GamesMenu(menu.Menu):
-    stripes_rom = "menu"
-
-    def __init__(self, options, selected_index=0):
-        super().__init__(options, selected_index)
-        self.last_shuffle = -1
-        self.shuffle_options()
-
-    def shuffle_options(self):
-        if self.needs_shuffling():
-            self.options = shuffled(self.options)
-            self.last_shuffle = utime.ticks_ms()
-
-    def needs_shuffling(self):
+    def _check_debug_combo(self):
+        if (
+            joy1.held(UP) and joy1.held(LEFT) and joy1.held(RIGHT) and joy1.held(A)
+        ):
+            vs2.audio.sound("ventilagon/audio/es/superventilagon")
+            self.push(DebugMenu())
+            return True
         return False
-        if self.last_shuffle == -1:
-            return True
-        return utime.ticks_diff(utime.ticks_ms(), self.last_shuffle) > 60000
-
-    def on_enter(self):
-        self.shuffle_options()
-        super().on_enter()
-        director.music_off()
-
-        self.animation_frames = 0
-        self.tincho_frames = 0
-        try:
-            pollitos_index = [m[1] for m in self.options].index("pollitos.png")
-            self.pollitos = self.sprites[pollitos_index]
-        except ValueError:
-            self.pollitos = None
-        try:
-            tincho_index = [m[1] for m in self.options].index(game_menu_strip("vsjam-oct25.tincho_vrunner"))
-            self.es_tincho = self.sprites[tincho_index]
-        except ValueError:
-            self.es_tincho = None
-
-        self.vslogo = sprites.Sprite()
-        self.vslogo.set_strip(stripes["vslogo.png"])
-        self.vslogo.set_perspective(2)
-        self.vslogo.set_x(128 - self.vslogo.width() // 2)
-        self.vslogo.set_y(0)
-        self.vslogo.set_frame(0)
-
-        self.loviejo = sprites.Sprite()
-        self.loviejo.set_strip(stripes["loviejo-3.png"])
-        self.loviejo.set_perspective(2)
-        self.loviejo.set_x(128 - self.loviejo.width() // 2)
-        self.loviejo.set_y(11)
-        self.loviejo.set_frame(0)
-
-        self.fondo = make_me_a_planet("favalli.png")
-        self.fondo.set_frame(0)
-        self.garbage_collect()
-
-    def garbage_collect(self):
-        import gc
-
-        gc.collect()
-        self.call_later(60000, self.garbage_collect)
-
-    def on_option_pressed(self, option_index):
-        app_chosen = self.options[option_index][0]
-        if native_apps.has_rom_library(app_chosen):
-            native_apps.remember_rom_selection(app_chosen)
-            director.push(RomLibraryMenu(app_chosen))
-            raise StopIteration()
-        load_app(app_chosen)
-        raise StopIteration()
-
-    def check_debugmode(self):
-        if (
-            director.is_pressed(director.JOY_UP)
-            and director.is_pressed(director.JOY_LEFT)
-            and director.is_pressed(director.JOY_RIGHT)
-            and director.is_pressed(director.BUTTON_A)
-        ):
-            director.sound_play("ventilagon/audio/es/superventilagon")
-            director.push(SystemMenu(SYS_MENU_OPTIONS))
-            return True
-
-        if (
-            director.is_pressed(director.BUTTON_B)
-            and director.is_pressed(director.BUTTON_C)
-            and director.is_pressed(director.BUTTON_A)
-        ):
-            return True
-
-    def step(self):
-        if not self.check_debugmode():
-            super().step()
-
-            if (
-                director.is_pressed(director.BUTTON_D)
-                and director.is_pressed(director.BUTTON_B)
-                and director.is_pressed(director.BUTTON_C)
-            ):
-                pass
-
-            if self.pollitos and self.pollitos.frame() != 255:
-                self.animation_frames += 1
-                pf = (self.animation_frames // 4) % 5
-                self.pollitos.set_frame(pf)
-
-            if self.es_tincho and self.es_tincho.frame() != 255:
-                self.tincho_frames += 1
-                pf = (self.tincho_frames // 6) % 2
-                self.es_tincho.set_frame(pf)
 
 
-def _main_menu_index(slug):
-    for index, option in enumerate(MAIN_MENU_OPTIONS):
-        if option[0] == slug:
-            return index
-    return 0
+class GroupMenu(ListMenu):
+    """One group's members: real games, or the five native emulator apps."""
+
+    def __init__(self, group_id, selected_slug=None):
+        self.group_id = group_id
+        entries = GROUP_MEMBERS.get(group_id, [])
+        index = _option_index(entries, selected_slug) if selected_slug else 0
+        super().__init__(entries, index)
+
+    def on_select(self, entry):
+        slug = entry[0]
+        native_apps.write_launcher_state({"group_id": self.group_id, "slug": slug, "rom_path": None})
+        if native_apps.has_rom_library(slug):
+            self.push(RomLibraryMenu(slug))
+        elif native_apps.is_native_app(slug):
+            native_apps.launch_native_scene(slug)
+        else:
+            load_app(slug)
+
+    def on_back(self):
+        native_apps.write_launcher_state({"group_id": None, "slug": None, "rom_path": None})
+
+
+class RomLibraryMenu(ListMenu):
+    """Files within one emulator's ROM directory -- always label-only,
+    ROM files never had icons."""
+
+    empty_message = "NO ROMS"
+
+    def __init__(self, slug, selected_rom=None):
+        self.slug = slug
+        roms = native_apps.list_roms(slug)
+        entries = [(rom["path"], None, 0, rom["label"]) for rom in roms]
+        index = 0
+        if selected_rom:
+            for rom_index, rom in enumerate(roms):
+                if rom["path"] == selected_rom:
+                    index = rom_index
+                    break
+        super().__init__(entries, index)
+
+    def on_select(self, entry):
+        rom_path = entry[0]
+        native_apps.write_launcher_state({
+            "group_id": group_tile_id("emulators"), "slug": self.slug, "rom_path": rom_path,
+        })
+        native_apps.launch_native_scene(self.slug, rom_path)
+
+    def on_back(self):
+        native_apps.write_launcher_state({
+            "group_id": group_tile_id("emulators"), "slug": self.slug, "rom_path": None,
+        })
+
+
+class DebugMenu(ListMenu):
+    """The secret developer menu, reached via the button combo in
+    GroupsMenu. Not part of the group hierarchy, so back always returns to
+    the root without touching launcher_state.json."""
+
+    def __init__(self):
+        super().__init__(SYS_MENU_OPTIONS)
+
+    def on_select(self, entry):
+        load_app(entry[0])
+
+    def on_back(self):
+        pass
 
 
 def main(launcher_state=None):
     launcher_state = launcher_state or native_apps.read_launcher_state()
-    return GamesMenu(MAIN_MENU_OPTIONS, _main_menu_index(launcher_state.get("main_slug")))
+    group_id = launcher_state.get("group_id")
+    slug = launcher_state.get("slug")
+    target = group_id or slug
+    index = _option_index(MAIN_MENU_OPTIONS, target) if target else 0
+    return GroupsMenu(index)
 
 
 def setup():
     launcher_state = native_apps.consume_native_return()
-    launcher = main(launcher_state)
-    # director.push() below calls on_enter() synchronously, which (via
-    # Scene.on_enter()) already runs load_images() once. A second, deferred
-    # load_images() here used to re-run director.load_rom(), allocating a
-    # fresh romdata buffer and overwriting Director._stripe_buffers -- while
-    # the sprites this same on_enter() just created were still holding their
-    # own cached pointers into the *first* buffer, now unreachable. That
-    # buffer sat untouched (MicroPython's GC doesn't compact) until the next
-    # gc.collect() actually reclaimed and reused its memory, at which point
-    # every sprite still pointing at it started rendering whatever new data
-    # landed there -- the menu-sprite-corruption bug. See
-    # docs/internals/menu-sprite-corruption.md.
-    director.push(launcher)
-    submenu_slug = launcher_state.get("submenu_slug")
-    if submenu_slug and native_apps.has_rom_library(submenu_slug):
-        director.push(RomLibraryMenu(submenu_slug, launcher_state.get("rom_path")))
+    root = main(launcher_state)
+    director.push(root)
+
+    group_id = launcher_state.get("group_id")
+    slug = launcher_state.get("slug")
+    if not group_id:
+        return
+    group_menu = GroupMenu(group_id, selected_slug=slug)
+    director.push(group_menu)
+
+    rom_path = launcher_state.get("rom_path")
+    if rom_path and slug and native_apps.has_rom_library(slug):
+        director.push(RomLibraryMenu(slug, selected_rom=rom_path))

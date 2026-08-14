@@ -54,8 +54,8 @@ class InputDemoTests(unittest.TestCase):
         api_guard.reset()
 
     def test_is_discoverable_and_reflects_both_controller_states(self):
-        entries = discover_game_entries()
-        self.assertTrue(any(slug == "demos.input_demo" for _order, slug, _strip, _frame in entries))
+        entries = discover_game_entries(group="demos")
+        self.assertTrue(any(slug == "demos.input_demo" for _order, slug, _strip, _frame, _title in entries))
 
         scene = load_app("demos.input_demo")
         self.assertEqual(scene._vs_declared_api, "vs2")

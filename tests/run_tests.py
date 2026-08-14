@@ -71,6 +71,8 @@ CPYTHON_TESTS = [
     "tests/test_package_server.py",
     "tests/test_install_dispatch.py",
     "tests/test_boot.py",
+    "tests/test_catalog.py",
+    "tests/test_launcher_groups.py",
     "tests/test_native_apps.py",
     "tests/test_native_exit_transition.py",
     "tests/test_input_protocol_v2.py",

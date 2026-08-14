@@ -37,7 +37,7 @@ For `voom`, the pragmatic path is now:
 
 1. keep MicroPython as the default launcher runtime
 2. expose a tiny hardware module, `vshw_native_apps`
-3. map `native.voom` to a flashed app partition labelled `prboom-go`
+3. map `emulators.voom` to a flashed app partition labelled `prboom-go`
 4. call `esp_ota_set_boot_partition(...)`
 5. restart the ESP32
 
@@ -45,7 +45,7 @@ This keeps the Python launcher contract stable while matching the code that alre
 
 ## Python Contract
 
-From Python, the launcher sees a native slug such as `native.voom`.
+From Python, the launcher sees a native slug such as `emulators.voom`.
 
 Current Python pieces:
 
@@ -140,11 +140,11 @@ python3 flash_voom_image.py --build --port /dev/cu.usbmodemXXXX
 
 The default launcher includes:
 
-- `native.voom`
-- `native.nes`
-- `native.sms`
-- `native.gb`
-- `native.msx`
+- `emulators.voom`
+- `emulators.nes`
+- `emulators.sms`
+- `emulators.gb`
+- `emulators.msx`
 
 NES, SMS, Game Boy, and MSX open dynamic ROM libraries. The library uses a
 single packed tiny-font tilemap with white and red ASCII frames; its active
@@ -252,6 +252,6 @@ That future path would reuse the same Python slug and the same `vshw_native_apps
 
 1. Finish Python-side registry and launch contract
 2. Add `vshw_native_apps`
-3. Switch `native.voom` into a flashed `prboom-go` partition
+3. Switch `emulators.voom` into a flashed `prboom-go` partition
 4. Add return-to-MicroPython semantics from the Voom firmware
 5. Optionally replace partition switching with same-firmware takeover later

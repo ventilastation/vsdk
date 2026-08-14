@@ -41,7 +41,7 @@ firmware fork, which builds Doom as the `prboom-go` app partition in a Retro-Go 
 
 That means the current hardware flow for `voom` is:
 
-- MicroPython launcher selects `native.voom`
+- MicroPython launcher selects `emulators.voom`
 - Python asks the hardware platform to launch a native app hook
 - the hook switches boot partition to `prboom-go`
 - the ESP32 restarts into the flashed Voom firmware

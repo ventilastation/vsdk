@@ -7,4 +7,4 @@ from `git describe`; do not hand-edit GIT_HASH.
 
 NAME = "ROTOR"
 VERSION = "v1.0"
-GIT_HASH = "pre-agentic-391-g5137367-dirty"
+GIT_HASH = "pre-agentic-400-g8c06a2b-dirty"

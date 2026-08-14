@@ -38,7 +38,6 @@
     "apps/micropython/ventilastation/director.py",
     "apps/micropython/ventilastation/emu_spritelib.py",
     "apps/micropython/ventilastation/emu_sprites.py",
-    "apps/micropython/ventilastation/menu.py",
     "apps/micropython/ventilastation/platforms/__init__.py",
     "apps/micropython/ventilastation/povdisplay.py",
     "apps/micropython/ventilastation/remotepov.py",
@@ -1420,6 +1419,7 @@
     "system/shared/other/images/vs2_environment.png",
     "apps/micropython/vs2/__init__.py",
     "apps/micropython/vs2/controls.py",
-    "system/shared/other/images/ll9.png"
+    "system/shared/other/images/ll9.png",
+    "apps/micropython/roms/alecu.torta50.rom"
   ]
 }

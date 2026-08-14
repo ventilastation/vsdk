@@ -19,11 +19,11 @@ USB-local command channel. Requires:
     ``--rpm-control wifi``.
 
 Game slugs match ventilastation.native_apps.APP_REGISTRY / app_loader
-slugs, e.g. "native.voom" (Voom/prboom-go) or "alecu.vixeous" (Vixeous).
+slugs, e.g. "emulators.voom" (Voom/prboom-go) or "alecu.vixeous" (Vixeous).
 
     python3 tools/pov_profile_report.py \\
         --rpms 600 650 700 \\
-        --games prboom=native.voom vixious=alecu.vixeous
+        --games prboom=emulators.voom vixious=alecu.vixeous
 """
 
 import argparse
@@ -40,7 +40,7 @@ VSDK_ROOT = Path(__file__).resolve().parents[1]
 # built for profiling -- constant sprite/tilemap load every run, unlike a real
 # game whose load varies with play. Replaces the earlier ad hoc use of Vixeous
 # as the MicroPython profiling subject.
-DEFAULT_GAMES = ["prboom=native.voom", "povstress=demos.povstress"]
+DEFAULT_GAMES = ["prboom=emulators.voom", "povstress=demos.povstress"]
 DEFAULT_RPMS = [600, 650, 700]
 WORKBENCH_TELEMETRY_PORT = 5005
 BOOT_BANNER = "VENTILASTATION ROTOR"
@@ -415,7 +415,7 @@ def main():
     parser.add_argument("--rpms", type=int, nargs="+", default=DEFAULT_RPMS)
     parser.add_argument(
         "--games", nargs="+", default=DEFAULT_GAMES,
-        help="label=slug pairs, e.g. prboom=native.voom vixious=alecu.vixeous",
+        help="label=slug pairs, e.g. prboom=emulators.voom vixious=alecu.vixeous",
     )
     parser.add_argument("--settle", type=float, default=2.0, help="seconds to wait after launch before profiling")
     parser.add_argument("--duration", type=float, default=5.0, help="seconds to run the profiler for")
@@ -456,7 +456,7 @@ def main():
                 set_rpm(args.workbench_host, rpm)
             time.sleep(1.0)
             for label, slug in games:
-                is_native = slug.startswith("native.")
+                is_native = slug.startswith("emulators.")
                 print(f"  {label} ({slug}): launch, settle {args.settle}s, "
                       f"profile {args.duration}s ...")
                 state, timing = profile_run(
