@@ -89,11 +89,11 @@ Registry (`native_apps.c`): `voom`→prboom-go, `retro-core`→retro-core, and
 `fmsx`→fmsx.
 
 Menu slugs (`native_apps.py` `APP_REGISTRY`):
-- `native.voom` → Voom (fixed WAD, no ROM selector)
-- `native.nes` → dynamic NES library — `retro-core`, `system=nes`
-- `native.sms` → dynamic Master System library — `retro-core`, `system=sms`
-- `native.gb` → dynamic Game Boy / Color library — `retro-core`, `system=gb`
-- `native.msx` → dynamic MSX library — `fmsx`
+- `emulators.voom` → Voom (fixed WAD, no ROM selector)
+- `emulators.nes` → dynamic NES library — `retro-core`, `system=nes`
+- `emulators.sms` → dynamic Master System library — `retro-core`, `system=sms`
+- `emulators.gb` → dynamic Game Boy / Color library — `retro-core`, `system=gb`
+- `emulators.msx` → dynamic MSX library — `fmsx`
 
 **Handing an emulator its ROM.** The launcher lists each file in its matching
 `/roms/<system>` directory, uses only its basename without the extension as a
@@ -123,14 +123,28 @@ emulators load `.zip` directly where their core supports it.
 
 ### Return and selection state
 
-Before a native hand-off, `native_apps.py` saves the main-menu slug, optional
-submenu slug, and selected ROM path in `ventilastation/launcher_state.json` and
-includes the same state in `ventilastation/boot.json`. On the next normal
-MicroPython boot, `consume_native_return()` promotes that intent and the
-launcher reconstructs the last menu/submenu. The active tile is red and pinned
-one tiny-font height above the display bottom (`x=0`, `y=6`); later entries are
-shown above it. `D` from a ROM library clears the submenu state while retaining
-the selected emulator, so that main-menu selection also survives a reboot.
+`system/launcher/code` is a `vs2` scene stack: a root `GroupsMenu` (one tile
+per `games/<group>/` folder plus the Emulators group and the standalone
+Tutorial/Gallery/Credits entries), a `GroupMenu` per group, and a
+`RomLibraryMenu` for an emulator's ROM files — each a real pushed `vs2.Scene`,
+so `Y`/`BACK` (`ListMenu`'s `back_button` handling) pops one level for free.
+
+`ventilastation/launcher_state.json` holds `{group_id, slug, rom_path}` —
+which group tile (if any) is open, which slug was last **selected** within
+it (or at the top level), and, only when that slug has a ROM library, which
+file. It's written at two points, not on every cursor move: whenever an
+entry is actually confirmed with `A` (`ListMenu.on_select`, one level up
+from wherever the confirmed entry lives), and whenever `Y`/`BACK` walks back
+up a level (`ListMenu.on_back`, writing the *parent* level's position). A
+native hand-off's `boot.json` intent carries a snapshot of this same file
+(`build_boot_intent`); on the next normal MicroPython boot,
+`consume_native_return()` promotes it back into `launcher_state.json`, and
+`setup()` replays it as a `director.push()` chain — root, then the saved
+group (cursor on the saved slug), then the ROM library (cursor on the saved
+ROM) if applicable. Because state is saved on every selection rather than
+only for native hand-offs, an unexpected reset while playing a plain
+MicroPython game also resumes at that game's group and slug, not the top of
+the menu.
 
 ## 3a. Running a retro-go emulator on the POV board
 

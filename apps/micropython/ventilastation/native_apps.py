@@ -21,12 +21,12 @@ LAUNCHER_STATE_FILE = "ventilastation/launcher_state.json"
 # One descriptor drives the main-menu entry, dynamic ROM discovery, NVS launch
 # payload, and post-reboot restoration.  ``rom_extensions`` are lower-case.
 APP_REGISTRY = {
-    "native.voom": {
+    "emulators.voom": {
         "kind": "native",
         "native_app": "voom",
         "title": "Voom",
     },
-    "native.nes": {
+    "emulators.nes": {
         "kind": "native",
         "native_app": "retro-core",
         "title": "NES",
@@ -34,7 +34,7 @@ APP_REGISTRY = {
         "rom_directory": "nes",
         "rom_extensions": (".nes", ".zip"),
     },
-    "native.sms": {
+    "emulators.sms": {
         "kind": "native",
         "native_app": "retro-core",
         "title": "Master System",
@@ -42,7 +42,7 @@ APP_REGISTRY = {
         "rom_directory": "sms",
         "rom_extensions": (".sms", ".zip"),
     },
-    "native.gb": {
+    "emulators.gb": {
         "kind": "native",
         "native_app": "retro-core",
         "title": "Game Boy",
@@ -50,7 +50,7 @@ APP_REGISTRY = {
         "rom_directory": "gb",
         "rom_extensions": (".gb", ".gbc", ".zip"),
     },
-    "native.msx": {
+    "emulators.msx": {
         "kind": "native",
         "native_app": "fmsx",
         "title": "MSX",
@@ -116,10 +116,16 @@ def write_last_exit(data):
 
 
 def _default_launcher_state():
-    return {"main_slug": None, "submenu_slug": None, "rom_path": None}
+    return {"group_id": None, "slug": None, "rom_path": None}
 
 
 def read_launcher_state():
+    """Where the launcher was: which group tile (if any) was open, which
+    slug was last selected within it (or at the top level), and -- only
+    when that slug has a ROM library -- which file. The launcher itself
+    decides what's still valid on restore (an unresolvable id/slug just
+    falls back to the top of whatever list it would have opened), so this
+    only needs to type-check, not know what a valid group_id is."""
     state = _read_json(LAUNCHER_STATE_FILE)
     if not isinstance(state, dict):
         return _default_launcher_state()
@@ -127,10 +133,7 @@ def read_launcher_state():
     for key in result:
         value = state.get(key)
         result[key] = value if isinstance(value, str) else None
-    if result["main_slug"] not in APP_REGISTRY:
-        result["main_slug"] = None
-    if result["submenu_slug"] not in APP_REGISTRY or not has_rom_library(result["submenu_slug"]):
-        result["submenu_slug"] = None
+    if not has_rom_library(result["slug"]):
         result["rom_path"] = None
     return result
 
@@ -141,27 +144,6 @@ def write_launcher_state(state):
         value = state.get(key) if isinstance(state, dict) else None
         result[key] = value if isinstance(value, str) else None
     return _write_json(LAUNCHER_STATE_FILE, result)
-
-
-def remember_main_selection(slug):
-    state = _default_launcher_state()
-    state["main_slug"] = slug if slug in APP_REGISTRY else None
-    return write_launcher_state(state)
-
-
-def remember_rom_selection(slug, rom_path=None):
-    if not has_rom_library(slug):
-        return remember_main_selection(slug)
-    return write_launcher_state({
-        "main_slug": slug,
-        "submenu_slug": slug,
-        "rom_path": rom_path,
-    })
-
-
-def leave_rom_menu(slug):
-    """Persist the D/back result: main menu open on this emulator."""
-    return remember_main_selection(slug)
 
 
 def _isdir(path):
@@ -324,11 +306,11 @@ class NativeLaunchScene(Scene):
         self.call_later(1, self._launch)
 
     def _launch(self):
+        # launcher_state.json already reflects this slug/rom_path -- the
+        # ListMenu that called launch_native_scene() wrote it just before,
+        # so build_boot_intent() below (via read_launcher_state()) picks it
+        # up without this scene needing to touch it itself.
         spec = get_app_spec(self.slug) or {}
-        if has_rom_library(self.slug):
-            remember_rom_selection(self.slug, self.rom_path)
-        else:
-            remember_main_selection(self.slug)
         _write_native_launch_nvs(spec, self.rom_path)
         result = request_native_launch(self.slug, self.rom_path)
         if result["launched"]:

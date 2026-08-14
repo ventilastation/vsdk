@@ -51,14 +51,14 @@ class ToIntTests(unittest.TestCase):
 
 class BuildReportRowTests(unittest.TestCase):
     def test_failed_run_when_no_response(self):
-        row = report.build_report_row(600, "prboom", "native.voom", None, None)
+        row = report.build_report_row(600, "prboom", "emulators.voom", None, None)
         self.assertFalse(row["ok"])
 
     def test_computes_overrun_and_skip_percent(self):
         state = {"encoder": "calibrated", "heap_start": "10000", "heap_free": "9984",
                  "heap_delta": "-16"}
         timing = {"samples": "100", "overruns": "5", "skipped": "5", "deadline_us": "390"}
-        row = report.build_report_row(600, "prboom", "native.voom", state, timing)
+        row = report.build_report_row(600, "prboom", "emulators.voom", state, timing)
         self.assertTrue(row["ok"])
         self.assertAlmostEqual(row["overrun_pct"], 5.0)
         # 5 skipped out of (100 samples + 5 skipped) columns actually swept.
@@ -82,7 +82,7 @@ class BuildReportRowTests(unittest.TestCase):
             "samples": "10", "overruns": "0", "skipped": "0", "deadline_us": "390",
             "avg_project_us": "160", "avg_spi_us": "5",
         }
-        row = report.build_report_row(600, "prboom", "native.voom", {"encoder": "calibrated"}, timing)
+        row = report.build_report_row(600, "prboom", "emulators.voom", {"encoder": "calibrated"}, timing)
         self.assertEqual(row["avg_render_us"], 160)
         self.assertEqual(row["avg_spi_us"], 5)
 

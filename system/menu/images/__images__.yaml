@@ -16,3 +16,9 @@ palettegroups:
     - strip: vslogo.png
     - strip: loviejo-3.png
     - fullscreen: favalli.png
+  palette2:
+    # Glyphs for the current-selection text label (system/launcher).  Kept
+    # in its own palette group so the label doesn't dilute palette1's
+    # 255-colour budget; same source as system/shared/other/images'.
+    - strip: ../../shared/other/images/tinyfont_menu.png
+      frames: 255

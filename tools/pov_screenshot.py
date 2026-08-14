@@ -15,7 +15,7 @@ default profile, which approximates the board's calibrated one closely enough
 to eyeball illumination.
 
     # NES, pressing Start+A to get past the title screen:
-    python3 tools/pov_screenshot.py --slug native.nes \\
+    python3 tools/pov_screenshot.py --slug emulators.nes \\
         --rom "/vfs/roms/nes/Super Mario Bros. (World).zip" \\
         --press start a --out smb.png
 
@@ -149,7 +149,7 @@ def main():
     parser.add_argument("--host", default="ventilastation-workbench.local",
                         help="workbench Wi-Fi host/IP for the frame_apa102 UDP telemetry")
     parser.add_argument("--rpm", type=int, default=600, help="simulated hall RPM")
-    parser.add_argument("--slug", help="app/game slug to launch, e.g. native.nes, alecu.vixeous")
+    parser.add_argument("--slug", help="app/game slug to launch, e.g. emulators.nes, alecu.vixeous")
     parser.add_argument("--rom", help="ROM path on the board for native ROM-library apps")
     parser.add_argument("--press", nargs="+", default=[], metavar="BTN",
                         help="controller buttons to tap after launch: " + ", ".join(sorted(BUTTONS)))
@@ -193,7 +193,7 @@ def main():
             line = "launch " + args.slug + (" " + args.rom if args.rom else "")
             print(">> " + line)
             pr.send_line(ser, line)
-            is_native = args.slug.startswith("native.")
+            is_native = args.slug.startswith("emulators.")
             if is_native and not reader.wait_for(pr.BOOT_BANNER, timeout=args.boot_timeout):
                 print("  warning: no boot banner seen", file=sys.stderr)
             time.sleep(3.0)  # reach the title screen

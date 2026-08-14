@@ -205,10 +205,10 @@ class Director:
             hall_filter_control.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
         elif cmd == "launch":
             # "launch <slug> [rom_path]" -- load a game or native app by its
-            # app_loader slug (e.g. "alecu.vixeous", "native.voom") without menu
-            # navigation. A native ROM-library app (native.nes/sms/gb/msx) takes
-            # a rom path as the remaining args (it may contain spaces). Used by
-            # scripted profiling/testing tools.
+            # app_loader slug (e.g. "alecu.vixeous", "emulators.voom") without
+            # menu navigation. A native ROM-library app (emulators.nes/sms/gb/msx)
+            # takes a rom path as the remaining args (it may contain spaces).
+            # Used by scripted profiling/testing tools.
             slug = parts[1] if len(parts) > 1 else ""
             rom_path = " ".join(parts[2:]) if len(parts) > 2 else None
             if not slug:
