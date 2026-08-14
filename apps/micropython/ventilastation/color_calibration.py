@@ -11,17 +11,23 @@ import sys
 
 
 MAGIC = b"PCAL"
-VERSION = 1
+VERSION = 2
+V1_VERSION = 1
 LED_COUNT = 54
 PWM_KNOTS = 17
 GB_LEVELS = 32
 Q15_ONE = 32767
 MATRIX_Q = 4096
+DARK_WHITE_UNITY = 1000
+DARK_WHITE_MIN = 250
+DARK_WHITE_MAX = 4000
 NVS_NAMESPACE = "voom_pov"
+# The key name is historical: it predates the schema version living in the
+# payload, and renaming it would strand every provisioned board's profile.
 NVS_KEY = "color_v1"
 
 HEADER_FORMAT = "<4sBBHI"
-CONTROLS_FORMAT = "<BHHHHHHBB"
+CONTROLS_FORMAT = "<BHHHHHHHHHBB"
 MATRIX_FORMAT = "<9h"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 CONTROLS_SIZE = struct.calcsize(CONTROLS_FORMAT)
@@ -30,6 +36,8 @@ PROFILE_BYTES = (
     HEADER_SIZE + CONTROLS_SIZE + MATRIX_SIZE + LED_COUNT * 2
     + GB_LEVELS * 2 + 3 * PWM_KNOTS * 2
 )
+# v1 lacked the three dark white balance values.
+V1_PROFILE_BYTES = PROFILE_BYTES - 6
 
 _loaded = False
 _profile = None
@@ -38,10 +46,13 @@ _OFF_SOURCE_EOTF = HEADER_SIZE
 _OFF_SOURCE_GAMMA = _OFF_SOURCE_EOTF + 1
 _OFF_MASTER = _OFF_SOURCE_GAMMA + 2
 _OFF_WHITE = _OFF_MASTER + 2
-_OFF_RADIAL_EXPONENT = _OFF_WHITE + 6
+_OFF_DARK_WHITE = _OFF_WHITE + 6
+_OFF_RADIAL_EXPONENT = _OFF_DARK_WHITE + 6
 _OFF_GB_FLOOR = _OFF_RADIAL_EXPONENT + 2
 _OFF_GB_CEILING = _OFF_GB_FLOOR + 1
 _OFF_LED_TRIMS = HEADER_SIZE + CONTROLS_SIZE + MATRIX_SIZE
+# Where the v1 layout stops matching v2, i.e. just past white balance.
+_V1_PREFIX = _OFF_DARK_WHITE
 
 _TEST_PATTERNS = {
     "off": 0,
@@ -68,6 +79,7 @@ def build_default(generation=0):
         2200,    # retained for the optional power-gamma profile
         1000,    # master brightness (milli)
         1000, 1000, 1000,
+        DARK_WHITE_UNITY, DARK_WHITE_UNITY, DARK_WHITE_UNITY,
         1000,    # radial exponent (milli)
         1, 31,   # APA102 global-brightness floor/ceiling
     ))
@@ -115,6 +127,26 @@ def _put_u32(payload, offset, value):
         payload[offset + index] = (value >> (8 * index)) & 0xff
 
 
+def upgrade_v1(payload):
+    """Return the v2 equivalent of a v1 payload, or None if it is not one.
+
+    A board provisioned before the dark white balance existed still holds a
+    319-byte blob. Its measured curves and hand-tuned gains are worth keeping,
+    so the field is spliced in at neutral rather than resetting to factory.
+    """
+    if len(payload) != V1_PROFILE_BYTES:
+        return None
+    magic, version, flags, length, _ = struct.unpack(HEADER_FORMAT, payload[:HEADER_SIZE])
+    if magic != MAGIC or version != V1_VERSION or flags != 0 or length != V1_PROFILE_BYTES:
+        return None
+    upgraded = bytearray(payload[:_V1_PREFIX])
+    upgraded.extend(struct.pack("<3H", *([DARK_WHITE_UNITY] * 3)))
+    upgraded.extend(payload[_V1_PREFIX:])
+    upgraded[4] = VERSION
+    _put_u16(upgraded, 6, PROFILE_BYTES)
+    return bytes(upgraded)
+
+
 def _read_nvs():
     try:
         import esp32
@@ -146,8 +178,16 @@ def load():
             _header(candidate)
             _profile = candidate
         except Exception:
-            print("color_calibration: ignoring invalid NVS profile")
-            _profile = build_default()
+            upgraded = upgrade_v1(candidate)
+            if upgraded is None:
+                print("color_calibration: ignoring invalid NVS profile")
+                _profile = build_default()
+            else:
+                print("color_calibration: upgraded v1 profile to v2")
+                _profile = upgraded
+                # Persist once so later boots take the fast path.
+                if sys.platform == "esp32":
+                    _write_nvs(_profile)
     else:
         _profile = build_default()
         # A committed default lets a native Retro-Go app launched after the
@@ -233,6 +273,11 @@ def _set_values(parts):
         for channel, value in enumerate(values):
             _put_u16(candidate, _OFF_WHITE + channel * 2,
                      _integer(value, "white gain", 0, 4000))
+    elif key == "dark_white" and len(values) == 3:
+        for channel, value in enumerate(values):
+            _put_u16(candidate, _OFF_DARK_WHITE + channel * 2,
+                     _integer(value, "dark white gain",
+                              DARK_WHITE_MIN, DARK_WHITE_MAX))
     elif key == "radial_exponent" and len(values) == 1:
         _put_u16(candidate, _OFF_RADIAL_EXPONENT,
                  _integer(values[0], "radial exponent", 0, 4000))

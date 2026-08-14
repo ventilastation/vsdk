@@ -591,7 +591,12 @@ _cal_generation_seen = None
 _cal_dragging = None
 _cal_master_max = 4000
 _cal_radial_max = 4000
-_cal_last_sent = {"master": None, "radial_exponent": None}
+# The dark white balance is a fine trim, so its slider covers a narrow band
+# around neutral rather than the full range the protocol accepts.
+_cal_dark_min, _cal_dark_max = 800, 1200
+# Last acknowledged red/blue, so moving the green slider leaves them alone.
+_cal_dark_white = [1000, 1000, 1000]
+_cal_last_sent = {"master": None, "radial_exponent": None, "dark_white": None}
 
 cal_master_track = shapes.Rectangle(_cal_x, _cal_y, _cal_w, _cal_h,
                                     color=(70, 70, 70), batch=controls_batch)
@@ -601,12 +606,19 @@ cal_master_handle = shapes.Circle(_cal_x, _cal_y + _cal_h / 2, _cal_handle_radiu
                                   color=(100, 190, 255), batch=controls_batch)
 cal_radial_handle = shapes.Circle(_cal_x, _cal_y + 32 + _cal_h / 2, _cal_handle_radius,
                                   color=(160, 220, 110), batch=controls_batch)
+cal_dark_track = shapes.Rectangle(_cal_x, _cal_y + 64, _cal_w, _cal_h,
+                                  color=(70, 70, 70), batch=controls_batch)
+cal_dark_handle = shapes.Circle(_cal_x, _cal_y + 64 + _cal_h / 2, _cal_handle_radius,
+                                color=(120, 230, 140), batch=controls_batch)
 cal_master_label = pyglet.text.Label("Master: waiting", font_name="Arial", font_size=10,
                                      x=_cal_x, y=_cal_y + 10,
                                      color=(210, 210, 210, 255), batch=controls_batch)
 cal_radial_label = pyglet.text.Label("Radial: waiting", font_name="Arial", font_size=10,
                                      x=_cal_x, y=_cal_y + 42,
                                      color=(210, 210, 210, 255), batch=controls_batch)
+cal_dark_label = pyglet.text.Label("Dark green: waiting", font_name="Arial", font_size=10,
+                                   x=_cal_x, y=_cal_y + 74,
+                                   color=(210, 210, 210, 255), batch=controls_batch)
 cal_status_label = pyglet.text.Label("POV CAL: waiting for board profile", font_name="Arial", font_size=10,
                                      x=_cal_x, y=_cal_y + 60,
                                      color=(150, 180, 210, 255), batch=controls_batch)
@@ -681,10 +693,13 @@ def _layout_settings_controls(left, bottom, width, height):
     cal_status_label.x, cal_status_label.y = _cal_x, bottom + 151
     cal_master_track.position = (_cal_x, _cal_y)
     cal_radial_track.position = (_cal_x, _cal_y - 38)
+    cal_dark_track.position = (_cal_x, _cal_y - 76)
     cal_master_handle.y = _cal_y + _cal_h / 2
     cal_radial_handle.y = _cal_y - 38 + _cal_h / 2
+    cal_dark_handle.y = _cal_y - 76 + _cal_h / 2
     cal_master_label.x, cal_master_label.y = _cal_x, _cal_y + 10
     cal_radial_label.x, cal_radial_label.y = _cal_x, _cal_y - 28
+    cal_dark_label.x, cal_dark_label.y = _cal_x, _cal_y - 66
     for button, x in ((cal_commit_button, _cal_commit_x),
                       (cal_revert_button, _cal_revert_x),
                       (cal_factory_button, _cal_factory_x)):
@@ -721,6 +736,15 @@ def _cal_x_to_value(x, maximum):
     return round(max(0.0, min(1.0, (x - _cal_x) / _cal_w)) * maximum)
 
 
+def _cal_ranged_to_x(value, minimum, maximum):
+    return _cal_x + max(0.0, min(1.0, (value - minimum) / (maximum - minimum))) * _cal_w
+
+
+def _cal_x_to_ranged(x, minimum, maximum):
+    fraction = max(0.0, min(1.0, (x - _cal_x) / _cal_w))
+    return minimum + round(fraction * (maximum - minimum))
+
+
 def _sync_calibration_controls():
     global _cal_generation_seen
     state = comms.povcal_state
@@ -733,17 +757,30 @@ def _sync_calibration_controls():
     cal_radial_handle.x = _cal_value_to_x(profile.radial_exponent_milli, _cal_radial_max)
     cal_master_label.text = "Master: %d" % profile.master_milli
     cal_radial_label.text = "Radial: %d" % profile.radial_exponent_milli
+    _cal_dark_white[:] = list(profile.dark_white)
+    cal_dark_handle.x = _cal_ranged_to_x(profile.dark_white[1], _cal_dark_min, _cal_dark_max)
+    cal_dark_label.text = "Dark green: %d" % profile.dark_white[1]
 
 
 def _set_calibration_value(name, value):
     if name == "master":
         cal_master_handle.x = _cal_value_to_x(value, _cal_master_max)
         cal_master_label.text = "Master: %d (applying)" % value
-    else:
+    elif name == "radial_exponent":
         cal_radial_handle.x = _cal_value_to_x(value, _cal_radial_max)
         cal_radial_label.text = "Radial: %d (applying)" % value
-    if _cal_last_sent[name] != value:
-        _cal_last_sent[name] = value
+    else:
+        cal_dark_handle.x = _cal_ranged_to_x(value, _cal_dark_min, _cal_dark_max)
+        cal_dark_label.text = "Dark green: %d (applying)" % value
+    if _cal_last_sent[name] == value:
+        return
+    _cal_last_sent[name] = value
+    if name == "dark_white":
+        # Green is the axis that drifts on the NS107S rotor, so it is the one
+        # on a slider; red and blue keep whatever the board last acknowledged.
+        comms.send_povcal("set dark_white %d %d %d" % (
+            _cal_dark_white[0], value, _cal_dark_white[2]))
+    else:
         comms.send_povcal("set %s %d" % (name, value))
 
 
@@ -804,6 +841,10 @@ def on_mouse_press(x, y, button, modifiers):
                        _cal_w + 2 * _cal_handle_radius, _cal_h + 2 * _cal_handle_radius):
         _cal_dragging = "radial_exponent"
         _set_calibration_value("radial_exponent", _cal_x_to_value(x, _cal_radial_max))
+    elif _point_in_rect(x, y, _cal_x - _cal_handle_radius, _cal_y - 76 - _cal_handle_radius,
+                       _cal_w + 2 * _cal_handle_radius, _cal_h + 2 * _cal_handle_radius):
+        _cal_dragging = "dark_white"
+        _set_calibration_value("dark_white", _cal_x_to_ranged(x, _cal_dark_min, _cal_dark_max))
     elif _point_in_rect(x, y, _cal_commit_x, _cal_button_y, _cal_button_w, _cal_button_h):
         comms.send_povcal("commit")
     elif _point_in_rect(x, y, _cal_revert_x, _cal_button_y, _cal_button_w, _cal_button_h):
@@ -830,6 +871,8 @@ def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
         _set_calibration_value("master", _cal_x_to_value(x, _cal_master_max))
     elif _cal_dragging == "radial_exponent":
         _set_calibration_value("radial_exponent", _cal_x_to_value(x, _cal_radial_max))
+    elif _cal_dragging == "dark_white":
+        _set_calibration_value("dark_white", _cal_x_to_ranged(x, _cal_dark_min, _cal_dark_max))
     return pyglet.event.EVENT_HANDLED
 
 

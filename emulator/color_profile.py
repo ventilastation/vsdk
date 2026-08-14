@@ -10,15 +10,18 @@ import struct
 
 
 MAGIC = b"PCAL"
-VERSION = 1
+VERSION = 2
 LED_COUNT = 54
 PWM_KNOTS = 17
 GB_LEVELS = 32
 Q15_ONE = 32767
 MATRIX_Q = 4096
+DARK_WHITE_UNITY = 1000
+DARK_WHITE_MIN = 250
+DARK_WHITE_MAX = 4000
 
 _HEADER = struct.Struct("<4sBBHI")
-_CONTROLS = struct.Struct("<BHHHHHHBB")
+_CONTROLS = struct.Struct("<BHHHHHHHHHBB")
 _MATRIX = struct.Struct("<9h")
 PAYLOAD_BYTES = (
     _HEADER.size
@@ -51,6 +54,49 @@ def _srgb_encode(linear):
     return max(0, min(255, int(encoded * 255.0 + 0.5)))
 
 
+def _c_div(numerator, denominator):
+    """Integer division truncating toward zero, the way C does it.
+
+    The dark white balance below is evaluated identically here and in
+    color_pipeline.c, and its intermediate term is negative whenever a channel
+    is trimmed down -- exactly the interesting case. Python's floor division
+    would disagree with the firmware by one Q15 count there, which is enough to
+    make the preview and the rotor differ.
+    """
+    quotient = abs(numerator) // abs(denominator)
+    return -quotient if (numerator < 0) != (denominator < 0) else quotient
+
+
+def effective_global_response(global_response, dark_white, gb_floor, gb_ceiling):
+    """Per-channel global-brightness response, as color_pipeline.c builds it.
+
+    The measured curve describes the global-brightness stage as if it behaved
+    identically on all three channels. NS107S parts do not: their per-channel
+    current gain drifts apart as the level drops, which tints dark tones. The
+    dark white balance is that drift, as a per-channel milli-gain that is
+    neutral at the ceiling and reaches full strength at the floor.
+    """
+    curves = []
+    for channel in range(3):
+        trim = dark_white[channel]
+        curve = []
+        for level, base in enumerate(global_response):
+            if base == 0 or trim == DARK_WHITE_UNITY:
+                curve.append(base)
+                continue
+            if level >= gb_ceiling:
+                weight = 0
+            elif level > gb_floor and gb_ceiling > gb_floor:
+                weight = (gb_ceiling - level) * DARK_WHITE_UNITY // (gb_ceiling - gb_floor)
+            else:
+                weight = DARK_WHITE_UNITY
+            gain = DARK_WHITE_UNITY + _c_div((trim - DARK_WHITE_UNITY) * weight, DARK_WHITE_UNITY)
+            gain = max(1, gain)
+            curve.append(min(Q15_ONE, (base * DARK_WHITE_UNITY + gain // 2) // gain))
+        curves.append(tuple(curve))
+    return tuple(curves)
+
+
 def _interpolate(knots, code):
     code = max(0, min(255, int(code)))
     scaled = code * (len(knots) - 1)
@@ -76,6 +122,7 @@ class ColorProfile:
         source_gamma_milli,
         master_milli,
         white_balance,
+        dark_white,
         radial_exponent_milli,
         gb_floor,
         gb_ceiling,
@@ -89,6 +136,7 @@ class ColorProfile:
         self.source_gamma_milli = int(source_gamma_milli)
         self.master_milli = int(master_milli)
         self.white_balance = tuple(int(value) for value in white_balance)
+        self.dark_white = tuple(int(value) for value in dark_white)
         self.radial_exponent_milli = int(radial_exponent_milli)
         self.gb_floor = int(gb_floor)
         self.gb_ceiling = int(gb_ceiling)
@@ -106,6 +154,22 @@ class ColorProfile:
             tuple(_interpolate(curve, byte) for byte in range(256))
             for curve in self.pwm_response
         )
+        self._effective_global_key = None
+        self._effective_global = None
+
+    @property
+    def effective_global_response(self):
+        """Per-channel global-brightness response, cached against its inputs.
+
+        The numeric fields stay editable after construction -- the calibration
+        UI edits them in place -- so this recomputes when one of its four
+        inputs changes rather than freezing at construction time.
+        """
+        key = (self.global_response, self.dark_white, self.gb_floor, self.gb_ceiling)
+        if self._effective_global_key != key:
+            self._effective_global = effective_global_response(*key)
+            self._effective_global_key = key
+        return self._effective_global
 
     @classmethod
     def default(cls, generation=0):
@@ -115,6 +179,7 @@ class ColorProfile:
             source_gamma_milli=2200,
             master_milli=1000,
             white_balance=(1000, 1000, 1000),
+            dark_white=(DARK_WHITE_UNITY,) * 3,
             radial_exponent_milli=1000,
             gb_floor=1,
             gb_ceiling=31,
@@ -146,6 +211,10 @@ class ColorProfile:
             raise ColorProfileError("master brightness is outside supported range")
         if len(self.white_balance) != 3 or any(not 0 <= value <= 4000 for value in self.white_balance):
             raise ColorProfileError("invalid white balance")
+        if len(self.dark_white) != 3 or any(
+            not DARK_WHITE_MIN <= value <= DARK_WHITE_MAX for value in self.dark_white
+        ):
+            raise ColorProfileError("invalid dark white balance")
         if not 0 <= self.radial_exponent_milli <= 4000:
             raise ColorProfileError("radial exponent is outside supported range")
         if not 0 <= self.gb_floor <= self.gb_ceiling <= 31:
@@ -172,6 +241,9 @@ class ColorProfile:
             self.white_balance[0],
             self.white_balance[1],
             self.white_balance[2],
+            self.dark_white[0],
+            self.dark_white[1],
+            self.dark_white[2],
             self.radial_exponent_milli,
             self.gb_floor,
             self.gb_ceiling,
@@ -226,9 +298,10 @@ class ColorProfile:
             source_gamma_milli=values[1],
             master_milli=values[2],
             white_balance=values[3:6],
-            radial_exponent_milli=values[6],
-            gb_floor=values[7],
-            gb_ceiling=values[8],
+            dark_white=values[6:9],
+            radial_exponent_milli=values[9],
+            gb_floor=values[10],
+            gb_ceiling=values[11],
             preview_matrix=preview_matrix,
             led_trims=led_trims,
             global_response=global_response,
@@ -243,11 +316,13 @@ class ColorProfile:
         if brightness == 0:
             return (0, 0, 0)
 
-        global_light = self.global_response[brightness]
+        # Per channel: the global-brightness stage is not channel independent
+        # on NS107S, and the dark white balance is how the profile says so.
+        global_light = self.effective_global_response
         led_light = (
-            global_light * self.pwm_byte_lut[0][max(0, min(255, int(red_pwm)))] / (Q15_ONE * Q15_ONE),
-            global_light * self.pwm_byte_lut[1][max(0, min(255, int(green_pwm)))] / (Q15_ONE * Q15_ONE),
-            global_light * self.pwm_byte_lut[2][max(0, min(255, int(blue_pwm)))] / (Q15_ONE * Q15_ONE),
+            global_light[0][brightness] * self.pwm_byte_lut[0][max(0, min(255, int(red_pwm)))] / (Q15_ONE * Q15_ONE),
+            global_light[1][brightness] * self.pwm_byte_lut[1][max(0, min(255, int(green_pwm)))] / (Q15_ONE * Q15_ONE),
+            global_light[2][brightness] * self.pwm_byte_lut[2][max(0, min(255, int(blue_pwm)))] / (Q15_ONE * Q15_ONE),
         )
         preview_linear = []
         for row in range(3):

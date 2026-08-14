@@ -9,9 +9,14 @@
 #include <stdlib.h>
 #endif
 
-#define COLOR_PROFILE_VERSION 1
+#define COLOR_PROFILE_VERSION 2
+#define COLOR_PROFILE_V1_VERSION 1
 #define COLOR_PROFILE_HEADER_BYTES 12
-#define COLOR_PROFILE_CONTROLS_BYTES 15
+#define COLOR_PROFILE_CONTROLS_BYTES 21
+#define COLOR_PROFILE_V1_CONTROLS_BYTES 15
+// The v1 controls block ends after white balance; dark white balance is
+// inserted there, so a v1 payload is copied around a six-byte hole.
+#define COLOR_PROFILE_V1_PREFIX_BYTES (COLOR_PROFILE_HEADER_BYTES + 1 + 2 + 2 + 6)
 #define COLOR_PROFILE_MATRIX_BYTES 18
 #define COLOR_PROFILE_LED_TRIMS_BYTES (COLOR_PIPELINE_LEDS * 2)
 #define COLOR_PROFILE_GLOBAL_BYTES (32 * 2)
@@ -21,6 +26,9 @@
 // APA102 global brightness is a low-frequency PWM. Keep the RGB channels at
 // useful code values before introducing that additional modulation source.
 #define COLOR_RGB_PREFERRED_MIN_PWM 32
+#define COLOR_DARK_WHITE_UNITY COLOR_PIPELINE_DARK_WHITE_UNITY
+#define COLOR_DARK_WHITE_MIN COLOR_PIPELINE_DARK_WHITE_MIN
+#define COLOR_DARK_WHITE_MAX COLOR_PIPELINE_DARK_WHITE_MAX
 #define COLOR_LIGHT_LUT_SHIFT 5
 #define COLOR_LIGHT_LUT_COUNT ((COLOR_Q15_ONE >> COLOR_LIGHT_LUT_SHIFT) + 2)
 #define COLOR_DARK_PWM_LUT_COUNT (3 * 31 * COLOR_LIGHT_LUT_COUNT)
@@ -30,6 +38,7 @@ typedef struct {
     uint16_t radial_lut[COLOR_PIPELINE_LEDS];
     uint16_t led_trims[COLOR_PIPELINE_LEDS];
     uint16_t white_balance[3];
+    uint16_t dark_white[3];
     uint16_t master_milli;
     uint16_t global_response[32];
     uint16_t pwm_response[3][COLOR_PROFILE_PWM_KNOTS];
@@ -164,11 +173,47 @@ static uint16_t scaled_target(uint16_t source, uint32_t scale_q10) {
     return value > COLOR_Q15_ONE ? COLOR_Q15_ONE : (uint16_t)value;
 }
 
+// How much light the global-brightness stage of one channel really delivers at
+// one level. The measured `global_response` curve describes the stage as if it
+// were channel independent, which holds for APA102 but not for the NS107S
+// parts now on the rotor: their per-channel current gain drifts apart as the
+// level drops, so a neutral dark grey picks up a tint. `dark_white` is that
+// drift, expressed the same way as the ordinary white balance -- a per-channel
+// milli-gain where 1000 is neutral and smaller means dimmer. It fades to
+// nothing at the ceiling, where the ordinary white balance already holds and
+// the picture is already correct, and reaches full strength at the floor.
+//
+// This is called only while building the render LUTs, so the correction costs
+// the render task nothing: it is folded into tables it already consults.
+static uint16_t effective_global(const color_pipeline_state_t *state,
+        uint8_t channel, uint8_t level) {
+    uint32_t base = state->global_response[level];
+    int32_t trim = state->dark_white[channel];
+    if (base == 0 || trim == COLOR_DARK_WHITE_UNITY) {
+        return (uint16_t)base;
+    }
+    int32_t weight = COLOR_DARK_WHITE_UNITY;
+    if (level >= state->gb_ceiling) {
+        weight = 0;
+    } else if (level > state->gb_floor && state->gb_ceiling > state->gb_floor) {
+        weight = (int32_t)(state->gb_ceiling - level) * COLOR_DARK_WHITE_UNITY
+            / (int32_t)(state->gb_ceiling - state->gb_floor);
+    }
+    int32_t gain = COLOR_DARK_WHITE_UNITY
+        + (trim - COLOR_DARK_WHITE_UNITY) * weight / COLOR_DARK_WHITE_UNITY;
+    if (gain < 1) gain = 1;
+    // Dividing by the gain is what makes the trim read like a brightness: a
+    // channel declared dimmer down here needs a correspondingly larger modelled
+    // global response, which the solver answers with less PWM.
+    uint32_t value = (base * COLOR_DARK_WHITE_UNITY + (uint32_t)gain / 2) / (uint32_t)gain;
+    return value > COLOR_Q15_ONE ? COLOR_Q15_ONE : (uint16_t)value;
+}
+
 static uint8_t choose_brightness(const color_pipeline_state_t *state,
         uint8_t peak_channel, uint16_t maximum) {
     uint8_t brightness = state->gb_ceiling;
     for (int level = state->gb_ceiling; level >= state->gb_floor; level--) {
-        uint16_t global = state->global_response[level];
+        uint16_t global = effective_global(state, peak_channel, (uint8_t)level);
         if (global == 0 || global < maximum) {
             continue;
         }
@@ -196,7 +241,7 @@ static void build_render_luts(color_pipeline_state_t *state) {
             state->brightness_lut[channel][light] = choose_brightness(state, channel, target);
         }
         for (int brightness = 0; brightness < 32; brightness++) {
-            uint16_t global = state->global_response[brightness];
+            uint16_t global = effective_global(state, (uint8_t)channel, (uint8_t)brightness);
             for (uint16_t light = 0; light < COLOR_LIGHT_LUT_COUNT; light++) {
                 uint16_t target = light == COLOR_LIGHT_LUT_COUNT - 1
                     ? COLOR_Q15_ONE : light << COLOR_LIGHT_LUT_SHIFT;
@@ -233,6 +278,10 @@ bool color_pipeline_build_default(uint8_t *profile, size_t length, uint32_t gene
         write_u16(profile + offset, 1000);
         offset += 2;
     }
+    for (int channel = 0; channel < 3; channel++) {
+        write_u16(profile + offset, COLOR_DARK_WHITE_UNITY);
+        offset += 2;
+    }
     write_u16(profile + offset, 1000); offset += 2;
     profile[offset++] = 1;
     profile[offset++] = 31;
@@ -259,6 +308,31 @@ bool color_pipeline_build_default(uint8_t *profile, size_t length, uint32_t gene
     return offset == length;
 }
 
+bool color_pipeline_upgrade_v1(const uint8_t *v1, size_t v1_length,
+                               uint8_t *v2, size_t v2_length) {
+    if (v1 == NULL || v2 == NULL
+        || v1_length != COLOR_PIPELINE_PROFILE_V1_BYTES
+        || v2_length != COLOR_PIPELINE_PROFILE_BYTES
+        || memcmp(v1, "PCAL", 4) != 0
+        || v1[4] != COLOR_PROFILE_V1_VERSION || v1[5] != 0
+        || read_u16(v1 + 6) != COLOR_PIPELINE_PROFILE_V1_BYTES) {
+        return false;
+    }
+    // Everything up to and including white balance keeps its offset; the rest
+    // slides down by the width of the new field, which starts out neutral.
+    memcpy(v2, v1, COLOR_PROFILE_V1_PREFIX_BYTES);
+    size_t offset = COLOR_PROFILE_V1_PREFIX_BYTES;
+    for (int channel = 0; channel < 3; channel++) {
+        write_u16(v2 + offset, COLOR_DARK_WHITE_UNITY);
+        offset += 2;
+    }
+    memcpy(v2 + offset, v1 + COLOR_PROFILE_V1_PREFIX_BYTES,
+           COLOR_PIPELINE_PROFILE_V1_BYTES - COLOR_PROFILE_V1_PREFIX_BYTES);
+    v2[4] = COLOR_PROFILE_VERSION;
+    write_u16(v2 + 6, COLOR_PIPELINE_PROFILE_BYTES);
+    return true;
+}
+
 bool color_pipeline_apply(const uint8_t *profile, size_t length) {
     if (profile == NULL || length != COLOR_PIPELINE_PROFILE_BYTES
         || memcmp(profile, "PCAL", 4) != 0
@@ -275,6 +349,15 @@ bool color_pipeline_apply(const uint8_t *profile, size_t length) {
     for (int channel = 0; channel < 3; channel++) {
         white_balance[channel] = read_u16(profile + offset);
         offset += 2;
+    }
+    uint16_t dark_white[3];
+    for (int channel = 0; channel < 3; channel++) {
+        dark_white[channel] = read_u16(profile + offset);
+        offset += 2;
+        if (dark_white[channel] < COLOR_DARK_WHITE_MIN
+            || dark_white[channel] > COLOR_DARK_WHITE_MAX) {
+            return false;
+        }
     }
     uint16_t radial_exponent_milli = read_u16(profile + offset); offset += 2;
     uint8_t gb_floor = profile[offset++];
@@ -302,6 +385,7 @@ bool color_pipeline_apply(const uint8_t *profile, size_t length) {
     state->gb_floor = gb_floor;
     state->gb_ceiling = gb_ceiling;
     memcpy(state->white_balance, white_balance, sizeof(white_balance));
+    memcpy(state->dark_white, dark_white, sizeof(dark_white));
 
     for (int led = 0; led < COLOR_PIPELINE_LEDS; led++) {
         state->led_trims[led] = read_u16(profile + offset);
