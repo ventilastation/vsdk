@@ -140,6 +140,11 @@ def _option_index(options, option_id):
 # sits at that slot's offset from the selection.
 POOL_SIZE = 12
 Y_STEP = 20
+# ROM libraries are always label-only, and the 4x6 list font is tiny next to
+# the ~30-LED icons the 20-step spacing was picked for. Packing those rows
+# closer puts more of them on the disc and reads as one list rather than a
+# scatter of unrelated words.
+ROM_Y_STEP = 10
 ICON_X = -32
 LABEL_COLUMNS = 21
 LABEL_FONT_WIDTH = 4
@@ -162,6 +167,8 @@ BYLINE_Y = 11
 # where the 4x6 list font is not; 24 columns is 192 of the disc's 256.
 HEADING_FONT = "rainbow8x8.png"
 HEADING_FONT_WIDTH = 8
+# The selected entry sits at the rim, where HUD text is most legible.
+SELECTION_Y = 0
 HEADING_MAX_COLUMNS = 24
 
 
@@ -179,6 +186,8 @@ class ListMenu(vs2.Scene):
     back_button = False
     enable_back = True
     empty_message = None
+    #: Depth between consecutive entries in the tunnel cascade.
+    y_step = Y_STEP
     #: Text shown at the top of the disc, in the large font. None draws
     #: nothing, which is what the root uses -- it shows the wordmark instead.
     heading = None
@@ -207,17 +216,30 @@ class ListMenu(vs2.Scene):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.slots = []
         for index in range(POOL_SIZE):
-            sprite = self.world.sprite(PLACEHOLDER_IMAGE, x=ICON_X, y=index * Y_STEP)
+            sprite = self.world.sprite(PLACEHOLDER_IMAGE, x=ICON_X, y=index * self.y_step)
             sprite.hide()
             label = self.world.label(LABEL_FONT, columns=LABEL_COLUMNS,
-                                     x=LABEL_X, y=index * Y_STEP)
+                                     x=LABEL_X, y=index * self.y_step)
             label.hide()
             self.slots.append({
                 "sprite": sprite,
                 "label": label,
                 "entry_index": self.selected_index + index,
-                "y": float(index * Y_STEP),
+                "y": float(index * self.y_step),
             })
+        # menu.py drew the selected entry with perspective 2 (HUD) and every
+        # other one in the tunnel -- that projection is what made the current
+        # option legible, and the vs2 port lost it by putting the whole list
+        # on one TUNNEL layer. A drawable's layer is fixed for its whole life,
+        # so the selection gets its own HUD pair here rather than a slot
+        # migrating between layers; the matching tunnel slot stays hidden.
+        self.selection = self.layer("selection", projection=vs2.HUD)
+        self.selected_sprite = self.selection.sprite(
+            PLACEHOLDER_IMAGE, x=ICON_X, y=SELECTION_Y)
+        self.selected_sprite.hide()
+        self.selected_label = self.selection.label(
+            LABEL_FONT, columns=LABEL_COLUMNS, x=LABEL_X, y=SELECTION_Y)
+        self.selected_label.hide()
         self.build_overlay()
         self._render_all()
         self._garbage_collect()
@@ -235,10 +257,13 @@ class ListMenu(vs2.Scene):
             return
         text = self.heading[:HEADING_MAX_COLUMNS]
         self.heading_layer = self.layer("heading", projection=vs2.HUD)
+        # The disc shows the naive mapping rotated 180 degrees, so a heading
+        # placed at the top reads mirrored on both axes unless it is flipped
+        # back here (same correction the native POV overlay applies).
         self.heading_label = self.heading_layer.label(
             HEADING_FONT, columns=len(text),
             x=DISC_TOP - len(text) * HEADING_FONT_WIDTH // 2,
-            y=0, text=text)
+            y=0, text=text, flip_x=True, flip_y=True)
 
     def _garbage_collect(self):
         import gc
@@ -252,22 +277,8 @@ class ListMenu(vs2.Scene):
             return strip
         return None
 
-    def _render_slot(self, slot):
-        entry_index = slot["entry_index"]
-        sprite, label = slot["sprite"], slot["label"]
-        if not self.entries:
-            if entry_index == 0 and self.empty_message:
-                label.text = self.empty_message
-                label.show()
-            else:
-                label.hide()
-            sprite.hide()
-            return
-        if entry_index is None or not (0 <= entry_index < len(self.entries)):
-            sprite.hide()
-            label.hide()
-            return
-        entry = self.entries[entry_index]
+    def _show_entry(self, sprite, label, entry):
+        """Draw one entry as its icon, or as a text label when it has none."""
         icon = self._entry_icon(entry)
         if icon:
             sprite.image = icon
@@ -279,9 +290,38 @@ class ListMenu(vs2.Scene):
             label.show()
             sprite.hide()
 
+    def _render_slot(self, slot):
+        entry_index = slot["entry_index"]
+        sprite, label = slot["sprite"], slot["label"]
+        if not self.entries:
+            if entry_index == 0 and self.empty_message:
+                label.text = self.empty_message
+                label.show()
+            else:
+                label.hide()
+            sprite.hide()
+            return
+        if (entry_index is None or not (0 <= entry_index < len(self.entries))
+                or entry_index == self.selected_index):
+            # The selection is drawn by the HUD pair, so its tunnel slot stays
+            # hidden rather than showing the same entry twice.
+            sprite.hide()
+            label.hide()
+            return
+        self._show_entry(sprite, label, self.entries[entry_index])
+
+    def _render_selection(self):
+        if not self.entries:
+            self.selected_sprite.hide()
+            self.selected_label.hide()
+            return
+        self._show_entry(self.selected_sprite, self.selected_label,
+                         self.entries[self.selected_index])
+
     def _render_all(self):
         for slot in self.slots:
             self._render_slot(slot)
+        self._render_selection()
 
     def _move(self, delta):
         if not self.entries:
@@ -294,6 +334,10 @@ class ListMenu(vs2.Scene):
         if new_index != self.selected_index:
             self.selected_index = new_index
             vs2.audio.sound("alecu.vyruss/shoot3")
+            # Which slot is under the selection changed, and only recycled
+            # slots get re-rendered below -- refresh them all so the newly
+            # selected one hides and the previous one reappears.
+            self._render_all()
 
     def _select(self):
         if not self.entries:
@@ -325,7 +369,7 @@ class ListMenu(vs2.Scene):
             if offset == 0:
                 y = 0.0
             else:
-                dest_y = min(offset * Y_STEP + 45, 255)
+                dest_y = min(offset * self.y_step + 45, 255)
                 curr_y = slot["y"]
                 y = curr_y - (curr_y - dest_y) / 4
             slot["y"] = y
@@ -434,6 +478,7 @@ class RomLibraryMenu(ListMenu):
     ROM files never had icons."""
 
     empty_message = "NO ROMS"
+    y_step = ROM_Y_STEP
 
     def __init__(self, slug, selected_rom=None):
         self.slug = slug

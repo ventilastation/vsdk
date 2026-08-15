@@ -284,6 +284,9 @@ class SetupIntegrationTests(unittest.TestCase):
         # 9 characters of an 8-wide font, centred on x=128.
         self.assertEqual(label.x, 128 - 9 * 8 // 2)
         self.assertEqual(label.y, 0)
+        # The disc shows the naive mapping rotated 180 degrees.
+        self.assertTrue(label.flip_x)
+        self.assertTrue(label.flip_y)
 
     def test_rom_library_is_headed_by_its_emulator(self):
         menu = self._build(RomLibraryMenu("emulators.nes"))
@@ -293,6 +296,42 @@ class SetupIntegrationTests(unittest.TestCase):
 
     def test_debug_menu_is_headed(self):
         self.assertEqual(self._build(DebugMenu()).heading_label.text, "Debug")
+
+    def _shown_slot_entries(self, menu):
+        return [slot["entry_index"] for slot in menu.slots
+                if slot["sprite"].visible or slot["label"].visible]
+
+    def test_selected_entry_is_drawn_on_a_hud_layer(self):
+        # menu.py gave the selected option perspective 2 and everything else
+        # perspective 1; that projection is what makes it legible.
+        menu = self._build(GroupsMenu())
+
+        self.assertEqual(menu.selection.projection, 2)  # vs2.HUD
+        self.assertEqual(menu.selected_sprite.y, 0)
+        self.assertTrue(menu.selected_sprite.visible or menu.selected_label.visible)
+
+    def test_selected_entry_is_not_also_drawn_in_the_tunnel(self):
+        menu = self._build(GroupsMenu())
+
+        self.assertNotIn(menu.selected_index, self._shown_slot_entries(menu))
+
+    def test_moving_the_selection_swaps_which_row_is_hud_projected(self):
+        menu = self._build(GroupsMenu())
+        first = menu.selected_index
+
+        menu._move(1)
+
+        self.assertNotEqual(menu.selected_index, first)
+        shown = self._shown_slot_entries(menu)
+        self.assertIn(first, shown)                      # the old row comes back
+        self.assertNotIn(menu.selected_index, shown)     # the new one leaves
+        # ...and the HUD pair is showing the new selection, one way or another.
+        self.assertNotEqual(menu.selected_sprite.visible, menu.selected_label.visible)
+
+    def test_rom_libraries_pack_their_rows_closer(self):
+        # The 4x6 list font is tiny next to the icons the default step suits.
+        rom_menu = RomLibraryMenu("emulators.nes")
+        self.assertLess(rom_menu.y_step, GroupsMenu().y_step)
 
     def test_restores_group_and_rom_library_on_top_of_root(self):
         native_apps.write_launcher_state({
