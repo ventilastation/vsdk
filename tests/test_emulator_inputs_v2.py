@@ -11,6 +11,8 @@ fake_window.key = types.SimpleNamespace(
     A="A", D="D", W="W", S="S", SPACE="SPACE", O="O", P="P", U="U", Y="Y",
     H="H", J="J", K="K", L="L", Z="Z", X="X", C="C", V="V",
     PAGEUP="PAGEUP", PAGEDOWN="PAGEDOWN", HOME="HOME", END="END",
+    LCTRL="LCTRL", RCTRL="RCTRL", LCOMMAND="LCOMMAND", RCOMMAND="RCOMMAND",
+    LMETA="LMETA", RMETA="RMETA",
     MOD_CTRL=0x100, MOD_COMMAND=0x200,
 )
 fake_pyglet.window = fake_window
@@ -27,6 +29,7 @@ from inputs_common import (  # noqa: E402
     EXTRA_JOY2_Y,
     keyboard_state,
     keyboard_v2_state,
+    ota_shortcut_held,
     ota_shortcut_pressed,
     pack_controllers,
 )
@@ -122,6 +125,22 @@ def test_ota_shortcut_requires_ctrl_or_command():
     assert ota_shortcut_pressed("U", 0x200)
     assert not ota_shortcut_pressed("U", 0)
     assert not ota_shortcut_pressed("Y", 0x100)
+
+
+def test_ota_shortcut_held_reads_polled_state():
+    # Console mode has no key-press events, so the same chord has to be
+    # recognizable from held keys alone (see consoleengine.py).
+    held = lambda *pressed: {symbol: symbol in pressed for symbol in (
+        "U", "Y", "LCTRL", "RCTRL", "LCOMMAND", "RCOMMAND", "LMETA", "RMETA")}
+
+    assert ota_shortcut_held(held("U", "LCTRL"))
+    assert ota_shortcut_held(held("U", "RCTRL"))
+    assert ota_shortcut_held(held("U", "LCOMMAND"))
+    assert ota_shortcut_held(held("U", "RMETA"))
+    assert not ota_shortcut_held(held("U"))
+    assert not ota_shortcut_held(held("LCTRL"))
+    assert not ota_shortcut_held(held("Y", "LCTRL"))
+    assert not ota_shortcut_held(held())
 
 
 def main():
