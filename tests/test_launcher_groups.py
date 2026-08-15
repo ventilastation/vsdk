@@ -250,6 +250,21 @@ class SetupIntegrationTests(unittest.TestCase):
         director.push(scene)
         return scene
 
+    def _roms(self, roms):
+        """Stand in for a real ROM directory while a menu is constructed."""
+        import contextlib
+
+        @contextlib.contextmanager
+        def patched():
+            original = native_apps.list_roms
+            native_apps.list_roms = lambda slug: roms
+            try:
+                yield
+            finally:
+                native_apps.list_roms = original
+
+        return patched()
+
     def test_root_menu_draws_its_backdrop_wordmark_and_byline(self):
         # Lost in the vs2 port and restored: the disc should not come up as a
         # bare list of tiles.
@@ -327,6 +342,38 @@ class SetupIntegrationTests(unittest.TestCase):
         self.assertNotIn(menu.selected_index, shown)     # the new one leaves
         # ...and the HUD pair is showing the new selection, one way or another.
         self.assertNotEqual(menu.selected_sprite.visible, menu.selected_label.visible)
+
+    def _label_frames(self, label, count):
+        # Tile storage runs counter-clockwise; read it back in writing order.
+        return [label.cells[label.columns - 1 - index] for index in range(count)]
+
+    def test_rom_library_marks_the_selection_in_red(self):
+        # menu.py's RomTextRow set bit 7 on the current row's glyphs;
+        # tinyfont_menu packs the red half of the font at +0x80.
+        with self._roms([{"path": "/a.nes", "label": "ALPHA"},
+                         {"path": "/b.nes", "label": "BETA"}]):
+            menu = self._build(RomLibraryMenu("emulators.nes"))
+
+            self.assertEqual(self._label_frames(menu.selected_label, 5),
+                             [ord(char) | 0x80 for char in "ALPHA"])
+            row = [slot for slot in menu.slots if slot["entry_index"] == 1][0]
+            self.assertEqual(self._label_frames(row["label"], 4),
+                             [ord(char) for char in "BETA"])
+
+    def test_other_menus_leave_their_selection_uncoloured(self):
+        self.assertEqual(self._build(GroupsMenu()).selected_frame_offset, 0)
+
+    def test_no_roms_notice_is_drawn_like_a_selected_option(self):
+        with self._roms([]):
+            menu = self._build(RomLibraryMenu("emulators.nes"))
+
+            self.assertTrue(menu.selected_label.visible)
+            self.assertEqual(menu.selected_label.y, 0)
+            self.assertEqual(menu.selection.projection, 2)  # vs2.HUD
+            self.assertFalse(any(slot["label"].visible or slot["sprite"].visible
+                                 for slot in menu.slots))
+            self.assertEqual(self._label_frames(menu.selected_label, 2),
+                             [ord(char) | 0x80 for char in "NO"])
 
     def test_rom_libraries_pack_their_rows_closer(self):
         # The 4x6 list font is tiny next to the icons the default step suits.

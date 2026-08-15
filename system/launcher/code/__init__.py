@@ -145,6 +145,10 @@ Y_STEP = 20
 # closer puts more of them on the disc and reads as one list rather than a
 # scatter of unrelated words.
 ROM_Y_STEP = 10
+# tinyfont_menu packs white ASCII at frames 0..127 and the matching red
+# glyphs at 128..254, so +0x80 recolours a line without a second strip.
+# menu.py's RomTextRow used exactly this to mark the current ROM.
+RED_GLYPH_OFFSET = 0x80
 ICON_X = -32
 LABEL_COLUMNS = 21
 LABEL_FONT_WIDTH = 4
@@ -188,6 +192,9 @@ class ListMenu(vs2.Scene):
     empty_message = None
     #: Depth between consecutive entries in the tunnel cascade.
     y_step = Y_STEP
+    #: Frame offset for the selected entry's label, and for
+    #: :attr:`empty_message`. See :data:`RED_GLYPH_OFFSET`.
+    selected_frame_offset = 0
     #: Text shown at the top of the disc, in the large font. None draws
     #: nothing, which is what the root uses -- it shows the wordmark instead.
     heading = None
@@ -277,7 +284,7 @@ class ListMenu(vs2.Scene):
             return strip
         return None
 
-    def _show_entry(self, sprite, label, entry):
+    def _show_entry(self, sprite, label, entry, frame_offset=0):
         """Draw one entry as its icon, or as a text label when it has none."""
         icon = self._entry_icon(entry)
         if icon:
@@ -286,7 +293,7 @@ class ListMenu(vs2.Scene):
             sprite.show()
             label.hide()
         else:
-            label.text = entry[3]
+            label.write(0, 0, entry[3], frame_offset=frame_offset)
             label.show()
             sprite.hide()
 
@@ -294,12 +301,11 @@ class ListMenu(vs2.Scene):
         entry_index = slot["entry_index"]
         sprite, label = slot["sprite"], slot["label"]
         if not self.entries:
-            if entry_index == 0 and self.empty_message:
-                label.text = self.empty_message
-                label.show()
-            else:
-                label.hide()
+            # The empty notice is drawn by _render_selection() instead: it is
+            # the screen's only line, so it belongs where a selected entry
+            # would be rather than at the back of the tunnel.
             sprite.hide()
+            label.hide()
             return
         if (entry_index is None or not (0 <= entry_index < len(self.entries))
                 or entry_index == self.selected_index):
@@ -313,10 +319,16 @@ class ListMenu(vs2.Scene):
     def _render_selection(self):
         if not self.entries:
             self.selected_sprite.hide()
-            self.selected_label.hide()
+            if self.empty_message:
+                self.selected_label.write(0, 0, self.empty_message,
+                                          frame_offset=self.selected_frame_offset)
+                self.selected_label.show()
+            else:
+                self.selected_label.hide()
             return
         self._show_entry(self.selected_sprite, self.selected_label,
-                         self.entries[self.selected_index])
+                         self.entries[self.selected_index],
+                         self.selected_frame_offset)
 
     def _render_all(self):
         for slot in self.slots:
@@ -479,6 +491,7 @@ class RomLibraryMenu(ListMenu):
 
     empty_message = "NO ROMS"
     y_step = ROM_Y_STEP
+    selected_frame_offset = RED_GLYPH_OFFSET
 
     def __init__(self, slug, selected_rom=None):
         self.slug = slug
