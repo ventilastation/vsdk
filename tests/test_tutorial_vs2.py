@@ -45,6 +45,24 @@ class TutorialVs2Tests(unittest.TestCase):
         director.platform.comms.push_input(bytes([buttons]))
         director.step_once()
 
+    def test_tutorial_does_not_exit_on_idle_timeout(self):
+        import utime
+        from vs2 import controls
+
+        scene = load_app("tutorial_vs2")
+        self.assertIsNone(scene.idle_timeout)
+
+        # Nobody has touched a control for an hour. The idle timer only
+        # resets when the button state changes, so stepping with the same
+        # (empty) input below leaves this in place.
+        director.last_player_action = utime.ticks_add(utime.ticks_ms(), -3600 * 1000)
+        self.step(0)
+
+        # The idle condition is real -- far past vs2.Scene's 30s default --
+        # and the tutorial is still the scene on top regardless.
+        self.assertGreater(int(controls.idle_ms), 30 * 1000)
+        self.assertIs(director.scene_stack[-1], scene)
+
     def test_tutorial_uses_labels_and_layer_owned_projection(self):
         scene = load_app("tutorial_vs2")
         self.assertEqual(scene._vs_declared_api, "vs2")

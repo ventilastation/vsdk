@@ -158,16 +158,32 @@ class Director:
         self.report_traceback(content)
 
     def return_to_menu(self):
-        """Leave every nested scene without rebooting MicroPython.
+        """Leave the running app, or step out of one menu level.
+
+        A game is launched from inside its group's menu, so exiting unwinds
+        the game and anything it pushed and lands back in that group; pressing
+        exit again leaves the group for the root, one level per press. Menus
+        opt in through an ``is_menu_scene`` attribute -- anything without it
+        counts as app state and gets unwound.
 
         Native partitions cannot retain a MicroPython scene, but a normal
-        MicroPython game can: the launcher is always the root scene and the
-        rest of the stack is transient UI or game state.
+        MicroPython game can: the launcher is always the root scene and
+        everything above it is transient game state or a menu level.
         """
-        returning = len(self.scene_stack) > 1
-        while len(self.scene_stack) > 1:
-            self._pop_scene(enter_below=False)
-        if returning and self.scene_stack:
+        if len(self.scene_stack) > 1:
+            popped = False
+            while (len(self.scene_stack) > 1
+                   and not getattr(self.scene_stack[-1], "is_menu_scene", False)):
+                self._pop_scene(enter_below=False)
+                popped = True
+            if not popped:
+                # Already showing a menu, so this press steps out of it the
+                # same way its own back button would -- including the
+                # on_back() bookkeeping that records where to resume.
+                on_back = getattr(self.scene_stack[-1], "on_back", None)
+                if on_back is not None:
+                    on_back()
+                self._pop_scene(enter_below=False)
             self._enter_scene(self.scene_stack[-1])
         self.buttons = 0
         self.last_buttons = 0

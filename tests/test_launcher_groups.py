@@ -219,21 +219,175 @@ class SetupIntegrationTests(unittest.TestCase):
         self.runtime_director = configure_runtime("headless")
         stripes.clear()
 
+        # Mirrors system/menu/images/__images__.yaml: every strip the launcher
+        # resolves during build(), with the real ROM's metadata. favalli is a
+        # `fullscreen:` entry, so it arrives reprojected to 256x54 rather than
+        # at its 320x320 source size.
+        fake_strips = [
+            ("menu.png", 64, 30, 16, 0),
+            ("vslogo.png", 84, 11, 1, 0),
+            ("loviejo-3.png", 84, 11, 1, 0),
+            ("favalli.png", 256, 54, 1, 0),
+            ("tinyfont_menu.png", 4, 6, 255, 1),
+            ("rainbow8x8.png", 8, 8, 256, 2),
+        ]
+
         def fake_load_rom(_filename):
-            stripes["menu.png"] = 0
-            self.runtime_director.platform.sprites.stripes[0] = {
-                "width": 64, "height": 30, "frames": 16, "palette": 0,
-            }
-            stripes["tinyfont_menu.png"] = 1
-            self.runtime_director.platform.sprites.stripes[1] = {
-                "width": 4, "height": 6, "frames": 255, "palette": 0,
-            }
+            for index, (name, width, height, frames, palette) in enumerate(fake_strips):
+                stripes[name] = index
+                self.runtime_director.platform.sprites.stripes[index] = {
+                    "width": width, "height": height,
+                    "frames": frames, "palette": palette,
+                }
 
         self.runtime_director.load_rom = fake_load_rom
 
     def tearDown(self):
         reset_runtime()
         api_guard.reset()
+
+    def _build(self, scene):
+        director.push(scene)
+        return scene
+
+    def _roms(self, roms):
+        """Stand in for a real ROM directory while a menu is constructed."""
+        import contextlib
+
+        @contextlib.contextmanager
+        def patched():
+            original = native_apps.list_roms
+            native_apps.list_roms = lambda slug: roms
+            try:
+                yield
+            finally:
+                native_apps.list_roms = original
+
+        return patched()
+
+    def test_root_menu_draws_its_backdrop_wordmark_and_byline(self):
+        # Lost in the vs2 port and restored: the disc should not come up as a
+        # bare list of tiles.
+        root = self._build(GroupsMenu())
+
+        backdrop = root.backdrop.sprites
+        self.assertEqual([sprite.image.name for sprite in backdrop], ["favalli.png"])
+        branding = [sprite.image.name for sprite in root.branding.sprites]
+        self.assertEqual(branding, ["vslogo.png", "loviejo-3.png"])
+
+    def test_root_backdrop_matches_the_legacy_planet_size(self):
+        # FULLSCREEN y is depth, 0 nearest, shrinking to a single LED by 255.
+        # The old make_me_a_planet() indexed deepspace[255 - y], so its
+        # set_y(220) spanned 40 of the 54 LEDs; vs2_deepspace[21] + 1 is the
+        # same 40. Carrying the raw 220 across would render a 1-LED speck.
+        root = self._build(GroupsMenu())
+
+        self.assertEqual(root.backdrop.sprites[0].y, 21)
+
+    def test_root_backdrop_paints_behind_the_list_and_branding_in_front(self):
+        root = self._build(GroupsMenu())
+        order = [layer.name for layer in root.layers]
+
+        self.assertLess(order.index("backdrop"), order.index("world"))
+        self.assertLess(order.index("world"), order.index("branding"))
+
+    def test_root_menu_has_no_text_heading(self):
+        self.assertIsNone(self._build(GroupsMenu()).heading)
+
+    def test_group_menu_is_headed_by_its_group_label(self):
+        menu = self._build(GroupMenu(group_tile_id("emulators")))
+
+        self.assertEqual(menu.heading, "Emulators")
+        self.assertEqual(menu.heading_label.text, "Emulators")
+        self.assertEqual(menu.heading_label.image.name, "rainbow8x8.png")
+
+    def test_heading_is_centred_on_the_top_of_the_disc(self):
+        menu = self._build(GroupMenu(group_tile_id("emulators")))
+        label = menu.heading_label
+
+        # 9 characters of an 8-wide font, centred on x=128.
+        self.assertEqual(label.x, 128 - 9 * 8 // 2)
+        self.assertEqual(label.y, 0)
+        # The disc shows the naive mapping rotated 180 degrees.
+        self.assertTrue(label.flip_x)
+        self.assertTrue(label.flip_y)
+
+    def test_rom_library_is_headed_by_its_emulator(self):
+        menu = self._build(RomLibraryMenu("emulators.nes"))
+
+        self.assertEqual(menu.heading, native_apps.APP_REGISTRY["emulators.nes"]["title"])
+        self.assertEqual(menu.heading_label.text, menu.heading)
+
+    def test_debug_menu_is_headed(self):
+        self.assertEqual(self._build(DebugMenu()).heading_label.text, "Debug")
+
+    def _shown_slot_entries(self, menu):
+        return [slot["entry_index"] for slot in menu.slots
+                if slot["sprite"].visible or slot["label"].visible]
+
+    def test_selected_entry_is_drawn_on_a_hud_layer(self):
+        # menu.py gave the selected option perspective 2 and everything else
+        # perspective 1; that projection is what makes it legible.
+        menu = self._build(GroupsMenu())
+
+        self.assertEqual(menu.selection.projection, 2)  # vs2.HUD
+        self.assertEqual(menu.selected_sprite.y, 0)
+        self.assertTrue(menu.selected_sprite.visible or menu.selected_label.visible)
+
+    def test_selected_entry_is_not_also_drawn_in_the_tunnel(self):
+        menu = self._build(GroupsMenu())
+
+        self.assertNotIn(menu.selected_index, self._shown_slot_entries(menu))
+
+    def test_moving_the_selection_swaps_which_row_is_hud_projected(self):
+        menu = self._build(GroupsMenu())
+        first = menu.selected_index
+
+        menu._move(1)
+
+        self.assertNotEqual(menu.selected_index, first)
+        shown = self._shown_slot_entries(menu)
+        self.assertIn(first, shown)                      # the old row comes back
+        self.assertNotIn(menu.selected_index, shown)     # the new one leaves
+        # ...and the HUD pair is showing the new selection, one way or another.
+        self.assertNotEqual(menu.selected_sprite.visible, menu.selected_label.visible)
+
+    def _label_frames(self, label, count):
+        # Tile storage runs counter-clockwise; read it back in writing order.
+        return [label.cells[label.columns - 1 - index] for index in range(count)]
+
+    def test_rom_library_marks_the_selection_in_red(self):
+        # menu.py's RomTextRow set bit 7 on the current row's glyphs;
+        # tinyfont_menu packs the red half of the font at +0x80.
+        with self._roms([{"path": "/a.nes", "label": "ALPHA"},
+                         {"path": "/b.nes", "label": "BETA"}]):
+            menu = self._build(RomLibraryMenu("emulators.nes"))
+
+            self.assertEqual(self._label_frames(menu.selected_label, 5),
+                             [ord(char) | 0x80 for char in "ALPHA"])
+            row = [slot for slot in menu.slots if slot["entry_index"] == 1][0]
+            self.assertEqual(self._label_frames(row["label"], 4),
+                             [ord(char) for char in "BETA"])
+
+    def test_other_menus_leave_their_selection_uncoloured(self):
+        self.assertEqual(self._build(GroupsMenu()).selected_frame_offset, 0)
+
+    def test_no_roms_notice_is_drawn_like_a_selected_option(self):
+        with self._roms([]):
+            menu = self._build(RomLibraryMenu("emulators.nes"))
+
+            self.assertTrue(menu.selected_label.visible)
+            self.assertEqual(menu.selected_label.y, 0)
+            self.assertEqual(menu.selection.projection, 2)  # vs2.HUD
+            self.assertFalse(any(slot["label"].visible or slot["sprite"].visible
+                                 for slot in menu.slots))
+            self.assertEqual(self._label_frames(menu.selected_label, 2),
+                             [ord(char) | 0x80 for char in "NO"])
+
+    def test_rom_libraries_pack_their_rows_closer(self):
+        # The 4x6 list font is tiny next to the icons the default step suits.
+        rom_menu = RomLibraryMenu("emulators.nes")
+        self.assertLess(rom_menu.y_step, GroupsMenu().y_step)
 
     def test_restores_group_and_rom_library_on_top_of_root(self):
         native_apps.write_launcher_state({
