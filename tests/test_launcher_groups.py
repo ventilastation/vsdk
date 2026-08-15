@@ -219,21 +219,80 @@ class SetupIntegrationTests(unittest.TestCase):
         self.runtime_director = configure_runtime("headless")
         stripes.clear()
 
+        # Mirrors system/menu/images/__images__.yaml: every strip the launcher
+        # resolves during build(), with the real ROM's metadata. favalli is a
+        # `fullscreen:` entry, so it arrives reprojected to 256x54 rather than
+        # at its 320x320 source size.
+        fake_strips = [
+            ("menu.png", 64, 30, 16, 0),
+            ("vslogo.png", 84, 11, 1, 0),
+            ("loviejo-3.png", 84, 11, 1, 0),
+            ("favalli.png", 256, 54, 1, 0),
+            ("tinyfont_menu.png", 4, 6, 255, 1),
+            ("rainbow8x8.png", 8, 8, 256, 2),
+        ]
+
         def fake_load_rom(_filename):
-            stripes["menu.png"] = 0
-            self.runtime_director.platform.sprites.stripes[0] = {
-                "width": 64, "height": 30, "frames": 16, "palette": 0,
-            }
-            stripes["tinyfont_menu.png"] = 1
-            self.runtime_director.platform.sprites.stripes[1] = {
-                "width": 4, "height": 6, "frames": 255, "palette": 0,
-            }
+            for index, (name, width, height, frames, palette) in enumerate(fake_strips):
+                stripes[name] = index
+                self.runtime_director.platform.sprites.stripes[index] = {
+                    "width": width, "height": height,
+                    "frames": frames, "palette": palette,
+                }
 
         self.runtime_director.load_rom = fake_load_rom
 
     def tearDown(self):
         reset_runtime()
         api_guard.reset()
+
+    def _build(self, scene):
+        director.push(scene)
+        return scene
+
+    def test_root_menu_draws_its_backdrop_wordmark_and_byline(self):
+        # Lost in the vs2 port and restored: the disc should not come up as a
+        # bare list of tiles.
+        root = self._build(GroupsMenu())
+
+        backdrop = root.backdrop.sprites
+        self.assertEqual([sprite.image.name for sprite in backdrop], ["favalli.png"])
+        branding = [sprite.image.name for sprite in root.branding.sprites]
+        self.assertEqual(branding, ["vslogo.png", "loviejo-3.png"])
+
+    def test_root_backdrop_paints_behind_the_list_and_branding_in_front(self):
+        root = self._build(GroupsMenu())
+        order = [layer.name for layer in root.layers]
+
+        self.assertLess(order.index("backdrop"), order.index("world"))
+        self.assertLess(order.index("world"), order.index("branding"))
+
+    def test_root_menu_has_no_text_heading(self):
+        self.assertIsNone(self._build(GroupsMenu()).heading)
+
+    def test_group_menu_is_headed_by_its_group_label(self):
+        menu = self._build(GroupMenu(group_tile_id("emulators")))
+
+        self.assertEqual(menu.heading, "Emulators")
+        self.assertEqual(menu.heading_label.text, "Emulators")
+        self.assertEqual(menu.heading_label.image.name, "rainbow8x8.png")
+
+    def test_heading_is_centred_on_the_top_of_the_disc(self):
+        menu = self._build(GroupMenu(group_tile_id("emulators")))
+        label = menu.heading_label
+
+        # 9 characters of an 8-wide font, centred on x=128.
+        self.assertEqual(label.x, 128 - 9 * 8 // 2)
+        self.assertEqual(label.y, 0)
+
+    def test_rom_library_is_headed_by_its_emulator(self):
+        menu = self._build(RomLibraryMenu("emulators.nes"))
+
+        self.assertEqual(menu.heading, native_apps.APP_REGISTRY["emulators.nes"]["title"])
+        self.assertEqual(menu.heading_label.text, menu.heading)
+
+    def test_debug_menu_is_headed(self):
+        self.assertEqual(self._build(DebugMenu()).heading_label.text, "Debug")
 
     def test_restores_group_and_rom_library_on_top_of_root(self):
         native_apps.write_launcher_state({

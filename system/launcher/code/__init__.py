@@ -147,6 +147,23 @@ LABEL_X = -(LABEL_COLUMNS * LABEL_FONT_WIDTH // 2)
 LABEL_FONT = "tinyfont_menu.png"
 PLACEHOLDER_IMAGE = "menu.png"
 
+# X angle of the top of the disc. The wordmark, the byline and every submenu
+# heading sit here, opposite the entry list (centred on x=0, the bottom).
+DISC_TOP = 128
+
+# Main-menu branding, in the positions the pre-vs2 flat menu used.
+BACKDROP_IMAGE = "favalli.png"
+LOGO_IMAGE = "vslogo.png"
+LOGO_Y = 0
+BYLINE_IMAGE = "loviejo-3.png"
+BYLINE_Y = 11
+
+# Submenu headings. 8x8 CP437, so a heading is legible from across the room
+# where the 4x6 list font is not; 24 columns is 192 of the disc's 256.
+HEADING_FONT = "rainbow8x8.png"
+HEADING_FONT_WIDTH = 8
+HEADING_MAX_COLUMNS = 24
+
 
 class ListMenu(vs2.Scene):
     """A virtualised, cascading list: entries scroll toward the rim as they
@@ -162,6 +179,9 @@ class ListMenu(vs2.Scene):
     back_button = False
     enable_back = True
     empty_message = None
+    #: Text shown at the top of the disc, in the large font. None draws
+    #: nothing, which is what the root uses -- it shows the wordmark instead.
+    heading = None
 
     def __init__(self, entries, selected_index=0):
         super().__init__()
@@ -181,6 +201,9 @@ class ListMenu(vs2.Scene):
             self.selected_index = min(max(selected_index, 0), len(entries) - 1)
 
     def build(self):
+        # Layers paint in creation order, so the backdrop has to be built
+        # before the list and the branding/heading after it.
+        self.build_backdrop()
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.slots = []
         for index in range(POOL_SIZE):
@@ -195,8 +218,27 @@ class ListMenu(vs2.Scene):
                 "entry_index": self.selected_index + index,
                 "y": float(index * Y_STEP),
             })
+        self.build_overlay()
         self._render_all()
         self._garbage_collect()
+
+    def build_backdrop(self):
+        """Create layers that paint behind the entry list. Override freely."""
+
+    def build_overlay(self):
+        """Create layers that paint in front of the entry list.
+
+        The default draws :attr:`heading` at the top of the disc; the root
+        menu overrides this to draw the wordmark and byline instead.
+        """
+        if not self.heading:
+            return
+        text = self.heading[:HEADING_MAX_COLUMNS]
+        self.heading_layer = self.layer("heading", projection=vs2.HUD)
+        self.heading_label = self.heading_layer.label(
+            HEADING_FONT, columns=len(text),
+            x=DISC_TOP - len(text) * HEADING_FONT_WIDTH // 2,
+            y=0, text=text)
 
     def _garbage_collect(self):
         import gc
@@ -324,6 +366,21 @@ class GroupsMenu(ListMenu):
     def __init__(self, selected_index=0):
         super().__init__(MAIN_MENU_OPTIONS, selected_index)
 
+    def build_backdrop(self):
+        self.backdrop = self.layer("backdrop", projection=vs2.FULLSCREEN)
+        self.backdrop.sprite(BACKDROP_IMAGE, x=0, y=255)
+
+    def build_overlay(self):
+        """The wordmark and byline, in the places the pre-vs2 menu had them.
+
+        The root gets these instead of a text heading: it is the one screen
+        whose name everybody already knows.
+        """
+        self.branding = self.layer("branding", projection=vs2.HUD)
+        for name, y in ((LOGO_IMAGE, LOGO_Y), (BYLINE_IMAGE, BYLINE_Y)):
+            image = self.image(name)
+            self.branding.sprite(image, x=DISC_TOP - image.width // 2, y=y)
+
     def on_select(self, entry):
         option_id = entry[0]
         if is_group_tile(option_id):
@@ -356,6 +413,7 @@ class GroupMenu(ListMenu):
         entries = GROUP_MEMBERS.get(group_id, [])
         index = _option_index(entries, selected_slug) if selected_slug else 0
         super().__init__(entries, index)
+        self.heading = _group_label(group_id[len(GROUP_PREFIX):])
 
     def on_select(self, entry):
         slug = entry[0]
@@ -388,6 +446,8 @@ class RomLibraryMenu(ListMenu):
                     index = rom_index
                     break
         super().__init__(entries, index)
+        spec = native_apps.APP_REGISTRY.get(slug) or {}
+        self.heading = spec.get("title") or catalog.prettify_name(slug)
 
     def on_select(self, entry):
         rom_path = entry[0]
@@ -406,6 +466,8 @@ class DebugMenu(ListMenu):
     """The secret developer menu, reached via the button combo in
     GroupsMenu. Not part of the group hierarchy, so back always returns to
     the root without touching launcher_state.json."""
+
+    heading = "Debug"
 
     def __init__(self):
         super().__init__(SYS_MENU_OPTIONS)
