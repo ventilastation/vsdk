@@ -140,12 +140,47 @@ def _option_index(options, option_id):
 # sits at that slot's offset from the selection.
 POOL_SIZE = 12
 Y_STEP = 20
+# ROM libraries are always label-only, and the 4x6 list font is tiny next to
+# the ~30-LED icons the 20-step spacing was picked for. Packing those rows
+# closer puts more of them on the disc and reads as one list rather than a
+# scatter of unrelated words.
+ROM_Y_STEP = 10
+# tinyfont_menu packs white ASCII at frames 0..127 and the matching red
+# glyphs at 128..254, so +0x80 recolours a line without a second strip.
+# menu.py's RomTextRow used exactly this to mark the current ROM.
+RED_GLYPH_OFFSET = 0x80
 ICON_X = -32
 LABEL_COLUMNS = 21
 LABEL_FONT_WIDTH = 4
 LABEL_X = -(LABEL_COLUMNS * LABEL_FONT_WIDTH // 2)
 LABEL_FONT = "tinyfont_menu.png"
 PLACEHOLDER_IMAGE = "menu.png"
+
+# X angle of the top of the disc. The wordmark, the byline and every submenu
+# heading sit here, opposite the entry list (centred on x=0, the bottom).
+DISC_TOP = 128
+
+# Main-menu branding, in the positions the pre-vs2 flat menu used.
+BACKDROP_IMAGE = "favalli.png"
+# On a FULLSCREEN layer y is depth, and 0 is nearest -- the image spans the
+# whole disc there and shrinks to a single LED by 255. The launcher's old
+# make_me_a_planet() used the opposite convention: its perspective-0 path
+# indexed deepspace[255 - y], so set_y(220) meant deepspace[35], spanning 40
+# of the 54 LEDs. vs2_deepspace[21] + 1 is the same 40, and it is the only
+# value that matches exactly.
+BACKDROP_Y = 21
+LOGO_IMAGE = "vslogo.png"
+LOGO_Y = 0
+BYLINE_IMAGE = "loviejo-3.png"
+BYLINE_Y = 11
+
+# Submenu headings. 8x8 CP437, so a heading is legible from across the room
+# where the 4x6 list font is not; 24 columns is 192 of the disc's 256.
+HEADING_FONT = "rainbow8x8.png"
+HEADING_FONT_WIDTH = 8
+# The selected entry sits at the rim, where HUD text is most legible.
+SELECTION_Y = 0
+HEADING_MAX_COLUMNS = 24
 
 
 class ListMenu(vs2.Scene):
@@ -162,6 +197,18 @@ class ListMenu(vs2.Scene):
     back_button = False
     enable_back = True
     empty_message = None
+    #: Stops the exit command unwinding past this scene (see
+    #: Director.return_to_menu): a game exits back into the menu it was
+    #: launched from, and only reaches the root on a further press.
+    is_menu_scene = True
+    #: Depth between consecutive entries in the tunnel cascade.
+    y_step = Y_STEP
+    #: Frame offset for the selected entry's label, and for
+    #: :attr:`empty_message`. See :data:`RED_GLYPH_OFFSET`.
+    selected_frame_offset = 0
+    #: Text shown at the top of the disc, in the large font. None draws
+    #: nothing, which is what the root uses -- it shows the wordmark instead.
+    heading = None
 
     def __init__(self, entries, selected_index=0):
         super().__init__()
@@ -181,22 +228,60 @@ class ListMenu(vs2.Scene):
             self.selected_index = min(max(selected_index, 0), len(entries) - 1)
 
     def build(self):
+        # Layers paint in creation order, so the backdrop has to be built
+        # before the list and the branding/heading after it.
+        self.build_backdrop()
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.slots = []
         for index in range(POOL_SIZE):
-            sprite = self.world.sprite(PLACEHOLDER_IMAGE, x=ICON_X, y=index * Y_STEP)
+            sprite = self.world.sprite(PLACEHOLDER_IMAGE, x=ICON_X, y=index * self.y_step)
             sprite.hide()
             label = self.world.label(LABEL_FONT, columns=LABEL_COLUMNS,
-                                     x=LABEL_X, y=index * Y_STEP)
+                                     x=LABEL_X, y=index * self.y_step)
             label.hide()
             self.slots.append({
                 "sprite": sprite,
                 "label": label,
                 "entry_index": self.selected_index + index,
-                "y": float(index * Y_STEP),
+                "y": float(index * self.y_step),
             })
+        # menu.py drew the selected entry with perspective 2 (HUD) and every
+        # other one in the tunnel -- that projection is what made the current
+        # option legible, and the vs2 port lost it by putting the whole list
+        # on one TUNNEL layer. A drawable's layer is fixed for its whole life,
+        # so the selection gets its own HUD pair here rather than a slot
+        # migrating between layers; the matching tunnel slot stays hidden.
+        self.selection = self.layer("selection", projection=vs2.HUD)
+        self.selected_sprite = self.selection.sprite(
+            PLACEHOLDER_IMAGE, x=ICON_X, y=SELECTION_Y)
+        self.selected_sprite.hide()
+        self.selected_label = self.selection.label(
+            LABEL_FONT, columns=LABEL_COLUMNS, x=LABEL_X, y=SELECTION_Y)
+        self.selected_label.hide()
+        self.build_overlay()
         self._render_all()
         self._garbage_collect()
+
+    def build_backdrop(self):
+        """Create layers that paint behind the entry list. Override freely."""
+
+    def build_overlay(self):
+        """Create layers that paint in front of the entry list.
+
+        The default draws :attr:`heading` at the top of the disc; the root
+        menu overrides this to draw the wordmark and byline instead.
+        """
+        if not self.heading:
+            return
+        text = self.heading[:HEADING_MAX_COLUMNS]
+        self.heading_layer = self.layer("heading", projection=vs2.HUD)
+        # The disc shows the naive mapping rotated 180 degrees, so a heading
+        # placed at the top reads mirrored on both axes unless it is flipped
+        # back here (same correction the native POV overlay applies).
+        self.heading_label = self.heading_layer.label(
+            HEADING_FONT, columns=len(text),
+            x=DISC_TOP - len(text) * HEADING_FONT_WIDTH // 2,
+            y=0, text=text, flip_x=True, flip_y=True)
 
     def _garbage_collect(self):
         import gc
@@ -210,22 +295,8 @@ class ListMenu(vs2.Scene):
             return strip
         return None
 
-    def _render_slot(self, slot):
-        entry_index = slot["entry_index"]
-        sprite, label = slot["sprite"], slot["label"]
-        if not self.entries:
-            if entry_index == 0 and self.empty_message:
-                label.text = self.empty_message
-                label.show()
-            else:
-                label.hide()
-            sprite.hide()
-            return
-        if entry_index is None or not (0 <= entry_index < len(self.entries)):
-            sprite.hide()
-            label.hide()
-            return
-        entry = self.entries[entry_index]
+    def _show_entry(self, sprite, label, entry, frame_offset=0):
+        """Draw one entry as its icon, or as a text label when it has none."""
         icon = self._entry_icon(entry)
         if icon:
             sprite.image = icon
@@ -233,13 +304,47 @@ class ListMenu(vs2.Scene):
             sprite.show()
             label.hide()
         else:
-            label.text = entry[3]
+            label.write(0, 0, entry[3], frame_offset=frame_offset)
             label.show()
             sprite.hide()
+
+    def _render_slot(self, slot):
+        entry_index = slot["entry_index"]
+        sprite, label = slot["sprite"], slot["label"]
+        if not self.entries:
+            # The empty notice is drawn by _render_selection() instead: it is
+            # the screen's only line, so it belongs where a selected entry
+            # would be rather than at the back of the tunnel.
+            sprite.hide()
+            label.hide()
+            return
+        if (entry_index is None or not (0 <= entry_index < len(self.entries))
+                or entry_index == self.selected_index):
+            # The selection is drawn by the HUD pair, so its tunnel slot stays
+            # hidden rather than showing the same entry twice.
+            sprite.hide()
+            label.hide()
+            return
+        self._show_entry(sprite, label, self.entries[entry_index])
+
+    def _render_selection(self):
+        if not self.entries:
+            self.selected_sprite.hide()
+            if self.empty_message:
+                self.selected_label.write(0, 0, self.empty_message,
+                                          frame_offset=self.selected_frame_offset)
+                self.selected_label.show()
+            else:
+                self.selected_label.hide()
+            return
+        self._show_entry(self.selected_sprite, self.selected_label,
+                         self.entries[self.selected_index],
+                         self.selected_frame_offset)
 
     def _render_all(self):
         for slot in self.slots:
             self._render_slot(slot)
+        self._render_selection()
 
     def _move(self, delta):
         if not self.entries:
@@ -252,6 +357,10 @@ class ListMenu(vs2.Scene):
         if new_index != self.selected_index:
             self.selected_index = new_index
             vs2.audio.sound("alecu.vyruss/shoot3")
+            # Which slot is under the selection changed, and only recycled
+            # slots get re-rendered below -- refresh them all so the newly
+            # selected one hides and the previous one reappears.
+            self._render_all()
 
     def _select(self):
         if not self.entries:
@@ -283,7 +392,7 @@ class ListMenu(vs2.Scene):
             if offset == 0:
                 y = 0.0
             else:
-                dest_y = min(offset * Y_STEP + 45, 255)
+                dest_y = min(offset * self.y_step + 45, 255)
                 curr_y = slot["y"]
                 y = curr_y - (curr_y - dest_y) / 4
             slot["y"] = y
@@ -324,6 +433,21 @@ class GroupsMenu(ListMenu):
     def __init__(self, selected_index=0):
         super().__init__(MAIN_MENU_OPTIONS, selected_index)
 
+    def build_backdrop(self):
+        self.backdrop = self.layer("backdrop", projection=vs2.FULLSCREEN)
+        self.backdrop.sprite(BACKDROP_IMAGE, x=0, y=BACKDROP_Y)
+
+    def build_overlay(self):
+        """The wordmark and byline, in the places the pre-vs2 menu had them.
+
+        The root gets these instead of a text heading: it is the one screen
+        whose name everybody already knows.
+        """
+        self.branding = self.layer("branding", projection=vs2.HUD)
+        for name, y in ((LOGO_IMAGE, LOGO_Y), (BYLINE_IMAGE, BYLINE_Y)):
+            image = self.image(name)
+            self.branding.sprite(image, x=DISC_TOP - image.width // 2, y=y)
+
     def on_select(self, entry):
         option_id = entry[0]
         if is_group_tile(option_id):
@@ -356,6 +480,7 @@ class GroupMenu(ListMenu):
         entries = GROUP_MEMBERS.get(group_id, [])
         index = _option_index(entries, selected_slug) if selected_slug else 0
         super().__init__(entries, index)
+        self.heading = _group_label(group_id[len(GROUP_PREFIX):])
 
     def on_select(self, entry):
         slug = entry[0]
@@ -376,6 +501,8 @@ class RomLibraryMenu(ListMenu):
     ROM files never had icons."""
 
     empty_message = "NO ROMS"
+    y_step = ROM_Y_STEP
+    selected_frame_offset = RED_GLYPH_OFFSET
 
     def __init__(self, slug, selected_rom=None):
         self.slug = slug
@@ -388,6 +515,8 @@ class RomLibraryMenu(ListMenu):
                     index = rom_index
                     break
         super().__init__(entries, index)
+        spec = native_apps.APP_REGISTRY.get(slug) or {}
+        self.heading = spec.get("title") or catalog.prettify_name(slug)
 
     def on_select(self, entry):
         rom_path = entry[0]
@@ -406,6 +535,8 @@ class DebugMenu(ListMenu):
     """The secret developer menu, reached via the button combo in
     GroupsMenu. Not part of the group hierarchy, so back always returns to
     the root without touching launcher_state.json."""
+
+    heading = "Debug"
 
     def __init__(self):
         super().__init__(SYS_MENU_OPTIONS)

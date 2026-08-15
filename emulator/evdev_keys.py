@@ -36,6 +36,7 @@ except ImportError:
 from pyglet.window import key as pygkey
 
 _EVDEV_TO_PYGLET = {}
+_DETECTION_KEYS = frozenset()
 if evdev is not None:
     _EVDEV_TO_PYGLET = {
         ecodes.KEY_LEFT: pygkey.LEFT,
@@ -64,6 +65,20 @@ if evdev is not None:
         ecodes.KEY_END: pygkey.END,
         ecodes.KEY_ESC: pygkey.ESCAPE,
     }
+    # Auto-detect below scores a candidate device on the gameplay keys only.
+    _DETECTION_KEYS = frozenset(_EVDEV_TO_PYGLET)
+    # The OTA shortcut chord (Ctrl-U, see inputs_common.ota_shortcut_held).
+    # Translated like any other key, but deliberately not part of
+    # _DETECTION_KEYS: modifiers are common on HID devices that are not the
+    # arcade panel's encoder, and letting them count toward the threshold
+    # would loosen what qualifies as a keyboard.
+    _EVDEV_TO_PYGLET.update({
+        ecodes.KEY_U: pygkey.U,
+        ecodes.KEY_LEFTCTRL: pygkey.LCTRL,
+        ecodes.KEY_RIGHTCTRL: pygkey.RCTRL,
+        ecodes.KEY_LEFTMETA: pygkey.LCOMMAND,
+        ecodes.KEY_RIGHTMETA: pygkey.RCOMMAND,
+    })
 
 _UP, _DOWN, _REPEAT = 0, 1, 2
 
@@ -98,7 +113,7 @@ def _is_joystick_like(device):
 
 def _looks_like_keyboard(device):
     keys = set(device.capabilities().get(ecodes.EV_KEY, []))
-    if len(keys & set(_EVDEV_TO_PYGLET)) < _MIN_MATCHING_KEYS:
+    if len(keys & _DETECTION_KEYS) < _MIN_MATCHING_KEYS:
         return False
     return not _is_joystick_like(device)
 

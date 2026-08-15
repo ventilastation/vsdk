@@ -90,6 +90,25 @@ def ota_shortcut_pressed(symbol, modifiers):
     return symbol == key.U and bool(modifiers & (key.MOD_CTRL | key.MOD_COMMAND))
 
 
+# Both symbol spellings of each modifier: which one a held key reads as
+# depends on the pyglet backend, and console mode gets its own from
+# evdev_keys' translation table rather than from pyglet at all.
+OTA_MODIFIER_KEYS = (
+    key.LCTRL, key.RCTRL, key.LCOMMAND, key.RCOMMAND, key.LMETA, key.RMETA,
+)
+
+
+def ota_shortcut_held(keys):
+    """Same chord as ota_shortcut_pressed(), read from polled key state.
+
+    Console mode never creates a window (see consoleengine.py), so nothing
+    delivers on_key_press and there is no `modifiers` mask to test -- it polls
+    evdev state instead. Keeping both forms here means the shortcut has one
+    definition rather than drifting between the windowed and headless engines.
+    """
+    return bool(keys[key.U]) and any(bool(keys[symbol]) for symbol in OTA_MODIFIER_KEYS)
+
+
 def pack_directions(left, right, up, down):
     return (bool(left) << 0 | bool(right) << 1 |
             bool(up) << 2 | bool(down) << 3)

@@ -34,7 +34,9 @@ import pyglet_evdev_fix
 from audio import sound_init, sound_process_queue
 from emu_audio import emu_audio
 from evdev_keys import MultiKeyState
-from inputs_common import keyboard_state, keyboard_v2_state, pack_controllers
+from inputs_common import (
+    keyboard_state, keyboard_v2_state, ota_shortcut_held, pack_controllers,
+)
 from pyglet.window import key
 
 pyglet_evdev_fix.apply()
@@ -63,6 +65,7 @@ class ConsoleEngine:
 
         self.last_input_sent = (0, 0, 0)
         self.last_exit_pressed = False
+        self.last_ota_pressed = False
 
     def _refresh_controllers(self):
         connected = list(self.controller_manager.get_controllers())[:2]
@@ -96,6 +99,13 @@ class ConsoleEngine:
         if exit_pressed and not self.last_exit_pressed:
             comms.send_command("exit")
         self.last_exit_pressed = exit_pressed
+        # The windowed backends get this from on_key_press; with no window
+        # there is no such event, so the chord is edge-detected off the same
+        # polled state _encode_input() just refreshed.
+        ota_pressed = ota_shortcut_held(self.keys)
+        if ota_pressed and not self.last_ota_pressed:
+            comms.trigger_ota()
+        self.last_ota_pressed = ota_pressed
         sound_process_queue()
         emu_audio.process()  # drive emulator-audio player lifecycle (main thread)
 

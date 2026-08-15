@@ -22,3 +22,9 @@ palettegroups:
     # 255-colour budget; same source as system/shared/other/images'.
     - strip: ../../shared/other/images/tinyfont_menu.png
       frames: 255
+  palette3:
+    # Submenu heading font (system/launcher).  A rainbow face spends a lot
+    # of a group's 255-colour budget, so it gets its own group rather than
+    # crowding the list labels in palette2.
+    - strip: ../../shared/other/images/8x8fonts/rainbow8x8.png
+      frames: 256

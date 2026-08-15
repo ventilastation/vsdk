@@ -31,6 +31,12 @@ def format_quarters(value):
 class TutorialVs2(vs2.Scene):
     asset_pack = "other"
 
+    # A tutorial is read, not played: you can sit on one screen studying the
+    # coordinate readout for a long time without touching a control, and
+    # vs2.Scene's default 30s idle timeout would drop you back to the
+    # launcher mid-sentence. Y/BACK still exits.
+    idle_timeout = None
+
     def build(self):
         self.fullscreen = self.layer("fullscreen", projection=vs2.FULLSCREEN)
         self.world = self.layer("world", projection=vs2.TUNNEL)
