@@ -275,6 +275,15 @@ class SetupIntegrationTests(unittest.TestCase):
         branding = [sprite.image.name for sprite in root.branding.sprites]
         self.assertEqual(branding, ["vslogo.png", "loviejo-3.png"])
 
+    def test_root_backdrop_fills_the_disc(self):
+        # On a FULLSCREEN layer y is depth and 0 is nearest, so the backdrop
+        # spans the whole disc there and shrinks to a single LED by 255. The
+        # legacy make_me_a_planet() helper used the opposite convention, and
+        # carrying its 255 across made favalli render as an invisible speck.
+        root = self._build(GroupsMenu())
+
+        self.assertEqual(root.backdrop.sprites[0].y, 0)
+
     def test_root_backdrop_paints_behind_the_list_and_branding_in_front(self):
         root = self._build(GroupsMenu())
         order = [layer.name for layer in root.layers]

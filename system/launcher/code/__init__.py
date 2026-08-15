@@ -162,6 +162,11 @@ DISC_TOP = 128
 
 # Main-menu branding, in the positions the pre-vs2 flat menu used.
 BACKDROP_IMAGE = "favalli.png"
+# On a FULLSCREEN layer y is depth, and 0 is nearest -- the image spans the
+# whole disc there and shrinks to a single LED by 255. The legacy
+# make_me_a_planet() helper used the opposite convention (its perspective-0
+# path indexed 255 - y), so its 255 does NOT carry over.
+BACKDROP_Y = 0
 LOGO_IMAGE = "vslogo.png"
 LOGO_Y = 0
 BYLINE_IMAGE = "loviejo-3.png"
@@ -190,6 +195,10 @@ class ListMenu(vs2.Scene):
     back_button = False
     enable_back = True
     empty_message = None
+    #: Stops the exit command unwinding past this scene (see
+    #: Director.return_to_menu): a game exits back into the menu it was
+    #: launched from, and only reaches the root on a further press.
+    is_menu_scene = True
     #: Depth between consecutive entries in the tunnel cascade.
     y_step = Y_STEP
     #: Frame offset for the selected entry's label, and for
@@ -424,7 +433,7 @@ class GroupsMenu(ListMenu):
 
     def build_backdrop(self):
         self.backdrop = self.layer("backdrop", projection=vs2.FULLSCREEN)
-        self.backdrop.sprite(BACKDROP_IMAGE, x=0, y=255)
+        self.backdrop.sprite(BACKDROP_IMAGE, x=0, y=BACKDROP_Y)
 
     def build_overlay(self):
         """The wordmark and byline, in the places the pre-vs2 menu had them.
