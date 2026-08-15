@@ -300,7 +300,7 @@ def _draw_toolbar():
 def _overlay_bounds(kind):
     max_width = max(280, window.width - 40)
     max_height = max(220, window.height - 40)
-    desired_height = 390 if kind == OVERLAY_HELP else 300
+    desired_height = 390 if kind == OVERLAY_HELP else 300 + _CAL_DARK_GROWTH
     width = min(580, max_width)
     height = min(desired_height, max_height)
     return ((window.width - width) / 2, (window.height - height) / 2, width, height)
@@ -591,18 +591,28 @@ _cal_generation_seen = None
 _cal_dragging = None
 _cal_master_max = 4000
 _cal_radial_max = 4000
-# The dark white balance is a fine trim, so its slider covers a narrow band
-# around neutral rather than the full range the protocol accepts.
-_cal_dark_min, _cal_dark_max = 800, 1200
-# Three short tracks side by side rather than three more full-width rows:
-# the card has room for one more slider row, not three.
+# Full protocol range (matches DARK_WHITE_MIN/MAX in color_calibration.py):
+# NS107S divergence at the floor can be well past a narrow trim, and a
+# cramped slider band just hides that from the person tuning it.
+_cal_dark_min, _cal_dark_max = 250, 4000
+# One full-width row per channel, stacked, rather than three short tracks
+# side by side -- a 60px-wide track gives too few pixels per unit of gain
+# to trim precisely. _cal_dark_pitch is the vertical spacing between rows.
 _cal_dark_channels = ("dark_r", "dark_g", "dark_b")
 _cal_dark_letters = ("R", "G", "B")
 _cal_dark_colors = ((235, 110, 110), (120, 230, 140), (120, 170, 255))
-_cal_dark_w, _cal_dark_gap = 60, 70
-# Horizontal grab margin. Must stay under half the 10px gap between tracks,
-# or neighbouring hit zones overlap and the leftmost one silently wins.
+_cal_dark_pitch = 38
+# Vertical grab margin around a row's track, like _cal_handle_radius already
+# gives the master/radial tracks.
 _cal_dark_hit_pad = 4
+# Two extra stacked rows (38px pitch) plus a little breathing room below the
+# lowest one and above the RPM slider -- see _layout_settings_controls and
+# _overlay_bounds, which both need to grow by exactly this much together.
+_CAL_DARK_GROWTH = 80
+# Extra breathing room between the radial-exponent row and the "Dark white
+# balance" title, on top of the fixed 24px the shared row rhythm gives every
+# other gap in this section.
+_CAL_DARK_TITLE_GAP = 10
 # The working triple. `povcal set dark_white` takes all three at once, so a
 # drag on one channel sends the other two alongside it.
 _cal_dark_white = [1000, 1000, 1000]
@@ -619,10 +629,10 @@ cal_radial_handle = shapes.Circle(_cal_x, _cal_y + 32 + _cal_h / 2, _cal_handle_
                                   color=(160, 220, 110), batch=controls_batch)
 cal_dark_tracks, cal_dark_handles = [], []
 for _index, _color in enumerate(_cal_dark_colors):
-    _x = _cal_x + _index * _cal_dark_gap
-    cal_dark_tracks.append(shapes.Rectangle(_x, _cal_y + 64, _cal_dark_w, _cal_h,
+    _y = _cal_y - 76 - _index * _cal_dark_pitch
+    cal_dark_tracks.append(shapes.Rectangle(_cal_x, _y, _cal_w, _cal_h,
                                             color=(70, 70, 70), batch=controls_batch))
-    cal_dark_handles.append(shapes.Circle(_x, _cal_y + 64 + _cal_h / 2, _cal_handle_radius,
+    cal_dark_handles.append(shapes.Circle(_cal_x, _y + _cal_h / 2, _cal_handle_radius,
                                           color=_color, batch=controls_batch))
 cal_master_label = pyglet.text.Label("Master: waiting", font_name="Arial", font_size=10,
                                      x=_cal_x, y=_cal_y + 10,
@@ -632,7 +642,7 @@ cal_radial_label = pyglet.text.Label("Radial: waiting", font_name="Arial", font_
                                      color=(210, 210, 210, 255), batch=controls_batch)
 cal_dark_labels = [
     pyglet.text.Label("%s ----" % letter, font_name="Arial", font_size=9,
-                      x=_cal_x + index * _cal_dark_gap, y=_cal_y + 74,
+                      x=_cal_x, y=_cal_y - 76 - _CAL_DARK_TITLE_GAP - index * _cal_dark_pitch + 10,
                       color=(210, 210, 210, 255), batch=controls_batch)
     for index, letter in enumerate(_cal_dark_letters)
 ]
@@ -692,16 +702,20 @@ def _layout_settings_controls(left, bottom, width, height):
     global _perf_legacy_x, _perf_stop_x, _perf_calibrated_x, _perf_button_y
 
     content_x = left + 22
-    _slider_x, _slider_y = content_x, bottom + 181
-    _reset_x, _reset_y = content_x + 232, bottom + 174
-    _ota_x, _ota_y = content_x + 314, bottom + 174
-    _cal_x, _cal_y = content_x, bottom + 112
+    # The dark-white section grew from one shared row to three stacked full
+    # rows (see _cal_dark_row_y), so everything from the RPM slider up needs
+    # to sit _CAL_DARK_GROWTH higher to leave it room; the settings card is
+    # the same amount taller (see _overlay_bounds) to match.
+    _slider_x, _slider_y = content_x, bottom + 181 + _CAL_DARK_GROWTH
+    _reset_x, _reset_y = content_x + 232, bottom + 174 + _CAL_DARK_GROWTH
+    _ota_x, _ota_y = content_x + 314, bottom + 174 + _CAL_DARK_GROWTH
+    _cal_x, _cal_y = content_x, bottom + 112 + _CAL_DARK_GROWTH
     _cal_commit_x, _cal_revert_x, _cal_factory_x = content_x + 232, content_x + 302, content_x + 382
     _cal_button_y = _cal_y - 5
     _perf_legacy_x, _perf_stop_x, _perf_calibrated_x = content_x + 232, content_x + 327, content_x + 409
     _perf_button_y = bottom + 16
 
-    settings_rotation_label.x, settings_rotation_label.y = content_x, bottom + 216
+    settings_rotation_label.x, settings_rotation_label.y = content_x, bottom + 216 + _CAL_DARK_GROWTH
     slider_track.position = (_slider_x, _slider_y)
     slider_handle.position = (_rpm_to_x(_current_rpm), _slider_y + _slider_h / 2)
     rpm_label.x, rpm_label.y = _slider_x, _slider_y + 16
@@ -710,16 +724,17 @@ def _layout_settings_controls(left, bottom, width, height):
     ota_button.position = (_ota_x, _ota_y)
     ota_label.x, ota_label.y = _ota_x + _ota_w / 2, _ota_y + _ota_h / 2
 
-    cal_status_label.x, cal_status_label.y = _cal_x, bottom + 151
+    cal_status_label.x, cal_status_label.y = _cal_x, bottom + 151 + _CAL_DARK_GROWTH
     cal_master_track.position = (_cal_x, _cal_y)
     cal_radial_track.position = (_cal_x, _cal_y - 38)
     for index in range(len(_cal_dark_channels)):
-        cal_dark_tracks[index].position = (_cal_dark_left(index), _cal_y - 76)
-        cal_dark_handles[index].x = _cal_dark_to_x(index, _cal_dark_white[index])
-        cal_dark_handles[index].y = _cal_y - 76 + _cal_h / 2
-        cal_dark_labels[index].x = _cal_dark_left(index)
-        cal_dark_labels[index].y = _cal_y - 66
-    cal_dark_title.x, cal_dark_title.y = _cal_x, _cal_y - 52
+        row_y = _cal_dark_row_y(index)
+        cal_dark_tracks[index].position = (_cal_x, row_y)
+        cal_dark_handles[index].x = _cal_dark_to_x(_cal_dark_white[index])
+        cal_dark_handles[index].y = row_y + _cal_h / 2
+        cal_dark_labels[index].x = _cal_x
+        cal_dark_labels[index].y = row_y + 10
+    cal_dark_title.x, cal_dark_title.y = _cal_x, _cal_y - 52 - _CAL_DARK_TITLE_GAP
     cal_master_handle.y = _cal_y + _cal_h / 2
     cal_radial_handle.y = _cal_y - 38 + _cal_h / 2
     cal_master_label.x, cal_master_label.y = _cal_x, _cal_y + 10
@@ -760,18 +775,19 @@ def _cal_x_to_value(x, maximum):
     return round(max(0.0, min(1.0, (x - _cal_x) / _cal_w)) * maximum)
 
 
-def _cal_dark_left(index):
-    return _cal_x + index * _cal_dark_gap
+def _cal_dark_row_y(index):
+    """Baseline Y of the index'th dark-white row, stacked below radial."""
+    return _cal_y - 76 - _CAL_DARK_TITLE_GAP - index * _cal_dark_pitch
 
 
-def _cal_dark_to_x(index, value):
+def _cal_dark_to_x(value):
     span = _cal_dark_max - _cal_dark_min
     fraction = max(0.0, min(1.0, (value - _cal_dark_min) / span))
-    return _cal_dark_left(index) + fraction * _cal_dark_w
+    return _cal_x + fraction * _cal_w
 
 
-def _cal_x_to_dark(index, x):
-    fraction = max(0.0, min(1.0, (x - _cal_dark_left(index)) / _cal_dark_w))
+def _cal_x_to_dark(x):
+    fraction = max(0.0, min(1.0, (x - _cal_x) / _cal_w))
     return _cal_dark_min + round(fraction * (_cal_dark_max - _cal_dark_min))
 
 
@@ -789,7 +805,7 @@ def _sync_calibration_controls():
     cal_radial_label.text = "Radial: %d" % profile.radial_exponent_milli
     _cal_dark_white[:] = list(profile.dark_white)
     for index, value in enumerate(_cal_dark_white):
-        cal_dark_handles[index].x = _cal_dark_to_x(index, value)
+        cal_dark_handles[index].x = _cal_dark_to_x(value)
         cal_dark_labels[index].text = "%s %d" % (_cal_dark_letters[index], value)
 
 
@@ -803,7 +819,7 @@ def _set_calibration_value(name, value):
     else:
         index = _cal_dark_channels.index(name)
         _cal_dark_white[index] = value
-        cal_dark_handles[index].x = _cal_dark_to_x(index, value)
+        cal_dark_handles[index].x = _cal_dark_to_x(value)
         cal_dark_labels[index].text = "%s %d*" % (_cal_dark_letters[index], value)
     if _cal_last_sent[name] == value:
         return
@@ -824,10 +840,10 @@ def _cal_dark_hit(x, y):
     """Index of the dark-white track under the cursor, or None."""
     for index in range(len(_cal_dark_channels)):
         if _point_in_rect(x, y,
-                          _cal_dark_left(index) - _cal_dark_hit_pad,
-                          _cal_y - 76 - _cal_handle_radius,
-                          _cal_dark_w + 2 * _cal_dark_hit_pad,
-                          _cal_h + 2 * _cal_handle_radius):
+                          _cal_x - _cal_handle_radius,
+                          _cal_dark_row_y(index) - _cal_dark_hit_pad,
+                          _cal_w + 2 * _cal_handle_radius,
+                          _cal_h + 2 * _cal_dark_hit_pad):
             return index
     return None
 
@@ -888,7 +904,7 @@ def on_mouse_press(x, y, button, modifiers):
     elif _cal_dark_hit(x, y) is not None:
         index = _cal_dark_hit(x, y)
         _cal_dragging = _cal_dark_channels[index]
-        _set_calibration_value(_cal_dragging, _cal_x_to_dark(index, x))
+        _set_calibration_value(_cal_dragging, _cal_x_to_dark(x))
     elif _point_in_rect(x, y, _cal_commit_x, _cal_button_y, _cal_button_w, _cal_button_h):
         comms.send_povcal("commit")
     elif _point_in_rect(x, y, _cal_revert_x, _cal_button_y, _cal_button_w, _cal_button_h):
@@ -916,8 +932,7 @@ def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
     elif _cal_dragging == "radial_exponent":
         _set_calibration_value("radial_exponent", _cal_x_to_value(x, _cal_radial_max))
     elif _cal_dragging in _cal_dark_channels:
-        index = _cal_dark_channels.index(_cal_dragging)
-        _set_calibration_value(_cal_dragging, _cal_x_to_dark(index, x))
+        _set_calibration_value(_cal_dragging, _cal_x_to_dark(x))
     return pyglet.event.EVENT_HANDLED
 
 
