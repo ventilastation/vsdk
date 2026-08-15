@@ -163,10 +163,12 @@ DISC_TOP = 128
 # Main-menu branding, in the positions the pre-vs2 flat menu used.
 BACKDROP_IMAGE = "favalli.png"
 # On a FULLSCREEN layer y is depth, and 0 is nearest -- the image spans the
-# whole disc there and shrinks to a single LED by 255. The legacy
-# make_me_a_planet() helper used the opposite convention (its perspective-0
-# path indexed 255 - y), so its 255 does NOT carry over.
-BACKDROP_Y = 0
+# whole disc there and shrinks to a single LED by 255. The launcher's old
+# make_me_a_planet() used the opposite convention: its perspective-0 path
+# indexed deepspace[255 - y], so set_y(220) meant deepspace[35], spanning 40
+# of the 54 LEDs. vs2_deepspace[21] + 1 is the same 40, and it is the only
+# value that matches exactly.
+BACKDROP_Y = 21
 LOGO_IMAGE = "vslogo.png"
 LOGO_Y = 0
 BYLINE_IMAGE = "loviejo-3.png"

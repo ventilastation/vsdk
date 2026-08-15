@@ -275,14 +275,14 @@ class SetupIntegrationTests(unittest.TestCase):
         branding = [sprite.image.name for sprite in root.branding.sprites]
         self.assertEqual(branding, ["vslogo.png", "loviejo-3.png"])
 
-    def test_root_backdrop_fills_the_disc(self):
-        # On a FULLSCREEN layer y is depth and 0 is nearest, so the backdrop
-        # spans the whole disc there and shrinks to a single LED by 255. The
-        # legacy make_me_a_planet() helper used the opposite convention, and
-        # carrying its 255 across made favalli render as an invisible speck.
+    def test_root_backdrop_matches_the_legacy_planet_size(self):
+        # FULLSCREEN y is depth, 0 nearest, shrinking to a single LED by 255.
+        # The old make_me_a_planet() indexed deepspace[255 - y], so its
+        # set_y(220) spanned 40 of the 54 LEDs; vs2_deepspace[21] + 1 is the
+        # same 40. Carrying the raw 220 across would render a 1-LED speck.
         root = self._build(GroupsMenu())
 
-        self.assertEqual(root.backdrop.sprites[0].y, 0)
+        self.assertEqual(root.backdrop.sprites[0].y, 21)
 
     def test_root_backdrop_paints_behind_the_list_and_branding_in_front(self):
         root = self._build(GroupsMenu())
