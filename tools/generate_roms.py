@@ -82,8 +82,18 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
         rom_name = rom_filename.stem
     rom_timestamp = rom_filename.stat().st_mtime if rom_filename.exists() else 0
     src_filenames = (folder / filename for group in palettegroups for filename, _ in group)
+    # A game_menu_strips expansion (see _game_menu_strip_items) derives each
+    # strip's id from its *path*, not its content -- so moving a game folder
+    # to a new group (same bytes, same mtime, different path) must be able
+    # to invalidate this rom too. Plain mv/git mv never touches a moved
+    # file's own mtime, but it does touch its old and new parent
+    # directories' (an entry left one, entered the other), so watch every
+    # games/<group>/ folder as well. Cheap even when irrelevant to this
+    # particular rom -- GAMES_ROOT only has a few dozen entries.
+    watch_dirs = [GAMES_ROOT, *(p for p in GAMES_ROOT.glob("*") if p.is_dir())] if GAMES_ROOT.exists() else []
 
-    if all(f.stat().st_mtime <= rom_timestamp for f in chain(src_filenames,[spritedef_path])):
+    if all(f.stat().st_mtime <= rom_timestamp
+           for f in chain(src_filenames, [spritedef_path], watch_dirs)):
         # print("Skipping", rom_name, file=sys.stderr)
         return
     print("Generating", rom_name, file=sys.stderr)
