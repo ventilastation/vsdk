@@ -43,12 +43,18 @@ from ventilastation import native_apps
 # suite in any order.
 configure_runtime("headless")
 from system.launcher.code import (
+    GROUP_ICONS,
     GROUP_MEMBERS,
+    GROUP_PREFIX,
     GROUP_TILES,
+    ICON_ANIM_RATE,
     MAIN_MENU_OPTIONS,
+    MORE_APPS_ID,
+    MORE_APPS_MENU_OPTIONS,
     DebugMenu,
     GroupMenu,
     GroupsMenu,
+    HighlightsMenu,
     RomLibraryMenu,
     SYS_MENU_OPTIONS,
     group_tile_id,
@@ -70,34 +76,65 @@ class MainMenuOptionsTests(unittest.TestCase):
         for slug, _strip, _frame, title in MAIN_MENU_OPTIONS:
             self.assertTrue(title, "missing title for %r" % (slug,))
 
-    def test_group_tiles_are_flagged_have_members_and_no_borrowed_icon(self):
-        group_ids = [slug for slug, _s, _f, _t in MAIN_MENU_OPTIONS if is_group_tile(slug)]
-        self.assertEqual(set(group_ids), set(GROUP_MEMBERS))
-        for _order, slug, strip, _frame, _title in GROUP_TILES:
-            self.assertIsNone(strip, "%r should have no icon of its own" % (slug,))
+    def test_curated_root_has_no_group_tiles_of_its_own(self):
+        # The curated root (HIGHLIGHT_ENTRIES) is a handful of hand-picked
+        # slugs plus the MORE_APPS_ID tile into GroupsMenu -- every actual
+        # games/<group>/ tile now lives one level down, in
+        # MORE_APPS_MENU_OPTIONS (see test_more_apps_*  below).
+        top_level_slugs = [slug for slug, _s, _f, _t in MAIN_MENU_OPTIONS]
+        self.assertFalse([slug for slug in top_level_slugs if is_group_tile(slug)])
+        self.assertIn(MORE_APPS_ID, top_level_slugs)
+
+    def test_more_apps_group_tiles_have_members(self):
+        group_ids = [slug for slug, _s, _f, _t in MORE_APPS_MENU_OPTIONS if is_group_tile(slug)]
+        # Emulators keeps its member list (used by the debug menu) but is
+        # deliberately excluded from "Más aplicaciones" -- see
+        # test_emulators_group_has_no_more_apps_tile below.
+        self.assertEqual(set(group_ids), set(GROUP_MEMBERS) - {group_tile_id("emulators")})
         for group_id, options in GROUP_MEMBERS.items():
             self.assertTrue(options, "%r has no members" % (group_id,))
+
+    def test_group_tiles_use_their_own_theme_badge_not_a_borrowed_icon(self):
+        # See make_menu_icons.py: every group with an entry in GROUP_ICONS
+        # gets its own badge, sized like every other menu icon; one without
+        # an entry there (a brand-new games/<group> folder) still falls back
+        # to a plain label rather than borrowing another tile's art.
+        for _order, slug, strip, _frame, _title in GROUP_TILES:
+            group_name = slug[len(GROUP_PREFIX):]
+            self.assertEqual(strip, GROUP_ICONS.get(group_name),
+                             "%r should use its own GROUP_ICONS entry" % (slug,))
 
     def test_emulators_group_keeps_its_real_icons(self):
         emulators = dict((slug, (strip, title)) for slug, strip, _f, title in GROUP_MEMBERS[group_tile_id("emulators")])
         self.assertEqual(set(emulators), set(native_apps.APP_REGISTRY))
         self.assertEqual(emulators["emulators.nes"], ("nes.png", "NES"))
 
-    def test_no_native_slug_survives_at_the_top_level(self):
-        top_level_slugs = [slug for slug, _s, _f, _t in MAIN_MENU_OPTIONS]
-        self.assertNotIn("emulators.voom", top_level_slugs)
-        self.assertIn(group_tile_id("emulators"), top_level_slugs)
+    def test_emulators_group_has_no_more_apps_tile(self):
+        # Moved to the debug menu (SYS_MENU_OPTIONS) -- not shown on the
+        # curated root or "Más aplicaciones", only reachable from there.
+        more_apps_slugs = [slug for slug, _s, _f, _t in MORE_APPS_MENU_OPTIONS]
+        self.assertNotIn(group_tile_id("emulators"), more_apps_slugs)
+        debug_slugs = [slug for slug, _s, _f, _t in SYS_MENU_OPTIONS]
+        self.assertIn(group_tile_id("emulators"), debug_slugs)
 
-    def test_tech_demos_group_includes_hidden_games_and_hardware_test(self):
+    def test_a_native_slug_can_be_a_curated_highlight(self):
+        # Voom sits directly on the curated root now, not nested under a
+        # group tile -- see HighlightsMenu.on_select()'s use of _dispatch_app.
+        top_level_slugs = [slug for slug, _s, _f, _t in MAIN_MENU_OPTIONS]
+        self.assertIn("emulators.voom", top_level_slugs)
+
+    def test_tech_demos_group_includes_the_hardware_test(self):
         tech_demos = [slug for slug, _s, _f, _t in GROUP_MEMBERS[group_tile_id("tech_demos")]]
         self.assertIn("demos.input_demo", tech_demos)
-        self.assertIn("alecu.ventilagon_game", tech_demos)
         self.assertIn("vs2_hardware", tech_demos)
 
-    def test_alecu_group_excludes_its_hidden_game(self):
+    def test_alecu_group_includes_the_curated_ventilagon(self):
+        # Un-hidden (meta.json's "hidden": true removed) so it shows up in
+        # its normal games/<group> listing, in addition to being curated
+        # separately as "Super Ventilagon" on the root.
         alecu = [slug for slug, _s, _f, _t in GROUP_MEMBERS[group_tile_id("alecu")]]
         self.assertIn("alecu.vyruss", alecu)
-        self.assertNotIn("alecu.ventilagon_game", alecu)
+        self.assertIn("alecu.ventilagon_game", alecu)
 
 
 class NavigationTests(unittest.TestCase):
@@ -193,14 +230,17 @@ class MainRestoreTests(unittest.TestCase):
     def test_fresh_boot_lands_on_the_first_top_level_tile(self):
         scene = main({"group_id": None, "slug": None, "rom_path": None})
 
+        self.assertIsInstance(scene, HighlightsMenu)
         self.assertEqual(scene.entries, MAIN_MENU_OPTIONS)
         self.assertEqual(scene.selected_index, 0)
 
-    def test_restoring_a_group_id_selects_its_tile(self):
+    def test_restoring_a_group_id_selects_more_apps_on_the_root(self):
+        # The root itself has no tile for any individual group any more --
+        # setup() pushes GroupsMenu/GroupMenu on top of this selection.
         group_id = group_tile_id("emulators")
         scene = main({"group_id": group_id, "slug": "emulators.nes", "rom_path": None})
 
-        self.assertEqual(scene.entries[scene.selected_index][0], group_id)
+        self.assertEqual(scene.entries[scene.selected_index][0], MORE_APPS_ID)
 
     def test_restoring_a_standalone_slug_selects_it_directly(self):
         scene = main({"group_id": None, "slug": "gallery", "rom_path": None})
@@ -267,8 +307,10 @@ class SetupIntegrationTests(unittest.TestCase):
 
     def test_root_menu_draws_its_backdrop_wordmark_and_byline(self):
         # Lost in the vs2 port and restored: the disc should not come up as a
-        # bare list of tiles.
-        root = self._build(GroupsMenu())
+        # bare list of tiles. Now HighlightsMenu's job -- GroupsMenu ("Más
+        # aplicaciones") is one level down and has a plain text heading
+        # instead (see test_more_apps_menu_is_headed below).
+        root = self._build(HighlightsMenu())
 
         backdrop = root.backdrop.sprites
         self.assertEqual([sprite.image.name for sprite in backdrop], ["favalli.png"])
@@ -280,19 +322,57 @@ class SetupIntegrationTests(unittest.TestCase):
         # The old make_me_a_planet() indexed deepspace[255 - y], so its
         # set_y(220) spanned 40 of the 54 LEDs; vs2_deepspace[21] + 1 is the
         # same 40. Carrying the raw 220 across would render a 1-LED speck.
-        root = self._build(GroupsMenu())
+        root = self._build(HighlightsMenu())
 
         self.assertEqual(root.backdrop.sprites[0].y, 21)
 
     def test_root_backdrop_paints_behind_the_list_and_branding_in_front(self):
-        root = self._build(GroupsMenu())
+        root = self._build(HighlightsMenu())
         order = [layer.name for layer in root.layers]
 
         self.assertLess(order.index("backdrop"), order.index("world"))
         self.assertLess(order.index("world"), order.index("branding"))
 
     def test_root_menu_has_no_text_heading(self):
-        self.assertIsNone(self._build(GroupsMenu()).heading)
+        self.assertIsNone(self._build(HighlightsMenu()).heading)
+
+    def test_more_apps_menu_is_headed(self):
+        menu = self._build(GroupsMenu())
+
+        self.assertEqual(menu.heading, "Más aplicaciones")
+        self.assertEqual(menu.heading_label.text, "Más aplicaciones")
+
+    def test_pollitos_icon_animates(self):
+        # Regression test for a bug in the animation fix itself: it must be
+        # driven off ANIMATED_ICON_STRIPS, not "the image has >1 frames" --
+        # see the next test for the strip that distinction exists for.
+        index = len(self.runtime_director.platform.sprites.stripes)
+        self.runtime_director.platform.sprites.stripes[index] = {
+            "width": 51, "height": 19, "frames": 5, "palette": 0,
+        }
+        stripes["pollitos.png"] = index
+        gallery_index = [slug for slug, _s, _f, _t in MAIN_MENU_OPTIONS].index("gallery")
+        root = self._build(HighlightsMenu(gallery_index))
+
+        frames_seen = set()
+        for _ in range(ICON_ANIM_RATE * 6):
+            root._animate_icons()
+            frames_seen.add(root.selected_sprite.frame)
+
+        self.assertGreater(len(frames_seen), 1)
+
+    def test_a_shared_menu_png_frame_does_not_animate(self):
+        # tutorial_vs2 pins frame 10 of the generic 16-frame menu.png --
+        # that strip packs several unrelated static icons (Credits, Tutorial,
+        # Debug Mode, ...), one fixed frame each, and must never be swept up
+        # by the animation loop just because it happens to have many frames.
+        tutorial_index = [slug for slug, _s, _f, _t in MORE_APPS_MENU_OPTIONS].index("tutorial_vs2")
+        menu = self._build(GroupsMenu(tutorial_index))
+
+        for _ in range(ICON_ANIM_RATE * 6):
+            menu._animate_icons()
+
+        self.assertEqual(menu.selected_sprite.frame, 10)
 
     def test_group_menu_is_headed_by_its_group_label(self):
         menu = self._build(GroupMenu(group_tile_id("emulators")))
@@ -389,7 +469,10 @@ class SetupIntegrationTests(unittest.TestCase):
         rom_menu = RomLibraryMenu("emulators.nes")
         self.assertLess(rom_menu.y_step, GroupsMenu().y_step)
 
-    def test_restores_group_and_rom_library_on_top_of_root(self):
+    def test_restores_emulators_and_rom_library_via_the_debug_menu(self):
+        # Emulators has no "Más aplicaciones" tile any more (see
+        # test_emulators_group_has_no_more_apps_tile) -- resuming into it
+        # goes through DebugMenu instead of GroupsMenu.
         native_apps.write_launcher_state({
             "group_id": group_tile_id("emulators"), "slug": "emulators.gb", "rom_path": None,
         })
@@ -397,11 +480,28 @@ class SetupIntegrationTests(unittest.TestCase):
         setup()
 
         stack = director.scene_stack
-        self.assertEqual(len(stack), 2)
-        self.assertIsInstance(stack[0], GroupsMenu)
-        self.assertIsInstance(stack[1], GroupMenu)
-        self.assertEqual(stack[1].group_id, group_tile_id("emulators"))
-        self.assertEqual(stack[1].entries[stack[1].selected_index][0], "emulators.gb")
+        self.assertEqual(len(stack), 3)
+        self.assertIsInstance(stack[0], HighlightsMenu)
+        self.assertIsInstance(stack[1], DebugMenu)
+        self.assertIsInstance(stack[2], GroupMenu)
+        self.assertEqual(stack[2].group_id, group_tile_id("emulators"))
+        self.assertEqual(stack[2].entries[stack[2].selected_index][0], "emulators.gb")
+
+    def test_restores_an_ordinary_group_via_more_apps(self):
+        native_apps.write_launcher_state({
+            "group_id": group_tile_id("alecu"), "slug": "alecu.vyruss", "rom_path": None,
+        })
+
+        setup()
+
+        stack = director.scene_stack
+        self.assertEqual(len(stack), 3)
+        self.assertIsInstance(stack[0], HighlightsMenu)
+        self.assertIsInstance(stack[1], GroupsMenu)
+        self.assertIsInstance(stack[2], GroupMenu)
+        self.assertEqual(stack[1].entries[stack[1].selected_index][0], group_tile_id("alecu"))
+        self.assertEqual(stack[2].group_id, group_tile_id("alecu"))
+        self.assertEqual(stack[2].entries[stack[2].selected_index][0], "alecu.vyruss")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ if "utime" not in sys.modules:
     utime.sleep_ms = lambda value: time.sleep(value / 1000)
     sys.modules["utime"] = utime
 
-from ventilastation.director import configure_runtime, reset_runtime
+from ventilastation.director import configure_runtime, director, reset_runtime
 from ventilastation import native_apps
 
 
@@ -128,6 +128,26 @@ class NativeAppsTests(unittest.TestCase):
         })
         self.assertEqual(native_apps.read_boot_intent(), {"mode": "micropython"})
         self.assertEqual(native_apps.read_last_exit()["rom"], rom_path)
+
+    def test_native_return_stops_music_left_playing_by_the_native_app(self):
+        # Regression: a native app's music plays on the base station and
+        # keeps going after the board reboots back into MicroPython, since
+        # that reboot is not a Director scene pop (the only other
+        # music_off() call site -- see director.py's _pop_scene). Without an
+        # explicit stop here it would bleed into the launcher indefinitely.
+        native_apps.write_boot_intent(native_apps.build_boot_intent("emulators.voom"))
+
+        native_apps.consume_native_return()
+
+        sent = director.platform.comms.sent
+        self.assertIn((b"music off", b""), sent)
+
+    def test_a_normal_boot_does_not_touch_music(self):
+        # No pending native hand-off (build_boot_intent was never called) --
+        # nothing should be sent at all, let alone a spurious stop.
+        native_apps.consume_native_return()
+
+        self.assertEqual(director.platform.comms.sent, [])
 
     def test_label_truncation_is_one_third_of_the_display(self):
         self.assertEqual(native_apps.trim_rom_label("x" * 21), "x" * 21)
