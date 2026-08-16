@@ -493,6 +493,18 @@ void coreTask( void * pvParameters ){
     while(true){
         hall_filter_drain();
         if (ventilagon_active) {
+            // ventilagon_active is set from MicroPython (ventilagon_enter(),
+            // a different task) and can flip true right between two loop
+            // iterations. gpu_serve() below always leaves an SPI DMA
+            // in flight (spi_write_HSPI(), meant to be drained by *its own*
+            // next call's spiWaitComplete()) -- if the switch lands right
+            // then, that write never gets drained, and ventilagon's own
+            // state->loop() (display.c, state_win_credits.c) calls
+            // spi_write_HSPI() again on top of it: "Cannot send polling
+            // transaction while the previous polling transaction is not
+            // terminated." spiWaitComplete() is a no-op when nothing is
+            // pending, so this costs nothing on every other iteration.
+            spiWaitComplete();
             ventilagon_loop();
         } else {
             gpu_serve();
