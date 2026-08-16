@@ -47,7 +47,9 @@ def _tables_for_profile(profile):
     if _frame_tables_cache is not None and _frame_tables_cache[0] is profile:
         return _frame_tables_cache[1]
     pwm_lut = np.array(profile.pwm_byte_lut, dtype=np.float64)  # shape (3, 256)
-    global_response = np.array(profile.global_response, dtype=np.float64)  # shape (32,)
+    # Shape (3, 32): the global-brightness stage carries the profile's dark
+    # white balance, so it differs per channel below the ceiling.
+    global_response = np.array(profile.effective_global_response, dtype=np.float64)
     matrix = np.array(profile.preview_matrix, dtype=np.float64).reshape(3, 3)
     tables = (pwm_lut, global_response, matrix)
     _frame_tables_cache = (profile, tables)
@@ -73,14 +75,14 @@ def decode_frame(raw, profile=None):
 
     valid = (gb & 0xE0) == 0xE0
     brightness = (gb & 0x1F).astype(np.int64)
-    global_light = np.where(valid & (brightness > 0), global_response[brightness], 0.0)
+    lit = valid & (brightness > 0)
 
     scale = 1.0 / (Q15_ONE * Q15_ONE)
     led_light = np.stack(
         (
-            global_light * pwm_lut[0][red_pwm] * scale,
-            global_light * pwm_lut[1][green_pwm] * scale,
-            global_light * pwm_lut[2][blue_pwm] * scale,
+            np.where(lit, global_response[0][brightness], 0.0) * pwm_lut[0][red_pwm] * scale,
+            np.where(lit, global_response[1][brightness], 0.0) * pwm_lut[1][green_pwm] * scale,
+            np.where(lit, global_response[2][brightness], 0.0) * pwm_lut[2][blue_pwm] * scale,
         ),
         axis=1,
     )

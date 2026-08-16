@@ -12,7 +12,7 @@ game RGB code
   -> source-transfer decode (sRGB or configured power gamma)
   -> linear target light
   -> master, white balance, radial, and per-LED adjustments
-  -> APA102 global-brightness + RGB PWM solver
+  -> APA102 global-brightness + RGB PWM solver (dark white balance applies here)
   -> [0xe0 | GB, B, G, R] LED frame
   -> workbench capture (four bytes preserved verbatim)
   -> desktop emulator profile decoder
@@ -31,23 +31,29 @@ proportionally more illumination time.
 
 ## Profile format and NVS
 
-The canonical profile is the 319-byte little-endian `PCAL` v1 payload stored
-in NVS as `voom_pov` / `color_v1`. `col_offset` remains a separate i32 key.
-It is understood by the MicroPython renderer, Retro-Go POV driver, and desktop
+The canonical profile is the 325-byte little-endian `PCAL` v2 payload stored
+in NVS as `voom_pov` / `color_v1` (the key name predates the schema version
+living inside the payload). `col_offset` remains a separate i32 key. It is
+understood by the MicroPython renderer, Retro-Go POV driver, and desktop
 emulator.
 
 | Offset | Size | Field |
 |---:|---:|---|
 | 0 | 4 | magic `PCAL` |
-| 4 | 1 | schema version (`1`) |
+| 4 | 1 | schema version (`2`) |
 | 5 | 1 | flags, currently zero |
-| 6 | 2 | total payload length (`319`) |
+| 6 | 2 | total payload length (`325`) |
 | 8 | 4 | monotonically increasing generation |
-| 12 | 15 | source transfer/gamma, master, white balance, radial exponent, GB floor/ceiling |
-| 27 | 18 | LED-to-preview 3×3 matrix, signed Q12 |
-| 45 | 108 | 54 LED gain trims, Q10 |
-| 153 | 64 | 32 APA102 global-brightness response values, Q15 |
-| 217 | 102 | three 17-knot PWM response curves, Q15 |
+| 12 | 21 | source transfer/gamma, master, white balance, dark white balance, radial exponent, GB floor/ceiling |
+| 33 | 18 | LED-to-preview 3×3 matrix, signed Q12 |
+| 51 | 108 | 54 LED gain trims, Q10 |
+| 159 | 64 | 32 APA102 global-brightness response values, Q15 |
+| 223 | 102 | three 17-knot PWM response curves, Q15 |
+
+v2 adds the three dark white balance values; everything else keeps its v1
+meaning. A board still holding a 319-byte v1 blob is migrated in place on the
+next load, with the new field neutral, so its measured curves and hand-tuned
+gains survive the upgrade instead of resetting to factory.
 
 The profile persists calibration *parameters and measured response knots*, not
 render LUTs. C builds source-decode, radial, and inverse PWM tables when a new
@@ -57,9 +63,10 @@ render task. Thus a `povcal set` takes effect on the next rendered column
 without a reboot or partial LUT.
 
 The current profile supports source transfer, master brightness, RGB white
-balance, radial exponent, per-LED gain, and APA102 global-brightness bounds.
-The desktop workbench panel initializes its master/radial sliders from the
-acknowledged profile and provides Save/Revert/Factory controls. The response
+balance, dark white balance, radial exponent, per-LED gain, and APA102
+global-brightness bounds. The desktop workbench panel initializes its
+master/radial/dark-green sliders from the acknowledged profile and provides
+Save/Revert/Factory controls. The response
 curves and preview matrix are already part of the stable payload; curve and
 matrix editing are the next calibration-tool addition.
 
@@ -72,6 +79,56 @@ the highest permitted global level and uses RGB PWM for normal dimming. It
 lowers global brightness only when the brightest channel would otherwise fall
 below RGB code 32, retaining useful channel resolution for very dark tones.
 The calibrated inverse response curves still determine the three PWM values.
+
+Current rotors carry NS107S LEDs rather than APA102s. They share the wire
+format, so the encoding above is unchanged, but their global-brightness stage
+is a per-channel current gain whose three channels do not track each other
+exactly as the level drops. A single shared `global_response` curve therefore
+mispredicts two of the three channels in the dark, which shows up as a tint on
+tones dim enough to use global-brightness modulation -- greenish dark greys on
+the measured rotor.
+
+## Dark white balance
+
+`dark_white` describes that per-channel drift. It is a milli-gain per channel
+in the same direction as the ordinary white balance: 1000 is neutral and
+smaller means dimmer. It applies with a weight that is zero at `gb_ceiling`,
+where the ordinary white balance already holds and bright tones are already
+correct, and reaches full strength at `gb_floor`. Only tones the solver
+actually pushes below the ceiling are affected.
+
+The pipeline folds it into a per-channel effective global-brightness curve:
+
+```text
+effective_global[channel][level] = global_response[level] * 1000 / gain
+gain = 1000 + (dark_white[channel] - 1000) * weight / 1000
+weight = 0 at gb_ceiling, 1000 at gb_floor, linear in level between
+```
+
+Dividing is what makes the trim read as a brightness. Declaring a channel
+dimmer down here means telling the solver that channel's global stage emits
+more light per PWM count than the shared curve says, which the solver answers
+with less PWM -- so the rendered tone loses that channel.
+
+The correction is evaluated only while building the render LUTs, into tables
+the encoder already consults (`dark_pwm_lut` is indexed by channel and
+brightness already). The per-LED render path is unchanged and costs nothing
+extra.
+
+To trim a rotor by eye, put up a controlled dark stimulus, adjust, and persist:
+
+```text
+povcal test gray 24
+povcal set dark_white 1000 960 1000
+povcal commit
+povcal test off
+```
+
+`povcal test gray` is deliberately a dark level here: the trim has no effect on
+a stimulus bright enough to render at the ceiling. The desktop workbench panel
+carries a "Dark green" slider over a narrow band around neutral, since green is
+the axis that drifts on the measured rotor; red and blue keep the values the
+board last acknowledged and are reachable through the command above.
 
 The real-time encoder does not perform divisions or curve searches per LED.
 Applying a profile builds active and inactive sets atomically. The common path
@@ -105,6 +162,7 @@ povcal set source_eotf srgb
 povcal set source_eotf power 2200
 povcal set master 700
 povcal set white 1000 960 900
+povcal set dark_white 1000 960 1000
 povcal set radial_exponent 1000
 povcal set led_gain 17 1025
 povcal set gb_floor 2
@@ -209,7 +267,10 @@ display-only and never change board calibration.
 `python3 tests/run_tests.py` covers:
 
 - binary profile parsing, profile generation, and emulator preview decoding;
-- MicroPython `povcal` command lifecycle and persistence boundary;
+- MicroPython `povcal` command lifecycle, persistence boundary, and the
+  v1-to-v2 profile upgrade;
+- dark white balance: neutral at the ceiling, trimming only the named channel
+  once global-brightness modulation engages, and rejected outside its range;
 - native C profile validation, atomic active state, radial/global-brightness
   quantization, and APA102 frame packing;
 - raw four-byte APA102 desktop preview input;
@@ -223,7 +284,13 @@ required before considering a profile production-calibrated.
 ## Remaining calibration work
 
 1. Use the controlled gray, primary, white, and radial patterns with a
-   photodiode/colorimeter to measure the installed rotor.
+   photodiode/colorimeter to measure the installed rotor. The dark white
+   balance models the NS107S per-channel global-brightness drift as one scalar
+   per channel with a linear ramp. If a measured sweep shows the drift is not
+   linear in the level, the next step is three measured `global_response`
+   curves rather than one curve plus a tilt; the render path already indexes
+   its tables per channel, so that change stays inside profile parsing and LUT
+   construction.
 2. Expose response-knot and preview-matrix editing/import in the desktop tool.
 3. Add the same profile-aware decoder to the web emulator.
 4. Build and exercise MicroPython and Retro-Go images on a real rotor, then

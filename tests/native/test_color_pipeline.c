@@ -6,9 +6,11 @@
 
 #define Q15_ONE 32767
 #define HEADER_BYTES 12
-#define CONTROLS_BYTES 15
+#define CONTROLS_BYTES 21
 #define MATRIX_BYTES 18
 #define PWM_KNOTS 17
+// Dark white balance sits just past white balance in the controls block.
+#define DARK_WHITE_OFFSET (HEADER_BYTES + 1 + 2 + 2 + 6)
 
 static int failures = 0;
 
@@ -32,13 +34,17 @@ static uint16_t rounded_fraction(int numerator, int denominator) {
 static void build_default_profile(uint8_t profile[COLOR_PIPELINE_PROFILE_BYTES]) {
     memset(profile, 0, COLOR_PIPELINE_PROFILE_BYTES);
     memcpy(profile, "PCAL", 4);
-    profile[4] = 1;
+    profile[4] = 2;
     put_u16(profile + 6, COLOR_PIPELINE_PROFILE_BYTES);
 
     size_t offset = HEADER_BYTES;
     profile[offset++] = 0;       // sRGB
     put_u16(profile + offset, 2200); offset += 2;
     put_u16(profile + offset, 1000); offset += 2;
+    put_u16(profile + offset, 1000); offset += 2;
+    put_u16(profile + offset, 1000); offset += 2;
+    put_u16(profile + offset, 1000); offset += 2;
+    // Dark white balance, neutral.
     put_u16(profile + offset, 1000); offset += 2;
     put_u16(profile + offset, 1000); offset += 2;
     put_u16(profile + offset, 1000); offset += 2;
@@ -110,6 +116,48 @@ int main(void) {
           && ((test_blue >> 16) & 0xff) == 0 && (test_blue >> 24) == 0,
           "test pattern overrides game RGB inside encoder");
     CHECK(color_pipeline_set_test_pattern(COLOR_TEST_OFF, 255), "disable test pattern");
+
+    // Dark white balance. A trimmed channel must lose PWM only where the
+    // global-brightness stage is doing the dimming; tones that render at the
+    // ceiling are already handled by the ordinary white balance.
+    uint8_t tinted[COLOR_PIPELINE_PROFILE_BYTES];
+    memcpy(tinted, profile, sizeof(tinted));
+    put_u16(tinted + DARK_WHITE_OFFSET + 2, 960);  // green
+    CHECK(color_pipeline_apply(tinted, sizeof(tinted)), "accept a dark white balance");
+
+    uint32_t bright_grey = color_pipeline_encode_rgb(53, 200, 200, 200);
+    CHECK((bright_grey & 0x1f) == 31
+          && ((bright_grey >> 16) & 0xff) == (bright_grey >> 24),
+          "dark white balance leaves ceiling-brightness greys neutral");
+
+    uint32_t dark_grey = color_pipeline_encode_rgb(53, 24, 24, 24);
+    CHECK((dark_grey & 0x1f) < 31
+          && ((dark_grey >> 16) & 0xff) < (dark_grey >> 24)
+          && ((dark_grey >> 8) & 0xff) == (dark_grey >> 24),
+          "dark white balance trims only green once global brightness engages");
+
+    memcpy(tinted, profile, sizeof(tinted));
+    put_u16(tinted + DARK_WHITE_OFFSET + 2, 100);
+    CHECK(!color_pipeline_apply(tinted, sizeof(tinted)),
+          "reject a dark white balance below its supported range");
+
+    CHECK(color_pipeline_apply(profile, sizeof(profile)), "restore the neutral profile");
+
+    // A board provisioned before the dark white balance keeps its calibration.
+    uint8_t v1[COLOR_PIPELINE_PROFILE_V1_BYTES];
+    memcpy(v1, profile, DARK_WHITE_OFFSET);
+    memcpy(v1 + DARK_WHITE_OFFSET, profile + DARK_WHITE_OFFSET + 6,
+           COLOR_PIPELINE_PROFILE_V1_BYTES - DARK_WHITE_OFFSET);
+    v1[4] = 1;
+    put_u16(v1 + 6, COLOR_PIPELINE_PROFILE_V1_BYTES);
+
+    uint8_t upgraded[COLOR_PIPELINE_PROFILE_BYTES];
+    CHECK(color_pipeline_upgrade_v1(v1, sizeof(v1), upgraded, sizeof(upgraded)),
+          "upgrade a v1 profile");
+    CHECK(memcmp(upgraded, profile, sizeof(profile)) == 0,
+          "upgraded v1 profile matches the v2 default");
+    CHECK(!color_pipeline_upgrade_v1(profile, sizeof(profile), upgraded, sizeof(upgraded)),
+          "reject a v2 payload offered as v1 input");
 
     profile[0] = 'X';
     CHECK(!color_pipeline_apply(profile, sizeof(profile)), "reject invalid profile magic");
