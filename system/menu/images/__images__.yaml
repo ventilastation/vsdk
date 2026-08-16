@@ -16,6 +16,15 @@ palettegroups:
     - strip: vslogo.png
     - strip: loviejo-3.png
     - fullscreen: favalli.png
+    # Group/theme badges, see system/menu/images/src/make_menu_icons.py.
+    - strip: alecu.png
+    - strip: other.png
+    - strip: vsjam_may25.png
+    - strip: vsjam_oct25.png
+    - strip: pycamp_mar25.png
+    - strip: tech_demos.png
+    - strip: emulators_group.png
+    - strip: more_apps.png
   palette2:
     # Glyphs for the current-selection text label (system/launcher).  Kept
     # in its own palette group so the label doesn't dilute palette1's

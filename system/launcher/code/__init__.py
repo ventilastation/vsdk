@@ -9,14 +9,28 @@ from ventilastation.director import director, stripes
 def game_menu_strip(game_slug):
     return game_slug.replace(".", "/") + "/menu.png"
 
-# Entries that aren't part of any games/<group>/ folder -- system scenes
-# with no group to move into. Everything else (games, native apps) is
-# reached through a group tile built by _build_groups_and_tiles() below.
-# These strips are real, dedicated art (a pollitos.png icon, wordmark
-# frames inside menu.png) so they render as icons rather than labels.
-STATIC_MENU_ENTRIES = [
+# The curated root (see HighlightsMenu): a handful of "greatest hits" plus
+# a way into everything else, rather than every group and system scene at
+# once. Titles here are deliberately shorter/punchier than a game's own
+# meta.json title (e.g. "Sencom" vs "Senile Command") -- this is the one
+# screen everybody sees first, not the full catalog entry.
+MORE_APPS_ID = "more_apps"
+HIGHLIGHT_ENTRIES = [
+    (10, "alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0, "Super Ventilagon"),
+    (20, "alecu.vyruss_vs2", game_menu_strip("alecu.vyruss_vs2"), 0, "Vyruss VS2"),
+    (30, "emulators.voom", "voom.png", 0, "Voom"),
+    (40, "vsjam-oct25.2bam_sencom", game_menu_strip("vsjam-oct25.2bam_sencom"), 0, "Sencom"),
+    (50, "vsjam-may25.vasura_espacial", game_menu_strip("vsjam-may25.vasura_espacial"), 0, "Vasura Espacial"),
+    (60, "gallery", "pollitos.png", 0, "Gallery"),
+    (9999, MORE_APPS_ID, "more_apps.png", 0, "Más aplicaciones"),
+]
+
+# What used to be the whole root before the curated highlights screen took
+# over: the two standalone system entries that don't belong to any
+# games/<group>/ folder. Every actual group tile is added in
+# _build_groups_and_tiles() below (emulators excepted -- see SYS_MENU_OPTIONS).
+MORE_APPS_STATIC_ENTRIES = [
     (2, "tutorial_vs2", "menu.png", 10, "Tutorial"),
-    (70, "gallery", "pollitos.png", 0, "Gallery"),
     (240, "credits", "menu.png", 3, "Credits"),
 ]
 
@@ -41,6 +55,18 @@ GROUP_LABELS = {
     "pycamp-mar25": "PyCamp Mar 25",
     "tech_demos": "Tech Demos",
 }
+# See system/menu/images/src/make_menu_icons.py -- a group holds many
+# unrelated games, so these are theme badges (a jam badge, a console badge,
+# ...), not any one game's own art. A group without an entry here still gets
+# a tile -- just as a plain label, like before this existed.
+GROUP_ICONS = {
+    "alecu": "alecu.png",
+    "other": "other.png",
+    "vsjam-may25": "vsjam_may25.png",
+    "vsjam-oct25": "vsjam_oct25.png",
+    "pycamp-mar25": "pycamp_mar25.png",
+    "tech_demos": "tech_demos.png",
+}
 
 # Renamed from the old "native" group -- these are the only slugs that hand
 # off to a native (non-MicroPython) partition. Icons predate per-game
@@ -60,13 +86,16 @@ TECH_DEMO_STATIC_ENTRIES = [
     (0, "vs2_hardware", "menu.png", 0, "VS2 Hardware Acceptance"),
 ]
 
-# The secret debug menu (see GroupsMenu's button-combo check). Two entries
-# borrow real game icons; the rest fall back to a label like a group tile.
+# The secret debug menu (see HighlightsMenu's button-combo check). Two
+# entries borrow real game icons; the rest fall back to a label like a group
+# tile -- including "Emulators" itself, a real group tile id so DebugMenu's
+# on_select() pushes GroupMenu for it exactly like any other group.
 SYS_MENU_OPTIONS = [
     ("debugmode", "menu.png", 9, "Debug Mode"),
     ("tutorial", "menu.png", 10, "Tutorial"),
     ("tutorial_vs2", "menu.png", 10, "Tutorial VS2"),
     ("settings", "menu.png", 8, "Settings"),
+    (GROUP_PREFIX + "emulators", "emulators_group.png", 0, "Emulators"),
     ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0, "Vyruss"),
     ("alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0, "Ventilagon"),
     ("credits", "menu.png", 3, "Credits"),
@@ -97,32 +126,36 @@ def _build_groups_and_tiles():
     """Return (tiles, members): tiles are (order, id, strip, frame, title)
     entries merged into MAIN_MENU_OPTIONS; members maps each group's tile id
     to its own sorted (slug, strip, frame, title) option list, built once so
-    opening/closing a group never re-walks the filesystem. Group tiles get
-    strip=None -- there's no dedicated art for "a folder of games", and
-    borrowing another image for it is exactly what looked wrong before."""
+    opening/closing a group never re-walks the filesystem. A group with no
+    entry in GROUP_ICONS falls back to a plain label -- there's no dedicated
+    art for "a folder of games" in general, only for the specific ones a
+    theme badge was made for (see make_menu_icons.py)."""
     tiles = []
     members = {}
 
-    emulators_id = group_tile_id("emulators")
-    members[emulators_id] = _emulator_options()
-    tiles.append((20, emulators_id, None, 0, _group_label("emulators")))
+    # Emulators intentionally gets no top-level tile any more -- reachable
+    # only through the debug menu (SYS_MENU_OPTIONS), not "Más aplicaciones".
+    # Its member list stays available for that.
+    members[group_tile_id("emulators")] = _emulator_options()
 
     for group_name, entries in catalog.discover_groups():
         tile_id = group_tile_id(group_name)
         members[tile_id] = catalog.build_menu_options([], entries)
         order = FOLDER_GROUP_ORDER.get(group_name, catalog.DEFAULT_ORDER)
-        tiles.append((order, tile_id, None, 0, _group_label(group_name)))
+        strip = GROUP_ICONS.get(group_name)
+        tiles.append((order, tile_id, strip, 0, _group_label(group_name)))
 
     tech_demos_id = group_tile_id("tech_demos")
     members[tech_demos_id] = catalog.build_menu_options(
         TECH_DEMO_STATIC_ENTRIES, catalog.discover_tech_demo_entries())
-    tiles.append((80, tech_demos_id, None, 0, _group_label("tech_demos")))
+    tiles.append((80, tech_demos_id, GROUP_ICONS.get("tech_demos"), 0, _group_label("tech_demos")))
 
     return tiles, members
 
 
 GROUP_TILES, GROUP_MEMBERS = _build_groups_and_tiles()
-MAIN_MENU_OPTIONS = catalog.build_menu_options(STATIC_MENU_ENTRIES, GROUP_TILES)
+MAIN_MENU_OPTIONS = catalog.build_menu_options([], HIGHLIGHT_ENTRIES)
+MORE_APPS_MENU_OPTIONS = catalog.build_menu_options(MORE_APPS_STATIC_ENTRIES, GROUP_TILES)
 
 
 def _option_index(options, option_id):
@@ -140,6 +173,19 @@ def _option_index(options, option_id):
 # sits at that slot's offset from the selection.
 POOL_SIZE = 12
 Y_STEP = 20
+# Strips that hold real animation frames for one icon -- restoring exactly
+# the pre-vs2 menu's pollitos/tincho animation, see ListMenu._animate_icons().
+# NOT "any multi-frame strip": menu.png alone packs 16 unrelated static
+# icons (Credits, Tutorial, Debug Mode, ...), one fixed frame per entry --
+# animating on frame count alone would cycle through all of those instead.
+ANIMATED_ICON_STRIPS = frozenset({
+    "pollitos.png",
+    game_menu_strip("vsjam-oct25.tincho_vrunner"),
+})
+# Ticks per animation-frame advance. The pre-vs2 menu hand-picked a rate per
+# icon (4 for pollitos, 6 for tincho); one shared rate is close enough and
+# needs no per-icon bookkeeping.
+ICON_ANIM_RATE = 4
 # ROM libraries are always label-only, and the 4x6 list font is tiny next to
 # the ~30-LED icons the 20-step spacing was picked for. Packing those rows
 # closer puts more of them on the disc and reads as one list rather than a
@@ -226,6 +272,12 @@ class ListMenu(vs2.Scene):
         self.selected_index = 0
         if entries:
             self.selected_index = min(max(selected_index, 0), len(entries) - 1)
+        # Icons with more than one frame (pollitos.png, tincho_vrunner's
+        # menu.png, ...) cycle on their own -- see _animate_icons(). One
+        # shared clock for every animated sprite on screen, rather than a
+        # per-sprite counter, so a slot recycled mid-cycle by the cascade
+        # (see _update_positions) never has to guess where to resume from.
+        self._icon_anim_tick = 0
 
     def build(self):
         # Layers paint in creation order, so the backdrop has to be built
@@ -399,6 +451,28 @@ class ListMenu(vs2.Scene):
             slot["sprite"].y = y
             slot["label"].y = y
 
+    def _animate_sprite(self, sprite):
+        if not sprite.visible:
+            return
+        if sprite.image.name not in ANIMATED_ICON_STRIPS:
+            return
+        frames = sprite.image.frames
+        if frames > 1:
+            sprite.frame = (self._icon_anim_tick // ICON_ANIM_RATE) % frames
+
+    def _animate_icons(self):
+        """Cycle pollitos/tincho -- regression fix: the vs2 port always
+        showed a strip's static idle frame (entry[2]) and dropped the
+        pre-vs2 menu's hand-picked animation for these two entirely.
+        Gated on ANIMATED_ICON_STRIPS, not just "image has >1 frames": most
+        multi-frame strips (menu.png above all) pack several unrelated
+        static icons, one fixed frame per entry, and would cycle through
+        each other's icons if animated on frame count alone."""
+        self._icon_anim_tick += 1
+        for slot in self.slots:
+            self._animate_sprite(slot["sprite"])
+        self._animate_sprite(self.selected_sprite)
+
     def update(self):
         if joy1.just_pressed(A):
             self._select()
@@ -411,6 +485,7 @@ class ListMenu(vs2.Scene):
         if joy1.just_pressed(DOWN):
             self._move(-1)
         self._update_positions()
+        self._animate_icons()
 
     def on_idle(self):
         if self.enable_back:
@@ -424,8 +499,24 @@ class ListMenu(vs2.Scene):
         """Called just before popping back one level."""
 
 
-class GroupsMenu(ListMenu):
-    """Root: one tile per group plus the standalone system entries."""
+def _dispatch_app(scene, slug, group_id):
+    """Launch slug from a menu screen: push a ROM library, hand off to a
+    native app, or load a MicroPython game. Shared by HighlightsMenu (a
+    curated entry like Voom can itself be a native app, not just a group
+    member) and GroupMenu, so both get the same three-way dispatch."""
+    native_apps.write_launcher_state({"group_id": group_id, "slug": slug, "rom_path": None})
+    if native_apps.has_rom_library(slug):
+        scene.push(RomLibraryMenu(slug))
+    elif native_apps.is_native_app(slug):
+        native_apps.launch_native_scene(slug)
+    else:
+        load_app(slug)
+
+
+class HighlightsMenu(ListMenu):
+    """Root: a curated set of Ventilastation's greatest hits (see
+    HIGHLIGHT_ENTRIES), plus a "Más aplicaciones" tile into everything else
+    (GroupsMenu)."""
 
     enable_back = False
     idle_timeout = None
@@ -450,12 +541,10 @@ class GroupsMenu(ListMenu):
 
     def on_select(self, entry):
         option_id = entry[0]
-        if is_group_tile(option_id):
-            native_apps.write_launcher_state({"group_id": option_id, "slug": None, "rom_path": None})
-            self.push(GroupMenu(option_id))
+        if option_id == MORE_APPS_ID:
+            self.push(GroupsMenu())
             return
-        native_apps.write_launcher_state({"group_id": None, "slug": option_id, "rom_path": None})
-        load_app(option_id)
+        _dispatch_app(self, option_id, None)
 
     def update(self):
         if self._check_debug_combo():
@@ -472,6 +561,26 @@ class GroupsMenu(ListMenu):
         return False
 
 
+class GroupsMenu(ListMenu):
+    """Más aplicaciones: one tile per group (minus emulators -- see
+    SYS_MENU_OPTIONS) plus the standalone system entries, reached from the
+    curated root's own tile of the same name."""
+
+    heading = "Más aplicaciones"
+
+    def __init__(self, selected_index=0):
+        super().__init__(MORE_APPS_MENU_OPTIONS, selected_index)
+
+    def on_select(self, entry):
+        option_id = entry[0]
+        if is_group_tile(option_id):
+            native_apps.write_launcher_state({"group_id": option_id, "slug": None, "rom_path": None})
+            self.push(GroupMenu(option_id))
+            return
+        native_apps.write_launcher_state({"group_id": None, "slug": option_id, "rom_path": None})
+        load_app(option_id)
+
+
 class GroupMenu(ListMenu):
     """One group's members: real games, or the five native emulator apps."""
 
@@ -483,14 +592,7 @@ class GroupMenu(ListMenu):
         self.heading = _group_label(group_id[len(GROUP_PREFIX):])
 
     def on_select(self, entry):
-        slug = entry[0]
-        native_apps.write_launcher_state({"group_id": self.group_id, "slug": slug, "rom_path": None})
-        if native_apps.has_rom_library(slug):
-            self.push(RomLibraryMenu(slug))
-        elif native_apps.is_native_app(slug):
-            native_apps.launch_native_scene(slug)
-        else:
-            load_app(slug)
+        _dispatch_app(self, entry[0], self.group_id)
 
     def on_back(self):
         native_apps.write_launcher_state({"group_id": None, "slug": None, "rom_path": None})
@@ -533,8 +635,10 @@ class RomLibraryMenu(ListMenu):
 
 class DebugMenu(ListMenu):
     """The secret developer menu, reached via the button combo in
-    GroupsMenu. Not part of the group hierarchy, so back always returns to
-    the root without touching launcher_state.json."""
+    HighlightsMenu. Not part of the group hierarchy, so back always returns
+    to the root without touching launcher_state.json. Also where Emulators
+    lives now (a real group tile id, so it pushes GroupMenu like any other
+    group) -- it isn't shown on the curated root or "Más aplicaciones"."""
 
     heading = "Debug"
 
@@ -542,7 +646,11 @@ class DebugMenu(ListMenu):
         super().__init__(SYS_MENU_OPTIONS)
 
     def on_select(self, entry):
-        load_app(entry[0])
+        option_id = entry[0]
+        if is_group_tile(option_id):
+            self.push(GroupMenu(option_id))
+            return
+        load_app(option_id)
 
     def on_back(self):
         pass
@@ -552,9 +660,18 @@ def main(launcher_state=None):
     launcher_state = launcher_state or native_apps.read_launcher_state()
     group_id = launcher_state.get("group_id")
     slug = launcher_state.get("slug")
-    target = group_id or slug
+    # Resuming into any group means the curated root should show "Más
+    # aplicaciones" pre-selected -- setup() pushes the real group screens on
+    # top of it. Resuming into one of the root's own curated slugs (no
+    # group) highlights that tile directly instead.
+    if group_id:
+        target = MORE_APPS_ID
+    elif slug:
+        target = slug
+    else:
+        target = None
     index = _option_index(MAIN_MENU_OPTIONS, target) if target else 0
-    return GroupsMenu(index)
+    return HighlightsMenu(index)
 
 
 def setup():
@@ -566,8 +683,14 @@ def setup():
     slug = launcher_state.get("slug")
     if not group_id:
         return
-    group_menu = GroupMenu(group_id, selected_slug=slug)
-    director.push(group_menu)
+
+    if group_id == GROUP_PREFIX + "emulators":
+        # Emulators moved off "Más aplicaciones" into the debug menu (see
+        # SYS_MENU_OPTIONS) -- resuming into it goes through there instead.
+        director.push(DebugMenu())
+    else:
+        director.push(GroupsMenu(_option_index(MORE_APPS_MENU_OPTIONS, group_id)))
+    director.push(GroupMenu(group_id, selected_slug=slug))
 
     rom_path = launcher_state.get("rom_path")
     if rom_path and slug and native_apps.has_rom_library(slug):

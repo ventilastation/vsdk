@@ -239,6 +239,14 @@ def consume_native_return():
     intent = read_boot_intent()
     if not isinstance(intent, dict) or intent.get("mode") != "native":
         return read_launcher_state()
+    # Regression fix: a native app's music plays on the base station, which
+    # keeps going after the board itself reboots back into MicroPython --
+    # nothing else ever tells it to stop, since this reboot isn't a Director
+    # scene pop (see director.py's _pop_scene, the only other music_off()
+    # call site, which only fires within one continuous MicroPython run).
+    # Called here, at the earliest point a native return is known, right
+    # after ensure_runtime() brings the comms link back up.
+    director.music_off()
     saved_state = intent.get("launcher_state")
     if isinstance(saved_state, dict):
         write_launcher_state(saved_state)
