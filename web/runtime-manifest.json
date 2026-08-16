@@ -31,7 +31,7 @@
     "apps/micropython/roms/vsjam-oct25.fanphibious_danger.rom",
     "apps/micropython/roms/vsjam-oct25.peronjam.rom",
     "apps/micropython/roms/vsjam-oct25.tincho_vrunner.rom",
-    "apps/micropython/roms/vsjam-oct25.vajon.rom",
+    "apps/micropython/roms/vsjam-may25.vajon.rom",
     "apps/micropython/ventilastation/app_loader.py",
     "apps/micropython/ventilastation/browser.py",
     "apps/micropython/ventilastation/comms.py",

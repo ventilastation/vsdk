@@ -3,5 +3,6 @@
   "api_revision": 2,
   "title": "Map Demo",
   "menu_frames": 1,
-  "order": 43
+  "order": 43,
+  "hidden": true
 }

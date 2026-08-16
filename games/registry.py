@@ -24,5 +24,5 @@ GAME_SLUGS = (
     "vsjam-oct25.fanphibious_danger",
     "vsjam-oct25.peronjam",
     "vsjam-oct25.tincho_vrunner",
-    "vsjam-oct25.vajon",
+    "vsjam-may25.vajon",
 )

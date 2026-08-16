@@ -129,7 +129,7 @@ class Roca(Sprite):
             self.finish()
 
 class Vajon(Scene):
-    stripes_rom = "vsjam-oct25.vajon"
+    stripes_rom = "vsjam-may25.vajon"
 
     def on_enter(self):
         super(Vajon, self).on_enter()
@@ -200,7 +200,7 @@ class Vajon(Scene):
 
         self.rest_time = REST_TIME
 
-        director.music_play("vsjam-oct25.vajon/synt263_l")
+        director.music_play("vsjam-may25.vajon/synt263_l")
 
         self.ending = False
 
@@ -344,7 +344,7 @@ class Vajon(Scene):
 
         if ( self.avance > 100 * (self.level+1) and not self.ending):
             self.level +=1
-            director.sound_play("vsjam-oct25.vajon/fallmore")
+            director.sound_play("vsjam-may25.vajon/fallmore")
 
         if (not self.ending):
             self.player.set_y( 16 + 16 * self.level )
@@ -374,7 +374,7 @@ class Vajon(Scene):
             self.impact.play(2)
             self.avance = max(self.avance-100, 0)
             self.level = max(self.level-1, 0)
-            director.sound_play("vsjam-oct25.vajon/hurt")
+            director.sound_play("vsjam-may25.vajon/hurt")
             print("COLISION CON ROCA! PLAF!")
 
         # end
@@ -397,7 +397,7 @@ class Vajon(Scene):
         self.call_later(4000, self.endFalling)
 
     def endFalling(self):
-        director.sound_play("vsjam-oct25.vajon/end")
+        director.sound_play("vsjam-may25.vajon/end")
         self.endingFall = True
 
 
