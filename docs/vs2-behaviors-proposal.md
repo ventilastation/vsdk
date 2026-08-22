@@ -56,6 +56,9 @@ concepts:
 | **A spawn schedule written as data** | `vs.py:45-51` (`(tick, kind, lane)` tuples per level), `2bam_sencom.py:688-703` |
 | **Lane or grid placement** | `vs.py:33-34` (a 3x3 grid), `tincho_level.py:136-144` (columns with fixed centres), `mapdemo.py:52-58` |
 | The same test run against three different pools | `vixeous.py:390-414` — shots vs boss, then vs enemies, then bombs vs targets |
+| **Un-projecting screen position back to world depth before a hit test** | `2bam_sencom.py:1086` — a hand-transcribed 55-entry inverse of the TUNNEL curve, used at `:365` and `:987` |
+| **Naming a palette colour and animating it** | `2bam_sencom.py:1302-1349` — re-parses the ROM header to find a colour by RGB, then recolours the core, cities, font and explosions per level |
+| **Controlled randomness from a bag, not `choice()`** | `2bam_sencom.py:1185-1212` (a real Fisher-Yates shuffle bag, used for both enemy types and target cities) |
 | **Sub-pixel position, hand-rolled** | `vasura_espacial/entities/entidad.py:55-72` (floats plus `floor`), `fanphibious_danger.py:92-115` (a 256x fixed-point shim) — both of which revision 2's 8.8 coordinates already solve |
 
 `vyruss_vs2.py` is the clearest case: it already invented Actions and stopped
@@ -273,6 +276,46 @@ Tilemap.cell_at(x, y)    # -> (column, row) or None
 The mapping accounts for the map's `x`/`y`, its `view_x`/`view_y`, the tile
 size and the circular X wrap — the same single-place-for-the-inversion rule
 `Label` already owns for reversed cell order.
+
+### Collision happens in world space, not screen space
+
+`Sprite.overlaps()` compares raw `x`/`y` boxes. On a `HUD` layer that is
+correct. On a `TUNNEL` or `FULLSCREEN` layer it is not, and the error is not
+subtle: Y is depth on a non-linear curve, so two sprites eight units apart are
+physically close near the rim and far apart near the centre. A fixed hitbox
+means a hitbox that silently changes size as things move inward.
+
+`2bam_sencom` is the only game that confronted this, and it did so by
+transcribing the inverse curve into the source as 55 magic numbers
+(`:1086`) and converting every hit position through it before testing
+(`:365`, `:987`). `vixeous` avoids the problem rather than solving it, by
+keeping a parallel `theta` on every entity and comparing in world space
+(`:390-434`). Nobody else noticed.
+
+The runtime already owns this curve — it is what the native renderer applies
+every frame — so a game hand-copying it is a defect in the API, not in the
+game. Three additions close it:
+
+```python
+vs2.display.to_depth(led_row)      # screen row  -> world depth
+vs2.display.to_row(depth)          # world depth -> screen row
+vs2.display.polar(x, y)            # cartesian   -> (angle, depth)
+```
+
+`Collide` then gets a `space` parameter — `screen` (today's behaviour, right
+for HUD) or `world` (un-project first, right for everything else) — and
+`world` is the default on any layer whose projection is not `HUD`. The
+cartesian helper is separate but comes from the same missing piece: the aim
+code at `2bam_sencom.py:975-996` runs `atan2` and `sqrt` per tick to turn a
+stick into a point on the disc, which is a conversion every crosshair game on
+this hardware will need and none should write twice.
+
+Radial hit tests belong here too. `2bam_sencom` does not test boxes at all: an
+explosion has a `radius` that changes with its animation frame
+(`BOOM_RADIUS`, `:127`) and only damages while that radius is non-zero
+(`do_damage`, `:213`). So `Collide` also takes `radius=` for a circular
+test, and a damage window is a `Frames` parameter naming which frames are
+live.
 
 ## Behaviors
 
@@ -559,6 +602,52 @@ A state machine is also the single most natural thing to draw. Scratch and
 Construct both make "when I am in this state" a top-level visual block, and it
 is what the Blockly skeleton below is shaped around.
 
+## Named palette colours
+
+Construct's effects make no sense on shaderless hardware. Palette animation is
+what we have instead, and it is more capable than it sounds: recolouring an
+index recolours every pixel drawn with it, everywhere, for free, on a machine
+with no blending at all.
+
+Revision 2 exposes `vs2.display.palettes` as a mutable buffer plus
+`apply_palettes()`, which is the right half of the feature. The missing half
+is *naming*. `2bam_sencom` wanted per-level colour themes, a white font flash,
+red alert on the last city, and randomised explosion colours — and to get
+them it re-parses the ROM header with `struct.unpack` to locate the palette
+block, then linearly searches that block for a hardcoded RGB triple to
+discover which index to poke (`:1302-1349`). It caches four indices found this
+way, and keeps a dirty flag so it only flushes once per tick.
+
+The dirty flag is right and matches `apply_palettes()`. The rest is a game
+reimplementing the asset pipeline because the pipeline does not tell it
+anything:
+
+```yaml
+# __images__.yaml
+palette:
+  colors:
+    core:  [0, 7, 250]
+    city:  [147, 0, 255]
+    font:  [0, 255, 0]
+    boom:  [0, 255, 240]
+```
+
+```python
+vs2.display.color("core", 255, 0, 0)   # by name, resolved at build
+vs2.display.apply_palettes()
+```
+
+Declared beside the art, resolved to an index once at build, and — the part
+that matters for this proposal — rendered in the panel as a **colour swatch**
+with a picker. A named colour is a parameter type like any other, so a
+behavior can take one (`Damageable(flash_color="hurt")`), and the two effects
+that games actually want, a flash and a cycle, become `Flashing(color, ticks)`
+and `Cycling(colors, ticks)` in the attributes tier.
+
+This is the closest thing to Construct's effects that the hardware can
+support, it costs nothing per frame, and one game has already built the ugly
+version of it.
+
 ## The tick
 
 ### Ordering
@@ -631,9 +720,12 @@ dozens of times and `Platform` exactly once.
 | `Pinned(to, offset_x, offset_y)` | `vyruss_vs2.py:384-391`, `vajon.py:246-247` |
 | `Carried(on_board, released_by)` | `fanphibious_danger.py:59-90` — a frog rides a floating object, a ring drags everything on it |
 | `Shaking(amplitude_x, amplitude_y, ticks)` | `vajon.py:240-241` — a per-tick `randrange` jitter |
+| `Flashing(color, ticks)` | `2bam_sencom.py:728`, `:902` — a named palette colour driven white, or red on last-city alert |
+| `Cycling(colors, ticks)` | `2bam_sencom.py:761`, `:824` — randomised font and explosion colours per wave |
 
 These are the ones that get attached forty times a project; none is more than
-a few lines. All ship in the first release except `Carried`.
+a few lines. All ship in the first release except `Carried`, `Flashing` and
+`Cycling`, which wait on named palette colours.
 
 Three of them changed shape because of the second survey:
 
@@ -643,6 +735,21 @@ way the sprite faces, because the art is not mirror-symmetric and `flip_x`
 would be wrong. `bank_size` plus a `bank` read from an instance variable
 covers it, and it is the same idea `Label.write(frame_offset=...)` already
 uses for a font strip's second colour.
+
+**`Animated` needs an explicit frame sequence, not just a range.**
+`2bam_sencom.py:126` animates an explosion as
+`BOOM_FRAMES = [4, 3, 2, 3, 2, 3, 2, 3, 2, 1, 0]` — a flicker that no
+`first`/`last`/`pingpong` combination produces. A `frames=(...)` tuple
+covers it and makes `first`/`last` the convenience case rather than the
+model.
+
+**`Animated` should be able to take a duration instead of a rate.** Both
+sencom animators derive their step from a wanted total time —
+`fpst = len(BOOM_FRAMES) / ttl` at `:190` and
+`_fracInc = SECONDS_PER_STEP * len(frames) / duration_secs` at `:402` — and
+both advance a *fractional* frame index so the speed is continuous rather
+than an integer divisor of the tick. `ticks=` and `duration=` are the same
+parameter seen from two ends; the editor should offer both and store one.
 
 **`Animated` also needs an image list.** `vajon.py:226` animates by swapping
 strips — `stripes["pozo" + str(pi) + ".png"]` — which builds a string on the
@@ -685,12 +792,17 @@ an event (`tincho_level.py:288-305` calls it `cambió_tile`). `on_change` is
 that event, and `Tilemap.cell_at()` is the tilemap-flavoured version of the
 same question.
 
-`Pilotable` gained a scheme. `vajon.py:293-337` steers with momentum: input
-accumulates into an `inertia` term capped at ±8, which decays back toward
-zero every third tick. That is neither `rim` nor `turn` — it is a fourth
-model, and it is the one that feels best on a disc that is already spinning.
-Which schemes ship is still open (below), but the survey says the answer is
-at least four, not three.
+`Pilotable` gained two schemes. `vajon.py:293-337` steers with momentum:
+input accumulates into an `inertia` term capped at ±8 which decays back toward
+zero every third tick — neither `rim` nor `turn`, and the one that feels best
+on a disc that is already spinning. `2bam_sencom.py:975-996` is stranger and
+more useful: the stick drives a cartesian `(ax, ay)` clamped to the unit disc,
+which is converted to an angle and a depth through `atan2`, `sqrt` and the
+inverse projection table. That is a *crosshair* — you point at a place on the
+disc rather than steering a thing around it — and it is the model every
+aiming game on this hardware will want. Which schemes ship is still open
+(below), but the survey says at least five, and the last one needs the
+display helpers from the collision-space section above.
 
 ### Composed — ship as block programs, meant to be forked
 
@@ -705,6 +817,32 @@ at least four, not three.
 `Projectile` and `Damageable` ship first, as the two flagship block programs —
 they are the proof that the palette can express what the catalog needs.
 
+`Spawner`'s `schedule` parameter is worth its own note, because
+`2bam_sencom.py:1112-1180` is the best-designed thing in the survey and the
+strongest argument in it for a table editor. Its wave format is
+`(duration_seconds, amount, [bag of enemy types])`, with the spawns spread
+evenly across the duration and a floor that extends the wave if the count
+could not otherwise fit (`:1225-1235`). The types come from a `ShuffleBag`
+(`:1185-1212`) — a real Fisher-Yates bag that reshuffles on exhaustion, so
+the distribution is controlled rather than merely random, which is the
+difference between "mostly fair" and `choice()`. Controlled randomness is
+common enough — sencom uses one bag for enemy types and another for target
+cities — that `ShuffleBag` belongs in `vs2` next to the behaviors rather than
+in each game.
+
+And the author drew the column headings as an ASCII diagram in a comment:
+
+```text
+#  ,------------- Duration seconds (will extend to amount steps if too low)
+# |     ,-------- Amount
+# |     |   ,---- Enemy shuffle bag
+( 3  ,  0, []          ),
+(10  ,  5, [W_M0]      ),
+```
+
+Someone hand-drew a spreadsheet in source comments because there was nowhere
+else to put one. That is the artefact the panel should be showing.
+
 `Damageable` exposes `hurt(sprite, amount)` for other behaviors to call. Note
 that Construct has no equivalent: it keeps behaviors mechanical and puts game
 rules in the event sheet. We can go further because Python *is* our event
@@ -714,7 +852,10 @@ Construct behavior is.
 Every Behavior that fires an event takes a `sound=` parameter rather than
 there being a sound behavior — every spawn and hit in both games is
 immediately followed by `vs2.audio.sound(...)` (`vixeous.py:197`, `:298`,
-`:303`, `:358`; `vyruss_vs2.py:319`, `:329`, `:377`, `:397`).
+`:303`, `:358`; `vyruss_vs2.py:319`, `:329`, `:377`, `:397`). `sound=` accepts
+a tuple as well as a name, picked from at random, because
+`2bam_sencom.py:154-158` keeps three spawn chops and varies between them to
+stop the repetition wearing through.
 
 ### Second wave
 
@@ -757,6 +898,16 @@ Behavior that owns them, reported per Behavior in the profiling command.
 Per-instance state and instance variables are reported, not capped: the cost
 is `fields × pool count × ~33 bytes`, which for all of `vixeous` is under 3 kB
 and never the thing that runs the board out of memory.
+
+Two habits in `2bam_sencom` are worth citing as evidence that these budgets
+are load-bearing rather than bureaucratic. It opens with a hand-written sprite
+census in a comment block (`:58-72`) — "5 cities, 4 booms, 20 missiles … 41
+total" — counted by hand because nothing counted it for them; that is exactly
+what `vs2.limits` and the census in `ResourceLimitError` now produce. And it
+schedules `gc.collect()` every sixty seconds (`:558-561`), which is an author
+who knows the game allocates and would rather choose when the pause lands than
+have it land on a visible frame. The sealed scene, primed state and pooled
+spawning exist so that timer never needs to be written again.
 
 ## The block editor
 
@@ -1038,14 +1189,15 @@ change shape once real games use it.
 
 ## Open for review
 
-- **Which `Pilotable` schemes ship?** The survey found four distinct models,
+- **Which `Pilotable` schemes ship?** The survey found five distinct models,
   not two: `rim` (`vyruss_vs2`), `turn` with camera follow-lag (`vixeous`),
-  `momentum` with damping (`vajon.py:293-337`), and free eight-way
-  (`vasura_espacial/entities/nave.py:71-94`). Four schemes in one behavior is
-  a smell; four separate behaviors is a smaller one. Probably the answer is
-  `Pilotable` with `inertia` and `follow_lag` parameters where zero means
-  neither, which collapses all four — but that wants trying before it is
-  believed.
+  `momentum` with damping (`vajon.py:293-337`), free eight-way
+  (`vasura_espacial/entities/nave.py:71-94`), and a cartesian crosshair
+  (`2bam_sencom.py:975-996`). The first four probably collapse into one
+  behavior with `inertia` and `follow_lag` parameters where zero means
+  neither. The crosshair does not — it is aiming rather than moving, and it
+  wants the polar and inverse-projection helpers — so it is likely a separate
+  `Aimable`.
 - **Should states be a separate `StateMachine` class, or should every Behavior
   be able to declare states?** Making every Behavior a potential state machine
   is fewer concepts; keeping them separate keeps the common stateless Behavior
@@ -1074,3 +1226,13 @@ change shape once real games use it.
 - **Should the catalogs ship frozen** in the runtime bundle, or as normal
   importable modules? Frozen imports faster and costs flash for games that
   never use it.
+- **Where do the display helpers live?** `to_depth`, `to_row` and `polar`
+  are proposed on `vs2.display` because that is where geometry already lives,
+  but they are the first things there that are pure maths rather than hardware
+  state. The alternative is a `vs2.geometry` module, which is tidier and one
+  more import for a game to know about.
+- **Should `Collide`'s default space depend on the layer's projection?**
+  Defaulting to `world` on TUNNEL and `screen` on HUD is what every game
+  actually wants, but it makes one parameter's default depend on another
+  object's state, which is the sort of implicitness the rest of this proposal
+  avoids.
