@@ -14,9 +14,12 @@ them.
   the vocabulary of Actions. `Moving`, `Damageable`, `Pilotable`,
   `PathFollowing`. A Behavior never touches the renderer directly. Simple ones
   ship built in; composed ones ship as **block programs the author can fork**.
-- **Instance variables and families** — game-owned per-instance data declared
-  on a pool, and groups of pools addressed as one. Both are Construct
-  primitives that every game in the tree currently fakes.
+- **State machines** — a declared form for the multi-state entities that four
+  of the nine surveyed games hand-rolled, including the timed transitions that
+  every temporary status effect is really made of.
+- **Instance variables, kinds and families** — game-owned per-instance data
+  declared on a pool, per-type default rows over it, and groups of pools
+  addressed as one. All three are things every game in the tree fakes.
 
 And above all three: **the editor owns `build()`**. Scene structure — layers,
 pools, tilemaps, instance variables, behavior attachments and their parameters
@@ -30,20 +33,30 @@ did not give them anywhere to put *conduct*, and it gave the editor nothing to
 edit. So every game writes conduct again, at the lowest possible level, in
 Python only.
 
-Two shipping VS2 games and eight V1 jam games were read for this proposal. The
-duplication is not in the arithmetic, it is in whole concepts:
+Two shipping VS2 games and seven V1 jam games were read in full for this
+proposal: `vixeous`, `vyruss_vs2`, `dome_defander`, `vajon`,
+`vasura_espacial`, `vs`, `2bam_sencom`, `tincho_vrunner` and
+`fanphibious_danger`. The duplication is not in the arithmetic, it is in whole
+concepts:
 
 | The concept every game re-implements | Where |
 |---|---|
+| **An explicit state machine** | `vasura_espacial/estado.py` (10 states, `on_enter`/`step`/`on_exit`, transitions by return value), `fanphibious_danger.py:13-17` (four named states), `vyruss_vs2.py:209-220` (a sequential one), `vs.py:152-160` (three booleans doing the job) |
 | Constant velocity, then leave the play field | `vixeous.py:314-331`, `vyruss_vs2.py:414-431`, `dome_defander/misil.py:31-38` |
-| Show, animate once, disappear | `vixeous.py:344-350`, `vyruss_vs2.py:432-437`, `dome_defander/misil.py:77-86` |
-| Per-instance data bolted on at spawn | `vixeous.py:216-220` (`theta`, `kind`, `phase`, `hp`), `vyruss_vs2.py:206-210` (`base_frame`, `frame_clock`, `dead`, `finished`, `movements`) |
-| A thing the player flies | `vyruss_vs2.py:34-44` + `:331-348`, `vixeous.py:257-289` |
-| A thing that takes damage, flashes, dies with a score and a sound | `vyruss_vs2.py:360-403`, `vixeous.py:220` + `:352-360` + `:396-403` + `:456-461` |
-| A projectile that travels, expires, and hurts what it touches | `vixeous.py:314-323` + `:390-434`, `vyruss_vs2.py:414-431` |
+| Show, animate once, disappear | `vixeous.py:344-350`, `vyruss_vs2.py:432-437`, `dome_defander/misil.py:77-86`, `vasura_espacial/estado.py:36-68`, `2bam_sencom.py:395-410` |
+| Per-instance data bolted on at spawn | `vixeous.py:216-220`, `vyruss_vs2.py:206-210`, `vasura_espacial/entities/entidad.py:8-16` |
+| **Per-type data tables indexed by a kind id** | `vs.py:53-67` (nine parallel arrays for items and nerds), `vasura_espacial/entities/enemigos/enemigo.py:61-99` (a subclass per enemy carrying its own constants) |
+| A thing the player flies | `vyruss_vs2.py:34-44` + `:331-348`, `vixeous.py:257-289`, `vajon.py:293-337` (momentum and damping), `vasura_espacial/entities/nave.py:71-94` |
+| A thing that takes damage, flashes, dies with a score and a sound | `vyruss_vs2.py:360-403`, `vixeous.py:220` + `:352-360` + `:396-403` + `:456-461`, `vasura_espacial/entities/nave.py:96-151` |
+| **A temporary status that reverts on a timer** | `tincho_level.py:452-507` (four of them: power-up, invulnerable, reversed, slowed), `vasura_espacial/entities/nave.py:133-151` (60-frame invincibility), `vixeous.py:352-360` |
+| A projectile that travels, expires, and hurts what it touches | `vixeous.py:314-323` + `:390-434`, `vyruss_vs2.py:414-431`, `2bam_sencom.py:277-300` |
 | A scripted path, then join a formation | `vyruss_vs2.py:72-115` + `:209-220` |
-| Sweep back and forth while animating | `vixeous.py:324-332`, `:333-343` |
+| Sweep back and forth while animating | `vixeous.py:324-332`, `:333-343`, `vasura_espacial/estado.py:168-188` |
+| **Facing, with a second frame bank per direction** | `vasura_espacial/entities/entidad.py:86-94`, `fanphibious_danger.py:20-21` |
+| **A spawn schedule written as data** | `vs.py:45-51` (`(tick, kind, lane)` tuples per level), `2bam_sencom.py:688-703` |
+| **Lane or grid placement** | `vs.py:33-34` (a 3x3 grid), `tincho_level.py:136-144` (columns with fixed centres), `mapdemo.py:52-58` |
 | The same test run against three different pools | `vixeous.py:390-414` — shots vs boss, then vs enemies, then bombs vs targets |
+| **Sub-pixel position, hand-rolled** | `vasura_espacial/entities/entidad.py:55-72` (floats plus `floor`), `fanphibious_danger.py:92-115` (a 256x fixed-point shim) — both of which revision 2's 8.8 coordinates already solve |
 
 `vyruss_vs2.py` is the clearest case: it already invented Actions and stopped
 one level short. `TravelTo`/`TravelX`/`TravelCloser`/`TravelAway` (`:72-115`)
@@ -235,6 +248,7 @@ All three are existing objects; nothing allocates.
 |---|---|---|
 | `Move(speed_x, speed_y, accel_x, accel_y)` | — | `vixeous.py:315-323`, `vyruss_vs2.py:415` |
 | `MoveTo(x, y, speed_x, speed_y)` | `DONE` on arrival | `vyruss_vs2.py:47-83` — 37 lines of shortest-arc arithmetic |
+| `Tween(x, y, ticks, ease)` | `DONE` when elapsed | `fanphibious_danger.py:145-146` — a hop that covers a fixed distance in a fixed number of frames |
 | `Steer(heading, speed, turn_rate)` | — | `vyruss_vs2.py:53-62` |
 | `Oscillate(axis, amplitude, period, wave)` | — | `vixeous.py:325-326`, `:334-338` |
 | `Animate(first, last, ticks, mode)` | `DONE` at cycle end | every game in the tree |
@@ -366,6 +380,14 @@ of numbers: they populate from the game's own ROM and sound folder, which
 `web/rom-builder-core.js` already parses. `PoolRef` and `Callback` populate
 from the scene the editor is already holding.
 
+**Durations are ticks in the API and seconds in the editor.** Every game in
+the survey counts ticks, but `2bam_sencom.py:396` declares its animations in
+`duration_secs` because that is how a person thinks about an explosion. Integer
+ticks are the right storage — no rounding drift, no float in the tick — so the
+API keeps them and the editor shows "13 ticks (0.4 s)" beside the slider,
+which it can do because it knows the 30 ms period. Authoring in seconds and
+storing ticks would silently change behaviour whenever the period moved.
+
 ### Per-instance state
 
 A Behavior that needs per-sprite state declares it (`state = ("shot_flown",)`
@@ -419,6 +441,41 @@ self.enemies.var("angry", False)
 `spawn()` gaining a reset loop is the only behavioural change to existing API
 in this proposal, and it only affects pools that declared variables.
 
+### Kinds: per-type defaults as a table
+
+The second survey turned up a pattern strong enough to deserve its own
+primitive. `vs.py:53-67` carries nine parallel arrays — `item_hps`,
+`item_atks`, `item_frame_amount`, `item_frame_rate`, `nerd_hps`,
+`nerd_speeds` and friends — all indexed by a type id, so `activate_item(id)`
+reads a column out of each. `vasura_espacial` does the same thing with
+inheritance instead: `Driller`, `Chiller` and their siblings are subclasses
+whose only content is constants (`velocidad_y = 0.52`, `largo_animacion = 7`,
+`puntaje = 75`, at `enemigo.py:61-72`).
+
+Both are one pool holding several *variants*. Construct would model it with a
+family plus instance variables and leave the table to the author. We can do
+better, because the panel is already a table editor:
+
+```python
+self.enemies.var("hp", 1)
+self.enemies.var("score", 40)
+self.enemies.var("speed_y", 1.0)
+self.enemies.kinds(
+    #        hp  score  speed_y
+    driller=( 3,    75,    0.52),
+    chiller=( 1,    40,    0.60),
+)
+...
+self.enemies.spawn(x, y, kind="chiller")
+```
+
+`kinds()` declares named rows over the pool's own instance variables, and
+`spawn(kind=...)` applies one. The row is resolved to an index at build, so
+spawning costs the same loop that already resets defaults. In the panel it is
+exactly what it looks like — a spreadsheet, one row per enemy type, which is
+the artefact a designer actually wants to edit and the one thing in this whole
+proposal that no amount of slider-dragging replaces.
+
 ## Families
 
 `vixeous.py:390-434` runs the same test three times: shots against the boss,
@@ -438,6 +495,69 @@ covers every member and state is primed across all of them — Construct's
 family-behavior semantics exactly.
 
 Families are build-time only and allocate nothing at runtime.
+
+## State machines
+
+This is the largest gap in the previous revision, and the survey is
+unambiguous: four of the nine games read invented one.
+
+`vasura_espacial/estado.py` is a complete hierarchical state machine — ten
+states with `on_enter`/`step`/`on_exit`, transitions expressed by returning
+the next state class from `step()`, and inheritance used to share work
+(`Vulnerable.step()` runs the collision checks every vulnerable state needs;
+`Bajando`, `ChillerBajando` and `BajandoEnEspiral` layer movement on top of
+it). It has timed transitions (`frames_left` counting down to a new state) and
+probabilistic ones (`if randint(0, 100) < 25`). `fanphibious_danger.py:13-17`
+declares four named states as module constants and branches on
+`frog.state` throughout its main loop. `vyruss_vs2.py:209-220` builds a
+sequential one out of a list. `vs.py:152-160` uses three booleans —
+`is_active`, `is_reloading`, `is_waiting_to_deactivate` — because it had no
+better vocabulary.
+
+A Behavior is already a state machine; what is missing is a way to *declare*
+one, so it becomes a shape the panel and the block editor can see instead of a
+tangle of counters only the author understands.
+
+```python
+class Enemy(StateMachine):
+    speed_x = Number(1.25, min=0, max=8, step=0.25)
+    speed_y = Number(0.6, min=0, max=8, step=0.25)
+
+    states  = ("descending", "orbiting", "chasing", "exploding")
+    initial = "descending"
+
+    def descending(self, sprite):
+        sprite.y -= self.speed_y
+        if sprite.y <= GROUND:
+            return "exploding"
+
+    def enter_orbiting(self, sprite):
+        self.hold(sprite, 128, then="descending")
+
+    def orbiting(self, sprite):
+        sprite.x += self.speed_x * sprite.facing
+```
+
+- **States are named**, and the name is what the protocol, the panel and a
+  traceback report. `enemies.enemy.state` is readable from the panel while the
+  game runs, which is most of a debugger for free.
+- **A step method returns the next state, or `None` to stay** — vasura's
+  protocol, which is the one that reads best.
+- **`enter_<state>` and `exit_<state>` are optional hooks**, matched by name.
+- **`hold(sprite, ticks, then=...)`** is the timed transition, replacing the
+  four hand-rolled `frames_left` countdowns in vasura and the four
+  `call_later` status effects in `tincho_level.py:452-507`. A temporary status
+  — invulnerable, powered up, reversed, slowed — is a state with a hold on it,
+  which is why this subsumes the whole "temporary status that reverts" row of
+  the evidence table.
+- **State lives in one primed byte** (`sprite.fsm_state`), and dispatch is a
+  tuple of bound methods indexed by that byte — one index and one call, no
+  string comparison. It pays the per-sprite branch cost measured below and
+  nothing more.
+
+A state machine is also the single most natural thing to draw. Scratch and
+Construct both make "when I am in this state" a top-level visual block, and it
+is what the Blockly skeleton below is shaped around.
 
 ## The tick
 
@@ -502,15 +622,39 @@ dozens of times and `Platform` exactly once.
 
 | | Replaces |
 |---|---|
-| `Transient(animate, ticks, sound, on_end)` | `vixeous.py:344-350`, `vyruss_vs2.py:432-437`, `dome_defander/misil.py:77-86` |
-| `Animated(first, last, ticks, mode)` | every game in the tree |
-| `DespawnBeyond(y_min, y_max, x_min, x_max)` | `vixeous.py:308-309`, `:327-329`, `vyruss_vs2.py:417-418`, `:430-431` |
-| `Lifetime(ticks, on_expire)` | the `age` counters in both games |
-| `Blinking(on_ticks, off_ticks, duration, on_end)` | `vixeous.py:456-461` |
-| `Pinned(to, offset_x, offset_y)` | `vyruss_vs2.py:384-391` |
+| `Transient(animate, ticks, sound, on_end)` | `vixeous.py:344-350`, `vyruss_vs2.py:432-437`, `dome_defander/misil.py:77-86`, `vasura_espacial/estado.py:36-68` |
+| `Animated(first, last, ticks, mode, bank, bank_size, images)` | every game in the tree |
+| `DespawnBeyond(y_min, y_max, x_min, x_max, on_leave)` | `vixeous.py:308-309`, `:327-329`, `vyruss_vs2.py:417-418`, `:430-431` |
+| `Recycling(x_range, y_range)` | `vajon.py:119-124` — a rock that leaves the top is repositioned rather than despawned; Construct's `Wrap` |
+| `Lifetime(ticks, on_expire)` | the `age` counters in both VS2 games, `2bam_sencom.py:183-216` |
+| `Blinking(on_ticks, off_ticks, duration, on_end)` | `vixeous.py:456-461`, `vasura_espacial/entities/nave.py:116-151` (twice, two different ways, in one file) |
+| `Pinned(to, offset_x, offset_y)` | `vyruss_vs2.py:384-391`, `vajon.py:246-247` |
+| `Carried(on_board, released_by)` | `fanphibious_danger.py:59-90` — a frog rides a floating object, a ring drags everything on it |
+| `Shaking(amplitude_x, amplitude_y, ticks)` | `vajon.py:240-241` — a per-tick `randrange` jitter |
 
-These are the ones that get attached forty times a project. All six ship in
-the first release; none is more than a few lines.
+These are the ones that get attached forty times a project; none is more than
+a few lines. All ship in the first release except `Carried`.
+
+Three of them changed shape because of the second survey:
+
+**`Animated` needs frame banks.** `vasura_espacial/entities/entidad.py:86-94`
+picks `frame = phase` or `frame = phase + largo_animacion` depending on which
+way the sprite faces, because the art is not mirror-symmetric and `flip_x`
+would be wrong. `bank_size` plus a `bank` read from an instance variable
+covers it, and it is the same idea `Label.write(frame_offset=...)` already
+uses for a font strip's second colour.
+
+**`Animated` also needs an image list.** `vajon.py:226` animates by swapping
+strips — `stripes["pozo" + str(pi) + ".png"]` — which builds a string on the
+heap every single tick, in the hot path, forever. `vs.py:247` does the same
+with a lookup table. An `images=(...)` parameter resolved once at build makes
+that impossible to write.
+
+**`Carried` is a runtime relationship, not a build-time one.**
+`Pinned(to=...)` is fixed at build; `fanphibious_danger` needs a frog to
+board and leave a log while the game runs. `Carried` holds a carrier
+reference in primed state, so attaching and detaching are reference writes
+that allocate nothing.
 
 ### Movements — one per subject
 
@@ -520,19 +664,33 @@ the first release; none is more than a few lines.
 | `Patrolling(axis, amplitude, period, wave, drift_x, drift_y)` | `vixeous.py:324-332`, `:333-343` |
 | `PathFollowing(points, relative, speed_x, speed_y, loop, on_finish)` | `vyruss_vs2.py:72-115` + `:209-220` |
 | `Pilotable(player, scheme, speed_x, speed_y, bounds, fires, fire_button, fire_sound)` | `vyruss_vs2.py:34-44` + `:331-348`, `vixeous.py:257-289` |
-| `Chasing(target, speed_x, speed_y, turn_rate, give_up_range, on_reach)` | nothing — see below |
-| `Orbiting(centre_y, speed)` | nothing — see below |
+| `Chasing(target, speed_x, speed_y, turn_rate, give_up_range, on_reach)` | `vasura_espacial/estado.py:139-157` |
+| `Orbiting(centre_y, speed)` | `vasura_espacial/estado.py:121-137` |
+| `Laned(centres, speed, on_change)` | `vs.py:33-34`, `tincho_level.py:136-144` |
 
-`Moving`, `Patrolling` and `PathFollowing` ship first. The two with no
-precedent are worth having for opposite reasons. `Chasing` is absent
-*because* doing it by hand needs the shortest-arc arithmetic only
-`vyruss_vs2` ever wrote (`:47-69`); two jam games fake it with a straight
-line. `Orbiting` is absent because nothing in the tree does it, but circular
-motion at a fixed depth is the disc's most natural movement and costs a few
-lines — a case of the hardware suggesting a primitive the games have not
-reached for yet, which is worth flagging as speculative rather than
-evidence-backed. `Pilotable`'s three schemes — `rim`, `turn`, `free` — are
-still an open question (below).
+The previous revision claimed `Chasing` and `Orbiting` had no precedent in
+the tree. That was wrong, and the correction matters because it moves both
+out of the speculative column. `vasura_espacial` has `Persiguiendo`, which
+normalises a vector to the player and steers along it — including the
+shortest-arc wrap that `delta_x if abs(delta_x) < 128 else -delta_x` gets at —
+and `Orbitando`, which holds a depth and advances the angle at a fixed rate.
+Both are real, both are the kind of thing that is fiddly enough to get wrong
+once per game, and both now ship in the first wave alongside `Moving`,
+`Patrolling` and `PathFollowing`.
+
+`Laned` is new from the second survey: `vs` snaps items to a 3x3 grid and
+`tincho_vrunner` snaps the runner to fixed column centres, both accumulating
+sub-cell movement until a boundary is crossed and then firing what is really
+an event (`tincho_level.py:288-305` calls it `cambió_tile`). `on_change` is
+that event, and `Tilemap.cell_at()` is the tilemap-flavoured version of the
+same question.
+
+`Pilotable` gained a scheme. `vajon.py:293-337` steers with momentum: input
+accumulates into an `inertia` term capped at ±8, which decays back toward
+zero every third tick. That is neither `rim` nor `turn` — it is a fourth
+model, and it is the one that feels best on a disc that is already spinning.
+Which schemes ship is still open (below), but the survey says the answer is
+at least four, not three.
 
 ### Composed — ship as block programs, meant to be forked
 
@@ -541,7 +699,7 @@ still an open question (below).
 | `Projectile(speed_x, speed_y, range, damage, hits, burst, sound)` | the shot/bomb loops and hit tests in both games |
 | `Damageable(hp, invulnerable_ticks, blink, explosion, score, sound, on_damage, on_death)` | `vyruss_vs2.py:360-403`, four scattered pieces of `vixeous` |
 | `FiringAt(target, projectile, every, jitter, lead, sound, on_fire)` | `vyruss_vs2.py:322-329` |
-| `Spawner(pool, every, count, pattern, on_spawn)` | `vixeous.py:209-243`, `vyruss_vs2.py:245-261` |
+| `Spawner(pool, every, count, pattern, schedule, on_spawn)` | `vixeous.py:209-243`, `vyruss_vs2.py:245-261`, `vs.py:45-51`, `2bam_sencom.py:688-703` |
 | `Collectible(score, sound, on_pickup)` | second wave |
 
 `Projectile` and `Damageable` ship first, as the two flagship block programs —
@@ -571,8 +729,13 @@ so every scrolling game reinvents world-versus-screen space.
 
 ### Deliberately not in the catalog
 
-- **Gravity and a physics solver.** No game in the tree uses one; the two that
-  fake it use a counter, which `Moving(accel_y=...)` covers.
+- **Gravity and a physics solver.** Nine games read in full, and not one
+  integrates a velocity under acceleration. `fanphibious_danger` — a
+  Frogger, the genre most likely to want a jump arc — implements its hop as a
+  fixed number of frames covering a fixed distance
+  (`fanphibious_danger.py:145-146`), which is a `Tween`, not physics. The one
+  `self.vy` in the whole tree (`vyruss/vyruss.py:687`) is a constant. This is
+  the clearest "no" in the proposal.
 - **Pathfinding and line of sight.** No meaningful nav space on a disc.
 - **Fade.** The renderer has no alpha. Palette animation is scene-level.
 - **Effects.** Shaderless hardware.
@@ -624,6 +787,23 @@ when ‹Projectile› ticks
 
 Uniform work physically cannot land inside the per-sprite loop. Generated code
 is right by construction, and the author never has to learn the rule.
+
+A `StateMachine` gets the same skeleton with one hat block per state, which is
+the shape Scratch and Construct both settled on and the reason the state
+machine belongs in this proposal rather than in game code:
+
+```
+‹Enemy›  initial state: descending
+├─ when in ‹descending› ▸ [ Move  speed_y (-0.6) ]
+│                         [ if ‹y ≤ (GROUND)› → go to ‹exploding› ]
+├─ on enter ‹orbiting›  ▸ [ hold (128) then go to ‹descending› ]
+└─ when in ‹orbiting›   ▸ [ Move  speed_x (1.25) x facing ]
+```
+
+Each hat generates one method; `go to` generates the return value; `hold`
+generates the timed transition. The ten states of
+`vasura_espacial/estado.py` are ten hats, and the inheritance it used to share
+the collision check becomes a shared state the others fall through to.
 
 ### Round-trip: one embedded blob and one one-way door
 
@@ -778,14 +958,16 @@ self.enemies.behave(CameraBound(self.camera))
 
 - **`vs2/params.py`**, new: the parameter types and their introspection.
 - **`vs2/actions.py`**, new: `Action` and the vocabulary.
-- **`vs2/behaviors.py`**, new: `Behavior` and the built-in catalog. All three
-  must compile with mpy-cross and stay import-cheap — a game that never calls
-  `behave()` must not pay for them, so catalogs are lazy-imported per class.
+- **`vs2/behaviors.py`**, new: `Behavior`, `StateMachine` and the built-in
+  catalog. All three must compile with mpy-cross and stay import-cheap — a
+  game that never calls `behave()` must not pay for them, so catalogs are
+  lazy-imported per class.
 - **`vs2/__init__.py`**: `behave()`/`behaviors`/`behavior()` on `Sprite`,
-  `SpritePool`, `Family` and (second wave) `Tilemap`; `SpritePool.var()` and
-  the `spawn()` reset; `Scene.family()`; `Sprite.despawn()`; the scene run
-  list built during `_seal_drawables()`; the Behavior pass in `scene_step()`
-  between `update()` and `_run_defaults()`; `limits.behaviors`; `vs2.DONE`;
+  `SpritePool`, `Family` and (second wave) `Tilemap`; `SpritePool.var()`,
+  `SpritePool.kinds()` and the `spawn()` reset and `kind=` argument;
+  `Scene.family()`; `Sprite.despawn()`; the scene run list built during
+  `_seal_drawables()`; the Behavior pass in `scene_step()` between `update()`
+  and `_run_defaults()`; `limits.behaviors`; `vs2.DONE`;
   `Tilemap.cell_at()`.
 - **`ventilastation/director.py`**: one `elif cmd == "vs2beh"` next to
   `hallfilter`, delegating to `ventilastation/behavior_control.py` with the
@@ -809,25 +991,30 @@ self.enemies.behave(CameraBound(self.camera))
    `Animate`, `Collide`). Prove the allocation and dispatch numbers in tests.
 2. `Behavior`, `behave()`, the run list, the tick pass, `limits.behaviors`.
    `Projectile` as the worked example, hand-written.
-3. Instance variables, the `spawn()` reset, and families. These are small,
+3. Instance variables, `kinds()`, the `spawn()` reset, and families. Small,
    independent of the editor, and immediately useful to hand-written games.
-4. The six attributes and the three first-wave movements.
-5. `vs2beh list` / `set` / `reset` and the director hook. Tune from a serial
-   console before any UI exists — if it is not useful at that level, the panel
-   will not save it.
-6. The inspector panel: generic widgets, the two-level tree, the live-tune
-   loop against a hand-written game.
-7. The scene editor and the `build()` generator. Round-trip, checksum, Detach.
+4. `StateMachine`, with `hold()`. Port `vasura_espacial`'s ten states to it as
+   the proving case — if the declared form is not clearly better than the
+   hand-rolled one it replaces, stop here and rethink.
+5. The nine attributes and the five first-wave movements.
+6. `vs2beh list` / `set` / `reset` and the director hook, including reading
+   and forcing a sprite's current state. Tune from a serial console before any
+   UI exists — if it is not useful at that level, the panel will not save it.
+7. The inspector panel: generic widgets, the two-level tree, the `kinds` table
+   editor, the live-tune loop against a hand-written game.
+8. The scene editor and the `build()` generator. Round-trip, checksum, Detach.
    Migrate one small game (`mapdemo`) end to end.
-8. Blockly: palette, tick skeleton, generator, line map. Re-author
+9. Blockly: palette, tick skeleton, state hats, generator, line map. Re-author
    `Projectile` and `Damageable` as block programs and ship the generated
    output as the catalog.
-9. Migrate `vyruss_vs2` and `vixeous`. The real acceptance test.
-10. Second wave, `Tilemap.cell_at()`, `Angle` and `Points` fields.
+10. Migrate `vyruss_vs2` and `vixeous`. The real acceptance test.
+11. Second wave, `Tilemap.cell_at()`, `Angle` and `Points` fields.
 
-Steps 1-6 stand alone and are worth having even if the editor never ships.
-That ordering is deliberate: nothing before step 7 depends on the editor
-existing.
+Steps 1-7 stand alone and are worth having even if the editor never ships.
+That ordering is deliberate: nothing before step 8 depends on the editor
+existing. Step 4 is the one to reorder if something has to give — the state
+machine is the highest-value item in this proposal and the one most likely to
+change shape once real games use it.
 
 ## Acceptance checks
 
@@ -851,10 +1038,25 @@ existing.
 
 ## Open for review
 
-- **Which `Pilotable` schemes ship?** `rim` (`vyruss_vs2`) and `turn`
-  (`vixeous`) both exist and are not the same thing. A third game would settle
-  whether `free` is needed, or whether the two are one behavior with a
-  `follow_lag` parameter.
+- **Which `Pilotable` schemes ship?** The survey found four distinct models,
+  not two: `rim` (`vyruss_vs2`), `turn` with camera follow-lag (`vixeous`),
+  `momentum` with damping (`vajon.py:293-337`), and free eight-way
+  (`vasura_espacial/entities/nave.py:71-94`). Four schemes in one behavior is
+  a smell; four separate behaviors is a smaller one. Probably the answer is
+  `Pilotable` with `inertia` and `follow_lag` parameters where zero means
+  neither, which collapses all four — but that wants trying before it is
+  believed.
+- **Should states be a separate `StateMachine` class, or should every Behavior
+  be able to declare states?** Making every Behavior a potential state machine
+  is fewer concepts; keeping them separate keeps the common stateless Behavior
+  cheap to read and cheap to explain. This proposal splits them, weakly.
+- **Do behavior callbacks need more than one subscriber?**
+  `vasura_espacial/common/evento.py` is a full publish/subscribe class, which
+  suggests at least one author wanted fan-out. This proposal gives each hook
+  one callback, because `Evento.disparar` builds a list on every fire — a list
+  comprehension evaluated purely for its side effects — and that is exactly
+  the per-tick allocation the sealed-scene rule exists to prevent. A game that
+  genuinely needs fan-out can fan out inside its one callback.
 - **Does the editor own `update()` too, eventually?** This proposal draws the
   line at structure. If blocks later author `update()`, the game file becomes
   generated as well and the hand-written tier disappears — which is a
