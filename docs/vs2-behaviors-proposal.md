@@ -1136,6 +1136,118 @@ self.enemies.behave(CameraBound(self.camera))
   against a refactor reintroducing per-sprite dispatch for uniform work,
   generator determinism, and parity of migrated `vixeous`/`vyruss_vs2`.
 
+## Native Actions: the offload seam is already drawn
+
+The Action layer turns out to be the right boundary for pushing work into C,
+and not by accident. "An Action never decides" is precisely the precondition
+for a kernel that runs over many sprites at once, and the two call forms
+already mark which side of the line each use is on:
+
+- `run(sprites)` — uniform, column-wise, no branching, no callbacks. This can
+  become a C kernel.
+- `run_one(sprite)` — invoked from inside a Behavior's per-sprite branch, in
+  the middle of Python control flow. This cannot.
+
+So the split that was justified by editability and by the Blockly palette is
+justified a third time by offload. Three independent reasons converging on one
+boundary is a good sign the boundary is real.
+
+### The state is already in C
+
+`vs2_sprite_t` (`gpu.h:33-41`) holds `layer`, `image_strip`, `frame`, `mode`,
+`flags` and 8.8 fixed-point `x`/`y` — twelve bytes per sprite, in a flat
+`vs2_sprite_records[VS2_MAX_SPRITES]` table (`vs2_native.c:36`). The Python
+`Sprite` is already a facade that writes through to it. A native `Move` would
+not touch a single Python object; it would walk a slot range and add two
+fixed-point deltas. The depth curve a world-space collision test needs is
+there too, as `vs2_deepspace[256]` (`gpu.h:26`).
+
+What the record lacks is per-sprite *behavior* state — animation clocks,
+oscillation phases, life counters. Offloading an Action that needs one means
+adding a parallel motion record. Note the inversion: the parallel-array layout
+measured *slower* than primed Python attributes (8.9 ms vs 6.2 ms), because
+MicroPython's `range()` plus subscript is expensive. In C it is the fast
+layout. The right storage depends on which language reads it, which is another
+reason to decide this after the gate rather than before.
+
+### Start with `Collide`
+
+If only one kernel is ever written, it should be this one, for three reasons.
+
+It is the only thing in the catalog that is **O(N x M)**; everything else is
+O(N). A bullet-hell with 20 shots against 40 enemies is 800 tests per tick,
+which is hopeless in Python and trivial in C.
+
+It **mutates nothing**. It reads records and returns hit pairs, so it has none
+of the coherence problem below. That makes it the highest-value, lowest-risk
+kernel by a wide margin.
+
+And it is where **world-space collision** belongs anyway. The un-projection
+table is already in C; doing the test there means the correction described
+above costs nothing instead of costing a table lookup per sprite per tick in
+Python.
+
+### The coherence problem, for the kernels that do mutate
+
+`vs2.Sprite` keeps `self._x`/`self._y` as Python shadows and writes through to
+the record, so reads are free and writes cost one native call. If C starts
+mutating the record, those shadows go stale.
+
+The answer is to make it a per-pool property: a pool driven by native Actions
+drops its shadows, and `sprite.x` reads through to the record instead (which
+needs getters — only setters exist today). Games that use no native Actions
+pay nothing and change in no way. The wart is that `sprite.x` then has two
+cost profiles depending on how its pool was configured, and that is worth
+naming out loud rather than hiding, because it is the kind of thing that
+surprises someone profiling a game six months later.
+
+### Batching: the offload unit is the prologue, not the Action
+
+Crossing the Python/C boundary has a fixed cost. A pool with four native
+Actions calling four kernels crosses four times per tick, and the overhead can
+eat the gain.
+
+So the unit that moves is the **whole run of consecutive column-wise Actions**
+— the uniform prologue a Behavior hoists before its per-sprite loop —
+compiled into one native call per pool per tick. Which is one more argument
+for the `step()` shape this proposal already requires: the hoisted prologue is
+exactly the offloadable run, and a Behavior written the other way round has
+nothing to offload.
+
+### The rules that keep it safe
+
+1. **Native is an optimization, never a semantic.** Every native Action keeps
+   its Python `run()` as the reference implementation, and the Python path
+   runs wherever no kernel exists. A game must behave identically in the
+   browser IDE and on the board, or the editor's whole premise is poisoned.
+2. **Parity is tested, not assumed.** Kernel and reference must agree
+   bit-for-bit over a randomised corpus, in the manner of the existing render
+   parity suites.
+3. **Count the targets before writing one.** VS2 rendering exists in
+   `hardware/rotor/modules/povdisplay/` for the board and `emulator/native/`
+   for the desktop, with the browser on its own path. A kernel is not one
+   implementation, it is a shared source file compiled into several — the
+   pattern `color_pipeline.c` and `hall_filter.c` already established. That
+   cost is the reason to write two kernels that matter rather than fifteen
+   that might.
+4. **An Action declares its kernel by name** (`native = "move"`), meaning it
+   touches only its declared parameters and native record fields. Anything
+   that spawns, plays a sound, or calls back into Python is disqualified by
+   construction — which is the same list as "anything that decides".
+
+### When to decide: after the gate, not before
+
+Nothing here gets built speculatively. Three outcomes:
+
+- **The gate passes comfortably.** Write no kernels. The seam costs nothing to
+  keep and can be used later if a game outgrows the budget.
+- **The gate is marginal.** Offload `Collide`, and `Move` and `Animate` if the
+  profile says so. Leave the rest in Python.
+- **The gate fails.** Native Actions become the rescue rather than the
+  retreat — which is a better answer than the fallback below, because moving
+  `run()` into C keeps the Action layer, the palette and the editor intact,
+  where collapsing the layer loses all three.
+
 ## Gate: prove the numbers on real hardware first
 
 **Nothing in this proposal gets built until the performance model is confirmed
@@ -1185,15 +1297,20 @@ instrumentation is a deliverable rather than scaffolding.
 | `heap_delta` across 1000+ ticks with the full catalog attached | Zero |
 | State-machine dispatch through a tuple of bound methods | Within the per-sprite branch budget, not worse |
 | `vs2beh set` round trip while the game runs | Visible within one tick, no dropped frames |
+| One Python/C boundary crossing, timed in isolation | Cheap enough that a per-pool prologue call is worth it — this is what decides whether native Actions are viable at all |
 
 ### If it fails
 
-The design changes, in this order: drop `run_one()` and make every Action
-column-wise only, pushing state machines back into hand-written Python; then,
-if that is still too slow, drop the Action layer entirely and keep Behaviors
-as monolithic hand-written classes with declared parameters — which preserves
-the editor, the protocol and the instance-variable work, and loses only the
-Blockly palette. The parameter system, instance variables, `kinds()`, families
+Try native Actions first — see the section above. Moving `run()` into C keeps
+the Action layer, the Blockly palette and the editor intact, and `Collide`
+alone may close the gap.
+
+Only if that is not enough does the design retreat, in this order: drop
+`run_one()` and make every Action column-wise only, pushing state machines
+back into hand-written Python; then drop the Action layer entirely and keep
+Behaviors as monolithic hand-written classes with declared parameters — which
+preserves the editor, the protocol and the instance-variable work, and loses
+only the Blockly palette. The parameter system, instance variables, `kinds()`, families
 and the scene editor do not depend on the dispatch model and survive either
 way.
 
@@ -1294,6 +1411,11 @@ change shape once real games use it.
   but they are the first things there that are pure maths rather than hardware
   state. The alternative is a `vs2.geometry` module, which is tidier and one
   more import for a game to know about.
+- **Does `Collide` go native before it ships at all?** It is the only O(N x M)
+  entry in the catalog, it mutates nothing, and the depth table it needs is
+  already in C. Writing the Python version first and replacing it later is the
+  safe order; writing the kernel first is the honest one, if the gate says the
+  Python version could never carry a bullet-hell anyway.
 - **Should `Collide`'s default space depend on the layer's projection?**
   Defaulting to `world` on TUNNEL and `screen` on HUD is what every game
   actually wants, but it makes one parameter's default depend on another
