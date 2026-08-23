@@ -1136,8 +1136,70 @@ self.enemies.behave(CameraBound(self.camera))
   against a refactor reintroducing per-sprite dispatch for uniform work,
   generator determinism, and parity of migrated `vixeous`/`vyruss_vs2`.
 
+## Gate: prove the numbers on real hardware first
+
+**Nothing in this proposal gets built until the performance model is confirmed
+on an ESP32-S3.** Every measurement quoted above was taken on desktop
+MicroPython 1.25, unix port. Only the *ratios* are expected to survive the
+move to the board; the absolutes certainly will not.
+
+The ratios are not incidental — they are the argument. If a column-wise Action
+pass is not at least as fast as the loop it replaces, Actions are pure
+overhead. If per-sprite dispatch does not cost meaningfully more than inlined
+arithmetic, the two-tier split has no performance justification and the
+Blockly two-zone tick skeleton — which exists specifically to make the fast
+shape unavoidable — is solving a problem that does not exist. If priming
+attributes at build does not actually make tick writes free, the whole
+instance-variable and behavior-state design changes shape. Each of those is
+cheaper to discover now than after the catalog, the protocol and the editor
+are built on top of it.
+
+### The rig
+
+The workbench simulates the hall pulse train, so nothing has to physically
+spin and a fixed RPM makes runs comparable. Profiling goes over the
+workbench's serial port as in-band text, never through `mpremote` on the DUT —
+a raw-REPL entry interrupts the running Python and leaves it parked at a
+prompt, which is useless for timing a live loop. Normalise to the same screen
+before every capture and confirm the `layers`/`sprites` census matches between
+runs before comparing anything.
+
+`povperf` already reports what half of this gate needs, including
+`heap_start`, `heap_free` and `heap_delta` — so the zero-allocation claim is
+directly testable with no new instrumentation — alongside
+`avg`/`max_frame_render_us`, `frame_deadline_misses`, `skipped`, `overruns`
+and `worst_slack_us`.
+
+What it does not report is the MicroPython `scene_step()` cost, which is
+exactly what the behavior pass adds. That counter has to exist before the gate
+can run, and it should be built as the `vs2beh profile` command this proposal
+already calls for — per-behavior tick cost in microseconds — so the
+instrumentation is a deliverable rather than scaffolding.
+
+### What to measure, at 600 and 700 RPM
+
+| Measurement | Passes if |
+|---|---|
+| The three dispatch shapes, ported as a microbench | Column-wise ≤ hand-written inline; per-sprite dispatch measurably worse than inlined, in the same direction as desktop |
+| A realistic scene — 13 behaviors, 60-100 sprites, `vixeous`-equivalent | Behavior pass fits the 30 ms tick with margin, and `frame_deadline_misses` does not move against the same scene without behaviors |
+| `heap_delta` across 1000+ ticks with the full catalog attached | Zero |
+| State-machine dispatch through a tuple of bound methods | Within the per-sprite branch budget, not worse |
+| `vs2beh set` round trip while the game runs | Visible within one tick, no dropped frames |
+
+### If it fails
+
+The design changes, in this order: drop `run_one()` and make every Action
+column-wise only, pushing state machines back into hand-written Python; then,
+if that is still too slow, drop the Action layer entirely and keep Behaviors
+as monolithic hand-written classes with declared parameters — which preserves
+the editor, the protocol and the instance-variable work, and loses only the
+Blockly palette. The parameter system, instance variables, `kinds()`, families
+and the scene editor do not depend on the dispatch model and survive either
+way.
+
 ## Rollout, in dependency order
 
+0. **The hardware gate above.** Nothing below starts until it passes.
 1. `vs2/params.py` and `vs2/actions.py` with four Actions (`Move`, `MoveTo`,
    `Animate`, `Collide`). Prove the allocation and dispatch numbers in tests.
 2. `Behavior`, `behave()`, the run list, the tick pass, `limits.behaviors`.
@@ -1170,7 +1232,8 @@ change shape once real games use it.
 ## Acceptance checks
 
 - A scene with the full catalog attached to 100 sprites allocates zero bytes
-  across 1000 ticks.
+  across 1000 ticks — verified on the board via `povperf`'s `heap_delta`, not
+  only on desktop.
 - A Behavior's uniform work stays at or under the hand-written loop it
   replaces; its per-sprite branch stays within 50% of inlined arithmetic.
 - `vixeous` and `vyruss_vs2` after migration are shorter, and play identically
