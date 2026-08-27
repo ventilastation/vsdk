@@ -38,7 +38,7 @@ We are currently using one with 6 cabled lanes, and a maximum rotation speed of 
 
 The axle adapter allows the slip ring and fan blade to be securely attached to the fan's axle.
 This piece was lathe-machined out of a block of steel, but aluminum should work too.
-In this folder you can find a PDF with a [blueprint for this part](hardware/rotor/3dmodels/Axle%20adapter.pdf), but it may have to be adjusted if your fan and/or slipring have different dimensions.
+In this folder you can find a PDF with a [blueprint for this part](Axle%20adapter.pdf), but it may have to be adjusted if your fan and/or slipring have different dimensions.
 
 ![Axle adapter](/docs/images/axleAdapter.jpg)
 
@@ -46,7 +46,7 @@ In this folder you can find a PDF with a [blueprint for this part](hardware/roto
 ## Fan blade and slip ring support (custom)
 
 The fan blade and slip ring support were laser-cut out of 2mm steel.
-An included PDF provides a [detailed blueprint](hardware/rotor/3dmodels/Fan%20blade%20and%20slip%20ring%20support.pdf) for both parts.
+An included PDF provides a [detailed blueprint](Fan%20blade%20and%20slip%20ring%20support.pdf) for both parts.
 The slip ring support blueprint may need to be changed if your fan and/or slipring have different dimensions.
 
 ![Fan blade](/docs/images/fanBlade.jpg)
