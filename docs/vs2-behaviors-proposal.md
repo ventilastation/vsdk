@@ -1364,10 +1364,11 @@ way.
    gate harness: four direct benchmark kernels plus a `scene_step()` timer
    exposed through the existing `povperf` command. It has no `Behavior`,
    Action, Blockly or `vs2beh` dependency, is built only to measure the
-   proposed dispatch shapes, and is deleted or folded into the later profiler
-   after the decision. Record numerical ceilings (tick time, heap delta and
-   available frame slack) in the run report. Nothing below starts until it
-   passes.
+   proposed dispatch shapes. Its workload is ten distinct kernels over 60
+   sprites, with 30 sprites carrying a second behavior (90 active behavior
+   slots). It is deleted or folded into the later profiler after the decision.
+   Record numerical ceilings (tick time, heap delta and available frame slack)
+   in the run report. Nothing below starts until it passes.
 1. `vs2/params.py` and `vs2/actions.py` with four Actions (`Move`, `MoveTo`,
    `Animate`, `Collide`). Prove the allocation and dispatch numbers in tests.
 2. `Behavior`, `behave()`, the run list, the tick pass, `limits.behaviors`.

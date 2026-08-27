@@ -68,10 +68,12 @@ def _unsupported(send):
 
 def _send_gate_stats(send, scene):
     stats = scene.gate_stats()
-    send(("povperf_gate mode=%s passes=%d sprites=%d samples=%d avg_us=%d "
+    send(("povperf_gate mode=%s passes=%d sprites=%d behaviors=%d "
+          "multi_behavior_sprites=%d behavior_slots=%d samples=%d avg_us=%d "
           "max_us=%d heap_start=%d heap_free=%d heap_delta=%d" % (
               stats["mode"], stats["passes"], stats["sprites"],
-              stats["samples"], stats["avg_us"], stats["max_us"],
+              stats["behaviors"], stats["multi_behavior_sprites"],
+              stats["behavior_slots"], stats["samples"], stats["avg_us"], stats["max_us"],
               stats["heap_start"], stats["heap_free"],
               stats["heap_delta"])).encode())
 
