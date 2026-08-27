@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision vs2-hardware-test base-monitor list-boards register-rotor register-workbench register-base
+.PHONY: micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full flash-fs voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision vs2-hardware-test base-monitor list-boards register-rotor register-workbench register-base
 
 PORT ?=
 MAC ?=
@@ -11,7 +11,7 @@ BAUD ?= 2000000
 # boards of one type are attached or when a particular board must be forced.
 PYTHON ?= python3
 BOARD_DETECTOR := $(abspath tools/find_board.py)
-ROTOR_PORT_TARGETS := initial-flash flash-recovery flash-full flash-launcher configure-board configure-board-v2 configure-board-eu wifi-provision
+ROTOR_PORT_TARGETS := initial-flash flash-recovery flash-full flash-fs flash-launcher configure-board configure-board-v2 configure-board-eu wifi-provision
 WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
 BASE_PORT_TARGETS := base-monitor
 PORT_TARGETS := $(ROTOR_PORT_TARGETS) $(WORKBENCH_PORT_TARGETS) $(BASE_PORT_TARGETS)
@@ -90,7 +90,7 @@ define NL
 endef
 
 IDF_SOURCE_HINT := source ../../esp-idf/esp-5.5.2/export.sh
-NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs vs2-hardware-test base-monitor
+NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs vs2-hardware-test vs2-behaviors-gate base-monitor
 IDF_GOALS := $(filter-out $(NO_IDF_TARGETS),$(MAKECMDGOALS))
 ifneq ($(strip $(IDF_GOALS)),)
 ifeq ($(strip $(IDF_PATH)),)
@@ -214,6 +214,12 @@ flash-recovery: vsdk
 flash-full: vsdk voom retro-core fmsx
 	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_full_image.py --port "$(PORT)" --baud "$(BAUD)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"'
 
+# Update only the LittleFS application payload over USB.  This is useful for
+# bench fixtures (such as the VS2 behavior gate) after initial-flash, which
+# intentionally leaves the VFS empty.
+flash-fs: build-fs
+	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/deploy_micropython_fs.py --port "$(PORT)" --baud "$(BAUD)" --skip-build'
+
 voom:
 	$(call rg-build,prboom-go)
 
@@ -331,6 +337,12 @@ workbench-wifi-provision:
 VSDK_TEST_PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,$(PYTHON))
 vs2-hardware-test:
 	$(VSDK_TEST_PYTHON) tools/vs2_hardware_test.py $(if $(PORT),--port "$(PORT)",)
+
+# Pre-gate measurement for the proposed VS2 Actions/Behaviors dispatch shape.
+# This is intentionally separate from vs2-hardware-test: it proves the
+# proposal's performance assumptions before that runtime API exists.
+vs2-behaviors-gate:
+	$(VSDK_TEST_PYTHON) tools/vs2_behaviors_gate.py $(if $(PORT),--port "$(PORT)",)
 
 # --- Base Arduino (buttons/servo/dial relay; see docs/internals/base-control-api.md) ---
 # Not an ESP-IDF project, so there's no build/flash target here (use the

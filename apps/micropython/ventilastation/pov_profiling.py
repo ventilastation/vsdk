@@ -66,14 +66,25 @@ def _unsupported(send):
     send(b"povperf_error unsupported")
 
 
+def _send_gate_stats(send, scene):
+    stats = scene.gate_stats()
+    send(("povperf_gate mode=%s passes=%d sprites=%d samples=%d avg_us=%d "
+          "max_us=%d heap_start=%d heap_free=%d heap_delta=%d" % (
+              stats["mode"], stats["passes"], stats["sprites"],
+              stats["samples"], stats["avg_us"], stats["max_us"],
+              stats["heap_start"], stats["heap_free"],
+              stats["heap_delta"])).encode())
+
+
 def handle_command(parts, send, display, scene=None):
     """Handle ``povperf`` without persisting or otherwise changing a profile.
 
     Commands are ``status``, ``start``, ``stop``, ``reset``,
-    ``mode legacy|calibrated``, and ``capture``. Selecting an encoder resets
-    the sample window so a report never silently combines the two
-    implementations. ``capture`` asks an opt-in fixture to restore and freeze
-    its deterministic oracle frame.
+    ``mode legacy|calibrated``, ``capture``, and the temporary pre-gate
+    benchmark controls ``gate start|stop|status [shape]``. Selecting an
+    encoder resets the sample window so a report never silently combines the
+    two implementations. ``capture`` asks an opt-in fixture to restore and
+    freeze its deterministic oracle frame.
     """
     get_stats = getattr(display, "get_performance_stats", None)
     set_enabled = getattr(display, "set_performance_profiling", None)
@@ -109,6 +120,30 @@ def handle_command(parts, send, display, scene=None):
                 raise ValueError("scene does not support deterministic capture")
             prepare_capture()
             send(b"povperf_capture ready=1")
+            return
+        elif command == "gate":
+            start_gate = getattr(scene, "gate_start", None)
+            baseline_gate = getattr(scene, "gate_baseline", None)
+            stop_gate = getattr(scene, "gate_stop", None)
+            gate_stats = getattr(scene, "gate_stats", None)
+            if gate_stats is None:
+                raise ValueError("scene does not support behavior gate")
+            gate_command = parts[1] if len(parts) > 1 else "status"
+            if gate_command == "start" and len(parts) == 3:
+                if start_gate is None:
+                    raise ValueError("scene does not support behavior gate")
+                start_gate(parts[2])
+            elif gate_command == "baseline" and len(parts) == 2:
+                if baseline_gate is None:
+                    raise ValueError("scene does not support behavior gate")
+                baseline_gate()
+            elif gate_command == "stop" and len(parts) == 2:
+                if stop_gate is None:
+                    raise ValueError("scene does not support behavior gate")
+                stop_gate()
+            elif gate_command != "status" or len(parts) != 2:
+                raise ValueError("invalid gate command")
+            _send_gate_stats(send, scene)
             return
         elif command == "mode" and len(parts) == 2:
             selector = getattr(display, "set_color_pipeline_enabled", None)

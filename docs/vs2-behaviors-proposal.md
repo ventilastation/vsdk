@@ -225,9 +225,14 @@ class Move(Action):
     def run(self, sprites):
         """Apply to every sprite. Hoist parameter reads here."""
         dx, dy = self.speed_x, self.speed_y
-        for sprite in sprites:
+        live = sprites._live
+        index = 0
+        count = len(live)
+        while index < count:
+            sprite = live[index]
             sprite.x += dx
             sprite.y += dy
+            index += 1
 
     def run_one(self, sprite):
         """Apply to one sprite, for a Behavior that branches per sprite."""
@@ -238,6 +243,15 @@ class Move(Action):
 Two call forms, because Behaviors need both and they cost differently
 (measured below). The base class defines `run()` as a loop over `run_one()`,
 so an Action overrides `run()` only when hoisting saves something.
+
+**Bulk traversal is part of the runtime contract.** `SpritePool.__iter__()`
+currently creates an iterator object, which is fine for handwritten gameplay
+but is not acceptable inside a zero-allocation Action or Behavior pass. The
+sealed runtime therefore gives bulk Actions direct access to the pool's sealed
+live array and requires an indexed loop, as above; it must not implement the
+hot path as `for sprite in pool`. Actions that can despawn stay in the
+per-sprite branch, which has the existing removal-tolerant traversal rules.
+The gate measures this exact traversal shape on the board.
 
 **Results.** `run_one()` returns `None` when nothing notable happened,
 `vs2.DONE` when a durative Action finished (`MoveTo` arrived, `Animate`
@@ -384,6 +398,29 @@ editor and the control protocol address a parameter by
 (`enemies.patrolling.amplitude`), so a collision is a build-time error naming
 both. Read them back with `subject.behaviors`, `subject.behavior("patrolling")`
 or `subject.behavior(Damageable)`.
+
+### Subjects have explicit, allocation-free dispatch
+
+`Sprite`, `SpritePool` and `Family` are all legal subjects, but they are not
+silently normalised to a temporary one-element list. That would make the
+singleton case either fail (`for sprite in sprites` on a `Sprite`) or allocate
+on every tick, violating the central budget. The run list records the subject
+kind while the scene is sealed:
+
+- A pool invokes `Behavior.step(pool)` and therefore permits column-wise
+  `Action.run(pool)` work followed by a per-sprite loop.
+- A single sprite invokes `Behavior.step_one(sprite)`; it uses
+  `Action.run_one(sprite)` exclusively.
+- A family stores its members as a sealed tuple. It dispatches each pool to
+  `step(pool)` and each singleton to `step_one(sprite)`, in declared member
+  order, without flattening or creating an iterator/list in the tick.
+
+`Behavior.step` and `Behavior.step_one` are separate entry points for this
+reason. Standard behaviors implement both, sharing private helpers where that
+does not introduce allocation. A custom behavior may implement only the form
+its declared subject needs; attaching it to an unsupported subject is a
+build-time error. This also makes the `boss.behave(Damageable(...))` example
+above a real supported case rather than an accidental special case.
 
 ### Parameters are the schema
 
@@ -653,7 +690,8 @@ version of it.
 ### Ordering
 
 1. `scene.update()` — game code, unchanged.
-2. the Behavior pass, in attach order across the whole scene.
+2. if no transition is pending, the Behavior pass, in attach order across the
+   whole scene.
 3. back button, idle timeout, timers, transition commit — unchanged.
 
 Behaviors run **after** `update()`, the opposite of Construct 3, deliberately:
@@ -665,6 +703,11 @@ game overrides a parameter, taking effect immediately.
 One sentence: *game code decides, then Behaviors carry it out, in the order
 they were attached.* `scene.behaviors` lists them in run order, and so does
 the panel.
+
+A queued `pop()` or `switch()` is a hard boundary: `scene_step()` skips the
+whole pass if `update()` queued one, and stops the pass immediately if a
+Behavior queues one. This preserves the existing lifecycle invariant that no
+later callback mutates a scene after it has asked to leave.
 
 ### What the dispatch shape costs
 
@@ -1116,9 +1159,10 @@ self.enemies.behave(CameraBound(self.camera))
 - **`vs2/__init__.py`**: `behave()`/`behaviors`/`behavior()` on `Sprite`,
   `SpritePool`, `Family` and (second wave) `Tilemap`; `SpritePool.var()`,
   `SpritePool.kinds()` and the `spawn()` reset and `kind=` argument;
-  `Scene.family()`; `Sprite.despawn()`; the scene run list built during
-  `_seal_drawables()`; the Behavior pass in `scene_step()` between `update()`
-  and `_run_defaults()`; `limits.behaviors`; `vs2.DONE`;
+  `Scene.family()`; `Sprite.despawn()`; the subject-kind-tagged scene run list
+  built during `_seal_drawables()`; the guarded Behavior pass in
+  `scene_step()` between `update()` and `_run_defaults()`; `limits.behaviors`;
+  `vs2.DONE`;
   `Tilemap.cell_at()`.
 - **`ventilastation/director.py`**: one `elif cmd == "vs2beh"` next to
   `hallfilter`, delegating to `ventilastation/behavior_control.py` with the
@@ -1316,7 +1360,14 @@ way.
 
 ## Rollout, in dependency order
 
-0. **The hardware gate above.** Nothing below starts until it passes.
+0. **The hardware gate above.** First add a deliberately narrow, standalone
+   gate harness: four direct benchmark kernels plus a `scene_step()` timer
+   exposed through the existing `povperf` command. It has no `Behavior`,
+   Action, Blockly or `vs2beh` dependency, is built only to measure the
+   proposed dispatch shapes, and is deleted or folded into the later profiler
+   after the decision. Record numerical ceilings (tick time, heap delta and
+   available frame slack) in the run report. Nothing below starts until it
+   passes.
 1. `vs2/params.py` and `vs2/actions.py` with four Actions (`Move`, `MoveTo`,
    `Animate`, `Collide`). Prove the allocation and dispatch numbers in tests.
 2. `Behavior`, `behave()`, the run list, the tick pass, `limits.behaviors`.

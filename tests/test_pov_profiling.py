@@ -55,6 +55,38 @@ class FakeDisplay:
         }
 
 
+class FakeGateScene:
+    def __init__(self):
+        self.mode = None
+        self.started = []
+        self.baselines = 0
+        self.stopped = 0
+
+    def gate_start(self, mode):
+        self.mode = mode
+        self.started.append(mode)
+
+    def gate_stop(self):
+        self.mode = None
+        self.stopped += 1
+
+    def gate_baseline(self):
+        self.baselines += 1
+
+    def gate_stats(self):
+        return {
+            "mode": self.mode or "stopped",
+            "passes": 32,
+            "sprites": 60,
+            "samples": 100,
+            "avg_us": 640,
+            "max_us": 700,
+            "heap_start": 1000,
+            "heap_free": 1000,
+            "heap_delta": 0,
+        }
+
+
 class PovProfilingTests(unittest.TestCase):
     def command(self, parts, display=None, scene=None):
         sent = []
@@ -110,6 +142,28 @@ class PovProfilingTests(unittest.TestCase):
     def test_capture_rejects_a_scene_without_fixture_hook(self):
         sent = self.command(["capture"], scene=object())
         self.assertEqual(sent, [b"povperf_error invalid_command"])
+
+    def test_gate_controls_an_opt_in_scene(self):
+        scene = FakeGateScene()
+        sent = self.command(["gate", "start", "column"], scene=scene)
+        self.assertEqual(scene.started, ["column"])
+        self.assertIn(b"povperf_gate mode=column", sent[0])
+        sent = self.command(["gate", "stop"], scene=scene)
+        self.assertEqual(scene.stopped, 1)
+        self.assertIn(b"povperf_gate mode=stopped", sent[0])
+        self.command(["gate", "baseline"], scene=scene)
+        self.assertEqual(scene.baselines, 1)
+
+    def test_gate_rejects_missing_or_invalid_fixture(self):
+        self.assertEqual(
+            self.command(["gate", "status"], scene=object()),
+            [b"povperf_error invalid_command"],
+        )
+        scene = FakeGateScene()
+        self.assertEqual(
+            self.command(["gate", "start"], scene=scene),
+            [b"povperf_error invalid_command"],
+        )
 
 
 if __name__ == "__main__":
