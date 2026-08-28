@@ -190,13 +190,17 @@ are produced but before APA102 values are calculated. This makes a measurement
 pattern identical in MicroPython and native games, without altering the saved
 profile. Use `povcal test off` before returning to normal content.
 
-## Render-performance comparison
+## Handoff and Paint performance
 
 `povperf` profiles the ESP32-S3 GPU task only when explicitly enabled. The
-double-buffered renderer reports two paths separately: physical-column service
-(waiting for and queueing APA102 DMA plus copying the published framebuffer
-row) and background projection (one rendered column, plus complete 256-column
-frame totals). It does not print from the render task or persist any setting.
+double-buffered renderer reports two paths separately. **Handoff** is
+physical-column service: waiting for and queueing APA102 DMA plus copying the
+published framebuffer row before the next SPI transfer. It is the per-column
+hard deadline that protects a steady image. **Paint** is background projection:
+producing rendered columns and complete 256-column rotations. It determines
+how much visual work fits in a frame. Game-logic **Step** timing is separate
+from this GPU profiler and must be measured by the scene/behavior profiler.
+It does not print from the render task or persist any setting.
 
 Run the same steady rotor speed and the same scene twice:
 
@@ -216,20 +220,21 @@ povperf stop
 
 Use a busy VS2 scene such as `vixeous` or `mapdemo`; `povperf_state` records
 whether VS2 was active and its current layer, sprite, and tilemap slot counts.
-`povperf_timing` reports mean and maximum service/render/DMA-wait/copy time in
-microseconds. `deadline_us` is the measured revolution period divided by 256;
-a service update is an overrun when its total exceeds that budget. `skipped`
-is the number of physical angular updates the GPU task passed within a
-revolution before it could service them. An accepted hall edge begins a new
-measurement epoch, so its intentional phase correction is not misreported as
-a near-full-revolution skip. `frames`, `avg_frame_render_us` and
-`max_frame_render_us` measure complete 256-column projections against
-`frame_deadline_us`. `complete=1` means both physical and full-frame samples
-were collected; the numeric skip and overrun fields remain independent so
-acceptance tools can enforce their own limits. Zero service/frame overruns and
-a bounded skip rate show that both halves met their deadlines.
-`worst_slack_us` is the minimum `deadline_us - total_us`; it should remain
-positive.
+`povperf_timing` reports mean and maximum Handoff/Paint/DMA-wait/copy time in
+microseconds. `deadline_us` is the Handoff budget: the measured revolution
+period divided by 256. A Handoff overrun occurs when `total_us` exceeds that
+budget. `skipped` is the number of physical angular updates the GPU task
+passed within a revolution before it could service them. An accepted hall edge
+begins a new measurement epoch, so its intentional phase correction is not
+misreported as a near-full-revolution skip. `frames`,
+`avg_frame_render_us` and `max_frame_render_us` measure Paint across complete
+256-column rotations against `frame_deadline_us`. `complete=1` means both
+physical and full-frame samples were collected; the numeric skip and overrun
+fields remain independent so acceptance tools can enforce their own limits.
+Zero Handoff overruns, positive Handoff slack, zero Paint frame overruns and a
+bounded skip rate show that the output and projection paths are healthy.
+`worst_slack_us` is the minimum Handoff slack, `deadline_us - total_us`; it
+should remain positive.
 
 The profiler is for the MicroPython GPU/VS2 renderer. Native Retro-Go has its
 own display loop and is not represented by these counters.

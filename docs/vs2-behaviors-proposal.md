@@ -74,10 +74,10 @@ no way to edit its numbers except editing Python and restarting.
    "takes three hits", "chases the player". If the panel's top level reads
    like a physics library, the layer is at the wrong altitude.
 2. **Nothing that runs on the board may cost more than the code it
-   replaces.** Games tick every 30 ms (`director.py:680`) on an ESP32 running
-   MicroPython. The measured budget below decides the dispatch shape, and it
-   decides the shape of the block program too.
-3. **Nothing in the tick allocates.** The sealed-scene rule extends unchanged:
+   replaces.** Game logic takes a **Step** every 30 ms (`director.py:680`) on
+   an ESP32 running MicroPython. The measured budget below decides the
+   dispatch shape, and it decides the shape of the block program too.
+3. **Nothing in a Step allocates.** The sealed-scene rule extends unchanged:
    parameters, per-instance state, instance variables, families and every
    cross-pool reference resolve during `build()`; the tick writes only fields
    that already exist.
@@ -685,7 +685,33 @@ This is the closest thing to Construct's effects that the hardware can
 support, it costs nothing per frame, and one game has already built the ugly
 version of it.
 
-## The tick
+## The three timing contracts
+
+Ventilastation has three separate timings. They should not all be called
+"render time": each protects a different visible property, runs in a
+different part of the system, and fails differently.
+
+| Name | What it measures | What it protects | A miss looks like |
+|---|---|---|---|
+| **Handoff** | On the output-serving core, the time to have a column's colour-corrected LED bytes ready for SPI transfer. Its budget is the time until the next column. | A steady, unbroken image. | An overrun or no remaining Handoff slack: the output cannot be served in time. |
+| **Paint** | The scene-to-colour-corrected-LED work: projecting and composing sprite data, per column and per rotation. | Visible frame rate and visual complexity. | Paint consumes too much rotation time, reducing the rate at which complete images can be produced. |
+| **Step** | Game logic, including `scene.update()` and the Behavior pass. It has both a cost and a fixed target cadence. | Fluid, deterministic gameplay. | A late or skipped Step makes motion uneven even if the image remains steady. |
+
+**Handoff is the hard deadline.** At a given RPM, it is a per-column deadline
+and must never be missed. **Paint** is related but is not interchangeable with
+Handoff: a buffered Paint measurement may be longer than one Handoff interval
+without causing an output miss. Track Paint per column and per rotation to
+understand its throughput. **Step** is a scheduling contract: target 33 Hz
+(one Step every 30 ms), then report its elapsed time, achieved rate and missed
+Steps separately.
+
+Use the names in reviews, profiles and dashboards: `handoff_budget_us`,
+`handoff_time_us` and `handoff_slack_us`; `paint_time_us`,
+`paint_frame_time_us` and `paint_frames_per_second`; `step_time_us`,
+`step_rate_hz` and `missed_steps`. These are descriptive names, not an
+acronym layer to learn.
+
+## The Step
 
 ### Ordering
 
@@ -695,9 +721,9 @@ version of it.
 3. back button, idle timeout, timers, transition commit — unchanged.
 
 Behaviors run **after** `update()`, the opposite of Construct 3, deliberately:
-a scene with no Behaviors ticks exactly as today; a sprite spawned in
-`update()` moves and is range-checked on the same tick, and at 33 Hz a
-one-tick lag on a bullet is visible; and `update()` stays the place where the
+a scene with no Behaviors Steps exactly as today; a sprite spawned in
+`update()` moves and is range-checked in the same Step, and at 33 Hz a
+one-Step lag on a bullet is visible; and `update()` stays the place where the
 game overrides a parameter, taking effect immediately.
 
 One sentence: *game code decides, then Behaviors carry it out, in the order
@@ -1320,27 +1346,48 @@ prompt, which is useless for timing a live loop. Normalise to the same screen
 before every capture and confirm the `layers`/`sprites` census matches between
 runs before comparing anything.
 
-`povperf` already reports what half of this gate needs, including
-`heap_start`, `heap_free` and `heap_delta` — so the zero-allocation claim is
-directly testable with no new instrumentation — alongside
-`avg`/`max_frame_render_us`, `frame_deadline_misses`, `skipped`, `overruns`
-and `worst_slack_us`.
+`povperf` already supplies the Handoff and Paint sides of the gate. Treat
+`deadline_us`, `avg_total_us`, `max_total_us`, `overruns` and
+`worst_slack_us` as the Handoff report; `deadline_us` is the Handoff budget.
+Treat `avg_render_us`/`max_render_us` as per-column Paint, and
+`avg_frame_render_us`/`max_frame_render_us`, `frame_deadline_us` and
+`frame_overruns` as Paint over a full rotation. A rotation deadline is not a
+Handoff deadline.
 
-What it does not report is the MicroPython `scene_step()` cost, which is
-exactly what the behavior pass adds. That counter has to exist before the gate
-can run, and it should be built as the `vs2beh profile` command this proposal
-already calls for — per-behavior tick cost in microseconds — so the
-instrumentation is a deliverable rather than scaffolding.
+The gate fixture reports the Step side: its `avg_us`, `max_us` and `samples`
+are elapsed Step measurements. Its eventual `vs2beh profile` replacement
+must additionally report `step_rate_hz` and `missed_steps`, because an
+inexpensive Step that runs at an irregular cadence still makes a game feel
+wrong. The behavior pass should remain separately attributable within Step.
+
+### Baseline from the ten-behavior gate
+
+The current hardware gate uses ten distinct behavior kernels on 60 sprites;
+30 sprites carry a second behavior, for 90 active behavior slots. Five-second
+runs at both target speeds produced the following range across the four
+dispatch shapes. Every run had zero Handoff overruns.
+
+| RPM | Handoff budget / worst slack | Paint, average per column | Paint, average per rotation | Step, average | Observed Step cadence |
+|---|---:|---:|---:|---:|---:|
+| 600 | 390 us / 142 us | 125–138 us | 32.3–35.4 ms | 16.1–18.7 ms | 34.6–34.8 Hz |
+| 700 | 334 us / 83 us | 123–137 us | 31.5–35.4 ms | 15.7–18.3 ms | 34.6–34.8 Hz |
+
+The measured cadence is an observation of this harness, not yet an enforced
+fixed-Step scheduler. The later game loop must make the 33 Hz Step contract
+explicit and count misses. Also note that individual Paint samples reached
+598 us at 700 RPM while Handoff still had 87 us of worst slack and no overruns:
+that is expected for the buffered pipeline, and is exactly why Paint and
+Handoff need separate names and counters.
 
 ### What to measure, at 600 and 700 RPM
 
 | Measurement | Passes if |
 |---|---|
 | The three dispatch shapes, ported as a microbench | Column-wise ≤ hand-written inline; per-sprite dispatch measurably worse than inlined, in the same direction as desktop |
-| A realistic scene — 13 behaviors, 60-100 sprites, `vixeous`-equivalent | Behavior pass fits the 30 ms tick with margin, and `frame_deadline_misses` does not move against the same scene without behaviors |
-| `heap_delta` across 1000+ ticks with the full catalog attached | Zero |
+| A realistic scene — ten or more behaviors, 60-100 sprites, with half carrying a second behavior | Step fits its 30 ms budget with margin and holds its target cadence; Handoff has no overruns and positive slack against the same scene without behaviors; Paint stays within its per-rotation budget |
+| `heap_delta` across 1000+ Steps with the full catalog attached | Zero |
 | State-machine dispatch through a tuple of bound methods | Within the per-sprite branch budget, not worse |
-| `vs2beh set` round trip while the game runs | Visible within one tick, no dropped frames |
+| `vs2beh set` round trip while the game runs | Visible within one Step, with no Handoff misses |
 | One Python/C boundary crossing, timed in isolation | Cheap enough that a per-pool prologue call is worth it — this is what decides whether native Actions are viable at all |
 
 ### If it fails
@@ -1367,8 +1414,9 @@ way.
    proposed dispatch shapes. Its workload is ten distinct kernels over 60
    sprites, with 30 sprites carrying a second behavior (90 active behavior
    slots). It is deleted or folded into the later profiler after the decision.
-   Record numerical ceilings (tick time, heap delta and available frame slack)
-   in the run report. Nothing below starts until it passes.
+   Record the Handoff budget and worst slack, Paint time per column and per
+   rotation, Step time and cadence, plus heap delta, in the run report.
+   Nothing below starts until it passes.
 1. `vs2/params.py` and `vs2/actions.py` with four Actions (`Move`, `MoveTo`,
    `Animate`, `Collide`). Prove the allocation and dispatch numbers in tests.
 2. `Behavior`, `behave()`, the run list, the tick pass, `limits.behaviors`.
@@ -1401,7 +1449,7 @@ change shape once real games use it.
 ## Acceptance checks
 
 - A scene with the full catalog attached to 100 sprites allocates zero bytes
-  across 1000 ticks — verified on the board via `povperf`'s `heap_delta`, not
+  across 1000 Steps — verified on the board via `povperf`'s `heap_delta`, not
   only on desktop.
 - A Behavior's uniform work stays at or under the hand-written loop it
   replaces; its per-sprite branch stays within 50% of inlined arithmetic.
