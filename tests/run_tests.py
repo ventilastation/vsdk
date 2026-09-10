@@ -40,6 +40,7 @@ CPYTHON_TESTS = [
     "tests/test_ventilagon_parity.py",
     "tests/test_rom_format.py",
     "tests/test_vs2_api.py",
+    "tests/test_vs2_projection.py",
     "tests/test_base_control.py",
     "tests/test_uart_logging.py",
     "tests/test_apa102_preview.py",
