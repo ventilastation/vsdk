@@ -2,156 +2,108 @@
 
 Status: draft for review
 Baseline: `vs2` revision 2 as shipped (`apps/micropython/vs2/__init__.py`)
-Prior art: Construct 3; `docs/vs2-api-rework-proposal.md`
 
-This proposes three layers on top of revision 2, plus the editor that owns
-them.
+Five layers on top of revision 2, plus the editor that owns them.
 
 - **Actions** — small, parameterised, allocation-free operations on a sprite.
-  `MoveTo`, `Animate`, `Collide`, `Spawn`, `PlaySound`. An Action never
-  decides. The Action catalog is also the **Blockly palette**.
-- **Behaviors** — named, parameterised per-sprite state machines written in
-  the vocabulary of Actions. `Moving`, `Damageable`, `Pilotable`,
-  `PathFollowing`. A Behavior never touches the renderer directly. Simple ones
-  ship built in; composed ones ship as **block programs the author can fork**.
-- **State machines** — a declared form for the multi-state entities that four
-  of the nine surveyed games hand-rolled, including the timed transitions that
-  every temporary status effect is really made of.
-- **Instance variables, kinds and families** — game-owned per-instance data
-  declared on a pool, per-type default rows over it, and groups of pools
-  addressed as one. All three are things every game in the tree fakes.
+  An Action never decides.
+- **Behaviors** — named, parameterised per-subject state machines written in
+  the vocabulary of Actions. A Behavior never touches the renderer directly.
+- **State machines** — a declared form for multi-state entities, including
+  timed transitions.
+- **Variables** — per-instance on a pool, per-type rows over them (`kinds`),
+  families addressing several pools as one, plus scene, project and saved
+  state.
+- **Layer cameras and projection curves** — a layer moves its contents
+  together, and its projection is a parameterised curve rather than one
+  hardcoded tunnel.
 
-And above all three: **the editor owns `build()`**. Scene structure — layers,
-pools, tilemaps, instance variables, behavior attachments and their parameters
-— is authored in the editor and emitted as generated MicroPython. The game
-keeps `update()` and its callbacks.
+Above all five, the editor owns the generated MicroPython — `build()` and
+`update()` alike. There are two ways to build a game and both are complete:
 
-## Why this exists
+- **From the editor, writing no MicroPython.** A whole project — several
+  scenes, a menu, a game-over, transitions, scoring — authored in blocks and
+  emitted as MicroPython. This is a hard requirement.
+- **By hand, in MicroPython.** The same API, written directly.
 
-Revision 2 gave games a sealed display graph, pools, labels and tilemaps. It
-did not give them anywhere to put *conduct*, and it gave the editor nothing to
-edit. So every game writes conduct again, at the lowest possible level, in
-Python only.
+`Detach` is the seam: a generated file is regenerated freely until the author
+takes ownership of it, and after that it is ordinary MicroPython forever.
+Nothing else transfers ownership and there is no round-trip back.
 
-Two shipping VS2 games and seven V1 jam games were read in full for this
-proposal: `vixeous`, `vyruss_vs2`, `dome_defander`, `vajon`,
-`vasura_espacial`, `vs`, `2bam_sencom`, `tincho_vrunner` and
-`fanphibious_danger`. The duplication is not in the arithmetic, it is in whole
-concepts:
-
-| The concept every game re-implements | Where |
-|---|---|
-| **An explicit state machine** | `vasura_espacial/estado.py` (10 states, `on_enter`/`step`/`on_exit`, transitions by return value), `fanphibious_danger.py:13-17` (four named states), `vyruss_vs2.py:209-220` (a sequential one), `vs.py:152-160` (three booleans doing the job) |
-| Constant velocity, then leave the play field | `vixeous.py:314-331`, `vyruss_vs2.py:414-431`, `dome_defander/misil.py:31-38` |
-| Show, animate once, disappear | `vixeous.py:344-350`, `vyruss_vs2.py:432-437`, `dome_defander/misil.py:77-86`, `vasura_espacial/estado.py:36-68`, `2bam_sencom.py:395-410` |
-| Per-instance data bolted on at spawn | `vixeous.py:216-220`, `vyruss_vs2.py:206-210`, `vasura_espacial/entities/entidad.py:8-16` |
-| **Per-type data tables indexed by a kind id** | `vs.py:53-67` (nine parallel arrays for items and nerds), `vasura_espacial/entities/enemigos/enemigo.py:61-99` (a subclass per enemy carrying its own constants) |
-| A thing the player flies | `vyruss_vs2.py:34-44` + `:331-348`, `vixeous.py:257-289`, `vajon.py:293-337` (momentum and damping), `vasura_espacial/entities/nave.py:71-94` |
-| A thing that takes damage, flashes, dies with a score and a sound | `vyruss_vs2.py:360-403`, `vixeous.py:220` + `:352-360` + `:396-403` + `:456-461`, `vasura_espacial/entities/nave.py:96-151` |
-| **A temporary status that reverts on a timer** | `tincho_level.py:452-507` (four of them: power-up, invulnerable, reversed, slowed), `vasura_espacial/entities/nave.py:133-151` (60-frame invincibility), `vixeous.py:352-360` |
-| A projectile that travels, expires, and hurts what it touches | `vixeous.py:314-323` + `:390-434`, `vyruss_vs2.py:414-431`, `2bam_sencom.py:277-300` |
-| A scripted path, then join a formation | `vyruss_vs2.py:72-115` + `:209-220` |
-| Sweep back and forth while animating | `vixeous.py:324-332`, `:333-343`, `vasura_espacial/estado.py:168-188` |
-| **Facing, with a second frame bank per direction** | `vasura_espacial/entities/entidad.py:86-94`, `fanphibious_danger.py:20-21` |
-| **A spawn schedule written as data** | `vs.py:45-51` (`(tick, kind, lane)` tuples per level), `2bam_sencom.py:688-703` |
-| **Lane or grid placement** | `vs.py:33-34` (a 3x3 grid), `tincho_level.py:136-144` (columns with fixed centres), `mapdemo.py:52-58` |
-| The same test run against three different pools | `vixeous.py:390-414` — shots vs boss, then vs enemies, then bombs vs targets |
-| **Un-projecting screen position back to world depth before a hit test** | `2bam_sencom.py:1086` — a hand-transcribed 55-entry inverse of the TUNNEL curve, used at `:365` and `:987` |
-| **Naming a palette colour and animating it** | `2bam_sencom.py:1302-1349` — re-parses the ROM header to find a colour by RGB, then recolours the core, cities, font and explosions per level |
-| **Controlled randomness from a bag, not `choice()`** | `2bam_sencom.py:1185-1212` (a real Fisher-Yates shuffle bag, used for both enemy types and target cities) |
-| **Sub-pixel position, hand-rolled** | `vasura_espacial/entities/entidad.py:55-72` (floats plus `floor`), `fanphibious_danger.py:92-115` (a 256x fixed-point shim) — both of which revision 2's 8.8 coordinates already solve |
-
-`vyruss_vs2.py` is the clearest case: it already invented Actions and stopped
-one level short. `TravelTo`/`TravelX`/`TravelCloser`/`TravelAway` (`:72-115`)
-each have `step(sprite)`, `finished(sprite)` and instance parameters, and every
-baddie carries an ordered list of them (`:209-220`). That list *is* a
-`PathFollowing` behavior, hand-assembled per sprite, scoped to one game, with
-no way to edit its numbers except editing Python and restarting.
-
-## Design goals, in priority order
+## Design rules
 
 1. **A Behavior is the unit a designer thinks in.** "Pilotable by joystick 2",
-   "takes three hits", "chases the player". If the panel's top level reads
-   like a physics library, the layer is at the wrong altitude.
-2. **Nothing that runs on the board may cost more than the code it
-   replaces.** Game logic takes a **Step** every 30 ms (`director.py:680`) on
-   an ESP32 running MicroPython. The measured budget below decides the
-   dispatch shape, and it decides the shape of the block program too.
-3. **Nothing in a Step allocates.** The sealed-scene rule extends unchanged:
-   parameters, per-instance state, instance variables, families and every
-   cross-pool reference resolve during `build()`; the tick writes only fields
-   that already exist.
-4. **One declaration, four consumers.** A parameter is declared once, with
-   type, range, label and unit. The runtime, the reference docs, the property
-   panel and the Blockly field all read that declaration. A separate schema
-   that can drift is not acceptable.
+   "takes three hits", "chases the player".
+2. **Nothing on the board costs more than the code it replaces.** Game logic
+   takes a Step every 30 ms on an ESP32 running MicroPython.
+3. **Nothing in a Step allocates.** Parameters, per-instance state, instance
+   variables, families and every cross-reference resolve during `build()`; the
+   tick writes only fields that already exist.
+4. **One declaration, four consumers.** A parameter is declared once with type,
+   range, label and unit. Runtime, reference docs, property panel and Blockly
+   field all read that declaration.
 5. **Nothing on the board knows the editor exists.** The editor emits
-   MicroPython. The console runs ordinary code, compiled by mpy-cross,
-   packaged in an ordinary `.vs2`. No graph interpreter, no runtime loader, no
-   editor-only code path to keep working.
+   MicroPython, compiled by mpy-cross, packaged in an ordinary `.vs2`.
 6. **The standard behaviors are forkable.** Composed behaviors ship as block
-   programs, not black boxes. If the catalog needs something the palette
-   cannot express, the palette is wrong.
-7. **The catalog is grounded in the tree.** Every entry replaces something at
-   least two games in `games/` write by hand.
-
-## The three lines
+   programs. If the catalog needs something the palette cannot express, the
+   palette is wrong.
+7. **A whole game is authorable without writing MicroPython** — a project with
+   several scenes, a menu, a game-over, and a score that survives a transition.
 
 Short enough to enforce in review:
 
-> **An Action never decides. A Behavior never draws. The editor owns
-> structure; the game owns consequences.**
+> **An Action never decides. A Behavior never draws. The editor owns the
+> generated code; `Detach` is the only way out.**
 
-An Action, given parameters and a sprite, does exactly one thing — no
-conditions, no state machine, no callbacks that change its course. Pure enough
-to unit-test in isolation, small enough to be one Blockly block.
+### Naming
 
-A Behavior reads input, timers, its own state and the world, then picks which
-Actions run. It writes only its declared state; everything reaching the
-renderer goes through an Action.
+**Actions are verbs. Behaviors describe what a thing is or does.** `Move` /
+`Moving`. `Animate` / `Animated`. `Steer` / `Pilotable`. `Collide` /
+`Damageable`.
 
-The editor decides what exists — layers, pools, counts, variables,
-attachments, parameters. The game decides what happens when something occurs —
-`update()`, and the callbacks behaviors fire.
+Within Behaviors: **`-ing` when the subject acts, `-able` when something else
+acts on it.** `Moving`, `Chasing`, `Orbiting`, `Patrolling`, `Blinking`,
+`Scrolling`, `Aiming` are things a sprite does. `Pilotable` and `Damageable`
+are done *to* it, and are the only two `-able` entries in the catalog.
 
-### A naming rule that makes the layers legible
+## Projects, scenes and ownership
 
-**Actions are verbs. Behaviors are adjectives or role-nouns.**
+The editor's unit is a **project**, which owns:
 
-`Move` / `Moving`. `Animate` / `Animated`. `Steer` / `Pilotable`. `Spawn` /
-`Spawner`. `Collide` / `Damageable`. In the palette you are picking verbs; in
-the property panel you are describing what a thing *is*. It costs nothing and
-it makes a screenshot self-explanatory.
+- an ordered list of **scenes**, one workspace each, and which one is the entry;
+- **project variables** that outlive a transition;
+- the **asset pack** — `images/`, `sounds/`, `menu.png`;
+- `meta.json`.
 
-## Ownership: who writes which file
+Scene flow is authored, not implied: `push`, `pop` and `switch` are system
+blocks and the editor draws the scene list as the graph they form. The runtime
+already supports this unchanged.
 
-The generated/hand split runs along file boundaries, never inside a file.
-Mixed-ownership files are the round-trip trap and this design does not have
-any.
+Every file the editor emits is generated **until detached**, including
+`update()`. A fully editor-authored project has no hand-written file:
 
 ```
 games/alecu/vixeous/
-  meta.json
+  meta.json              GENERATED. Scene list, entry scene, launcher metadata.
   code/
     vixeous_scene.py     GENERATED. Layers, pools, vars, behaviors, params.
                          Carries the editor workspace as a trailing blob.
-    vixeous.py           YOURS. update(), callbacks, game state.
+    vixeous.py           GENERATED. update(), event handlers, scene flow.
+                         Detach to take ownership; then it is yours forever.
     behaviors/
       chasing.py         GENERATED from blocks. One file per custom behavior.
   images/  sounds/  menu.png
 ```
 
 ```python
-# vixeous_scene.py  -- generated, do not edit
-# Ventilastation scene editor. Edit in the editor, or Detach to take
-# ownership of this file. body-sha: 8f3a1c02
+# vixeous_scene.py  -- generated, do not edit. body-sha: 8f3a1c02
 import vs2
 from vs2.behaviors import Damageable, Moving, Patrolling, Projectile, Transient
 
 
 class VixeousScene(vs2.Scene):
     def build(self):
-        self.world = self.layer("world", projection=vs2.TUNNEL)
+        self.world = self.layer("world", projection=vs2.VS1_TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
 
         self.explosions = self.world.sprite_pool(
@@ -161,7 +113,7 @@ class VixeousScene(vs2.Scene):
         self.enemies = self.world.sprite_pool("enemy.png", 6)
         self.enemies.var("kind", 0, min=0, max=2)
         self.enemies.behave(Moving(speed_y=-1))
-        self.enemies.behave(Patrolling(axis="x", amplitude=2, period=128))
+        self.enemies.behave(Patrolling(field="x", amplitude=64, period=128))
         self.enemies.behave(Animated(first=0, last=1, ticks=8))
         self.enemies.behave(Damageable(hp=1, explosion=self.explosions,
                                        score=40, on_death=self.enemy_died))
@@ -176,37 +128,102 @@ class VixeousScene(vs2.Scene):
         self.shots.behave(Projectile(speed_y=8, range=179,
                                      hits=self.hostiles,
                                      burst=self.explosions, sound="hit"))
-        self.on_build()
-
-    def on_build(self):
-        """Hook for the game subclass. Generated empty."""
 
 # blocks: eJyNVMtu2zAQ/BWCpxaQ...
 ```
 
-```python
-# vixeous.py  -- yours
-from .vixeous_scene import VixeousScene
+Each file is wholly generated or wholly yours; `Detach` moves it across, one
+file at a time. A project may keep its scene generated while the game file
+becomes hand-written.
 
+`on_build()` serves that part-detached case: a hook where a hand-written
+subclass does post-construction work needing the graph. Because drawables
+created there are invisible to the editor's model but still consume the sprite
+budget and take a place in draw order, the generator emits **numbered hook
+points in draw order** rather than one hook at the end. The editor recovers the
+true scene by running `build()` in the wasm emulator and reading
+`vs2.export_scene_payload()`.
 
-class Vixeous(VixeousScene):
-    def update(self):
-        ...
-
-    def enemy_died(self, sprite):
-        self.score += 40
-```
-
-The generated file is 100% generated; yours is 100% yours. `on_build()` is
-the seam: post-construction work that needs the graph goes there without
-touching generated code. When the editor wires `on_death=self.enemy_died` and
-no such method exists, it offers to create a stub in your file — on creation
+When the editor wires `on_death=` to a handler that does not exist, it creates
+the event hat. On a detached file it offers a Python stub instead, on creation
 only, never on regeneration.
 
-**No runtime change is needed for any of this.** `build()` stays exactly the
-hook it is today; the editor simply generates into it. That is deliberate: a
-game hand-written against revision 2 keeps working, and a generated game is
-indistinguishable from a hand-written one at runtime.
+**No runtime change is needed for any of this.** `build()` and `update()` stay
+the hooks they are today; the editor generates into them.
+
+## Layers
+
+### Cameras
+
+`layer.camera_x` and `layer.camera_y` are a render-time translation of
+everything the layer draws. Sprite and tilemap `x`/`y` are **world**
+coordinates; no game computes a screen position.
+
+```python
+self.world.camera_x = self.camera_theta      # once per tick, for everything
+```
+
+- **X is angular and wraps**, at no cost: the renderer's
+  `wrap_column_delta(render_column - sprite_x)` is already modular, so the
+  camera is one addend inside it.
+- **Y follows the layer's projection** — LEDs on `HUD`, depth on a tunnel.
+- **A tilemap larger than the view still scrolls with `view_x`/`view_y`.** The
+  camera moves the map; the viewport chooses which part is loaded.
+- **Parallax falls out.** Layers hold their own cameras, so a background at
+  `camera_x = theta // 2` is one line.
+
+Cost is **O(1) in the Step** and one extra add per sprite per column in Paint.
+
+### Projection curves
+
+A projection is a 256-entry table mapping depth to LED row.
+
+```python
+vs2.HUD                    # Y is an LED index, 0..display.height-1
+vs2.VS1_TUNNEL             # the historical curve: tunnel(gamma=0.28)
+vs2.FULLSCREEN             # radial extent
+vs2.TUNNEL                 # alias for VS1_TUNNEL
+
+vs2.tunnel(gamma=0.28, near=0, far=53)
+```
+
+| | Effect |
+|---|---|
+| `gamma` | Curvature. `0.28` is V1. Lower crowds more of the world into the outer LEDs — a deeper, more foreshortened tunnel. `1.0` spreads depth evenly along the bar: a flat plane seen edge-on |
+| `near` / `far` | Which LED rows the depth range lands on. `near=0, far=26` occupies the inner half of the bar; `near=53, far=0` inverts it, so depth travels outward |
+
+That covers a shallow bowl, a dome, a well, a tunnel that stops halfway, and an
+inverted tunnel. `TUNNEL` keeps working and keeps meaning what it meant, so a
+revision-2 game runs unmodified; `VS1_TUNNEL` is the name for new code.
+
+`FULLSCREEN` stays a mode rather than a curve — it scales a sprite's height to
+a radial extent rather than placing rows — but reads the layer's curve for that
+extent.
+
+**One curve per layer, statically allocated.** A curve is `uint8_t[256]`, so
+**2 kB covers every curve a scene can hold** at eight layers. For scale, one
+64x30 single-frame image strip is 1920 bytes. At that price there is no pool,
+no sharing and no `limits.curves`; each layer owns its table outright, which
+also lets a layer's curve be rewritten at runtime — a tunnel that opens out as
+a level progresses.
+
+Curves are plain globals, so they sit in `.bss` and therefore internal SRAM.
+Building one calls `pow()` 256 times, a `build()` cost.
+
+The wire format needs nothing: a layer record in `export_scene_payload()` is
+eight bytes of which five are reserved zeros, and camera X, camera Y and a
+curve index fit in exactly those five. Zero already means "no camera, default
+curve", so old and new readers interoperate in both directions.
+
+### Geometry helpers
+
+Per layer, because the curve is per layer:
+
+```python
+layer.to_depth(led_row)      # screen row  -> world depth
+layer.to_row(depth)          # world depth -> screen row
+layer.polar(x, y)            # cartesian   -> (angle, depth)
+```
 
 ## Actions
 
@@ -230,106 +247,117 @@ class Move(Action):
         count = len(live)
         while index < count:
             sprite = live[index]
-            sprite.x += dx
-            sprite.y += dy
+            sprite.dx += dx
+            sprite.dy += dy
             index += 1
 
     def run_one(self, sprite):
         """Apply to one sprite, for a Behavior that branches per sprite."""
-        sprite.x += self.speed_x
-        sprite.y += self.speed_y
+        sprite.dx += self.speed_x
+        sprite.dy += self.speed_y
 ```
 
-Two call forms, because Behaviors need both and they cost differently
-(measured below). The base class defines `run()` as a loop over `run_one()`,
-so an Action overrides `run()` only when hoisting saves something.
-
-**Bulk traversal is part of the runtime contract.** `SpritePool.__iter__()`
-currently creates an iterator object, which is fine for handwritten gameplay
-but is not acceptable inside a zero-allocation Action or Behavior pass. The
-sealed runtime therefore gives bulk Actions direct access to the pool's sealed
-live array and requires an indexed loop, as above; it must not implement the
-hot path as `for sprite in pool`. Actions that can despawn stay in the
-per-sprite branch, which has the existing removal-tolerant traversal rules.
-The gate measures this exact traversal shape on the board.
+Two call forms, because Behaviors need both and they cost differently. The base
+class defines `run()` as a loop over `run_one()`, so an Action overrides
+`run()` only when hoisting saves something.
 
 **Results.** `run_one()` returns `None` when nothing notable happened,
 `vs2.DONE` when a durative Action finished (`MoveTo` arrived, `Animate`
 completed a `once` cycle, `Wait` elapsed), or an object when it found one
-(`Collide` returns the sprite hit, `Spawn` returns the new sprite or `None`).
-All three are existing objects; nothing allocates.
+(`Collide` returns the sprite hit, `Spawn` the new sprite or `None`). All are
+existing objects; nothing allocates.
 
-### The vocabulary — which is the block palette
+**Traversal is indexed, in both tiers.** `SpritePool.__iter__()` creates an
+iterator object, which is fine for handwritten gameplay and not acceptable in a
+zero-allocation pass. Bulk Actions get direct access to the pool's sealed live
+array and use an indexed loop. **This applies to the per-sprite tier too** — a
+Behavior's decision loop is an indexed `while` over `sprites._live`, not a
+`for`, and it walks downward so `despawn()` (which fills the hole by swapping in
+the tail) is safe. Handwritten gameplay outside a Behavior may keep using
+`for sprite in pool`; the generator never emits it inside one.
 
-| Action | Result | Replaces |
-|---|---|---|
-| `Move(speed_x, speed_y, accel_x, accel_y)` | — | `vixeous.py:315-323`, `vyruss_vs2.py:415` |
-| `MoveTo(x, y, speed_x, speed_y)` | `DONE` on arrival | `vyruss_vs2.py:47-83` — 37 lines of shortest-arc arithmetic |
-| `Tween(x, y, ticks, ease)` | `DONE` when elapsed | `fanphibious_danger.py:145-146` — a hop that covers a fixed distance in a fixed number of frames |
-| `Steer(heading, speed, turn_rate)` | — | `vyruss_vs2.py:53-62` |
-| `Oscillate(axis, amplitude, period, wave)` | — | `vixeous.py:325-326`, `:334-338` |
-| `Animate(first, last, ticks, mode)` | `DONE` at cycle end | every game in the tree |
-| `SetFrame(frame)` / `Flip(x, y)` | — | |
-| `Blink(on_ticks, off_ticks)` | — | `vixeous.py:456-461` |
-| `Spawn(pool, offset_x, offset_y, frame)` | new sprite or `None` | `dome_defander/misil.py:49-56`, `vyruss_vs2.py:322-329` |
-| `Despawn()` / `Show()` / `Hide()` | — | |
-| `Collide(targets)` | sprite hit or `None` | `vixeous.py:405-414`, `vyruss_vs2.py:419-427` |
-| `TileUnder(tilemap)` | tile index or `None` | `mapdemo.py:52-58`, `vixeous.py:77-101` |
-| `PlaySound(name)` | — | `vixeous.py:197`, `:298`, `:303`, `:358` |
-| `Wait(ticks)` | `DONE` when elapsed | `vyruss_vs2.py:258-261` |
+**Movement Actions accumulate; the framework commits.** A movement Action writes
+into a per-sprite `dx`/`dy` accumulator, and one commit pass per pool per tick
+applies it to `sprite.x`/`sprite.y`. Composition is defined rather than
+order-dependent, `Moving` + `Patrolling` on one pool is legal, and writes
+through the `Sprite` facade drop from one per Action per sprite to one per
+sprite.
 
-`TileUnder` needs a new public method first — there is no way to ask a tilemap
-what is under a point today, which is why `mapdemo` hand-rolls it and
-`vixeous` sidesteps it by re-deriving terrain from the generator function
-instead of reading the map:
+**An Action declares which field it writes.** `Move` writes position, `Animate`
+writes `frame`, `Oscillate` writes whatever it is pointed at. Every Action
+writing a scalar takes `field=`, defaulting to the obvious one and accepting an
+instance variable:
+
+```python
+Oscillate(field="boom_radius", amplitude=6, period=22)
+```
+
+The panel renders `field` as a dropdown over the pool's real fields and declared
+instance variables, which is also what makes the Blockly socket typed.
+
+### The vocabulary
+
+| Action | Result |
+|---|---|
+| `Move(speed_x, speed_y, accel_x, accel_y)` | — |
+| `MoveTo(x, y, speed_x, speed_y)` | `DONE` on arrival |
+| `Tween(x, y, ticks, ease)` | `DONE` when elapsed |
+| `Steer(heading, speed, turn_rate)` | — |
+| `Oscillate(field, amplitude, period, wave)` | — |
+| `Animate(first, last, ticks, mode)` | `DONE` at cycle end |
+| `SetFrame(frame)` / `Flip(x, y)` | — |
+| `Blink(on_ticks, off_ticks)` | — |
+| `Spawn(pool, offset_x, offset_y, frame)` | new sprite or `None` |
+| `Despawn()` / `Show()` / `Hide()` | — |
+| `Collide(targets)` | sprite hit or `None` |
+| `TileUnder(tilemap)` | tile index or `None` |
+| `PlaySound(name)` | — |
+| `Wait(ticks)` | `DONE` when elapsed |
+
+`TileUnder` needs a new public method:
 
 ```python
 Tilemap.cell_at(x, y)    # -> (column, row) or None
 ```
 
-The mapping accounts for the map's `x`/`y`, its `view_x`/`view_y`, the tile
-size and the circular X wrap — the same single-place-for-the-inversion rule
-`Label` already owns for reversed cell order.
+accounting for the map's `x`/`y`, its `view_x`/`view_y`, the tile size and the
+circular X wrap.
 
-### Collision happens in world space, not screen space
+### Collision
 
-`Sprite.overlaps()` compares raw `x`/`y` boxes. On a `HUD` layer that is
-correct. On a `TUNNEL` or `FULLSCREEN` layer it is not, and the error is not
-subtle: Y is depth on a non-linear curve, so two sprites eight units apart are
-physically close near the rim and far apart near the centre. A fixed hitbox
-means a hitbox that silently changes size as things move inward.
+`Collide` tests in **world space, always**, and only ever compares sprites on
+the same layer. Attaching one whose target lives elsewhere is a build-time error
+naming both.
 
-`2bam_sencom` is the only game that confronted this, and it did so by
-transcribing the inverse curve into the source as 55 magic numbers
-(`:1086`) and converting every hit position through it before testing
-(`:365`, `:987`). `vixeous` avoids the problem rather than solving it, by
-keeping a parallel `theta` on every entity and comparing in world space
-(`:390-434`). Nobody else noticed.
+Both rules are the same rule. Sprites on different layers are in different
+coordinate systems — the same numeric `y` is a different physical distance under
+a different curve, the same `x` a different angle under a different camera — so
+a cross-layer box test is meaningless, and making it meaningful would cost more
+than the test. With one layer there is exactly one curve; every curve in the
+family is monotonic, so un-projecting is well-defined, and on a `HUD` layer the
+curve is the identity, under which a box comparison is provably unchanged. World
+and screen space are the same test on HUD. So there is no conditional default:
+`world` is correct on every layer.
 
-The runtime already owns this curve — it is what the native renderer applies
-every frame — so a game hand-copying it is a defect in the API, not in the
-game. Three additions close it:
+`space="screen"` survives as an explicit escape hatch. On a tunnel it is the
+bug: the curve is many-to-one after rounding, so a screen-space test loses depth
+resolution near the centre and a hitbox silently changes size as it travels.
 
-```python
-vs2.display.to_depth(led_row)      # screen row  -> world depth
-vs2.display.to_row(depth)          # world depth -> screen row
-vs2.display.polar(x, y)            # cartesian   -> (angle, depth)
-```
+`Collide` also takes `radius=` for a circular test, and a damage window is a
+`Frames` parameter naming which frames are live.
 
-`Collide` then gets a `space` parameter — `screen` (today's behaviour, right
-for HUD) or `world` (un-project first, right for everything else) — and
-`world` is the default on any layer whose projection is not `HUD`. The
-cartesian helper is separate but comes from the same missing piece: the aim
-code at `2bam_sencom.py:975-996` runs `atan2` and `sqrt` per tick to turn a
-stick into a point on the disc, which is a conversion every crosshair game on
-this hardware will need and none should write twice.
+### Sprites against tilemaps
 
-Radial hit tests belong here too. `2bam_sencom` does not test boxes at all: an
-explosion has a `radius` that changes with its animation frame
-(`BOOM_RADIUS`, `:127`) and only damages while that radius is non-zero
-(`do_damage`, `:213`). So `Collide` also takes `radius=` for a circular
-test, and a damage window is a `Frames` parameter naming which frames are
-live.
+`Tilemap.cell_at()` and the `TileUnder` Action stay distinct from `Collide`:
+
+| | `Collide(targets)` | `TileUnder(tilemap)` |
+|---|---|---|
+| Cost | O(N x M) pairwise | O(N) — a divide per sprite |
+| Answer | the sprite hit, or `None` | the tile index under the point, or `None` |
+| Question | "did two things touch" | "what am I standing on" |
+
+Both are Actions returning a value or `None`, so both drop into the same `if`
+socket in the block editor and a game can ask both in one tick.
 
 ## Behaviors
 
@@ -357,80 +385,83 @@ class Projectile(Behavior):
     def step(self, sprites):
         self.move.run(sprites)                  # uniform: hoisted, column-wise
         limit = self.range
-        for sprite in sprites:                  # per-sprite: decisions only
+        live = sprites._live                    # per-sprite: decisions only
+        index = len(live) - 1
+        while index >= 0:                       # downward: despawn-safe
+            sprite = live[index]
             sprite.shot_flown += self.speed_y
             if sprite.shot_flown > limit:
                 sprite.despawn()
-                continue
-            other = self.hit.run_one(sprite)
-            if other is not None:
-                self.boom.run_one(sprite)
-                self.bang.run_one(sprite)
-                hurt(other, self.damage)
-                sprite.despawn()
+            else:
+                other = self.hit.run_one(sprite)
+                if other is not None:
+                    self.boom.run_one(sprite)
+                    self.bang.run_one(sprite)
+                    hurt(other, self.damage)
+                    sprite.despawn()
+            index -= 1
 ```
 
-Three things there are load-bearing.
-
-**`attached()` is where composition happens.** It runs once, at build time,
-and may allocate. `self.action(...)` registers the Action so the panel and the
-block editor can find it and so the same object is reused every tick.
+**`attached()` is where composition happens.** It runs once at build time and
+may allocate. `self.action(...)` registers the Action so the panel and block
+editor can find it, and so the same object is reused every tick.
 
 **The loop is split deliberately.** Everything uniform is hoisted into
-`action.run(sprites)`; the per-sprite loop carries only branching. That shape
-is measured below, and the block editor's skeleton makes it structural.
+`action.run(sprites)`; the per-sprite loop carries only branching.
 
-**Cross-behavior wiring resolves at build where it can.** Because Behaviors
-attach at the *pool* level — Construct's object-type level — a single target
-pool has exactly one `Damageable`, so `attached()` can hold a direct reference
-to it. When the target is a family whose members carry different
-`Damageable`s, the lookup happens at hit time through the sprite's owning
-pool. Hits are rare; the fast path covers the common case and the slow path is
-still a dict lookup with no allocation.
+**Cross-behavior wiring resolves at build where it can.** Behaviors attach at
+the pool level, so a single target pool has exactly one `Damageable` and
+`attached()` holds a direct reference. When the target is a family whose members
+carry different `Damageable`s, the lookup happens at hit time through the
+sprite's owning pool — a dict lookup, no allocation.
+
+**Each hook takes exactly one callback.** Fan-out would need a subscriber list
+built per fire, which is the per-tick allocation the sealed-scene rule exists to
+prevent. A game needing fan-out writes it inside its one callback.
 
 ### Attaching
 
 `behave()` is a structural call, legal only inside `build()`, returning the
-Behavior — the same shape as every other VS2 factory. Behaviors are named,
-defaulting to the class name in snake case; a second of the same class on one
-subject needs an explicit `name=`. Names are the path the panel, the block
-editor and the control protocol address a parameter by
+Behavior. Behaviors are named, defaulting to the class name in snake case; a
+second of the same class on one subject needs an explicit `name=`. Names are the
+path the panel, block editor and control protocol address a parameter by
 (`enemies.patrolling.amplitude`), so a collision is a build-time error naming
-both. Read them back with `subject.behaviors`, `subject.behavior("patrolling")`
-or `subject.behavior(Damageable)`.
+both. Read them back with `subject.behaviors`,
+`subject.behavior("patrolling")` or `subject.behavior(Damageable)`.
 
-### Subjects have explicit, allocation-free dispatch
+`scene` is reserved as the subject name for scene-subject Behaviors, so
+`scene.spawner.every` is addressable. A layer, pool or family called `scene` is
+a build-time error.
 
-`Sprite`, `SpritePool` and `Family` are all legal subjects, but they are not
-silently normalised to a temporary one-element list. That would make the
-singleton case either fail (`for sprite in sprites` on a `Sprite`) or allocate
-on every tick, violating the central budget. The run list records the subject
-kind while the scene is sealed:
+### Subjects
 
-- A pool invokes `Behavior.step(pool)` and therefore permits column-wise
+`Sprite`, `SpritePool`, `Family` and `Scene` are all legal subjects, and are not
+normalised to a temporary one-element list — that would either fail or allocate
+every tick. The run list records the subject kind while the scene is sealed:
+
+- A **pool** invokes `Behavior.step(pool)`, permitting column-wise
   `Action.run(pool)` work followed by a per-sprite loop.
-- A single sprite invokes `Behavior.step_one(sprite)`; it uses
+- A **single sprite** invokes `Behavior.step_one(sprite)`, using
   `Action.run_one(sprite)` exclusively.
-- A family stores its members as a sealed tuple. It dispatches each pool to
-  `step(pool)` and each singleton to `step_one(sprite)`, in declared member
-  order, without flattening or creating an iterator/list in the tick.
+- A **family** stores its members as a sealed tuple, dispatching each pool to
+  `step(pool)` and each singleton to `step_one(sprite)` in declared member
+  order, without flattening or creating an iterator in the tick.
+- A **scene** invokes `Behavior.step_scene(scene)`. Some conduct has no sprite
+  behind it: wave spawning decides *when* something is born, not what an
+  existing sprite does. A scene-subject Behavior may not use `run(sprites)` —
+  there is no pool to sweep — so it is per-tick work of fixed, tiny size.
 
-`Behavior.step` and `Behavior.step_one` are separate entry points for this
-reason. Standard behaviors implement both, sharing private helpers where that
-does not introduce allocation. A custom behavior may implement only the form
-its declared subject needs; attaching it to an unsupported subject is a
-build-time error. This also makes the `boss.behave(Damageable(...))` example
-above a real supported case rather than an accidental special case.
+Standard behaviors implement every form their subject allows, sharing private
+helpers where that does not introduce allocation. A custom behavior may
+implement only the form its declared subject needs; attaching it to an
+unsupported subject is a build-time error.
 
 ### Parameters are the schema
 
 Parameter objects are non-data descriptors holding a default plus metadata.
-`__init__` walks the declarations once at construction and writes plain
-instance attributes, so `self.speed_y` in the tick is an ordinary attribute
-read with no descriptor cost. (`dir()` on a class, including inherited
-attributes, works on MicroPython 1.25 — verified on the unix port — so no
-metaclass is needed.) Validation happens at construction, inside `build()`, so
-a bad parameter surfaces the first time the scene is entered:
+`__init__` walks the declarations once at construction and writes plain instance
+attributes, so `self.speed_y` in the tick is an ordinary attribute read.
+Validation happens at construction, inside `build()`:
 
 ```text
 TypeError: Damageable has no parameter 'health'; valid: hp,
@@ -451,29 +482,51 @@ One declaration, four renderings:
 | `Image(default)` | dropdown over the asset pack | dropdown |
 | `PoolRef(default)` | dropdown over pools and families | dropdown, from the live scene |
 | `Points(default)` | table + overlay on the LED preview | overlay editor, opened from the block |
-| `Callback(default)` | read-only, shows the bound method | dropdown over the game class's methods |
+| `Callback(default)` | read-only, shows the bound handler | dropdown over the workspace's event hats |
 
 `Angle` earns its own type because X is angular everywhere in VS2 and "the
-bottom of the disc" is not a fact anyone recovers from the number `0`. The
-asset-backed types are what make both surfaces worth using rather than boxes
-of numbers: they populate from the game's own ROM and sound folder, which
-`web/rom-builder-core.js` already parses. `PoolRef` and `Callback` populate
-from the scene the editor is already holding.
+bottom of the disc" is not recoverable from the number `0`. The asset-backed
+types populate from the game's own ROM and sound folder, which
+`web/rom-builder-core.js` already parses.
 
-**Durations are ticks in the API and seconds in the editor.** Every game in
-the survey counts ticks, but `2bam_sencom.py:396` declares its animations in
-`duration_secs` because that is how a person thinks about an explosion. Integer
-ticks are the right storage — no rounding drift, no float in the tick — so the
-API keeps them and the editor shows "13 ticks (0.4 s)" beside the slider,
-which it can do because it knows the 30 ms period. Authoring in seconds and
-storing ticks would silently change behaviour whenever the period moved.
+`Callback` names an **event hat in the workspace**, not a method: a fully
+generated project has no hand-written class to pick a method from, and the
+generator emits the method from the hat. On a detached file it renders as the
+bound method — the same parameter from the other side of `Detach`.
+
+**Durations are ticks in the API and seconds in the editor.** Integer ticks are
+the right storage; the editor shows "13 ticks (0.4 s)" beside the slider,
+because it knows the 30 ms period. Authoring in seconds and storing ticks would
+silently change behaviour whenever the period moved.
+
+### A parameter may be bound to an instance variable
+
+A Behavior attaches at pool level and holds **one** parameter set for every
+member, which is what makes column-wise dispatch possible. A parameter may
+instead name an instance variable:
+
+```python
+self.enemies.var("speed_y", 1.0)
+self.enemies.behave(Moving(speed_y=Var("speed_y")))
+self.baddies.behave(PathFollowing(points=Var("path")))
+```
+
+The binding resolves at build and decides which dispatch tier the Action lands
+in:
+
+- a **literal** parameter is hoisted once per tick, runs column-wise, and is
+  offloadable to a native kernel;
+- a **`Var`-bound** parameter is read per sprite, forces that Action into the
+  per-sprite tier, and is not offloadable.
+
+The panel shows one toggle per parameter and marks a var-bound parameter as
+per-sprite, so the tier it selects is not hidden.
 
 ### Per-instance state
 
-A Behavior that needs per-sprite state declares it (`state = ("shot_flown",)`
-above). At attach time the framework primes every named field to `0` on
-**every** sprite of the subject — the free ones too. That is not tidiness, it
-is the whole allocation argument:
+A Behavior needing per-sprite state declares it (`state = ("shot_flown",)`). At
+attach time the framework primes every named field to `0` on **every** sprite of
+the subject, free ones included:
 
 ```text
 first assignment of a name, 40 sprites : 1312 bytes  (~33 bytes each)
@@ -481,25 +534,23 @@ overwriting a primed name, 40 sprites  :    0 bytes
 ```
 
 Priming during `build()` is what makes `sprite.shot_flown += ...` in the tick
-allocation-free, and it spends the cost visibly where a pool spends its sprite
-budget. State names are flat, so access is a plain attribute read — measured
-faster than a parallel array indexed by slot (6.2 ms vs 8.9 ms for 2000 ticks
-× 40 sprites), because MicroPython's `range()` plus subscript costs more than
-an attribute lookup. Flat names mean collisions are possible, so the primer
-rejects them at build: two Behaviors on one subject declaring the same name,
-or a name shadowing a `Sprite` property or an instance variable, is a
-`StateConflictError` naming both sides.
+allocation-free. State names are flat, so access is a plain attribute read —
+measured faster than a parallel array indexed by slot (6.2 ms vs 8.9 ms for
+2000 ticks x 40 sprites), because MicroPython's `range()` plus subscript costs
+more than an attribute lookup.
 
-## Instance variables
+Flat names mean collisions are possible, so the primer rejects them at build:
+two Behaviors on one subject declaring the same name, or a name shadowing a
+`Sprite` property or an instance variable, is a `StateConflictError` naming both
+sides. The framework reserves `dx`, `dy` (the movement accumulator),
+`fsm_state`, `fsm_hold`, `fsm_then` (the state machine and its timed transition)
+and `enabled`.
 
-Construct's most-copied primitive, and the one thing every VS2 game fakes.
-`vixeous` bolts `theta`, `kind`, `phase` and `hp` onto enemies at spawn
-(`:216-220`); `vyruss_vs2` bolts on `base_frame`, `frame_clock`, `dead`,
-`finished` and `movements` (`:206-208`). Both pay the ~33-bytes-per-name heap
-growth at the first spawn rather than at build, and neither surfaces the cost
-anywhere.
+## Variables
 
-Declared on the pool, in the editor, with the same parameter types:
+### Instance variables
+
+Declared on the pool, with the same parameter types:
 
 ```python
 self.enemies.var("kind", 0, min=0, max=2)
@@ -507,34 +558,79 @@ self.enemies.var("hp", 1, min=0, max=99)
 self.enemies.var("angry", False)
 ```
 
-- Primed on every sprite at build, exactly like behavior state, so writes in
-  the tick allocate nothing.
-- **Reset to their declared defaults by `spawn()`.** A recycled explosion must
-  not inherit the previous one's counter. Today every game writes
-  `boom.age = 0` by hand after every spawn (`vyruss_vs2.py:373-374`,
-  `vixeous.py:196`, `:206-207`) and the bug when they forget is invisible.
-  Behavior state resets the same way.
-- Editable in the panel as a table on the pool, which is exactly Construct's
-  instance-variable editor.
+- Primed on every sprite at build, exactly like behavior state.
+- **Reset to their declared defaults by `spawn()`**, so a recycled explosion
+  does not inherit the previous one's counter. Behavior state resets the same
+  way.
+- Editable in the panel as a table on the pool.
 - Readable from blocks as a value block, writable as a set block.
 
-`spawn()` gaining a reset loop is the only behavioural change to existing API
-in this proposal, and it only affects pools that declared variables.
+`spawn()` gaining a reset loop is the only behavioural change to existing API in
+this proposal, and it only affects pools that declared variables.
+
+### Scene and project variables
+
+```python
+self.var("score", 0, min=0, max=999999)          # scene: reset every build()
+vs2.project.var("high_score", 0, persist=True)   # project: survives a switch()
+```
+
+- **Scene variables** are primed on the scene at `build()` and reset there.
+- **Project variables** live above the scene stack, so a score survives
+  `push`/`pop` and a menu. `persist=True` additionally saves them.
+
+Both appear in the panel as tables, are readable as value blocks and writable as
+set blocks, and are addressable over the live-tune protocol alongside behavior
+parameters.
+
+### `vs2.store`
+
+A small JSON-able document per game, saved when the game says so.
+
+```python
+vs2.store["hiscore"] = max(vs2.store.get("hiscore", 0), self.score)
+vs2.store["song"] = self.sonidito.to_dict()
+vs2.store.save()
+```
+
+`vs2.store` is a dict. It loads on first access and does nothing until then, so
+a game that never saves never pays. `save()` is explicit, and returns without
+touching flash when the store is clean.
+
+**It is a file, deliberately not NVS.** The NVS partition is 16 kB total and
+already holds the POV calibration, the OTA updater's partition-hash state,
+retro-go's settings and MicroPython's own keys. A full NVS fails for whatever
+writes next, which is as likely to be the calibration as the game: a lost high
+score is a shrug, a lost POV calibration is a console that draws crooked.
+Critical state and disposable state should not share a 16 kB partition, and the
+disposable one is the one with no size bound. The `vfs` partition is 8.75 MB.
+
+**Saves live outside the game directory**, because installing a game removes the
+old one first, so anything written inside `/games/<group>/<name>/` is destroyed
+the next time that game updates:
+
+```
+/saves/<group>.<name>.json
+```
+
+named from the app slug, so two games cannot collide, and untouched by both
+installer and updater. OTA is per-file against a manifest, so a path the
+manifest does not name is never read, written or deleted.
+
+**Failure is always survivable.** A missing directory, a corrupt file, a full
+partition: the store falls back to an in-memory dict and the game keeps running.
+The store is allowed to fail. That is why it does not share a partition with the
+things that are not.
+
+The size cap exists only to catch a game writing per-tick by mistake. The
+desktop emulator and browser use the same `/saves/` path against their own
+filesystems, so a save works in the editor's preview and the format is identical
+everywhere.
+
+`vs2.project.var(..., persist=True)` is sugar over this — read from the store at
+project start, written back on `save()`.
 
 ### Kinds: per-type defaults as a table
-
-The second survey turned up a pattern strong enough to deserve its own
-primitive. `vs.py:53-67` carries nine parallel arrays — `item_hps`,
-`item_atks`, `item_frame_amount`, `item_frame_rate`, `nerd_hps`,
-`nerd_speeds` and friends — all indexed by a type id, so `activate_item(id)`
-reads a column out of each. `vasura_espacial` does the same thing with
-inheritance instead: `Driller`, `Chiller` and their siblings are subclasses
-whose only content is constants (`velocidad_y = 0.52`, `largo_animacion = 7`,
-`puntaje = 75`, at `enemigo.py:61-72`).
-
-Both are one pool holding several *variants*. Construct would model it with a
-family plus instance variables and leave the table to the author. We can do
-better, because the panel is already a table editor:
 
 ```python
 self.enemies.var("hp", 1)
@@ -550,53 +646,32 @@ self.enemies.spawn(x, y, kind="chiller")
 ```
 
 `kinds()` declares named rows over the pool's own instance variables, and
-`spawn(kind=...)` applies one. The row is resolved to an index at build, so
-spawning costs the same loop that already resets defaults. In the panel it is
-exactly what it looks like — a spreadsheet, one row per enemy type, which is
-the artefact a designer actually wants to edit and the one thing in this whole
-proposal that no amount of slider-dragging replaces.
+`spawn(kind=...)` applies one. The row resolves to an index at build, so
+spawning costs the same loop that already resets defaults. In the panel it is a
+spreadsheet, one row per enemy type.
 
 ## Families
-
-`vixeous.py:390-434` runs the same test three times: shots against the boss,
-shots against enemies, bombs against targets. A family is Construct's answer
-and it collapses that to one attachment:
 
 ```python
 self.hostiles = self.family(self.enemies, self.boss)
 self.shots.behave(Projectile(hits=self.hostiles, ...))
 ```
 
-A `Family` is a build-time object holding an ordered tuple of pools and
-sprites. Iterating yields the live sprites of every member, in member order.
+A `Family` is a build-time object holding an ordered tuple of pools and sprites.
 It can be the target of `Collide` and `PoolRef`, and a Behavior can attach to
 the family itself, in which case one Behavior instance with one parameter set
-covers every member and state is primed across all of them — Construct's
-family-behavior semantics exactly.
+covers every member and state is primed across all of them.
+
+**A family is not iterable, deliberately.** Its main job is being the target of
+`Collide`, which runs inside a per-sprite loop; one iterator per sprite per tick
+would be O(N) allocations for the one construct whose purpose is the O(N x M)
+case. It exposes its members as a sealed tuple instead, and traversal is a
+two-level indexed walk. That is also what a native `Collide` kernel wants handed
+to it.
 
 Families are build-time only and allocate nothing at runtime.
 
 ## State machines
-
-This is the largest gap in the previous revision, and the survey is
-unambiguous: four of the nine games read invented one.
-
-`vasura_espacial/estado.py` is a complete hierarchical state machine — ten
-states with `on_enter`/`step`/`on_exit`, transitions expressed by returning
-the next state class from `step()`, and inheritance used to share work
-(`Vulnerable.step()` runs the collision checks every vulnerable state needs;
-`Bajando`, `ChillerBajando` and `BajandoEnEspiral` layer movement on top of
-it). It has timed transitions (`frames_left` counting down to a new state) and
-probabilistic ones (`if randint(0, 100) < 25`). `fanphibious_danger.py:13-17`
-declares four named states as module constants and branches on
-`frog.state` throughout its main loop. `vyruss_vs2.py:209-220` builds a
-sequential one out of a list. `vs.py:152-160` uses three booleans —
-`is_active`, `is_reloading`, `is_waiting_to_deactivate` — because it had no
-better vocabulary.
-
-A Behavior is already a state machine; what is missing is a way to *declare*
-one, so it becomes a shape the panel and the block editor can see instead of a
-tangle of counters only the author understands.
 
 ```python
 class Enemy(StateMachine):
@@ -607,7 +682,7 @@ class Enemy(StateMachine):
     initial = "descending"
 
     def descending(self, sprite):
-        sprite.y -= self.speed_y
+        sprite.dy -= self.speed_y
         if sprite.y <= GROUND:
             return "exploding"
 
@@ -615,49 +690,26 @@ class Enemy(StateMachine):
         self.hold(sprite, 128, then="descending")
 
     def orbiting(self, sprite):
-        sprite.x += self.speed_x * sprite.facing
+        sprite.dx += self.speed_x * sprite.facing
 ```
 
 - **States are named**, and the name is what the protocol, the panel and a
   traceback report. `enemies.enemy.state` is readable from the panel while the
   game runs, which is most of a debugger for free.
-- **A step method returns the next state, or `None` to stay** — vasura's
-  protocol, which is the one that reads best.
+- **A step method returns the next state, or `None` to stay.**
 - **`enter_<state>` and `exit_<state>` are optional hooks**, matched by name.
-- **`hold(sprite, ticks, then=...)`** is the timed transition, replacing the
-  four hand-rolled `frames_left` countdowns in vasura and the four
-  `call_later` status effects in `tincho_level.py:452-507`. A temporary status
-  — invulnerable, powered up, reversed, slowed — is a state with a hold on it,
-  which is why this subsumes the whole "temporary status that reverts" row of
-  the evidence table.
+- **`hold(sprite, ticks, then=...)`** is the timed transition. A temporary
+  status — invulnerable, powered up, reversed, slowed — is a state with a hold
+  on it.
 - **State lives in one primed byte** (`sprite.fsm_state`), and dispatch is a
-  tuple of bound methods indexed by that byte — one index and one call, no
-  string comparison. It pays the per-sprite branch cost measured below and
-  nothing more.
-
-A state machine is also the single most natural thing to draw. Scratch and
-Construct both make "when I am in this state" a top-level visual block, and it
-is what the Blockly skeleton below is shaped around.
+  tuple of bound methods indexed by that byte: one index and one call, no string
+  comparison.
 
 ## Named palette colours
 
-Construct's effects make no sense on shaderless hardware. Palette animation is
-what we have instead, and it is more capable than it sounds: recolouring an
-index recolours every pixel drawn with it, everywhere, for free, on a machine
-with no blending at all.
-
-Revision 2 exposes `vs2.display.palettes` as a mutable buffer plus
-`apply_palettes()`, which is the right half of the feature. The missing half
-is *naming*. `2bam_sencom` wanted per-level colour themes, a white font flash,
-red alert on the last city, and randomised explosion colours — and to get
-them it re-parses the ROM header with `struct.unpack` to locate the palette
-block, then linearly searches that block for a hardcoded RGB triple to
-discover which index to poke (`:1302-1349`). It caches four indices found this
-way, and keeps a dirty flag so it only flushes once per tick.
-
-The dirty flag is right and matches `apply_palettes()`. The rest is a game
-reimplementing the asset pipeline because the pipeline does not tell it
-anything:
+Recolouring an index recolours every pixel drawn with it, everywhere, for free,
+on a machine with no blending. Revision 2 exposes `vs2.display.palettes` as a
+mutable buffer plus `apply_palettes()`; what is missing is naming.
 
 ```yaml
 # __images__.yaml
@@ -674,70 +726,54 @@ vs2.display.color("core", 255, 0, 0)   # by name, resolved at build
 vs2.display.apply_palettes()
 ```
 
-Declared beside the art, resolved to an index once at build, and — the part
-that matters for this proposal — rendered in the panel as a **colour swatch**
-with a picker. A named colour is a parameter type like any other, so a
-behavior can take one (`Damageable(flash_color="hurt")`), and the two effects
-that games actually want, a flash and a cycle, become `Flashing(color, ticks)`
-and `Cycling(colors, ticks)` in the attributes tier.
+Declared beside the art, resolved to an index once at build, and rendered in the
+panel as a colour swatch with a picker. A named colour is a parameter type like
+any other, so a behavior can take one (`Damageable(flash_color="hurt")`), and
+`Flashing(color, ticks)` and `Cycling(colors, ticks)` join the attributes tier.
 
-This is the closest thing to Construct's effects that the hardware can
-support, it costs nothing per frame, and one game has already built the ugly
-version of it.
+## The three timings
 
-## The three timing contracts
-
-Ventilastation has three separate timings. They should not all be called
-"render time": each protects a different visible property, runs in a
-different part of the system, and fails differently.
+Three separate timings, each protecting a different visible property.
 
 | Name | What it measures | What it protects | A miss looks like |
 |---|---|---|---|
-| **Handoff** | On the output-serving core, the time to have a column's colour-corrected LED bytes ready for SPI transfer. Its budget is the time until the next column. | A steady, unbroken image. | An overrun or no remaining Handoff slack: the output cannot be served in time. |
-| **Paint** | The scene-to-colour-corrected-LED work: projecting and composing sprite data, per column and per rotation. | Visible frame rate and visual complexity. | Paint consumes too much rotation time, reducing the rate at which complete images can be produced. |
-| **Step** | Game logic, including `scene.update()` and the Behavior pass. It has both a cost and a fixed target cadence. | Fluid, deterministic gameplay. | A late or skipped Step makes motion uneven even if the image remains steady. |
+| **Handoff** | On the output-serving core, the time to have a column's colour-corrected LED bytes ready for SPI transfer. Its budget is the time until the next column. | A steady, unbroken image. | An overrun or no remaining slack: the output cannot be served in time. |
+| **Paint** | The scene-to-colour-corrected-LED work: projecting and composing sprite data, per column and per rotation. | Visible frame rate and visual complexity. | Paint consumes too much rotation time, reducing the rate at which complete images are produced. |
+| **Step** | Game logic, including `scene.update()` and the Behavior pass. Has both a cost and a fixed target cadence. | Fluid, deterministic gameplay. | A late or skipped Step makes motion uneven even if the image is steady. |
 
-**Handoff is the hard deadline.** At a given RPM, it is a per-column deadline
-and must never be missed. **Paint** is related but is not interchangeable with
-Handoff: a buffered Paint measurement may be longer than one Handoff interval
-without causing an output miss. Track Paint per column and per rotation to
-understand its throughput. **Step** is a scheduling contract: target 33 Hz
-(one Step every 30 ms), then report its elapsed time, achieved rate and missed
-Steps separately.
+**Handoff is the hard deadline** — a per-column deadline that must never be
+missed. **Paint** is related but not interchangeable: a buffered Paint
+measurement may exceed one Handoff interval without causing an output miss.
+**Step** is a scheduling contract: target 33 Hz, then report elapsed time,
+achieved rate and missed Steps separately.
 
-Use the names in reviews, profiles and dashboards: `handoff_budget_us`,
-`handoff_time_us` and `handoff_slack_us`; `paint_time_us`,
-`paint_frame_time_us` and `paint_frames_per_second`; `step_time_us`,
-`step_rate_hz` and `missed_steps`. These are descriptive names, not an
-acronym layer to learn.
+Names to use in reviews, profiles and dashboards: `handoff_budget_us`,
+`handoff_time_us`, `handoff_slack_us`; `paint_time_us`, `paint_frame_time_us`,
+`paint_frames_per_second`; `step_time_us`, `step_rate_hz`, `missed_steps`.
 
 ## The Step
 
-### Ordering
-
 1. `scene.update()` — game code, unchanged.
-2. if no transition is pending, the Behavior pass, in attach order across the
+2. If no transition is pending, the Behavior pass, in attach order across the
    whole scene.
-3. back button, idle timeout, timers, transition commit — unchanged.
+3. Back button, idle timeout, timers, transition commit — unchanged.
 
-Behaviors run **after** `update()`, the opposite of Construct 3, deliberately:
-a scene with no Behaviors Steps exactly as today; a sprite spawned in
-`update()` moves and is range-checked in the same Step, and at 33 Hz a
-one-Step lag on a bullet is visible; and `update()` stays the place where the
-game overrides a parameter, taking effect immediately.
+Behaviors run **after** `update()`, deliberately: a scene with no Behaviors
+Steps exactly as today; a sprite spawned in `update()` moves and is
+range-checked in the same Step, and at 33 Hz a one-Step lag on a bullet is
+visible; and `update()` stays the place where the game overrides a parameter,
+taking effect immediately.
 
-One sentence: *game code decides, then Behaviors carry it out, in the order
-they were attached.* `scene.behaviors` lists them in run order, and so does
-the panel.
+*Game code decides, then Behaviors carry it out, in the order they were
+attached.* `scene.behaviors` lists them in run order, and so does the panel.
 
 A queued `pop()` or `switch()` is a hard boundary: `scene_step()` skips the
 whole pass if `update()` queued one, and stops the pass immediately if a
-Behavior queues one. This preserves the existing lifecycle invariant that no
-later callback mutates a scene after it has asked to leave.
+Behavior queues one.
 
 ### What the dispatch shape costs
 
-Measured on MicroPython 1.25, unix port, 600 ticks × 60 live sprites:
+Measured on MicroPython 1.25, unix port, 600 ticks x 60 live sprites:
 
 ```text
   Action applied column-wise, action.run(sprites)          23.3 ms   39 us/tick
@@ -754,247 +790,208 @@ And for a uniform pool:
   per-sprite dispatch across an action list                38.7 ms   65 us/tick
 ```
 
-Three rules follow:
-
-1. **Uniform work goes column-wise.** `action.run(sprites)` is *faster* than
-   the loop it replaces, because hoisting the parameter read is natural in
-   that shape and easy to forget by hand.
-2. **The Action indirection costs ~42% when dispatched per sprite** (27.3 vs
-   19.2 ms). That is the price of making the mechanics introspectable,
-   editable and expressible as blocks, and it is paid only where a Behavior
-   genuinely branches.
+1. **Uniform work goes column-wise.** `action.run(sprites)` is *faster* than the
+   loop it replaces, because hoisting the parameter read is natural in that
+   shape and easy to forget by hand.
+2. **The Action indirection costs ~42% when dispatched per sprite.** That is the
+   price of making the mechanics introspectable, editable and expressible as
+   blocks, and it is paid only where a Behavior genuinely branches.
 3. **So a Behavior hoists everything uniform and keeps the per-sprite loop for
    decisions.** That hybrid lands within 7% of fully inlined hand-written code
    with every knob visible. It is the shape `Projectile.step()` is written in,
-   the shape the catalog is written in, and — critically — the shape the block
-   editor makes structurally unavoidable.
+   the shape the catalog is written in, and the shape the block editor makes
+   structurally unavoidable.
 
 ## The catalog
 
-Weighted the way Construct's usage actually distributes: the high-frequency
-tier is tiny attribute-like behaviors, not composed state machines. Construct
-projects attach `Solid`, `Destroy outside layout`, `Fade`, `Flash` and `Timer`
-dozens of times and `Platform` exactly once.
+### Despawn is the off switch
+
+**Despawning is the only way to take a sprite out of a behavior's reach.** A
+per-sprite `enabled` check would defeat the entire column-wise tier: a pool
+behavior whose first act is a per-sprite branch cannot be hoisted, cannot be a
+native kernel, and costs the per-sprite dispatch price for every sprite whether
+or not any is disabled — the 65 us/tick row, on work that was 35.
+
+The catalog is arranged so despawn suffices: `Damageable`'s death despawns,
+`Transient` and `Lifetime` despawn on expiry, `DespawnBeyond` despawns on exit.
+A sprite that must stay visible while inert — a wreck, a stunned enemy — is a
+`StateMachine` with an inert state, which pays the branch once, in the one place
+that was always going to branch.
+
+This changes how games are written: bookkeeping that keeps dead entities in a
+list to decide when a wave is finished has to move to a counter.
 
 ### Attributes — built in, tiny, attached from the panel, never forked
 
-| | Replaces |
-|---|---|
-| `Transient(animate, ticks, sound, on_end)` | `vixeous.py:344-350`, `vyruss_vs2.py:432-437`, `dome_defander/misil.py:77-86`, `vasura_espacial/estado.py:36-68` |
-| `Animated(first, last, ticks, mode, bank, bank_size, images)` | every game in the tree |
-| `DespawnBeyond(y_min, y_max, x_min, x_max, on_leave)` | `vixeous.py:308-309`, `:327-329`, `vyruss_vs2.py:417-418`, `:430-431` |
-| `Recycling(x_range, y_range)` | `vajon.py:119-124` — a rock that leaves the top is repositioned rather than despawned; Construct's `Wrap` |
-| `Lifetime(ticks, on_expire)` | the `age` counters in both VS2 games, `2bam_sencom.py:183-216` |
-| `Blinking(on_ticks, off_ticks, duration, on_end)` | `vixeous.py:456-461`, `vasura_espacial/entities/nave.py:116-151` (twice, two different ways, in one file) |
-| `Pinned(to, offset_x, offset_y)` | `vyruss_vs2.py:384-391`, `vajon.py:246-247` |
-| `Carried(on_board, released_by)` | `fanphibious_danger.py:59-90` — a frog rides a floating object, a ring drags everything on it |
-| `Shaking(amplitude_x, amplitude_y, ticks)` | `vajon.py:240-241` — a per-tick `randrange` jitter |
-| `Flashing(color, ticks)` | `2bam_sencom.py:728`, `:902` — a named palette colour driven white, or red on last-city alert |
-| `Cycling(colors, ticks)` | `2bam_sencom.py:761`, `:824` — randomised font and explosion colours per wave |
+| |
+|---|
+| `Transient(animate, ticks, sound, on_end)` |
+| `Animated(first, last, ticks, mode, bank, bank_size, images, frames, duration)` |
+| `DespawnBeyond(y_min, y_max, x_min, x_max, on_leave)` |
+| `Recycling(x_range, y_range)` |
+| `Lifetime(ticks, on_expire)` |
+| `Blinking(on_ticks, off_ticks, duration, on_end)` |
+| `Pinned(to, offset_x, offset_y)` |
+| `Carried(on_board, released_by)` |
+| `Shaking(amplitude_x, amplitude_y, ticks)` |
+| `Flashing(color, ticks)` |
+| `Cycling(colors, ticks)` |
 
-These are the ones that get attached forty times a project; none is more than
-a few lines. All ship in the first release except `Carried`, `Flashing` and
-`Cycling`, which wait on named palette colours.
+These get attached forty times a project; none is more than a few lines. All
+ship in the first release except `Carried`, `Flashing` and `Cycling`, which wait
+on named palette colours.
 
-Three of them changed shape because of the second survey:
+`Animated` carries more than a frame range, because a range does not cover what
+games need:
 
-**`Animated` needs frame banks.** `vasura_espacial/entities/entidad.py:86-94`
-picks `frame = phase` or `frame = phase + largo_animacion` depending on which
-way the sprite faces, because the art is not mirror-symmetric and `flip_x`
-would be wrong. `bank_size` plus a `bank` read from an instance variable
-covers it, and it is the same idea `Label.write(frame_offset=...)` already
-uses for a font strip's second colour.
+- **`bank` / `bank_size`** — a second frame bank per direction, for art that is
+  not mirror-symmetric and where `flip_x` would be wrong.
+- **`frames=(...)`** — an explicit sequence, for flickers no
+  `first`/`last`/`pingpong` combination produces. `first`/`last` becomes the
+  convenience case rather than the model.
+- **`duration=`** — the same parameter as `ticks=` seen from the other end, with
+  a fractional frame index so speed is continuous rather than an integer divisor
+  of the tick. The editor offers both and stores one.
+- **`images=(...)`** — an image list resolved once at build, so animating by
+  swapping strips cannot build a string on the heap every tick.
 
-**`Animated` needs an explicit frame sequence, not just a range.**
-`2bam_sencom.py:126` animates an explosion as
-`BOOM_FRAMES = [4, 3, 2, 3, 2, 3, 2, 3, 2, 1, 0]` — a flicker that no
-`first`/`last`/`pingpong` combination produces. A `frames=(...)` tuple
-covers it and makes `first`/`last` the convenience case rather than the
-model.
+`Carried` is a runtime relationship where `Pinned` is a build-time one: it holds
+a carrier reference in primed state, so attaching and detaching are reference
+writes that allocate nothing.
 
-**`Animated` should be able to take a duration instead of a rate.** Both
-sencom animators derive their step from a wanted total time —
-`fpst = len(BOOM_FRAMES) / ttl` at `:190` and
-`_fracInc = SECONDS_PER_STEP * len(frames) / duration_secs` at `:402` — and
-both advance a *fractional* frame index so the speed is continuous rather
-than an integer divisor of the tick. `ticks=` and `duration=` are the same
-parameter seen from two ends; the editor should offer both and store one.
+### Movements — composable, because they accumulate
 
-**`Animated` also needs an image list.** `vajon.py:226` animates by swapping
-strips — `stripes["pozo" + str(pi) + ".png"]` — which builds a string on the
-heap every single tick, in the hot path, forever. `vs.py:247` does the same
-with a lookup table. An `images=(...)` parameter resolved once at build makes
-that impossible to write.
+Movement Actions add into `dx`/`dy` and the framework commits once, so `Moving`
+plus `Patrolling` is unremarkable. The exceptions set an absolute position
+rather than a velocity: `PathFollowing`, `Laned` and `Pilotable` with `bounds`
+each own the field they write, and attaching two of those to one subject is a
+build-time error naming both.
 
-**`Carried` is a runtime relationship, not a build-time one.**
-`Pinned(to=...)` is fixed at build; `fanphibious_danger` needs a frog to
-board and leave a log while the game runs. `Carried` holds a carrier
-reference in primed state, so attaching and detaching are reference writes
-that allocate nothing.
+| |
+|---|
+| `Moving(speed_x, speed_y, accel_x, accel_y)` |
+| `Patrolling(field, amplitude, period, wave, drift_x, drift_y)` |
+| `PathFollowing(points, paths, relative, speed_x, speed_y, loop, then, on_finish)` |
+| `Pilotable(player, scheme, speed_x, speed_y, inertia, damping, follow_lag, bounds, fires, fire_button, fire_sound)` |
+| `Aiming(player, speed, bounds, fires, fire_button, fire_sound)` |
+| `Chasing(target, speed_x, speed_y, turn_rate, give_up_range, on_reach)` |
+| `Orbiting(centre_y, speed)` |
+| `Laned(centres, speed, on_change)` |
 
-### Movements — one per subject
+**`Pilotable` is one behavior, not four.** Rim, turn-with-camera-follow-lag,
+momentum-with-damping and free eight-way collapse into one parameter set where
+zero means "not that one": `inertia=0` is direct control, `follow_lag=0` a fixed
+camera. One panel, four presets, and a designer can find the feel *between*
+them, which four separate behaviors would make impossible.
 
-| | Replaces |
-|---|---|
-| `Moving(speed_x, speed_y, accel_x, accel_y)` | `vixeous.py:315-323`, `vyruss_vs2.py:415`, `:429` |
-| `Patrolling(axis, amplitude, period, wave, drift_x, drift_y)` | `vixeous.py:324-332`, `:333-343` |
-| `PathFollowing(points, relative, speed_x, speed_y, loop, on_finish)` | `vyruss_vs2.py:72-115` + `:209-220` |
-| `Pilotable(player, scheme, speed_x, speed_y, bounds, fires, fire_button, fire_sound)` | `vyruss_vs2.py:34-44` + `:331-348`, `vixeous.py:257-289` |
-| `Chasing(target, speed_x, speed_y, turn_rate, give_up_range, on_reach)` | `vasura_espacial/estado.py:139-157` |
-| `Orbiting(centre_y, speed)` | `vasura_espacial/estado.py:121-137` |
-| `Laned(centres, speed, on_change)` | `vs.py:33-34`, `tincho_level.py:136-144` |
-
-The previous revision claimed `Chasing` and `Orbiting` had no precedent in
-the tree. That was wrong, and the correction matters because it moves both
-out of the speculative column. `vasura_espacial` has `Persiguiendo`, which
-normalises a vector to the player and steers along it — including the
-shortest-arc wrap that `delta_x if abs(delta_x) < 128 else -delta_x` gets at —
-and `Orbitando`, which holds a depth and advances the angle at a fixed rate.
-Both are real, both are the kind of thing that is fiddly enough to get wrong
-once per game, and both now ship in the first wave alongside `Moving`,
-`Patrolling` and `PathFollowing`.
-
-`Laned` is new from the second survey: `vs` snaps items to a 3x3 grid and
-`tincho_vrunner` snaps the runner to fixed column centres, both accumulating
-sub-cell movement until a boundary is crossed and then firing what is really
-an event (`tincho_level.py:288-305` calls it `cambió_tile`). `on_change` is
-that event, and `Tilemap.cell_at()` is the tilemap-flavoured version of the
-same question.
-
-`Pilotable` gained two schemes. `vajon.py:293-337` steers with momentum:
-input accumulates into an `inertia` term capped at ±8 which decays back toward
-zero every third tick — neither `rim` nor `turn`, and the one that feels best
-on a disc that is already spinning. `2bam_sencom.py:975-996` is stranger and
-more useful: the stick drives a cartesian `(ax, ay)` clamped to the unit disc,
-which is converted to an angle and a depth through `atan2`, `sqrt` and the
-inverse projection table. That is a *crosshair* — you point at a place on the
-disc rather than steering a thing around it — and it is the model every
-aiming game on this hardware will want. Which schemes ship is still open
-(below), but the survey says at least five, and the last one needs the
-display helpers from the collision-space section above.
+**`Aiming` does not collapse into it.** A cartesian stick position clamped to
+the unit disc, converted to an angle and depth through `atan2`, `sqrt` and the
+inverse projection, is a *crosshair* — you point at a place on the disc rather
+than steering a thing around it. It needs the per-layer `to_depth` and `polar`
+helpers, which is a second reason it sits beside `Pilotable` rather than inside
+it.
 
 ### Composed — ship as block programs, meant to be forked
 
-| | Replaces |
-|---|---|
-| `Projectile(speed_x, speed_y, range, damage, hits, burst, sound)` | the shot/bomb loops and hit tests in both games |
-| `Damageable(hp, invulnerable_ticks, blink, explosion, score, sound, on_damage, on_death)` | `vyruss_vs2.py:360-403`, four scattered pieces of `vixeous` |
-| `FiringAt(target, projectile, every, jitter, lead, sound, on_fire)` | `vyruss_vs2.py:322-329` |
-| `Spawner(pool, every, count, pattern, schedule, on_spawn)` | `vixeous.py:209-243`, `vyruss_vs2.py:245-261`, `vs.py:45-51`, `2bam_sencom.py:688-703` |
-| `Collectible(score, sound, on_pickup)` | second wave |
+| |
+|---|
+| `Projectile(speed_x, speed_y, range, damage, hits, burst, sound)` |
+| `Damageable(hp, invulnerable_ticks, blink, explosion, score, sound, on_damage, on_death)` |
+| `FiringAt(target, projectile, every, jitter, lead, sound, on_fire)` |
+| `Spawner(pool, every, count, pattern, schedule, on_spawn)` — subject is the **scene** |
+| `Collectible(score, sound, on_pickup)` — second wave |
 
 `Projectile` and `Damageable` ship first, as the two flagship block programs —
-they are the proof that the palette can express what the catalog needs.
+the proof that the palette can express what the catalog needs. `Damageable`
+exposes `hurt(sprite, amount)` for other behaviors to call.
 
-`Spawner`'s `schedule` parameter is worth its own note, because
-`2bam_sencom.py:1112-1180` is the best-designed thing in the survey and the
-strongest argument in it for a table editor. Its wave format is
-`(duration_seconds, amount, [bag of enemy types])`, with the spawns spread
-evenly across the duration and a floor that extends the wave if the count
-could not otherwise fit (`:1225-1235`). The types come from a `ShuffleBag`
-(`:1185-1212`) — a real Fisher-Yates bag that reshuffles on exhaustion, so
-the distribution is controlled rather than merely random, which is the
-difference between "mostly fair" and `choice()`. Controlled randomness is
-common enough — sencom uses one bag for enemy types and another for target
-cities — that `ShuffleBag` belongs in `vs2` next to the behaviors rather than
-in each game.
+`Spawner`'s `schedule` is a table: `(duration_seconds, amount, bag)` per wave,
+spawns spread evenly across the duration, with a floor that extends a wave if
+the count cannot otherwise fit. Types come from a `ShuffleBag` — a Fisher-Yates
+bag that reshuffles on exhaustion, so the distribution is controlled rather than
+merely random. `ShuffleBag` ships in `vs2` beside the behaviors.
 
-And the author drew the column headings as an ASCII diagram in a comment:
-
-```text
-#  ,------------- Duration seconds (will extend to amount steps if too low)
-# |     ,-------- Amount
-# |     |   ,---- Enemy shuffle bag
-( 3  ,  0, []          ),
-(10  ,  5, [W_M0]      ),
-```
-
-Someone hand-drew a spreadsheet in source comments because there was nowhere
-else to put one. That is the artefact the panel should be showing.
-
-`Damageable` exposes `hurt(sprite, amount)` for other behaviors to call. Note
-that Construct has no equivalent: it keeps behaviors mechanical and puts game
-rules in the event sheet. We can go further because Python *is* our event
-sheet, and because a forkable block program is not the black box a compiled
-Construct behavior is.
-
-Every Behavior that fires an event takes a `sound=` parameter rather than
-there being a sound behavior — every spawn and hit in both games is
-immediately followed by `vs2.audio.sound(...)` (`vixeous.py:197`, `:298`,
-`:303`, `:358`; `vyruss_vs2.py:319`, `:329`, `:377`, `:397`). `sound=` accepts
-a tuple as well as a name, picked from at random, because
-`2bam_sencom.py:154-158` keeps three spawn chops and varies between them to
-stop the repetition wearing through.
+Every Behavior that fires an event takes a `sound=` parameter rather than there
+being a sound behavior. `sound=` accepts a tuple as well as a name, picked from
+at random, so repetition does not wear through.
 
 ### Second wave
 
 `Avoiding(threats, radius, strength)`; `TileBound(tilemap, solid, on_block,
-slide)` with `Tilemap.cell_at()` and the `TileUnder` Action;
-`Scrolling(speed_x, speed_y, wrap)` — the first Behavior whose subject is a
-`Tilemap`, replacing `vixeous.py:180-181` and `mapdemo.py:57-65`; and
-`CameraBound(camera)`, the one genuinely new capability — `vixeous` recomputes
-`sprite.x = screen_x(theta, camera_theta, width)` in six places (`:311-312`,
-`:320`, `:323`, `:331`, `:341-342`, `:349`) because VS2 has no camera concept,
-so every scrolling game reinvents world-versus-screen space.
+slide)` with `Tilemap.cell_at()` and the `TileUnder` Action; and
+`Scrolling(speed_x, speed_y, wrap)`, whose subject is a **`Layer`** — it drives
+that layer's camera. It is the smallest Behavior in the catalog, two
+accumulations onto two layer fields, and it is the whole of parallax scrolling.
+
+`TileBound`'s `solid` parameter is a `Frames`: the tileset's real tiles drawn as
+a strip with checkboxes.
 
 ### Deliberately not in the catalog
 
-- **Gravity and a physics solver.** Nine games read in full, and not one
-  integrates a velocity under acceleration. `fanphibious_danger` — a
-  Frogger, the genre most likely to want a jump arc — implements its hop as a
-  fixed number of frames covering a fixed distance
-  (`fanphibious_danger.py:145-146`), which is a `Tween`, not physics. The one
-  `self.vy` in the whole tree (`vyruss/vyruss.py:687`) is a constant. This is
-  the clearest "no" in the proposal.
+- **Gravity and a physics solver.** Nothing in the tree integrates a velocity
+  under acceleration; a jump arc is a `Tween`, not physics.
 - **Pathfinding and line of sight.** No meaningful nav space on a disc.
 - **Fade.** The renderer has no alpha. Palette animation is scene-level.
 - **Effects.** Shaderless hardware.
 - **Behaviors that create drawables.** A Behavior may spawn from an existing
   pool; it may never grow the display graph.
+- **`CameraBound`.** A layer camera does it as a layer field, O(1) in the Step,
+  rather than an O(N) Python pass writing a derived `x` onto every sprite.
 
-## Budgets and diagnostics
+### Budgets
 
 ```text
 ResourceLimitError: behavior 33/32 in Vixeous (shots: 1, enemies: 4,
   targets: 2, explosions: 1, boss: 2, player: 3); reduce the behavior budget
 ```
 
-`vs2.limits.behaviors = 32` per scene, sized against a hand-count of the two
-shipping games after migration: `vixeous` about 13, `vyruss_vs2` about 9.
-
-Actions are not capped separately — they are an implementation detail of the
-Behavior that owns them, reported per Behavior in the profiling command.
-Per-instance state and instance variables are reported, not capped: the cost
-is `fields × pool count × ~33 bytes`, which for all of `vixeous` is under 3 kB
-and never the thing that runs the board out of memory.
-
-Two habits in `2bam_sencom` are worth citing as evidence that these budgets
-are load-bearing rather than bureaucratic. It opens with a hand-written sprite
-census in a comment block (`:58-72`) — "5 cities, 4 booms, 20 missiles … 41
-total" — counted by hand because nothing counted it for them; that is exactly
-what `vs2.limits` and the census in `ResourceLimitError` now produce. And it
-schedules `gc.collect()` every sixty seconds (`:558-561`), which is an author
-who knows the game allocates and would rather choose when the pause lands than
-have it land on a visible frame. The sealed scene, primed state and pooled
-spawning exist so that timer never needs to be written again.
+`vs2.limits.behaviors = 32` per scene. Actions are not capped separately — they
+are an implementation detail of the Behavior that owns them, reported per
+Behavior in the profiling command. Per-instance state and instance variables are
+reported, not capped: the cost is `fields x pool count x ~33 bytes`, which for a
+full game is under 3 kB and never the thing that runs the board out of memory.
 
 ## The block editor
 
-### The palette is the Action catalog
+### The palette has five tiers
 
-Every Action is one block; its parameters are the block's fields, rendered
-from the same declarations the property panel uses. Nothing is written twice,
-and a new Action appears in the palette, the panel, the protocol and the
-reference docs at once.
+An Action never decides, so a palette of Actions alone cannot express a game.
 
-Blockly vendors as `web/vendor/blockly`, alongside monaco, piskel and
-chipsynth, lazily loaded the way Monaco already is.
+1. **Events and conditions** — `when <condition>`, input, collision, timer,
+   comparison, "on scene start". This is the tier the no-MicroPython
+   requirement rests on.
+2. **Expressions** — arithmetic, comparison, `random`, `display.width`, and
+   reads of any variable in scope, typed against the parameter system so a
+   socket refuses a bad value rather than generating code that fails on the
+   board.
+3. **Variables** — instance, scene and project, as value and set blocks.
+4. **System actions** — scene transitions, label output, music and sound,
+   timers, named palette colours.
+5. **Actions** — the sprite-mechanics catalog.
+
+Only tier 5 is generated from parameter declarations; the other four are
+hand-authored blocks over API that already exists. Each Action is one block, its
+parameters are the block's fields rendered from the same declarations the panel
+uses, so a new Action appears in palette, panel, protocol and reference docs at
+once.
+
+Blockly vendors as `web/vendor/blockly`, lazily loaded the way Monaco is.
+
+### The block tier prevents errors; the Python tier reports them
+
+In blocks, **the error is unreachable**: fields are dropdowns populated from the
+live scene and the real asset pack, numeric fields clamp to the declared range,
+sockets are typed, and a `PoolRef` cannot name a pool that does not exist. In
+MicroPython, the same declarations raise at `build()` with the message naming
+the fix. One declaration, two enforcement strategies.
+
+Where prevention cannot reach — a `Points` path that leaves the disc, a spawn
+schedule that outruns its pool — the editor warns in place, against the block,
+before the project runs.
 
 ### The tick skeleton makes the fast shape unavoidable
 
-A naive generator emits per-sprite dispatch — the 45 µs/tick shape instead of
-34. That is not fixed with a style guide nobody reads; it is fixed with the
-top-level block structure, which has two fixed zones:
+The top-level block structure has two fixed zones:
 
 ```
 when ‹Projectile› ticks
@@ -1005,12 +1002,10 @@ when ‹Projectile› ticks
                      [       ‹Despawn›              ]
 ```
 
-Uniform work physically cannot land inside the per-sprite loop. Generated code
-is right by construction, and the author never has to learn the rule.
+Uniform work physically cannot land inside the per-sprite loop, so generated
+code is right by construction and the author never learns the rule.
 
-A `StateMachine` gets the same skeleton with one hat block per state, which is
-the shape Scratch and Construct both settled on and the reason the state
-machine belongs in this proposal rather than in game code:
+A `StateMachine` gets the same skeleton with one hat block per state:
 
 ```
 ‹Enemy›  initial state: descending
@@ -1021,52 +1016,53 @@ machine belongs in this proposal rather than in game code:
 ```
 
 Each hat generates one method; `go to` generates the return value; `hold`
-generates the timed transition. The ten states of
-`vasura_espacial/estado.py` are ten hats, and the inheritance it used to share
-the collision check becomes a shared state the others fall through to.
+generates the timed transition.
 
 ### Round-trip: one embedded blob and one one-way door
 
-The trap every codegen tool falls into is trying to re-parse hand-edited output
-back into its model. This design refuses to.
-
 - **Embed the workspace** as a base64+zlib blob in a trailing comment of the
-  generated file. One file, so the source cannot get separated from its
-  output; survives copy, `git mv` and packaging with no extra plumbing.
+  generated file, so source cannot get separated from output and it survives
+  copy, `git mv` and packaging.
 - **Banner and body checksum** at the top. If the body no longer matches, the
   editor reports the file as hand-edited and refuses to overwrite silently.
-- **Detach** is the escape hatch: strip the blob, the file becomes ordinary
-  Python forever. Explicit, one-way, and it means nobody is ever trapped in
-  blocks.
+- **Detach** strips the blob; the file becomes ordinary Python forever.
+  Explicit, one-way, so nobody is trapped in blocks.
 
 ### Debugging generated code
 
-A traceback from the board names generated line numbers, which is useless on
-its own. The generator emits block IDs as trailing comments and keeps a line
-map beside the workspace blob, so the editor can highlight the offending
-block. The director already surfaces scene tracebacks over comms, so there is
-somewhere to hook it. This is much harder to retrofit than to build alongside
-the generator.
+The generator emits block IDs as trailing comments and keeps a line map beside
+the workspace blob, so the editor highlights the offending block when a
+traceback names a generated line. The director already surfaces scene tracebacks
+over comms. This is much harder to retrofit than to build alongside the
+generator.
+
+### Two backends: readable by default, fast on request
+
+Generated code is idiomatic MicroPython, so `Detach` is an on-ramp rather than a
+trapdoor. A project also carries a **compile for speed** switch whose backend
+hoists, inlines and constant-folds the same program.
+
+The invariant that keeps this from doubling the semantics: **the fast backend is
+a mechanical transform of the readable one** — hoisting, inlining and constant
+folding only, never reordering or restructuring. Equivalence is then structural
+rather than something a corpus test has to discover.
 
 ### Generator invariants, enforced by tests
 
-- Every generated file compiles with mpy-cross. Free: `tests/run_tests.py:109-126`
-  already sweeps every MicroPython source.
+- Every generated file compiles with mpy-cross (`tests/run_tests.py:109-126`
+  already sweeps every MicroPython source).
 - Generating every standard behavior and running 1000 ticks allocates zero
-  bytes. A generator invariant is far stronger than a rule saying "don't emit
-  f-strings in `step()`".
-- Generated code obeys the MicroPython restrictions in `AGENTS.md` — no
-  bytearray slice deletion, and so on.
-- Regenerating an unchanged workspace produces a byte-identical file, so the
-  editor never creates spurious diffs.
+  bytes. In particular the generator never emits `for sprite in pool` inside a
+  Behavior.
+- Generated code obeys the MicroPython restrictions in `AGENTS.md`.
+- Regenerating an unchanged workspace produces a byte-identical file.
+- The readable and fast backends produce identical gameplay over the parity
+  corpus, and the fast one differs only by the three permitted transforms.
 
 ## The live-tune loop
 
-Introspection rides the channel that already exists. The director dispatches
-in-band text commands to feature modules — `povcal`, `povperf`, `hallfilter`
-(`director.py:193-205`), each exposing `handle_command(parts, send, ...)`.
-Behaviors add one more in exactly that shape, and the nesting falls out of the
-layers:
+Introspection rides the existing in-band command channel, in the same shape as
+`povcal`, `povperf` and `hallfilter`:
 
 ```text
 > vs2beh list
@@ -1089,64 +1085,69 @@ vs2beh_ok enemies.damageable.hp=2
 vs2beh_ok enemies.damageable.blink.on_ticks=4
 ```
 
-Which gives a four-step loop:
-
 1. Drag a slider in the panel → `vs2beh set` → the running game changes on the
    next tick, with no restart.
 2. The editor marks the value as differing from what is saved.
 3. On commit, the editor updates its model and regenerates the scene file.
 4. The next full restart runs the committed value.
 
-That transport is why this is worth building: the panel talks to *a running
-game*, so the same panel tunes the desktop emulator, the browser, or the
-physical spinning console over USB serial — the only place some of these
-numbers can honestly be judged, because the disc's legibility and persistence
-do not survive a screenshot.
+The panel talks to *a running game*, so the same panel tunes the desktop
+emulator, the browser, or the physical spinning console over USB serial — the
+only place some of these numbers can honestly be judged, because the disc's
+legibility and persistence do not survive a screenshot.
 
 `list` allocates and is called on demand, never per tick. `set` writes one
-attribute.
+attribute. Scene and project variables ride the same protocol.
 
-Because the editor owns `build()`, there is no source-patching problem here at
-all — the previous revision of this proposal spent three phases on it. Step 3
-is plain serialisation of a model the editor already holds.
+On a detached file the loop still works up to step 2: the panel tunes the
+running game and the author copies the number across.
 
-## Migration examples
+## Ported examples
+
+**Nothing in `games/` is edited by this proposal.** The jam games are historical
+artifacts and keep working because revision 2 keeps working, which is an
+acceptance check below.
+
+Selected games are **copied and the copies ported**, as `games/alecu/vyruss_vs2`
+was ported from `games/alecu/vyruss` and now sits beside it. A port is a worked
+example and a proving case: it is where "shorter, and plays identically" is
+tested, and where the catalog gets to fail honestly against a real game.
+
+Ports live in **`games/vs2_examples/`**, a group of their own. `games/demos/`
+would be cheaper — the launcher folds it into Tech Demos with no tile of its own
+— but these are the reference implementations of the API, and someone holding
+the console should be able to find them, play them, then read the source that
+produced what they just played.
+
+Groups are discovered from the folder tree, so the folder is most of the work.
+The rest:
+
+- a group icon spec in `system/menu/images/src/make_menu_icons.py` — the naming
+  rule is the folder name with hyphens as underscores, so `vs2_examples.png`;
+- one line in the group-to-icon map in `system/launcher/code/__init__.py:63-65`;
+- a slug per ported game in `games/registry.py`.
+
+A port replaces hand-written conduct with declarations. A hand-rolled per-sprite
+list of movement objects becomes one `PathFollowing` attached to the pool, with
+per-instance variation carried by `Var`-bound parameters:
 
 ```python
-# before -- vyruss_vs2.py:72-115 and :209-220
-class TravelTo: ...           # 12 lines
-class TravelBy: ...           #  8 lines
-class TravelX(TravelBy): ...
-class TravelCloser(TravelBy): ...
-class TravelAway(TravelBy): ...
-baddie.movements = [TravelCloser(85), TravelX(112), TravelCloser(34),
-                    TravelX(-96), TravelAway(45), TravelTo(final_x, final_y)]
-
-# after -- once, for the whole pool, drawn as a path on the disc preview
+self.baddies.var("path", 0)
+self.baddies.var("slot_x", 0)
+self.baddies.var("slot_y", 0)
 self.baddies.behave(PathFollowing(
-    points=((0, -85), (112, 0), (0, -34), (-96, 0), (0, 45)),
+    points=Var("path"),
+    paths=(((0, -85), (112, 0), (0, -34), (-96, 0), (0, 45)),
+           ((0, -85), (-112, 0), (0, -34), (96, 0), (0, 45))),
     relative=True, speed_x=X_SPEED, speed_y=Y_SPEED,
+    then=MoveTo(x=Var("slot_x"), y=Var("slot_y")),
     on_finish=self.join_formation))
 ```
 
-```python
-# before -- vyruss_vs2.py:360-377, one of two places with the same idea
-def kill_baddie(self, baddie):
-    if baddie.dead: return
-    x = baddie.x + baddie.width // 2 - 16
-    y = baddie.y + baddie.height // 2 - 16
-    baddie.dead = True
-    baddie.hide()
-    if baddie in self.everyone: self.everyone.remove(baddie)
-    if baddie in self.attacking:
-        self.attacking.remove(baddie); self.max_attacking += 1
-    boom = self.explosions.spawn(x, y)
-    if boom is not None: boom.age = 0
-    self.score += randrange(10, 19)
-    self.update_scoreboard()
-    vs2.audio.sound("explosion2")
+A hand-written kill routine — hide, remove from lists, spawn an explosion, reset
+its counter, add score, update the scoreboard, play a sound — becomes:
 
-# after
+```python
 self.baddies.behave(Damageable(hp=1, explosion=self.explosions,
                                score=15, sound="explosion2",
                                on_death=self.baddie_died))
@@ -1154,24 +1155,19 @@ self.laser.behave(Projectile(speed_y=6, range=LASER_FAR_Y,
                              hits=self.baddies, burst=self.explosions))
 ```
 
-```python
-# before -- vixeous.py:324-332
-for enemy in self.enemies:
-    enemy.phase = (enemy.phase + 1) % 128
-    enemy.theta = (enemy.theta + (2 if enemy.phase < 64 else -2)) % vs2.display.width
-    enemy.y -= ENEMY_SPEED
-    if enemy.y < 0:
-        self.enemies.despawn(enemy)
-    else:
-        enemy.x = screen_x(enemy.theta, self.camera_theta, enemy.width)
-        enemy.frame = enemy.kind * 2 + ((enemy.phase // 8) & 1)
+And a scrolling-world update loop becomes attachments plus one camera write:
 
-# after -- nothing in update()
+```python
+self.enemies.var("kind", 0, min=0, max=2)
 self.enemies.behave(Moving(speed_y=-ENEMY_SPEED))
-self.enemies.behave(Patrolling(axis="theta", amplitude=2, period=128))
-self.enemies.behave(Animated(first=0, last=1, ticks=8))
+self.enemies.behave(Patrolling(field="x", amplitude=64, period=128,
+                               wave="triangle"))
+self.enemies.behave(Animated(first=0, last=1, ticks=8,
+                             bank=Var("kind"), bank_size=2))
 self.enemies.behave(DespawnBeyond(y_min=0))
-self.enemies.behave(CameraBound(self.camera))
+
+def update(self):
+    self.world.camera_x = self.camera_theta   # once, for the whole layer
 ```
 
 ## What has to change under the hood
@@ -1179,345 +1175,339 @@ self.enemies.behave(CameraBound(self.camera))
 - **`vs2/params.py`**, new: the parameter types and their introspection.
 - **`vs2/actions.py`**, new: `Action` and the vocabulary.
 - **`vs2/behaviors.py`**, new: `Behavior`, `StateMachine` and the built-in
-  catalog. All three must compile with mpy-cross and stay import-cheap — a
-  game that never calls `behave()` must not pay for them, so catalogs are
-  lazy-imported per class.
+  catalog. All must compile with mpy-cross and stay import-cheap — a game that
+  never calls `behave()` must not pay for them, so catalogs are lazy-imported
+  per class.
+- **`vs2/store.py`**, new: the per-game dict over `/saves/<slug>.json`, its
+  dirty flag, and its never-raise contract.
+- **`vs2/projection.py`**, new: the curve family, `tunnel()`, `VS1_TUNNEL`.
+  Pure maths, so the desktop and browser renderers import it too.
 - **`vs2/__init__.py`**: `behave()`/`behaviors`/`behavior()` on `Sprite`,
-  `SpritePool`, `Family` and (second wave) `Tilemap`; `SpritePool.var()`,
-  `SpritePool.kinds()` and the `spawn()` reset and `kind=` argument;
-  `Scene.family()`; `Sprite.despawn()`; the subject-kind-tagged scene run list
-  built during `_seal_drawables()`; the guarded Behavior pass in
-  `scene_step()` between `update()` and `_run_defaults()`; `limits.behaviors`;
-  `vs2.DONE`;
-  `Tilemap.cell_at()`.
+  `SpritePool`, `Family`, `Scene` and (second wave) `Tilemap`;
+  `SpritePool.var()`, `SpritePool.kinds()`, the `spawn()` reset and `kind=`
+  argument; `Scene.var()` and `vs2.project.var()`; `Scene.family()`;
+  `Sprite.despawn()`; the `dx`/`dy` accumulator and its commit pass;
+  `Layer.camera_x`/`camera_y`, `Layer.projection` accepting a curve, and
+  `Layer.to_depth`/`to_row`/`polar`; the subject-kind-tagged run list built
+  during `_seal_drawables()`; the guarded Behavior pass in `scene_step()`;
+  `limits.behaviors`; `vs2.DONE`; `Tilemap.cell_at()`. The five reserved bytes
+  in the layer payload record carry the camera and curve index, so the wire
+  format does not grow.
+- **`hardware/rotor/modules/povdisplay/`**: `vs2_layer_t` gains a camera pair
+  and a 256-byte curve (2 kB across eight layers); the three
+  `mode == 1 ? vs2_project_depth(y) : ...` sites in `gpu.c` become a per-layer
+  table lookup; `vs2_native.c` gains the setters. `emulator/` and
+  `web/scene-shader-core.js` follow, with the render parity suite as the check.
 - **`ventilastation/director.py`**: one `elif cmd == "vs2beh"` next to
-  `hallfilter`, delegating to `ventilastation/behavior_control.py` with the
-  same `handle_command(parts, send, scene)` signature the other three use.
+  `hallfilter`, delegating to `ventilastation/behavior_control.py`.
 - **`web/vendor/blockly`**: vendored, lazily loaded.
-- **`web/`**: the block editor pane, the custom fields (`Angle` dial, `Points`
-  overlay, ROM-backed dropdowns), the MicroPython generator, the scene editor,
-  the inspector block and the `vs2beh` client. Needs a `?v=` cache-bust.
+- **`web/`**: the block editor pane, the five palette tiers, the custom fields,
+  both generator backends, the project and scene editor, the inspector and the
+  `vs2beh` client.
 - **`tools/`**: a headless generator so CI can regenerate every in-tree
   generated file and assert it is byte-identical.
-- **`docs/vs2/`**: tutorial chapters on behaviors, on writing one in blocks,
-  and on the scene editor; `reference/behaviors.md` and `reference/actions.md`
-  generated from the parameter declarations.
-- **`tests/`**: allocation regression, the dispatch benchmark as a guard
-  against a refactor reintroducing per-sprite dispatch for uniform work,
-  generator determinism, and parity of migrated `vixeous`/`vyruss_vs2`.
+- **`docs/vs2/`**: tutorial chapters; `reference/behaviors.md` and
+  `reference/actions.md` generated from the parameter declarations.
+- **`tests/`**: allocation regression, the dispatch benchmark as a guard against
+  reintroducing per-sprite dispatch for uniform work, generator determinism,
+  backend equivalence, and parity between ported examples and their originals.
 
-## Native Actions: the offload seam is already drawn
+## Native Actions
 
-The Action layer turns out to be the right boundary for pushing work into C,
-and not by accident. "An Action never decides" is precisely the precondition
-for a kernel that runs over many sprites at once, and the two call forms
-already mark which side of the line each use is on:
+The Action layer is the right boundary for pushing work into C. "An Action never
+decides" is the precondition for a kernel running over many sprites at once, and
+the two call forms already mark which side of the line each use is on:
 
-- `run(sprites)` — uniform, column-wise, no branching, no callbacks. This can
-  become a C kernel.
-- `run_one(sprite)` — invoked from inside a Behavior's per-sprite branch, in
-  the middle of Python control flow. This cannot.
+- `run(sprites)` — uniform, column-wise, no branching, no callbacks. Can become
+  a C kernel.
+- `run_one(sprite)` — invoked from inside a per-sprite branch, in the middle of
+  Python control flow. Cannot.
 
-So the split that was justified by editability and by the Blockly palette is
-justified a third time by offload. Three independent reasons converging on one
-boundary is a good sign the boundary is real.
+A `Var`-bound parameter disqualifies an Action for the same reason.
 
-### The state is already in C
+### The layout has to change first
 
-`vs2_sprite_t` (`gpu.h:33-41`) holds `layer`, `image_strip`, `frame`, `mode`,
-`flags` and 8.8 fixed-point `x`/`y` — twelve bytes per sprite, in a flat
-`vs2_sprite_records[VS2_MAX_SPRITES]` table (`vs2_native.c:36`). The Python
-`Sprite` is already a facade that writes through to it. A native `Move` would
-not touch a single Python object; it would walk a slot range and add two
-fixed-point deltas. The depth curve a world-space collision test needs is
-there too, as `vs2_deepspace[256]` (`gpu.h:26`).
+`vs2_sprite_t` holds `layer`, `image_strip`, `frame`, `mode`, `flags` and 8.8
+fixed-point `x`/`y`. But `vs2_native.c` declares
 
-What the record lacks is per-sprite *behavior* state — animation clocks,
-oscillation phases, life counters. Offloading an Action that needs one means
-adding a parallel motion record. Note the inversion: the parallel-array layout
-measured *slower* than primed Python attributes (8.9 ms vs 6.2 ms), because
-MicroPython's `range()` plus subscript is expensive. In C it is the fast
-layout. The right storage depends on which language reads it, which is another
-reason to decide this after the gate rather than before.
+```c
+static const vs2_sprite_t* vs2_sprite_records[VS2_MAX_SPRITES];
+```
+
+— an array of **pointers** into individually GC-allocated objects, `const`
+besides. A kernel would chase pointers rather than stride, and could not write
+through them without casting the qualifier away. And C does not know which
+sprites are live: liveness exists only in Python's `SpritePool._live`.
+
+Flattening to a real `vs2_sprite_t vs2_records[VS2_MAX_SPRITES]` with objects
+carrying an index makes every later kernel possible. `spawn`/`despawn` already
+keep `_live` prefix-compact by swapping in the tail, and a pool's sprites already
+occupy a contiguous slot range, so a pool can hand C a base slot and a live
+count — but that has to become an invariant rather than an accident.
+
+The record still lacks per-sprite behavior state — animation clocks, oscillation
+phases, life counters, the `dx`/`dy` accumulator. Note the inversion: the
+parallel-array layout measured *slower* than primed Python attributes (8.9 ms vs
+6.2 ms), because MicroPython's `range()` plus subscript is expensive. In C it is
+the fast layout.
+
+### Surrendering the shadows is the mechanism
+
+`vs2.Sprite` keeps `self._x`/`self._y` as Python shadows and writes through to
+the record. If C mutates the record those shadows go stale, so a pool driven by
+native Actions drops its shadows and `sprite.x` reads through instead (which
+needs getters — only setters exist today).
+
+This is not a wart, it is the part that does the work. The four dispatch shapes
+land within ~19% of each other on hardware because they share a floor: `sprite.x`
+is a Python property whose setter calls `_fixed_8_8()`, itself a Python
+function, then a native method. Moving an Action's arithmetic into C while
+leaving that facade in place moves almost nothing.
+
+So the offload unit is **a pool that has surrendered its Python shadows**, and
+Actions are how such a pool is addressed. Two consequences to state plainly:
+`sprite.x` acquires two cost profiles depending on how its pool was configured;
+and a shadow-less pool returns *quantised* 8.8 values where a shadowed one
+returns exact floats, which is a game-logic difference.
+
+### Batching: the offload unit is the prologue
+
+Crossing the Python/C boundary has a fixed cost, so the unit that moves is the
+**whole run of consecutive column-wise Actions** — the uniform prologue a
+Behavior hoists before its per-sprite loop — compiled into one native call per
+pool per tick. A Behavior written the other way round has nothing to offload.
 
 ### Start with `Collide`
 
-If only one kernel is ever written, it should be this one, for three reasons.
+If only one kernel is ever written it should be this one. It is the only O(N x M)
+entry in the catalog; everything else is O(N). It **mutates nothing**, so the
+shadow problem does not apply and no writeback is needed — sealed ranges in, hit
+pairs out. And world-space collision belongs there anyway, since the
+un-projection table is already in C.
 
-It is the only thing in the catalog that is **O(N x M)**; everything else is
-O(N). A bullet-hell with 20 shots against 40 enemies is 800 tests per tick,
-which is hopeless in Python and trivial in C.
-
-It **mutates nothing**. It reads records and returns hit pairs, so it has none
-of the coherence problem below. That makes it the highest-value, lowest-risk
-kernel by a wide margin.
-
-And it is where **world-space collision** belongs anyway. The un-projection
-table is already in C; doing the test there means the correction described
-above costs nothing instead of costing a table lookup per sprite per tick in
-Python.
-
-### The coherence problem, for the kernels that do mutate
-
-`vs2.Sprite` keeps `self._x`/`self._y` as Python shadows and writes through to
-the record, so reads are free and writes cost one native call. If C starts
-mutating the record, those shadows go stale.
-
-The answer is to make it a per-pool property: a pool driven by native Actions
-drops its shadows, and `sprite.x` reads through to the record instead (which
-needs getters — only setters exist today). Games that use no native Actions
-pay nothing and change in no way. The wart is that `sprite.x` then has two
-cost profiles depending on how its pool was configured, and that is worth
-naming out loud rather than hiding, because it is the kind of thing that
-surprises someone profiling a game six months later.
-
-### Batching: the offload unit is the prologue, not the Action
-
-Crossing the Python/C boundary has a fixed cost. A pool with four native
-Actions calling four kernels crosses four times per tick, and the overhead can
-eat the gain.
-
-So the unit that moves is the **whole run of consecutive column-wise Actions**
-— the uniform prologue a Behavior hoists before its per-sprite loop —
-compiled into one native call per pool per tick. Which is one more argument
-for the `step()` shape this proposal already requires: the hoisted prologue is
-exactly the offloadable run, and a Behavior written the other way round has
-nothing to offload.
-
-### The rules that keep it safe
+### Parity across three targets
 
 1. **Native is an optimization, never a semantic.** Every native Action keeps
-   its Python `run()` as the reference implementation, and the Python path
-   runs wherever no kernel exists. A game must behave identically in the
-   browser IDE and on the board, or the editor's whole premise is poisoned.
-2. **Parity is tested, not assumed.** Kernel and reference must agree
-   bit-for-bit over a randomised corpus, in the manner of the existing render
-   parity suites.
-3. **Count the targets before writing one.** VS2 rendering exists in
-   `hardware/rotor/modules/povdisplay/` for the board and `emulator/native/`
-   for the desktop, with the browser on its own path. A kernel is not one
-   implementation, it is a shared source file compiled into several — the
-   pattern `color_pipeline.c` and `hall_filter.c` already established. That
-   cost is the reason to write two kernels that matter rather than fifteen
-   that might.
+   its Python `run()` as the reference implementation, and the Python path runs
+   wherever no kernel exists.
+2. **The reference implementation must do fixed-point arithmetic, not float.** A
+   shadow-less pool reads back quantised 8.8 values, and a float reference would
+   diverge from the kernel on the second tick of any fractional speed — in game
+   logic, not just pixels. Bit-for-bit parity is only achievable if both sides
+   round the same way, so the Action layer's arithmetic is 8.8 throughout.
+3. **Count the targets: there are three, and only two are compile targets.**
+   `color_pipeline.c` and `hall_filter.c` compile into the ESP32 firmware and
+   into `libvs2render.so` for the desktop emulator. The browser compiles
+   neither — `web/scene-shader-core.js` is a hand-written JS reimplementation
+   kept honest by `web/render-parity-test.js`. So a kernel is one C source, one
+   JS port and one parity suite. That is the reason to write two kernels that
+   matter rather than fifteen that might.
 4. **An Action declares its kernel by name** (`native = "move"`), meaning it
-   touches only its declared parameters and native record fields. Anything
-   that spawns, plays a sound, or calls back into Python is disqualified by
-   construction — which is the same list as "anything that decides".
+   touches only its declared parameters and native record fields. Anything that
+   spawns, plays a sound, or calls back into Python is disqualified by
+   construction — the same list as "anything that decides".
 
-### When to decide: after the gate, not before
+## Gate: prove the numbers on hardware first
 
-Nothing here gets built speculatively. Three outcomes:
-
-- **The gate passes comfortably.** Write no kernels. The seam costs nothing to
-  keep and can be used later if a game outgrows the budget.
-- **The gate is marginal.** Offload `Collide`, and `Move` and `Animate` if the
-  profile says so. Leave the rest in Python.
-- **The gate fails.** Native Actions become the rescue rather than the
-  retreat — which is a better answer than the fallback below, because moving
-  `run()` into C keeps the Action layer, the palette and the editor intact,
-  where collapsing the layer loses all three.
-
-## Gate: prove the numbers on real hardware first
-
-**Nothing in this proposal gets built until the performance model is confirmed
-on an ESP32-S3.** Every measurement quoted above was taken on desktop
-MicroPython 1.25, unix port. Only the *ratios* are expected to survive the
-move to the board; the absolutes certainly will not.
-
-The ratios are not incidental — they are the argument. If a column-wise Action
-pass is not at least as fast as the loop it replaces, Actions are pure
-overhead. If per-sprite dispatch does not cost meaningfully more than inlined
-arithmetic, the two-tier split has no performance justification and the
-Blockly two-zone tick skeleton — which exists specifically to make the fast
-shape unavoidable — is solving a problem that does not exist. If priming
-attributes at build does not actually make tick writes free, the whole
-instance-variable and behavior-state design changes shape. Each of those is
-cheaper to discover now than after the catalog, the protocol and the editor
-are built on top of it.
+Every desktop measurement above is expected to survive the move to the board
+only in its *ratios*. The ratios are the argument: if a column-wise Action pass
+is not at least as fast as the loop it replaces, Actions are pure overhead; if
+per-sprite dispatch does not cost meaningfully more than inlined arithmetic, the
+two-tier split has no performance justification and the two-zone tick skeleton
+solves a problem that does not exist; if priming attributes at build does not
+make tick writes free, the instance-variable design changes shape.
 
 ### The rig
 
-The workbench simulates the hall pulse train, so nothing has to physically
-spin and a fixed RPM makes runs comparable. Profiling goes over the
-workbench's serial port as in-band text, never through `mpremote` on the DUT —
-a raw-REPL entry interrupts the running Python and leaves it parked at a
-prompt, which is useless for timing a live loop. Normalise to the same screen
-before every capture and confirm the `layers`/`sprites` census matches between
-runs before comparing anything.
+The workbench simulates the hall pulse train, so nothing has to physically spin
+and a fixed RPM makes runs comparable. Profiling goes over the workbench's
+serial port as in-band text, never through `mpremote` on the DUT — a raw-REPL
+entry interrupts the running Python and parks it at a prompt. Normalise to the
+same screen before every capture and confirm the `layers`/`sprites` census
+matches between runs.
 
-`povperf` already supplies the Handoff and Paint sides of the gate. Treat
-`deadline_us`, `avg_total_us`, `max_total_us`, `overruns` and
-`worst_slack_us` as the Handoff report; `deadline_us` is the Handoff budget.
-Treat `avg_render_us`/`max_render_us` as per-column Paint, and
+`povperf` supplies the Handoff and Paint sides: treat `deadline_us`,
+`avg_total_us`, `max_total_us`, `overruns` and `worst_slack_us` as the Handoff
+report; `avg_render_us`/`max_render_us` as per-column Paint; and
 `avg_frame_render_us`/`max_frame_render_us`, `frame_deadline_us` and
-`frame_overruns` as Paint over a full rotation. A rotation deadline is not a
-Handoff deadline.
+`frame_overruns` as Paint over a rotation. A rotation deadline is not a Handoff
+deadline.
 
-The gate fixture reports the Step side: its `avg_us`, `max_us` and `samples`
-are elapsed Step measurements. Its eventual `vs2beh profile` replacement
-must additionally report `step_rate_hz` and `missed_steps`, because an
-inexpensive Step that runs at an irregular cadence still makes a game feel
-wrong. The behavior pass should remain separately attributable within Step.
+The gate fixture's `avg_us`, `max_us` and `samples` are measured inside
+`update()` around the dispatch loop only, so they are **behavior-pass** figures,
+not whole-Step figures. The eventual `vs2beh profile` must report the whole Step
+too, plus `step_rate_hz` and `missed_steps`, with the behavior pass separately
+attributable within it.
 
-### Baseline from the ten-behavior gate
+### Baseline
 
-The current hardware gate uses ten distinct behavior kernels on 60 sprites;
-30 sprites carry a second behavior, for 90 active behavior slots. Five-second
-runs at both target speeds produced the following range across the four
-dispatch shapes. Every run had zero Handoff overruns.
+Ten distinct behavior kernels on 60 sprites; 30 carry a second behavior, for 90
+active behavior slots. Five-second runs at both speeds, across the four dispatch
+shapes. Every run had zero Handoff overruns.
 
-| RPM | Handoff budget / worst slack | Paint, average per column | Paint, average per rotation | Step, average | Observed Step cadence |
+| RPM | Handoff budget / worst slack | Paint, average per column | Paint, average per rotation | Behavior pass, average | Observed Step cadence |
 |---|---:|---:|---:|---:|---:|
 | 600 | 390 us / 142 us | 125–138 us | 32.3–35.4 ms | 16.1–18.7 ms | 34.6–34.8 Hz |
 | 700 | 334 us / 83 us | 123–137 us | 31.5–35.4 ms | 15.7–18.3 ms | 34.6–34.8 Hz |
 
-The measured cadence is an observation of this harness, not yet an enforced
-fixed-Step scheduler. The later game loop must make the 33 Hz Step contract
-explicit and count misses. Also note that individual Paint samples reached
-598 us at 700 RPM while Handoff still had 87 us of worst slack and no overruns:
-that is expected for the buffered pipeline, and is exactly why Paint and
-Handoff need separate names and counters.
+Individual Paint samples reached 598 us at 700 RPM while Handoff still had 87 us
+of worst slack and no overruns — expected for a buffered pipeline, and exactly
+why Paint and Handoff need separate names and counters. The measured cadence is
+an observation of this harness, not an enforced fixed-Step scheduler; the later
+game loop must make the 33 Hz contract explicit and count misses.
+
+### How to read it
+
+**The ratios passed.** Column-wise stays at or under hand-written inline, and
+per-sprite dispatch is measurably worse.
+
+**The absolutes did not.** Those ten kernels do the cheapest thing a behavior
+can do — two adds and a modulo per sprite — and consume **55 to 62% of the 30 ms
+Step budget**. Nothing else has run: not `scene.update()`, not the generated
+event sheet, not `Collide`, the only O(N x M) entry and absent from this
+workload. Per slot that is roughly 180 us to perform two coordinate writes,
+far too slow to be arithmetic on a 240 MHz core.
+
+Two observations narrow where the time goes.
+
+**It is not core contention with rendering.** MicroPython is pinned to core 1
+and the GPU task and SPI ISR to core 0, since the shipping build does not set
+`CONFIG_FREERTOS_UNICORE`. The Step is not waiting behind a rotation.
+
+**It is probably not the dispatch shape either**, since all four shapes cluster
+within ~19%. That floor is the `Sprite` facade, and the remaining suspect is the
+shared octal-PSRAM bus, with core 1's heap contending against core 0 streaming
+the framebuffer. That is cheap to test, and if it is the answer the fix is
+memory placement and no kernel needs writing.
 
 ### What to measure, at 600 and 700 RPM
 
 | Measurement | Passes if |
 |---|---|
-| The three dispatch shapes, ported as a microbench | Column-wise ≤ hand-written inline; per-sprite dispatch measurably worse than inlined, in the same direction as desktop |
-| A realistic scene — ten or more behaviors, 60-100 sprites, with half carrying a second behavior | Step fits its 30 ms budget with margin and holds its target cadence; Handoff has no overruns and positive slack against the same scene without behaviors; Paint stays within its per-rotation budget |
+| **The same workload with the GPU task idle** | Tells us what fraction of the 16-18 ms is memory contention rather than compute. If Step collapses, the lever is placement — sprite records and behavior working set in internal SRAM |
+| **A flattened record table plus `pool.move_all(dx, dy)` as one native call** | Moves 60 sprites for meaningfully less than the 90-slot Python pass costs. Needs no `Action` or `Behavior` code to try |
+| The three dispatch shapes, ported as a microbench | Column-wise ≤ hand-written inline; per-sprite dispatch measurably worse — **confirmed at both RPMs** |
+| A realistic scene — ten or more behaviors, 60-100 sprites, half carrying a second | Step fits its 30 ms budget with margin and holds cadence; Handoff has no overruns and positive slack; Paint stays within its per-rotation budget — **not yet met** |
+| The same scene with a representative generated event sheet in `update()` | Still fits. Not modelled today, and now half of what runs in a Step |
+| `Collide` over 20 shots against 40 hostiles, in Python | Establishes the O(N x M) cost the catalog's most expensive entry carries |
 | `heap_delta` across 1000+ Steps with the full catalog attached | Zero |
-| State-machine dispatch through a tuple of bound methods | Within the per-sprite branch budget, not worse |
-| `vs2beh set` round trip while the game runs | Visible within one Step, with no Handoff misses |
-| One Python/C boundary crossing, timed in isolation | Cheap enough that a per-pool prologue call is worth it — this is what decides whether native Actions are viable at all |
+| State-machine dispatch through a tuple of bound methods | Within the per-sprite branch budget |
+| `vs2beh set` round trip while the game runs | Visible within one Step, no Handoff misses |
+| One Python/C boundary crossing, timed in isolation | Cheap enough that a per-pool prologue call is worth it |
 
 ### If it fails
 
-Try native Actions first — see the section above. Moving `run()` into C keeps
-the Action layer, the Blockly palette and the editor intact, and `Collide`
-alone may close the gap.
+Native Actions first: moving `run()` into C keeps the Action layer, the palette
+and the editor intact, and `Collide` alone may close the gap.
 
 Only if that is not enough does the design retreat, in this order: drop
-`run_one()` and make every Action column-wise only, pushing state machines
-back into hand-written Python; then drop the Action layer entirely and keep
-Behaviors as monolithic hand-written classes with declared parameters — which
-preserves the editor, the protocol and the instance-variable work, and loses
-only the Blockly palette. The parameter system, instance variables, `kinds()`, families
-and the scene editor do not depend on the dispatch model and survive either
-way.
+`run_one()` and make every Action column-wise only, pushing state machines back
+into hand-written Python; then drop the Action layer entirely and keep Behaviors
+as monolithic classes with declared parameters — which preserves the editor, the
+protocol and the variable work, and loses only the Blockly palette. The parameter
+system, variables, `kinds()`, families, layers and the scene editor do not depend
+on the dispatch model and survive either way.
 
-## Rollout, in dependency order
+## Rollout
 
-0. **The hardware gate above.** First add a deliberately narrow, standalone
-   gate harness: four direct benchmark kernels plus a `scene_step()` timer
-   exposed through the existing `povperf` command. It has no `Behavior`,
-   Action, Blockly or `vs2beh` dependency, is built only to measure the
-   proposed dispatch shapes. Its workload is ten distinct kernels over 60
-   sprites, with 30 sprites carrying a second behavior (90 active behavior
-   slots). It is deleted or folded into the later profiler after the decision.
-   Record the Handoff budget and worst slack, Paint time per column and per
-   rotation, Step time and cadence, plus heap delta, in the run report.
-   Nothing below starts until it passes.
+0. **The hardware gate.** A narrow standalone harness: four benchmark kernels
+   plus a `scene_step()` timer exposed through `povperf`, with no `Behavior`,
+   Action, Blockly or `vs2beh` dependency. **Done, and the ratios passed** — but
+   see *How to read it*. Two experiments now belong here because either can
+   change everything below: the GPU-idle comparison, and a flattened record
+   table with `pool.move_all()` as a single native call.
 1. `vs2/params.py` and `vs2/actions.py` with four Actions (`Move`, `MoveTo`,
-   `Animate`, `Collide`). Prove the allocation and dispatch numbers in tests.
+   `Animate`, `Collide`), including `Var` binding and the `dx`/`dy` accumulator.
 2. `Behavior`, `behave()`, the run list, the tick pass, `limits.behaviors`.
    `Projectile` as the worked example, hand-written.
-3. Instance variables, `kinds()`, the `spawn()` reset, and families. Small,
-   independent of the editor, and immediately useful to hand-written games.
-4. `StateMachine`, with `hold()`. Port `vasura_espacial`'s ten states to it as
-   the proving case — if the declared form is not clearly better than the
-   hand-rolled one it replaces, stop here and rethink.
-5. The nine attributes and the five first-wave movements.
-6. `vs2beh list` / `set` / `reset` and the director hook, including reading
-   and forcing a sprite's current state. Tune from a serial console before any
-   UI exists — if it is not useful at that level, the panel will not save it.
+3. Instance variables, `kinds()`, the `spawn()` reset, families, scene and
+   project variables, and `vs2.store`.
+3b. **Layer cameras and projection curves.** Independent of everything else and
+   useful to hand-written games on its own. Camera first — three lines of
+   `gpu.c` — then curves, with a Paint measurement before the curve table lands.
+4. `StateMachine`, with `hold()`. Port a ten-state hand-rolled machine to it as
+   the proving case — if the declared form is not clearly better, stop and
+   rethink.
+5. The eleven attributes and the eight movements.
+6. `vs2beh list` / `set` / `reset` and the director hook. Tune from a serial
+   console before any UI exists — if it is not useful at that level, the panel
+   will not save it.
 7. The inspector panel: generic widgets, the two-level tree, the `kinds` table
    editor, the live-tune loop against a hand-written game.
 8. The scene editor and the `build()` generator. Round-trip, checksum, Detach.
-   Migrate one small game (`mapdemo`) end to end.
-9. Blockly: palette, tick skeleton, state hats, generator, line map. Re-author
-   `Projectile` and `Damageable` as block programs and ship the generated
-   output as the catalog.
-10. Migrate `vyruss_vs2` and `vixeous`. The real acceptance test.
-11. Second wave, `Tilemap.cell_at()`, `Angle` and `Points` fields.
+   Port a copy of one small game (`mapdemo`) into `games/vs2_examples/`.
+9. **The event sheet**: the events, expressions, variables and system tiers, and
+   the `update()` generator. This is what the no-MicroPython requirement rests
+   on, and none of it depends on the Action work. Prove it by authoring one
+   complete small game, with a title screen and a game-over, writing no Python.
+10. Blockly for behaviors: the Action palette, tick skeleton, state hats, line
+    map, and the fast backend. Re-author `Projectile` and `Damageable` as block
+    programs and ship the generated output as the catalog.
+11. Port copies of `vyruss_vs2` and `vixeous` into `games/vs2_examples/`. The
+    real acceptance test — the originals stay where they are, running unmodified
+    beside the ports.
+12. Second wave, `Tilemap.cell_at()`, `Angle` and `Points` fields.
 
-Steps 1-7 stand alone and are worth having even if the editor never ships.
-That ordering is deliberate: nothing before step 8 depends on the editor
-existing. Step 4 is the one to reorder if something has to give — the state
-machine is the highest-value item in this proposal and the one most likely to
-change shape once real games use it.
+Steps 1-7 stand alone and are worth having even if the editor never ships;
+nothing before step 8 depends on the editor existing. Step 4 is the one to
+reorder if something has to give. Step 9 is the one *not* to defer: it is the
+difference between a tuning tool for people who already write MicroPython and an
+editor someone can make a game in.
 
 ## Acceptance checks
 
 - A scene with the full catalog attached to 100 sprites allocates zero bytes
-  across 1000 Steps — verified on the board via `povperf`'s `heap_delta`, not
-  only on desktop.
-- A Behavior's uniform work stays at or under the hand-written loop it
-  replaces; its per-sprite branch stays within 50% of inlined arithmetic.
-- `vixeous` and `vyruss_vs2` after migration are shorter, and play identically
-  at 600 RPM on hardware.
+  across 1000 Steps — verified on the board via `heap_delta`, not only on
+  desktop.
+- A Behavior's uniform work stays at or under the hand-written loop it replaces;
+  its per-sprite branch stays within 50% of inlined arithmetic.
+- The ported copies of `vixeous` and `vyruss_vs2` are shorter than their
+  originals and play identically at 600 RPM on hardware, compared side by side
+  against the untouched originals.
+- **No file under `games/` is modified.** A diff touching one is a bug in the
+  plan, not a migration.
 - Every standard composed behavior is expressible in blocks, and the shipped
   `.py` is the generator's output — not a hand-written file the blocks
   approximate.
 - Opening a standard behavior in the editor, duplicating it and changing one
   block produces a working forked behavior without touching `vs2/`.
-- Regenerating an unchanged workspace is a no-op diff.
+- Regenerating an unchanged workspace is a no-op diff, and the fast backend
+  differs from the readable one only by hoisting, inlining and folding.
 - A parameter changed from the panel is visible on the disc within one tick,
   over serial, on the physical console.
 - A game hand-written against revision 2 runs unmodified.
-- Every error names the scene, the subject, the Behavior and the fix, and is
-  raised during `build()`.
+- **A complete small game — title screen, one playable scene, game-over, a score
+  that survives the transition — is authored end to end with no MicroPython
+  written, and runs on the physical console.**
+- **`Detach` on that game yields MicroPython its author can read**, and editing
+  it by hand and re-running works.
+- Every error in the Python tier names the scene, the subject, the Behavior and
+  the fix, and is raised during `build()`. Every equivalent error in the block
+  tier is unreachable.
 
 ## Open for review
 
-- **Which `Pilotable` schemes ship?** The survey found five distinct models,
-  not two: `rim` (`vyruss_vs2`), `turn` with camera follow-lag (`vixeous`),
-  `momentum` with damping (`vajon.py:293-337`), free eight-way
-  (`vasura_espacial/entities/nave.py:71-94`), and a cartesian crosshair
-  (`2bam_sencom.py:975-996`). The first four probably collapse into one
-  behavior with `inertia` and `follow_lag` parameters where zero means
-  neither. The crosshair does not — it is aiming rather than moving, and it
-  wants the polar and inverse-projection helpers — so it is likely a separate
-  `Aimable`.
 - **Should states be a separate `StateMachine` class, or should every Behavior
   be able to declare states?** Making every Behavior a potential state machine
   is fewer concepts; keeping them separate keeps the common stateless Behavior
-  cheap to read and cheap to explain. This proposal splits them, weakly.
-- **Do behavior callbacks need more than one subscriber?**
-  `vasura_espacial/common/evento.py` is a full publish/subscribe class, which
-  suggests at least one author wanted fan-out. This proposal gives each hook
-  one callback, because `Evento.disparar` builds a list on every fire — a list
-  comprehension evaluated purely for its side effects — and that is exactly
-  the per-tick allocation the sealed-scene rule exists to prevent. A game that
-  genuinely needs fan-out can fan out inside its one callback.
-- **Does the editor own `update()` too, eventually?** This proposal draws the
-  line at structure. If blocks later author `update()`, the game file becomes
-  generated as well and the hand-written tier disappears — which is a
-  different product, and worth deciding on purpose rather than by drift.
-- **Is `Spawner`'s subject the scene?** Wave spawning in both games is scene
-  logic with no sprite behind it, which would make it the first Behavior
-  attached to a `Scene` — a fourth subject kind after Sprite, SpritePool and
-  Family.
+  cheap to read and explain. This proposal splits them, weakly.
+- **Does a `Var`-bound parameter belong in the panel, or only in blocks?** It
+  means the panel's "speed" row sometimes shows a number and sometimes the name
+  of a column in a different table. The `kinds()` spreadsheet may be the better
+  place to surface it.
 - **Do Actions need their own segment in the protocol path?**
   `enemies.damageable.blink.on_ticks` is four deep; flattening loses the tree
-  the panel and the block editor both want.
-- **Should instance variables be typed beyond the parameter types?** Construct
-  has number/text/boolean. `Angle` and `Frames` are tempting here and may be
-  over-fitting.
+  the panel and block editor both want.
+- **Should instance variables be typed beyond the parameter types?** `Angle` and
+  `Frames` are tempting here and may be over-fitting.
 - **Should the catalogs ship frozen** in the runtime bundle, or as normal
-  importable modules? Frozen imports faster and costs flash for games that
-  never use it.
-- **Where do the display helpers live?** `to_depth`, `to_row` and `polar`
-  are proposed on `vs2.display` because that is where geometry already lives,
-  but they are the first things there that are pure maths rather than hardware
-  state. The alternative is a `vs2.geometry` module, which is tidier and one
-  more import for a game to know about.
-- **Does `Collide` go native before it ships at all?** It is the only O(N x M)
-  entry in the catalog, it mutates nothing, and the depth table it needs is
-  already in C. Writing the Python version first and replacing it later is the
-  safe order; writing the kernel first is the honest one, if the gate says the
-  Python version could never carry a bullet-hell anyway.
-- **Should `Collide`'s default space depend on the layer's projection?**
-  Defaulting to `world` on TUNNEL and `screen` on HUD is what every game
-  actually wants, but it makes one parameter's default depend on another
-  object's state, which is the sort of implicitness the rest of this proposal
-  avoids.
+  importable modules? Frozen imports faster and costs flash for games that never
+  use it.
+- **What clears `vs2.store`?** Whether uninstalling a game deletes its save,
+  whether the settings app offers "clear game data", and whether anything
+  garbage-collects saves for games no longer present. An orphan costs a few
+  hundred bytes on an 8.75 MB partition, so doing nothing is defensible.
+- **When does `Collide` go native?** The Python version ships first and a kernel
+  arrives when a real game's profile asks for it. Its shipped semantics must be
+  kernel-reproducible from day one — same-layer only, explicit `space`, explicit
+  box-or-radius, first-hit rather than all-hits.
