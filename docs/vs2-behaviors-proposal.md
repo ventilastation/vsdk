@@ -2,6 +2,7 @@
 
 Status: draft for review
 Baseline: `vs2` revision 2 as shipped (`apps/micropython/vs2/__init__.py`)
+Work breakdown: `docs/vs2-behaviors-implementation.md`
 
 Five layers on top of revision 2, plus the editor that owns them.
 
