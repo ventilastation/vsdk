@@ -94,7 +94,7 @@ function expandGameMenuStrips(folder) {
   return items;
 }
 
-async function generateRomForFolder(folder) {
+async function generateRomForFolder(folder, force = false) {
   const stripedefPath = path.join(folder, STRIPEDEF_FILENAME);
   const romName = romNameForFolder(folder);
   const romFilename = path.join(ROMS_FOLDER, `${romName}.rom`);
@@ -114,7 +114,7 @@ async function generateRomForFolder(folder) {
     }
   }
 
-  if (fs.existsSync(romFilename)) {
+  if (!force && fs.existsSync(romFilename)) {
     const romTimestamp = fs.statSync(romFilename).mtimeMs;
     const needsRebuild = inputFilenames.some((filename) => fs.statSync(filename).mtimeMs > romTimestamp);
     if (!needsRebuild) {
@@ -134,12 +134,20 @@ async function generateRomForFolder(folder) {
 }
 
 async function main() {
-  const targetFolder = process.argv[2]
-    ? path.resolve(process.cwd(), process.argv[2])
+  // --force rebuilds even when the mtime check says the rom is current.
+  // Callers that need the builder's own output rather than whatever a
+  // previous build left behind (tests/test_rom_format.py's parity check)
+  // have no other way to be sure the rom on disk is the one this builder
+  // just produced.
+  const args = process.argv.slice(2);
+  const force = args.includes("--force");
+  const positional = args.filter((arg) => !arg.startsWith("--"));
+  const targetFolder = positional[0]
+    ? path.resolve(process.cwd(), positional[0])
     : null;
 
   if (targetFolder) {
-    await generateRomForFolder(targetFolder);
+    await generateRomForFolder(targetFolder, force);
     return;
   }
 
@@ -149,7 +157,7 @@ async function main() {
     }
     for (const { current, entries } of walkDirectories(rootFolder)) {
       if (entries.some((entry) => entry.isFile() && entry.name === STRIPEDEF_FILENAME)) {
-        await generateRomForFolder(current);
+        await generateRomForFolder(current, force);
       }
     }
   }

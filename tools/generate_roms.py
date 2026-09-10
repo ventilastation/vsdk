@@ -81,7 +81,7 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
         rom_filename = Path(rom_filename)
         rom_name = rom_filename.stem
     rom_timestamp = rom_filename.stat().st_mtime if rom_filename.exists() else 0
-    src_filenames = (folder / filename for group in palettegroups for filename, _ in group)
+    src_filenames = [folder / filename for group in palettegroups for filename, _ in group]
     # A game_menu_strips expansion (see _game_menu_strip_items) derives each
     # strip's id from its *path*, not its content -- so moving a game folder
     # to a new group (same bytes, same mtime, different path) must be able
@@ -91,9 +91,33 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
     # games/<group>/ folder as well. Cheap even when irrelevant to this
     # particular rom -- GAMES_ROOT only has a few dozen entries.
     watch_dirs = [GAMES_ROOT, *(p for p in GAMES_ROOT.glob("*") if p.is_dir())] if GAMES_ROOT.exists() else []
+    # That watch is still one level too shallow for a rom built from
+    # games/<group>/<name>/menu.png files, because two of its inputs are not
+    # files it names:
+    #   * the game folder itself. A menu.png can appear there looking older
+    #     than this rom (cp -p, mv, rsync -a, an unpacked tarball all keep
+    #     the source mtime), and a deleted one leaves nothing to stat --
+    #     but either way the folder it entered or left was touched. Watch
+    #     every games/<group>/<name>/, not only the ones holding a menu.png
+    #     right now, or a deletion has no watched path left to report it.
+    #   * the sibling meta.json, whose "menu_frames" sets the strip's frame
+    #     count. Editing it rewrites the rom without any png changing.
+    game_menu_dirs = [
+        game_dir
+        for game_dir in (src.resolve().parent for src in src_filenames if src.name == "menu.png")
+        if _relative_to(game_dir, GAMES_ROOT) is not None
+    ]
+    watch_files = []
+    if game_menu_dirs:
+        watch_dirs.extend(p for p in GAMES_ROOT.glob("*/*") if p.is_dir())
+        watch_files.extend(
+            game_dir / "meta.json"
+            for game_dir in game_menu_dirs
+            if (game_dir / "meta.json").exists()
+        )
 
     if all(f.stat().st_mtime <= rom_timestamp
-           for f in chain(src_filenames, [spritedef_path], watch_dirs)):
+           for f in chain(src_filenames, [spritedef_path], watch_files, watch_dirs)):
         # print("Skipping", rom_name, file=sys.stderr)
         return
     print("Generating", rom_name, file=sys.stderr)

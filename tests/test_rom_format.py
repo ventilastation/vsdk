@@ -85,36 +85,67 @@ def test_all_built_roms():
 
 def test_menu_rom_builder_parity():
     """The Python and JS builders must produce the same strip inventory for
-    the menu ROM (palette bytes may differ: different quantizers)."""
+    the menu ROM (palette bytes may differ: different quantizers).
+
+    Both ROMs are built here, from the tree as it stands, so the check does
+    not inherit whatever apps/micropython/roms/menu.rom happens to hold."""
     if not shutil.which("node") or not (ROOT / "node_modules" / "pngjs").exists():
         print("SKIP: node/pngjs unavailable for builder parity check")
         return
-    py_rom = ROMS / "menu.rom"
-    if not py_rom.exists():
-        print("SKIP: menu.rom not built")
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import generate_roms
+    except ModuleNotFoundError as error:
+        print("SKIP builder parity check: missing", error.name)
         return
+
+    menu_images = ROOT / "system" / "menu" / "images"
+    spritedef = menu_images / generate_roms.STRIPEDEF_FILENAME
+    py_rom = ROMS / "menu.rom"
 
     with tempfile.TemporaryDirectory() as tmp:
         env = dict(os.environ)
-        out = Path(tmp) / "menu.rom"
-        # The JS CLI writes into apps/micropython/roms; run it and restore.
+        py_out = Path(tmp) / "py-menu.rom"
+        js_out = Path(tmp) / "js-menu.rom"
+
+        # Build both sides here rather than reading apps/micropython/roms/
+        # menu.rom: that file is a gitignored build artifact, so trusting it
+        # makes this check depend on whatever the checkout happens to hold.
+        # An old one compares a stale inventory and fails; a current one is
+        # worse, because then the JS builder's own mtime check skips its
+        # build and the "parity" assert compares the Python rom to itself.
+        # An unwritten rom_filename has no timestamp to beat, so this always
+        # builds.
+        generate_roms.generate_rom(
+            menu_images,
+            generate_roms.load_palettegroups(spritedef),
+            spritedef,
+            rom_filename=py_out,
+        )
+
+        # The JS CLI only knows how to write into apps/micropython/roms, so
+        # run it there with --force and put back exactly what was there --
+        # including the case where nothing was.
         # Restore the mtime too: a fresher menu.rom would make the Python
         # generator's staleness check skip a needed rebuild after a new
         # game's menu.png is added.
-        original = py_rom.read_bytes()
-        original_stat = py_rom.stat()
+        original = py_rom.read_bytes() if py_rom.exists() else None
+        original_stat = py_rom.stat() if original is not None else None
         try:
             subprocess.run(
-                ["node", "tools/generate_roms_js.cjs", "system/menu/images"],
+                ["node", "tools/generate_roms_js.cjs", "--force", "system/menu/images"],
                 cwd=ROOT, check=True, capture_output=True, env=env,
             )
-            out.write_bytes(py_rom.read_bytes())
+            js_out.write_bytes(py_rom.read_bytes())
         finally:
-            py_rom.write_bytes(original)
-            os.utime(py_rom, (original_stat.st_atime, original_stat.st_mtime))
+            if original is None:
+                py_rom.unlink(missing_ok=True)
+            else:
+                py_rom.write_bytes(original)
+                os.utime(py_rom, (original_stat.st_atime, original_stat.st_mtime))
 
-        py_strips, py_palettes = parse_rom(original)
-        js_strips, js_palettes = parse_rom(out.read_bytes())
+        py_strips, py_palettes = parse_rom(py_out.read_bytes())
+        js_strips, js_palettes = parse_rom(js_out.read_bytes())
 
     def inventory(strips):
         return [(s["name"], s["width"], s["height"], s["frames"], s["palette"]) for s in strips]
