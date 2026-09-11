@@ -107,6 +107,10 @@ NODE_TESTS = [
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",
     "web/render-parity-test.js",
+    "tests/test_vs2_widget_dispatch.mjs",
+    "tests/test_vs2_kinds_editor.mjs",
+    "tests/test_vs2beh_client.mjs",
+    "tests/test_vs2beh_live_tune_e2e.mjs",
 ]
 
 
