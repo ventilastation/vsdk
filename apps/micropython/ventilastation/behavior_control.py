@@ -41,6 +41,22 @@ the first time that command actually arrives. It never imports
 so loading this module costs nothing until a ``vs2beh`` command is
 actually dispatched against a scene that looks like a real ``vs2.Scene``.
 
+**The kinds-table read path.** T12 (the inspector panel, same wave) built a
+``kinds`` table editor against a documented ``{"fields": [...], "rows":
+[{"name", "values"}, ...]}`` wire shape that this module did not originally
+emit -- found and fixed at Wave-5 merge time. Row order can't reflect
+declaration order: ``SpritePool.kinds()`` takes ``**rows``, and MicroPython's
+``**kwargs`` capture does not preserve call-site order (confirmed directly
+against the real interpreter), unlike ``var()``'s own ``_var_order`` fix
+(T5), which works because each variable is declared in its own call. Rows
+are sorted by name instead -- deterministic and stable across repeated
+``list`` calls, which is what the panel's "editing a cell never reorders
+other rows" contract actually needs. **Still open:** there is no wire verb
+for *writing* a kinds-table edit back to a running game (``set``/``reset``
+only address scalar parameters), and the panel's ``mountKindsEditor`` is not
+yet mounted into the live panel tree -- both real, scoped follow-up work,
+not silently swept under this fix.
+
 **Never crashes the control loop.** ``director.py.step_once()`` calls
 ``_dispatch_control()`` with no surrounding ``try``/``except`` (only the
 scene's own ``scene_step()`` is guarded, and that guard re-raises after
@@ -590,6 +606,25 @@ def _build_registry(scene):
             entry["count"] = obj.capacity
             entry["vars"] = _register_scalar_vars(
                 registry, name, obj, obj._var_defaults, obj._var_order)
+            if obj._kind_rows:
+                # SpritePool.kinds() takes **rows, and MicroPython's **kwargs
+                # capture does not preserve call-site order (confirmed
+                # directly: def f(**kw): ...; f(zebra=1, apple=2) sees
+                # ['apple', 'zebra'], hash order, not call order) -- there is
+                # no declaration order to recover here, unlike _var_order
+                # (T5's fix for var(), which IS called once per name and can
+                # append to a list at each call). So row order is sorted by
+                # kind name instead: not "as authored", but deterministic and
+                # stable across repeated `list` calls, which is what T12's
+                # kinds editor actually needs ("editing a cell never reorders
+                # other rows").
+                entry["kinds"] = {
+                    "fields": list(obj._kind_fields),
+                    "rows": [
+                        {"name": kind_name, "values": list(obj._kind_rows[kind_name])}
+                        for kind_name in sorted(obj._kind_rows.keys())
+                    ],
+                }
         elif kind == "family":
             entry["count"] = len(obj)
         entry["behaviors"] = _register_behaviors(

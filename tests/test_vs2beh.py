@@ -755,9 +755,79 @@ def test_director_dispatch_control_routes_vs2beh_to_the_handler():
         _teardown()
 
 
+def test_list_reports_a_pools_kinds_table_sorted_and_stable():
+    # Integration fix found at Wave-5 merge time: T12 (the inspector panel)
+    # built a kinds-table editor expecting list to emit an
+    # entry["kinds"] = {"fields": [...], "rows": [{"name", "values"}, ...]}
+    # shape, but this module didn't emit one at all until this test/fix.
+    # Row order can't be "as authored" -- SpritePool.kinds() takes **rows,
+    # and MicroPython's **kwargs capture does not preserve call-site order
+    # (confirmed directly against the real interpreter) -- so rows are
+    # sorted by kind name instead: deterministic and stable across repeated
+    # `list` calls, which is what the panel's "never reorders other rows"
+    # contract actually needs.
+    _setup()
+    try:
+        def build(scene):
+            scene.world = scene.layer("world", projection=vs2.TUNNEL)
+            scene.enemies = scene.world.sprite_pool("ship.png", count=6)
+            scene.enemies.var("hp", 1, min=0, max=99)
+            scene.enemies.var("score", 40, min=0, max=9999)
+            scene.enemies.kinds(driller=(3, 75), chiller=(1, 40), boss=(9, 500))
+
+        game = _build_scene(build)
+        sent, send = _send_capture()
+        behavior_control.handle_command(["list"], send, scene=game)
+        payload = _last_json(sent)
+        enemies = _find_subject(payload, "enemies")
+
+        kinds = enemies.get("kinds")
+        check("enemies reports a kinds table", kinds is not None)
+        check("kinds fields match var() declaration order",
+              kinds["fields"] == ["hp", "score"])
+        names = [row["name"] for row in kinds["rows"]]
+        check("kinds rows are sorted by name for determinism",
+              names == ["boss", "chiller", "driller"])
+        boss_row = next(row for row in kinds["rows"] if row["name"] == "boss")
+        check("a row's values match its declared tuple, in field order",
+              boss_row["values"] == [9, 500])
+
+        # Called again: same sorted order, same values -- stable across
+        # repeated `list` calls (what a panel polling for live state needs).
+        sent2, send2 = _send_capture()
+        behavior_control.handle_command(["list"], send2, scene=game)
+        payload2 = _last_json(sent2)
+        kinds2 = _find_subject(payload2, "enemies")["kinds"]
+        check("a second list call reports rows in the same order",
+              [row["name"] for row in kinds2["rows"]] == names)
+    finally:
+        _teardown()
+
+
+def test_a_pool_with_no_kinds_omits_the_kinds_field():
+    _setup()
+    try:
+        def build(scene):
+            scene.world = scene.layer("world", projection=vs2.TUNNEL)
+            scene.enemies = scene.world.sprite_pool("ship.png", count=6)
+            scene.enemies.var("hp", 1, min=0, max=99)
+
+        game = _build_scene(build)
+        sent, send = _send_capture()
+        behavior_control.handle_command(["list"], send, scene=game)
+        payload = _last_json(sent)
+        enemies = _find_subject(payload, "enemies")
+        check("a pool that never calls kinds() has no kinds field",
+              "kinds" not in enemies)
+    finally:
+        _teardown()
+
+
 TESTS = [
     test_list_allocates_only_when_called_and_never_during_ticks,
     test_list_reports_pool_vars_behaviors_and_nested_action_params,
+    test_list_reports_a_pools_kinds_table_sorted_and_stable,
+    test_a_pool_with_no_kinds_omits_the_kinds_field,
     test_a_pool_with_neither_vars_nor_behaviors_is_not_listed,
     test_a_pool_reachable_through_no_scene_attribute_is_not_addressable,
     test_two_attributes_referencing_one_pool_use_the_first_sorted_name,
