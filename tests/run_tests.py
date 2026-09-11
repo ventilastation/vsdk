@@ -40,6 +40,7 @@ CPYTHON_TESTS = [
     "tests/test_ventilagon_parity.py",
     "tests/test_rom_format.py",
     "tests/test_vs2_api.py",
+    "tests/test_vs2_variables.py",
     "tests/test_vs2_params.py",
     "tests/test_vs2_store.py",
     "tests/test_vs2_projection.py",
@@ -89,6 +90,7 @@ CPYTHON_TESTS = [
 
 MICROPYTHON_TESTS = [
     "tests/test_vs2_api_micropython.py",
+    "tests/test_vs2_variables_micropython.py",
     "tests/test_vs2_params.py",
     "tests/test_vs2_store_micropython.py",
     "tests/test_browser_input_v2.py",
