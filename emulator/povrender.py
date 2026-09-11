@@ -206,10 +206,24 @@ def decode_vs2_scene(data):
         if offset + layer_size > len(data):
             return None
         layer_id, mode, flags = unpack_from("<BBB", data, offset)
+        # Reserved bytes 3/4 (see export_scene_payload() in vs2/__init__.py):
+        # camera X (wraps at COLUMNS, so a plain byte already carries the
+        # wrap) and camera Y (clamped 0..255, sprite y's own domain). Camera
+        # is a per-frame constant, so folding it straight into each
+        # drawable's stored x/y below is exactly equivalent to re-adding it
+        # every column, and simpler. Byte 5 (curve index) isn't decoded here
+        # yet: a custom curve's 256 bytes never travel over this wire
+        # format, only the small index does, so there is nothing to resolve
+        # it to beyond the shared vs2_deepspace/HUD-identity default every
+        # layer already renders through.
+        camera_x = data[offset + 3] if layer_size > 3 else 0
+        camera_y = data[offset + 4] if layer_size > 4 else 0
         layers.append({
             "id": layer_id,
             "mode": mode,
             "visible": bool(flags & 0x01),
+            "camera_x": camera_x,
+            "camera_y": camera_y,
         })
         offset += layer_size
 
@@ -231,10 +245,12 @@ def decode_vs2_scene(data):
             continue
         if layer is not None:
             mode = layer["mode"]
+        camera_x = layer["camera_x"] if layer is not None else 0
+        camera_y = layer["camera_y"] if layer is not None else 0
         sprite = {
             "slot": slot,
-            "x": x_fixed / 256.0,
-            "y": y_fixed / 256.0,
+            "x": x_fixed / 256.0 + camera_x,
+            "y": y_fixed / 256.0 + camera_y,
             "image": image,
             "frame": frame,
             "perspective": mode,
@@ -269,10 +285,12 @@ def decode_vs2_scene(data):
             continue
         if layer is not None:
             mode = layer["mode"]
+        camera_x = layer["camera_x"] if layer is not None else 0
+        camera_y = layer["camera_y"] if layer is not None else 0
         tilemap = {
             "slot": slot,
-            "x": x_fixed / 256.0,
-            "y": y_fixed / 256.0,
+            "x": x_fixed / 256.0 + camera_x,
+            "y": y_fixed / 256.0 + camera_y,
             "image": image,
             "frames": bytes(data[frames_offset:frames_offset + cells]),
             "columns": map_columns,
