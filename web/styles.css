@@ -54,6 +54,125 @@ textarea {
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
 }
 
+/* VS2 behaviors inspector panel (T12) -- generic parameter tree + kinds
+   table editor, driven entirely by vs2/params.py's introspect() shape.
+   Kept as its own scope (`vs2beh-` prefix) rather than reusing
+   `.inspector-panel`/`.inspector-block`, which belong to the emulator's
+   pre-existing Options/debug panel. */
+.vs2beh-panel {
+  background: rgba(23, 27, 34, 0.82);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
+  padding: 16px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.vs2beh-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.vs2beh-panel-toolbar h2 {
+  margin: 0;
+  font-size: 1rem;
+  flex: 1 1 auto;
+}
+
+.vs2beh-status {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.vs2beh-subject {
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.vs2beh-subject > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.vs2beh-behavior {
+  margin: 8px 0 8px 14px;
+  border-left: 2px solid var(--panel-border);
+  padding-left: 10px;
+}
+
+.vs2beh-behavior > summary {
+  cursor: pointer;
+}
+
+.vs2beh-action {
+  margin: 6px 0 6px 14px;
+  padding-left: 10px;
+  border-left: 2px dashed var(--panel-border);
+}
+
+.vs2beh-action h5 {
+  margin: 4px 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.vs2beh-group h4 {
+  margin: 4px 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.vs2beh-param {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.vs2beh-param-label {
+  min-width: 140px;
+  font-size: 0.82rem;
+}
+
+.vs2beh-widget-slider-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vs2beh-widget-slider {
+  width: 140px;
+}
+
+.vs2beh-widget-number-echo {
+  width: 70px;
+}
+
+.vs2beh-kinds-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.vs2beh-kinds-table th,
+.vs2beh-kinds-table td {
+  border: 1px solid var(--panel-border);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.vs2beh-kind-cell {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .stage-panel {
   position: relative;
   width: 100vh;
