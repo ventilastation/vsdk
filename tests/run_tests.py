@@ -43,6 +43,7 @@ CPYTHON_TESTS = [
     "tests/test_vs2_actions.py",
     "tests/test_vs2_variables.py",
     "tests/test_vs2_families.py",
+    "tests/test_vs2_behaviors.py",
     "tests/test_vs2_params.py",
     "tests/test_vs2_store.py",
     "tests/test_vs2_projection.py",
