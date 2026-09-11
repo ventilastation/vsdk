@@ -1260,6 +1260,13 @@ class Layer:
         self._camera_y = 0
         backend = _vs2_backend()
         self._layer = backend.Layer(mode=self._projection, visible=self._visible) if backend else None
+        if self._layer is not None:
+            # Without this, a native-backed layer never hears about camera_x/
+            # camera_y or a non-default curve until something else happens to
+            # call set_camera()/set_curve() -- see the camera_x/camera_y and
+            # projection setters below, which keep this in sync afterward.
+            self._layer.set_camera(0, 0)
+            self._layer.set_curve(self._curve)
 
     def _require_build(self, method):
         if self._closed:
@@ -1305,6 +1312,7 @@ class Layer:
         self._projection, self._curve = _resolve_projection(value, self._projection)
         if self._layer is not None:
             self._layer.set_mode(self._projection)
+            self._layer.set_curve(self._curve)
 
     @property
     def camera_x(self):
@@ -1318,6 +1326,8 @@ class Layer:
     def camera_x(self, value):
         self._require_open("camera_x")
         self._camera_x = value
+        if self._layer is not None:
+            self._layer.set_camera(self._camera_x, self._camera_y)
 
     @property
     def camera_y(self):
@@ -1330,6 +1340,8 @@ class Layer:
     def camera_y(self, value):
         self._require_open("camera_y")
         self._camera_y = value
+        if self._layer is not None:
+            self._layer.set_camera(self._camera_x, self._camera_y)
 
     def to_row(self, depth):
         """World depth (``0..255``) -> LED row, through this layer's
