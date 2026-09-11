@@ -47,6 +47,7 @@ CPYTHON_TESTS = [
     "tests/test_vs2_catalog.py",
     "tests/test_vs2_catalog_movements.py",
     "tests/test_vs2_statemachine.py",
+    "tests/test_vs2beh.py",
     "tests/test_vs2_params.py",
     "tests/test_vs2_store.py",
     "tests/test_vs2_projection.py",
