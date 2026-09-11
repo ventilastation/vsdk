@@ -291,6 +291,13 @@ class _BaseControl:
 base = _BaseControl()
 
 
+#: Sentinel distinct from any real app slug (including the legitimate "no
+#: app is current" state, which is ``None``), so a freshly constructed
+#: :class:`_Project` always rebinds on its first access. Mirrors
+#: :mod:`vs2.store`'s identical ``_UNBOUND`` sentinel and the reason for it.
+_PROJECT_UNBOUND = object()
+
+
 class _Project:
     """Project-scoped variables that outlive a scene transition, exposed as
     ``vs2.project``.
@@ -306,11 +313,34 @@ class _Project:
 
     ``persist=True`` additionally reads the variable's initial value from
     :data:`vs2.store` and writes it back on :meth:`save`.
+
+    **Rebinds when the current app changes**, the same way :data:`vs2.store`
+    does: :func:`~ventilastation.api_guard.current_app` is checked on every
+    call, and a different slug than last seen means a different game is
+    running in this same process (a launcher-hosted session switching
+    between games, the emulator, or a test), so every declared variable --
+    and the plain instance attribute each one was ``setattr()`` onto this
+    singleton -- is dropped before the new app's own declarations apply.
+    Without this, a second game declaring a name the first game already
+    declared would silently read the first game's value instead of its own.
     """
 
     def __init__(self):
+        self._app_slug = _PROJECT_UNBOUND
         self._vars = {}
         self._persisted = set()
+
+    def _ensure_current_app(self):
+        slug = api_guard.current_app()
+        if slug != self._app_slug:
+            for name in self._vars:
+                try:
+                    delattr(self, name)
+                except AttributeError:
+                    pass
+            self._vars = {}
+            self._persisted = set()
+            self._app_slug = slug
 
     def var(self, name, default=0, persist=False, min=None, max=None,
             step=None, label=None, unit=None, options=None):
@@ -321,6 +351,7 @@ class _Project:
                 names (``dx``, ``dy``, ``fsm_state``, ``fsm_hold``,
                 ``fsm_then``, ``enabled``).
         """
+        self._ensure_current_app()
         if name in self._vars:
             return getattr(self, name)
         if name in _RESERVED_VAR_NAMES:
@@ -338,6 +369,7 @@ class _Project:
     def save(self):
         """Write every ``persist=True`` project variable to
         :data:`vs2.store` and save it. No-ops when nothing is persisted."""
+        self._ensure_current_app()
         if not self._persisted:
             return
         for name in self._persisted:
@@ -1952,10 +1984,18 @@ class SpritePool:
         self._free = sprites
         self._live = []
         self._on_empty = on_empty
-        #: ``{name: Parameter}`` declared by :meth:`var`, in declaration
-        #: order (dict insertion order, relied on by :meth:`kinds`).
+        #: ``{name: Parameter}`` declared by :meth:`var`.
         self._var_defaults = {}
-        #: Field order (from :attr:`_var_defaults`) a :meth:`kinds` row's
+        #: Declaration order of :attr:`_var_defaults`'s names, tracked
+        #: explicitly rather than read back from the dict: MicroPython's
+        #: dict does not preserve insertion order the way CPython's does
+        #: (confirmed on the unix port -- ``{"hp": 1, "score": 10}.keys()``
+        #: comes back ``["score", "hp"]``), so deriving :meth:`kinds`'
+        #: field order from ``self._var_defaults.keys()`` silently swapped
+        #: values between variables on real MicroPython. This list is what
+        #: :meth:`kinds` reads instead.
+        self._var_order = []
+        #: Field order (from :attr:`_var_order`) a :meth:`kinds` row's
         #: positional values line up against.
         self._kind_fields = ()
         #: ``{kind_name: row}`` declared by :meth:`kinds`.
@@ -2021,6 +2061,7 @@ class SpritePool:
         parameter = _var_parameter(default, min=min, max=max, step=step,
                                     label=label, unit=unit, options=options)
         self._var_defaults[name] = parameter
+        self._var_order.append(name)
         for sprite in self._free:
             setattr(sprite, name, parameter.default)
         for sprite in self._live:
@@ -2049,7 +2090,7 @@ class SpritePool:
         self._layer._require_build("kinds")
         if self._kind_rows:
             raise ValueError("kinds() has already been called on this pool")
-        fields = tuple(self._var_defaults.keys())
+        fields = tuple(self._var_order)
         for kind_name, row in rows.items():
             if len(row) != len(fields):
                 raise ValueError(
