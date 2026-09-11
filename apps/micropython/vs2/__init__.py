@@ -122,6 +122,24 @@ class FrameError(ValueError):
     """
 
 
+class StateConflictError(RuntimeError):
+    """A Behavior's ``state = (...)`` declaration collides with something
+    else already living on the same subject.
+
+    Priming state -- writing every declared name to ``0`` on every sprite of
+    a Behavior's subject at attach time -- is what makes ``sprite.name +=
+    ...`` allocation-free in a Step (see :meth:`SpritePool.var`'s identical
+    priming loop). That only holds if the name is unique across everything
+    else already on the sprite, so this is raised, naming both sides, when:
+    a second Behavior on the same subject declares the same state name; a
+    state name shadows a pool's own :meth:`SpritePool.var`-declared
+    variable, a scene's own :meth:`Scene.var`-declared variable, or a
+    built-in :class:`Sprite` property; or a state name is one of the
+    framework's reserved names (``dx``, ``dy``, ``fsm_state``, ``fsm_hold``,
+    ``fsm_then``, ``enabled``).
+    """
+
+
 class _Limits:
     """Per-target resource budgets, exposed as ``vs2.limits``."""
 
@@ -129,10 +147,9 @@ class _Limits:
     sprites = 100
     tilemaps = 16
     image_strips = 100
-    #: Behaviors attached anywhere in one scene. Not yet enforced here --
-    #: the census-raising build-time check lands with the Behavior
-    #: dispatcher itself, alongside :meth:`Sprite.behave` actually running
-    #: anything.
+    #: Behaviors attached anywhere in one scene, enforced by
+    #: :func:`_attach_behavior` -- see its per-kind census in the
+    #: :class:`ResourceLimitError` it raises when this is exceeded.
     behaviors = 32
 
 
@@ -596,33 +613,242 @@ def _behavior_snake_name(behavior):
     return "".join(chars)
 
 
+#: The three step-dispatch method names :meth:`Scene._run_behaviors` looks
+#: for, and the one each subject kind actually calls. ``"family"`` accepts
+#: either, since a family dispatches each member to whichever fits its own
+#: kind (see :meth:`Scene._run_behaviors`).
+_STEP_METHODS = ("step", "step_one", "step_scene")
+
+_KIND_REQUIRED_METHOD = {
+    "pool": "step",
+    "sprite": "step_one",
+    "scene": "step_scene",
+}
+
+_KIND_NEEDS_TEXT = {
+    "pool": "step()",
+    "sprite": "step_one()",
+    "family": "step() or step_one()",
+    "scene": "step_scene()",
+}
+
+
+def _behavior_kind_mismatch(behavior, kind):
+    """Whether ``behavior`` is shaped for a *different* subject kind than
+    ``kind`` -- the mistake this catches is attaching a Behavior written for
+    one subject (say, one that defines only ``step_one``) to another kind
+    (a pool, which dispatches through ``step``).
+
+    A ``behavior`` defining **none** of ``step``/``step_one``/``step_scene``
+    is not flagged: that is either a Behavior doing all of its work in
+    :meth:`Behavior.attached` with no per-tick logic of its own (legitimate
+    -- see the proposal's *Cross-behavior wiring* on a passive
+    ``Damageable``), or, pre-:class:`Behavior`, a bare duck-typed stand-in
+    like the ones :mod:`tests.test_vs2_api` attaches -- both cases
+    :meth:`Scene._run_behaviors` already tolerates by no-oping on whichever
+    of the three a subject's dispatch does not find, so attaching one is
+    legal on any subject.
+    """
+    if kind == "family":
+        if (getattr(behavior, "step", None) is not None
+                or getattr(behavior, "step_one", None) is not None):
+            return False
+        return getattr(behavior, "step_scene", None) is not None
+    required = _KIND_REQUIRED_METHOD[kind]
+    if getattr(behavior, required, None) is not None:
+        return False
+    for method in _STEP_METHODS:
+        if method != required and getattr(behavior, method, None) is not None:
+            return True
+    return False
+
+
+_SPRITE_PUBLIC_ATTRS = None
+
+
+def _sprite_public_attrs():
+    """Every non-private name :class:`Sprite` exposes (``x``, ``frame``,
+    ``despawn``, ``behavior``, ...), computed once and cached: what a
+    Behavior's ``state`` declaration must not shadow on a sprite subject.
+    Deferred (rather than computed at import time) because :class:`Sprite`
+    is defined later in this module than :func:`_attach_behavior` is.
+    """
+    global _SPRITE_PUBLIC_ATTRS
+    if _SPRITE_PUBLIC_ATTRS is None:
+        _SPRITE_PUBLIC_ATTRS = frozenset(
+            attr for attr in dir(Sprite) if not attr.startswith("_"))
+    return _SPRITE_PUBLIC_ATTRS
+
+
+def _check_state_owner(owners, name, behavior, label):
+    existing = owners.get(name)
+    if existing is not None:
+        raise StateConflictError(
+            "state name %r is already declared on this %s by %r; %r cannot "
+            "declare it again" % (name, label, existing, behavior))
+
+
+def _prime_pool_state(pool, names, behavior):
+    """Validate then prime ``names`` (a Behavior's ``state`` tuple) to ``0``
+    on every sprite of ``pool``, free ones included -- the same priming
+    idiom :meth:`SpritePool.var` uses, walking ``_free`` then ``_live``.
+    Ownership (for cross-Behavior collision detection) is recorded directly
+    on the pool object, so a family member primed this way and a pool
+    attached to directly are checked against the same registry.
+    """
+    owners = getattr(pool, "_behavior_state_owners", None)
+    if owners is None:
+        owners = {}
+        pool._behavior_state_owners = owners
+    for name in names:
+        if name in _RESERVED_VAR_NAMES:
+            raise StateConflictError(
+                "%r is a reserved name; %r cannot declare it as state"
+                % (name, behavior))
+        if name in pool._var_defaults:
+            raise StateConflictError(
+                "state name %r on %r collides with this pool's own "
+                "declared variable %r" % (name, behavior, name))
+        _check_state_owner(owners, name, behavior, "pool")
+    for name in names:
+        owners[name] = behavior
+        for sprite in pool._free:
+            setattr(sprite, name, 0)
+        for sprite in pool._live:
+            setattr(sprite, name, 0)
+
+
+def _prime_sprite_state(sprite, names, behavior):
+    """Validate then prime ``names`` to ``0`` on one standalone sprite."""
+    owners = getattr(sprite, "_behavior_state_owners", None)
+    if owners is None:
+        owners = {}
+        sprite._behavior_state_owners = owners
+    reserved_props = _sprite_public_attrs()
+    for name in names:
+        if name in _RESERVED_VAR_NAMES:
+            raise StateConflictError(
+                "%r is a reserved name; %r cannot declare it as state"
+                % (name, behavior))
+        if name in reserved_props:
+            raise StateConflictError(
+                "state name %r on %r collides with Sprite's own %r property"
+                % (name, behavior, name))
+        _check_state_owner(owners, name, behavior, "sprite")
+    for name in names:
+        owners[name] = behavior
+        setattr(sprite, name, 0)
+
+
+def _prime_scene_state(scene, names, behavior):
+    """Validate then prime ``names`` to ``0`` on the scene itself -- a
+    scene is its own single subject instance, so this primes ``scene``
+    directly rather than walking a collection of sprites."""
+    owners = getattr(scene, "_behavior_state_owners", None)
+    if owners is None:
+        owners = {}
+        scene._behavior_state_owners = owners
+    for name in names:
+        if name in _RESERVED_VAR_NAMES:
+            raise StateConflictError(
+                "%r is a reserved name; %r cannot declare it as state"
+                % (name, behavior))
+        if name in scene._vars:
+            raise StateConflictError(
+                "state name %r on %r collides with this scene's own "
+                "declared variable %r" % (name, behavior, name))
+        _check_state_owner(owners, name, behavior, "scene")
+    for name in names:
+        owners[name] = behavior
+        setattr(scene, name, 0)
+
+
+def _prime_behavior_state(subject, kind, behavior):
+    """Prime ``behavior.state`` (a plain tuple of field names, defaulting
+    to ``()`` and costing nothing when absent) across every sprite of
+    ``subject`` -- one sprite for a ``sprite`` subject, every sprite (free
+    included) of a ``pool`` subject, every member's sprites for a
+    ``family`` subject, or the scene object itself for a ``scene`` subject.
+    """
+    names = getattr(behavior, "state", ())
+    if not names:
+        return
+    if kind == "pool":
+        _prime_pool_state(subject, names, behavior)
+    elif kind == "sprite":
+        _prime_sprite_state(subject, names, behavior)
+    elif kind == "family":
+        for member_kind, member in subject._members:
+            if member_kind == "pool":
+                _prime_pool_state(member, names, behavior)
+            else:
+                _prime_sprite_state(member, names, behavior)
+    else:  # "scene"
+        _prime_scene_state(subject, names, behavior)
+
+
 def _attach_behavior(scene, subject, kind, by_name, order, behavior, name):
     """Shared body of ``behave()`` on every subject kind (:class:`Sprite`,
     :class:`SpritePool`, :class:`Family`, :class:`Scene`).
 
-    Structural: legal only while ``scene`` is building. Registers
-    ``behavior`` under ``name`` (defaulting to its class's snake_case name)
-    into the subject's own ``by_name``/``order`` bookkeeping, and appends
+    Structural: legal only while ``scene`` is building. Validates that
+    ``behavior`` is shaped for ``kind`` (:func:`_behavior_kind_mismatch`),
+    that its name does not collide with another Behavior already on this
+    subject, that attaching it would not exceed ``vs2.limits.behaviors``,
+    and primes any ``state`` it declares (:func:`_prime_behavior_state`) --
+    then registers it under ``name`` (defaulting to its class's snake_case
+    name) into the subject's own ``by_name``/``order`` bookkeeping, appends
     it to the scene-wide attachment log that :meth:`Scene._seal_drawables`
-    freezes into the subject-kind-tagged Step run list.
+    freezes into the subject-kind-tagged Step run list, and finally calls
+    ``behavior.attached(subject)`` if it defines one -- once, here, with
+    every other Behavior attached earlier on this subject already fully
+    registered (call order in :meth:`Scene.build` is what lets one
+    Behavior's ``attached()`` look an earlier sibling up via
+    ``subject.behavior(OtherClass)`` and cache a direct reference, per the
+    proposal's *Cross-behavior wiring*).
 
-    This is deliberately *just* bookkeeping: with no ``Behavior`` base
-    class defined yet (that lands with the behaviors module), nothing here
-    can validate that ``behavior`` supports ``kind`` as a subject, or
-    actually run anything -- :meth:`Scene._run_behaviors` dispatches
-    through ``getattr(..., None)`` and no-ops on whatever a stand-in
-    object does not implement.
+    Dispatch itself stays duck-typed (:meth:`Scene._run_behaviors` still
+    reads through ``getattr(..., None)``, not an ``isinstance`` check
+    against :class:`~vs2.behaviors.Behavior`) -- this function only
+    validates the *shape* ``behavior`` needs for ``kind`` to make sense,
+    which is why a bare stand-in defining none of the three step methods
+    (see :func:`_behavior_kind_mismatch`) still attaches without error,
+    and calling ``attached()`` through ``getattr(..., None)`` the same way
+    means a stand-in with no ``attached()`` of its own costs nothing extra.
     """
     scene._require_build("behave")
+    if _behavior_kind_mismatch(behavior, kind):
+        defined = "/".join(
+            method for method in _STEP_METHODS
+            if getattr(behavior, method, None) is not None)
+        raise TypeError(
+            "%s cannot attach to a %s: it defines %s, but a %s subject "
+            "dispatches through %s"
+            % (type(behavior).__name__, kind, defined, kind,
+               _KIND_NEEDS_TEXT[kind]))
     if name is None:
         name = _behavior_snake_name(behavior)
     if name in by_name:
         raise ValueError(
             "behavior name %r is already attached to this %s (%r and %r)"
             % (name, kind, by_name[name], behavior))
+    requested = len(scene._behavior_attachments) + 1
+    if requested > limits.behaviors:
+        counts = {}
+        for existing_kind, _existing_subject, _existing_behavior in scene._behavior_attachments:
+            counts[existing_kind] = counts.get(existing_kind, 0) + 1
+        counts[kind] = counts.get(kind, 0) + 1
+        census = ", ".join("%s: %d" % (k, counts[k]) for k in sorted(counts))
+        raise ResourceLimitError(
+            "behavior %d/%d in %s (%s); reduce the behavior budget"
+            % (requested, limits.behaviors, scene.__class__.__name__, census))
+    _prime_behavior_state(subject, kind, behavior)
     by_name[name] = behavior
     order.append(behavior)
     scene._behavior_attachments.append((kind, subject, behavior))
+    attached = getattr(behavior, "attached", None)
+    if attached is not None:
+        attached(subject)
     return behavior
 
 
