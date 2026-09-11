@@ -79,6 +79,8 @@ function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
     payload[offset] = index;
     payload[offset + 1] = layer.mode;
     payload[offset + 2] = layer.visible === false ? 0 : 1;
+    payload[offset + 3] = (layer.camera_x || 0) & 0xff;
+    payload[offset + 4] = (layer.camera_y || 0) & 0xff;
     offset += layerSize;
   }
   for (const sprite of sprites) {
@@ -358,6 +360,89 @@ function runTests() {
     assert.deepEqual(getLedColor(pixels, 20, 2), [20, 0, 0, 255], "VS2 flip_x+flip_y should sample mirrored column/row");
     assert.deepEqual(getLedColor(pixels, 20, 1), [10, 0, 0, 255], "VS2 flip_y should reverse source rows");
     assert.deepEqual(getLedColor(pixels, 21, 2), [40, 0, 0, 255], "VS2 flip_x should mirror source columns");
+  }
+
+  // Layer camera X folds into the same modular column arithmetic sprite x
+  // already uses, so it wraps at column 0 exactly like a sprite position
+  // does (see decodeVs2SceneBuffer's camera fold-in and the matching
+  // comment in led-render-core.js).
+  {
+    const palette = createPalette({
+      1: [10, 0, 0],
+      2: [20, 0, 0],
+      3: [30, 0, 0],
+      4: [40, 0, 0],
+    });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })],
+    ]);
+
+    const baselineDecoded = decodeVs2SceneBuffer(makeVs2ScenePayload({
+      layers: [{ mode: 2 }],
+      sprites: [{ layer: 0, image_strip: 8, frame: 0, mode: 2, flags: 1, x: 0, y: 0 }],
+    }));
+    const baselinePixels = computeLedFramePixels(blankFrame({ sprites: baselineDecoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(baselinePixels, 0, 53), [30, 0, 0, 255], "camera x=0 baseline column 0");
+    assert.deepEqual(getLedColor(baselinePixels, 1, 53), [10, 0, 0, 255], "camera x=0 baseline column 1");
+    assert.deepEqual(getLedColor(baselinePixels, 2, 53), [0, 0, 0, 255], "camera x=0 baseline column 2 is dark");
+
+    // camera_x=254 is -2 in the wrapped byte, shifting the sprite's visible
+    // window backward across column 0 onto columns 254-255.
+    const cameraDecoded = decodeVs2SceneBuffer(makeVs2ScenePayload({
+      layers: [{ mode: 2, camera_x: 254 }],
+      sprites: [{ layer: 0, image_strip: 8, frame: 0, mode: 2, flags: 1, x: 0, y: 0 }],
+    }));
+    const cameraPixels = computeLedFramePixels(blankFrame({ sprites: cameraDecoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(cameraPixels, 254, 53), [30, 0, 0, 255], "camera x=-2 wraps sprite onto column 254");
+    assert.deepEqual(getLedColor(cameraPixels, 255, 53), [10, 0, 0, 255], "camera x=-2 wraps sprite onto column 255");
+    assert.deepEqual(getLedColor(cameraPixels, 0, 53), [0, 0, 0, 255], "camera x=-2 leaves column 0 dark");
+  }
+
+  // Layer camera Y folds into the row range a drawable occupies, the same
+  // way camera X folds into the column range.
+  {
+    const palette = createPalette({
+      1: [10, 0, 0],
+      2: [20, 0, 0],
+      3: [30, 0, 0],
+      4: [40, 0, 0],
+    });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })],
+    ]);
+    const decoded = decodeVs2SceneBuffer(makeVs2ScenePayload({
+      layers: [{ mode: 2, camera_y: 5 }],
+      sprites: [{ layer: 0, image_strip: 8, frame: 0, mode: 2, flags: 1, x: 0, y: 0 }],
+    }));
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 0, 48), [30, 0, 0, 255], "camera y=+5 shifts sprite onto row 5");
+    assert.deepEqual(getLedColor(pixels, 0, 47), [40, 0, 0, 255], "camera y=+5 shifts sprite onto row 6");
+    assert.deepEqual(getLedColor(pixels, 0, 53), [0, 0, 0, 255], "camera y=+5 leaves the original row dark");
+  }
+
+  // Acceptance: a layer with no camera and the default curve must render
+  // byte-identical to a drawable with no layer at all.
+  {
+    const palette = createPalette({ 1: [5, 6, 7] });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 0, 0, 0] })],
+    ]);
+    const noLayerPixels = computeLedFramePixels(blankFrame({
+      sprites: decodeVs2SceneBuffer(makeVs2ScenePayload({
+        layers: [],
+        sprites: [{ layer: 255, image_strip: 8, frame: 0, mode: 1, flags: 1, x: 12, y: 30 }],
+      })).sprites,
+    }), assets, palette);
+    const withLayerPixels = computeLedFramePixels(blankFrame({
+      sprites: decodeVs2SceneBuffer(makeVs2ScenePayload({
+        layers: [{ mode: 1 }],
+        sprites: [{ layer: 0, image_strip: 8, frame: 0, mode: 1, flags: 1, x: 12, y: 30 }],
+      })).sprites,
+    }), assets, palette);
+    assert.deepEqual(
+      Array.from(withLayerPixels), Array.from(noLayerPixels),
+      "no camera, default curve renders byte-identical with or without a layer"
+    );
   }
 
   {

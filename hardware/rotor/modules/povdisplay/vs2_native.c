@@ -153,6 +153,14 @@ static mp_obj_t vs2_layer_make_new(const mp_obj_type_t *type, size_t n_args, siz
     self->layer.id = 0;
     self->layer.mode = args[ARG_mode].u_int;
     self->layer.flags = args[ARG_visible].u_bool ? VS2_FLAG_VISIBLE : 0;
+    self->layer.camera_x = 0;
+    self->layer.camera_y = 0;
+    // A real default from construction on, matching the mode this layer
+    // opens with (vs2_deepspace is also VS1_TUNNEL's byte-for-byte C twin --
+    // see vs2/projection.py) -- so render_vs2() never reads a half-built
+    // table, even before vs2/__init__.py's Layer.__init__ makes its own
+    // set_curve() call right after this object exists.
+    memcpy(self->layer.curve, vs2_deepspace, VS2_CURVE_LENGTH);
     self->slot = alloc_layer_slot(&self->layer);
     self->layer.id = self->slot;
     return MP_OBJ_FROM_PTR(self);
@@ -176,9 +184,53 @@ static mp_obj_t vs2_layer_set_visible(mp_obj_t self_in, mp_obj_t visible_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(vs2_layer_set_visible_obj, vs2_layer_set_visible);
 
+// 8.8 fixed point, the same convention as Sprite.set_x_fixed/set_y_fixed --
+// x and y arrive here as vs2/__init__.py's raw Layer.camera_x/camera_y
+// floats (see the Layer property setters), not pre-scaled, so this does the
+// *256 conversion itself via mp_obj_get_float() (accepts either an int or a
+// float MicroPython object, unlike mp_obj_get_int()).
+static int32_t vs2_fixed_from_number(mp_obj_t value_in) {
+    double scaled = mp_obj_get_float(value_in) * 256.0;
+    if (scaled < (double)INT32_MIN) {
+        return INT32_MIN;
+    }
+    if (scaled > (double)INT32_MAX) {
+        return INT32_MAX;
+    }
+    return (int32_t)scaled;
+}
+
+static mp_obj_t vs2_layer_set_camera(mp_obj_t self_in, mp_obj_t x_in, mp_obj_t y_in) {
+    vs2_layer_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    self->layer.camera_x = vs2_fixed_from_number(x_in);
+    self->layer.camera_y = vs2_fixed_from_number(y_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_3(vs2_layer_set_camera_obj, vs2_layer_set_camera);
+
+static mp_obj_t vs2_layer_set_curve(mp_obj_t self_in, mp_obj_t curve_in) {
+    vs2_layer_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_buffer_info_t bufinfo;
+    // mp_get_buffer_raise (rather than memoryview_data(), the borrowed-
+    // pointer helper other setters here use for long-lived data like
+    // tilemap frames) both validates the buffer protocol on whatever the
+    // caller passed -- bytes, bytearray or memoryview, all legal per
+    // vs2/projection.py's curve family -- and reports its length, which we
+    // need to enforce the 256-byte contract before copying.
+    mp_get_buffer_raise(curve_in, &bufinfo, MP_BUFFER_READ);
+    if (bufinfo.len != VS2_CURVE_LENGTH) {
+        mp_raise_ValueError(MP_ERROR_TEXT("a projection curve must be exactly 256 bytes"));
+    }
+    memcpy(self->layer.curve, bufinfo.buf, VS2_CURVE_LENGTH);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_layer_set_curve_obj, vs2_layer_set_curve);
+
 static const mp_rom_map_elem_t vs2_layer_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_set_mode), MP_ROM_PTR(&vs2_layer_set_mode_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_visible), MP_ROM_PTR(&vs2_layer_set_visible_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_camera), MP_ROM_PTR(&vs2_layer_set_camera_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_curve), MP_ROM_PTR(&vs2_layer_set_curve_obj) },
 };
 static MP_DEFINE_CONST_DICT(vs2_layer_locals_dict, vs2_layer_locals_dict_table);
 

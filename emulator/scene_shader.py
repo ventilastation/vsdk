@@ -157,7 +157,17 @@ def pack_scene_vs2_bytes(scene_bytes):
     for _ in range(layer_count):
         if offset + layer_size > len(data):
             return _finish_scene(packer)
-        layers[data[offset]] = (data[offset + 1], bool(data[offset + 2] & 1))
+        # Reserved bytes 3/4 are camera X/Y (see export_scene_payload() in
+        # vs2/__init__.py and the matching comment in
+        # web/scene-shader-core.js's packSceneVs2Bytes -- this function
+        # mirrors it byte-for-byte per tests/test_scene_shader_pack.py).
+        # Camera is a per-frame constant, so folding it into each
+        # drawable's x/y below is exactly equivalent to a per-column add
+        # and simpler. Byte 5 (curve index) stays undecoded: a custom
+        # curve's bytes never travel over this wire format.
+        camera_x = data[offset + 3] if layer_size > 3 else 0
+        camera_y = data[offset + 4] if layer_size > 4 else 0
+        layers[data[offset]] = (data[offset + 1], bool(data[offset + 2] & 1), camera_x, camera_y)
         offset += layer_size
 
     sprite_by_slot = [None] * sprite_count
@@ -172,9 +182,11 @@ def pack_scene_vs2_bytes(scene_bytes):
             continue
         x_fixed = unpack_from("<i", data, record + 10)[0]
         y_fixed = unpack_from("<i", data, record + 14)[0]
+        camera_x = layer[2] if layer is not None else 0
+        camera_y = layer[3] if layer is not None else 0
         sprite_by_slot[slot] = dict(
-            x=x_fixed // 256,
-            y=y_fixed // 256,
+            x=x_fixed // 256 + camera_x,
+            y=y_fixed // 256 + camera_y,
             strip=data[record + 1],
             frame=data[record + 2],
             mode=layer[0] if layer is not None else data[record + 3],
@@ -203,9 +215,11 @@ def pack_scene_vs2_bytes(scene_bytes):
         mode = layer[0] if layer is not None else data[record + 3]
         if canonical_mode(mode) == MODE_PLANET:
             continue
+        camera_x = layer[2] if layer is not None else 0
+        camera_y = layer[3] if layer is not None else 0
         tilemap_by_slot[slot] = dict(
-            x=unpack_from("<i", data, record + 20)[0] // 256,
-            y=unpack_from("<i", data, record + 24)[0] // 256,
+            x=unpack_from("<i", data, record + 20)[0] // 256 + camera_x,
+            y=unpack_from("<i", data, record + 24)[0] // 256 + camera_y,
             strip=data[record + 1], mode=mode,
             columns=columns, rows=rows,
             tile_width=unpack_from("<H", data, record + 8)[0],

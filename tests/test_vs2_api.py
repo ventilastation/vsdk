@@ -367,6 +367,8 @@ class Vs2ApiTests(unittest.TestCase):
                 def __init__(self, **_kwargs): pass
                 def set_mode(self, _value): pass
                 def set_visible(self, _value): pass
+                def set_camera(self, _x, _y): pass
+                def set_curve(self, _curve): pass
 
             def Sprite(self):
                 return Record()
