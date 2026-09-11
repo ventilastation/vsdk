@@ -42,6 +42,7 @@ CPYTHON_TESTS = [
     "tests/test_vs2_api.py",
     "tests/test_vs2_actions.py",
     "tests/test_vs2_variables.py",
+    "tests/test_vs2_families.py",
     "tests/test_vs2_params.py",
     "tests/test_vs2_store.py",
     "tests/test_vs2_projection.py",
@@ -92,6 +93,7 @@ CPYTHON_TESTS = [
 MICROPYTHON_TESTS = [
     "tests/test_vs2_api_micropython.py",
     "tests/test_vs2_variables_micropython.py",
+    "tests/test_vs2_families_micropython.py",
     "tests/test_vs2_params.py",
     "tests/test_vs2_store_micropython.py",
     "tests/test_browser_input_v2.py",
@@ -103,6 +105,7 @@ NODE_TESTS = [
     "tests/test_web_input_v2.mjs",
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",
+    "web/render-parity-test.js",
 ]
 
 
