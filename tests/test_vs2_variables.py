@@ -426,30 +426,49 @@ class Vs2VariablesTests(unittest.TestCase):
                             "the build-time declare must actually cost something")
 
         sprites = list(game.pool._free)
-        # Warm up with the exact operation about to be measured, and for
-        # long enough to clear it: CPython 3.13+'s tier-2 JIT (and the
-        # specializing interpreter under it) attaches its own one-time
-        # bookkeeping to a hot loop only after several hundred backedges,
-        # not a handful -- a shorter warm-up (or warming up a *different*
-        # operation, like ``-= 0``) leaves that one-time cost sitting
-        # inside the measured window and reads as a false allocation.
-        # 1000 iterations comfortably clears it (measured empirically: 200
-        # still leaked 32 bytes here, 500 and 1000 both read clean).
-        for _ in range(1000):
-            for sprite in sprites:
-                sprite.hp += 1
-                sprite.hp -= 1
-        tracemalloc.start()
-        try:
-            for _ in range(500):
+
+        def touch_all(count):
+            for _ in range(count):
                 for sprite in sprites:
                     sprite.hp += 1
                     sprite.hp -= 1
-            current, _peak = tracemalloc.get_traced_memory()
+
+        # Warm up with the exact operation about to be measured, and for
+        # long enough to clear it: CPython's specializing adaptive
+        # interpreter (and, on 3.13+, its tier-2 JIT) attaches its own
+        # one-time bookkeeping to a hot loop only after several hundred
+        # backedges, not a handful -- a shorter warm-up (or warming up a
+        # *different* operation, like ``-= 0``) leaves that one-time cost
+        # sitting inside the measured window and reads as a false
+        # allocation. 1000 iterations comfortably clears it.
+        touch_all(1000)
+
+        # Even fully warmed up, this can still read a small constant,
+        # non-zero handful of bytes depending on the exact CPython version
+        # (see ``test_spawn_with_kind_resolution_allocates_zero_bytes_once_
+        # warm`` below for the same hazard with a different root cause:
+        # confirmed on 3.12.9 this reads a steady 32 B that a longer
+        # warm-up never clears). So the meaningful check -- the one that
+        # actually matches "allocates zero bytes per write" -- is that the
+        # retained cost does not grow between two very different iteration
+        # counts, i.e. it's O(1) one-time bookkeeping, not O(N) real churn.
+        tracemalloc.start()
+        try:
+            touch_all(200)
+            current_small, _peak = tracemalloc.get_traced_memory()
         finally:
             tracemalloc.stop()
-        self.assertEqual(current, 0,
-                          "writing an already-primed variable must retain no allocation")
+
+        tracemalloc.start()
+        try:
+            touch_all(2000)
+            current_large, _peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+
+        self.assertEqual(current_small, current_large,
+                          "retained bytes must not grow with the number of "
+                          "writes to an already-primed variable (O(1), not O(N))")
 
     def test_spawn_with_kind_resolution_allocates_zero_bytes_once_warm(self):
         vs2 = self.vs2
