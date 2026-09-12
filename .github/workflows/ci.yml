@@ -22,7 +22,7 @@ jobs:
 
       - name: Install tools
         run: |
-          pip install mpy-cross pillow numpy pyyaml
+          pip install mpy-cross pillow numpy pyyaml pyserial
           npm ci --no-audit --no-fund
 
       - name: Build MicroPython unix port (cached)
