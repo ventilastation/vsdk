@@ -69,6 +69,7 @@ CPYTHON_TESTS = [
     "tests/test_mapdemo_vs2.py",
     "tests/test_input_demo.py",
     "tests/test_vixeous_vs2.py",
+    "tests/test_vixeous_vs2_examples.py",
     "tests/test_vyruss_vs2.py",
     "tests/test_povstress_vs2.py",
     "tests/test_vs2_hardware_fixture.py",
