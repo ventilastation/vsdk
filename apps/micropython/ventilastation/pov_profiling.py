@@ -78,12 +78,16 @@ def _send_gate_stats(send, scene):
               stats["heap_delta"])).encode())
 
 
-def handle_command(parts, send, display, scene=None):
+def handle_command(parts, send, display, scene=None, vs2_backend=None):
     """Handle ``povperf`` without persisting or otherwise changing a profile.
 
     Commands are ``status``, ``start``, ``stop``, ``reset``,
-    ``mode legacy|calibrated``, ``capture``, and the temporary pre-gate
-    benchmark controls ``gate start|stop|status [shape]``. Selecting an
+    ``mode legacy|calibrated``, ``capture``, the temporary pre-gate
+    benchmark controls ``gate start|stop|status [shape]``, and T0's two
+    hardware-gate experiments: ``gpuidle on|off|status`` and
+    ``flatprobe <count> <passes>`` (see
+    docs/vs2-behaviors-implementation.md's "Gate experiments" task -- both
+    are throwaway bench-only controls, not stable board API). Selecting an
     encoder resets the sample window so a report never silently combines the
     two implementations. ``capture`` asks an opt-in fixture to restore and
     freeze its deterministic oracle frame.
@@ -146,6 +150,31 @@ def handle_command(parts, send, display, scene=None):
             elif gate_command != "status" or len(parts) != 2:
                 raise ValueError("invalid gate command")
             _send_gate_stats(send, scene)
+            return
+        elif command == "gpuidle":
+            set_idle = getattr(display, "set_gpu_idle", None)
+            if set_idle is None:
+                _unsupported(send)
+                return
+            sub = parts[1] if len(parts) > 1 else "status"
+            if sub == "on":
+                set_idle(True)
+            elif sub == "off":
+                set_idle(False)
+            elif sub != "status":
+                raise ValueError("invalid gpuidle command")
+            send(b"povperf_gpuidle ok=1")
+            return
+        elif command == "flatprobe" and len(parts) == 3:
+            probe = getattr(vs2_backend, "flattened_probe", None)
+            if probe is None:
+                _unsupported(send)
+                return
+            count = int(parts[1])
+            passes = int(parts[2])
+            avg_us = probe(count, passes)
+            send(("povperf_flatprobe count=%d passes=%d avg_us=%d" % (
+                count, passes, avg_us)).encode())
             return
         elif command == "mode" and len(parts) == 2:
             selector = getattr(display, "set_color_pipeline_enabled", None)

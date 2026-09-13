@@ -214,7 +214,7 @@ class Director:
             scene = self.scene_stack[-1] if self.scene_stack else None
             pov_profiling.handle_command(
                 parts[1:], self.platform.comms.send, self.platform.display,
-                scene=scene,
+                scene=scene, vs2_backend=self.platform.vs2,
             )
         elif cmd == "hallfilter":
             from ventilastation import hall_filter_control

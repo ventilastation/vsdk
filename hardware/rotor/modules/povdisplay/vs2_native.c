@@ -4,6 +4,8 @@
 #include "py/obj.h"
 #include "py/runtime.h"
 
+#include "esp_timer.h"
+
 #include "gpu.h"
 
 #define VS2_FLAG_VISIBLE 0x01
@@ -132,6 +134,44 @@ static mp_obj_t vs2_set_active(mp_obj_t active) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(vs2_set_active_obj, vs2_set_active);
+
+// T0 gate experiment only (docs/vs2-behaviors-implementation.md,
+// "Flattened-record probe"): a throwaway, self-contained benchmark, not
+// stable board API. vs2_sprite_records[] above holds borrowed pointers into
+// individually heap-allocated Python Sprite objects, not a contiguous
+// array -- there is nothing real to "flatten" yet, so this times its own
+// static array shaped like the eventual pool layout instead, to get a real
+// number for what a flattened layout could cost.
+static mp_obj_t vs2_flattened_probe(mp_obj_t count_obj, mp_obj_t passes_obj) {
+    mp_int_t count = mp_obj_get_int(count_obj);
+    mp_int_t passes = mp_obj_get_int(passes_obj);
+    if (count <= 0 || count > VS2_MAX_SPRITES || passes <= 0) {
+        mp_raise_ValueError(MP_ERROR_TEXT("count/passes out of range"));
+    }
+    static vs2_sprite_t probe_records[VS2_MAX_SPRITES];
+    for (mp_int_t i = 0; i < count; i++) {
+        probe_records[i].x = (int32_t)((i * 37) % 256) << 8;
+        probe_records[i].y = (int32_t)((i * 13) % 240) << 8;
+    }
+    // Same 8.8 fixed-point units as the real x/y fields; arbitrary nonzero
+    // deltas so the loop body isn't foldable into a compile-time constant.
+    const int32_t dx = 1 << 8;
+    const int32_t dy = -(1 << 8);
+    int64_t started = esp_timer_get_time();
+    for (mp_int_t pass = 0; pass < passes; pass++) {
+        for (mp_int_t i = 0; i < count; i++) {
+            probe_records[i].x += dx;
+            probe_records[i].y += dy;
+        }
+    }
+    int64_t elapsed = esp_timer_get_time() - started;
+    // Defeat dead-code elimination of the loop above without adding any
+    // real cost to what is being measured.
+    volatile int32_t sink = probe_records[0].x ^ probe_records[count - 1].y;
+    (void)sink;
+    return mp_obj_new_int((mp_int_t)(elapsed / passes));
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_flattened_probe_obj, vs2_flattened_probe);
 
 static void vs2_layer_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     vs2_layer_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -559,6 +599,7 @@ static const mp_rom_map_elem_t vs2_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_reset_scene), MP_ROM_PTR(&vs2_reset_scene_obj) },
     { MP_ROM_QSTR(MP_QSTR_reset_sprites), MP_ROM_PTR(&vs2_reset_scene_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_active), MP_ROM_PTR(&vs2_set_active_obj) },
+    { MP_ROM_QSTR(MP_QSTR_flattened_probe), MP_ROM_PTR(&vs2_flattened_probe_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_draw_order), MP_ROM_PTR(&vs2_set_draw_order_obj) },
 };
 
