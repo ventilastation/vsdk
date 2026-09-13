@@ -22,10 +22,16 @@ read this. **T15 is done**, merged into `vs2/wave6-integration`. **T16 (a
 deliberately minimal first pass, not the full five-tier palette) is done**,
 merged into `vs2/wave7-integration`, and — unusually for this effort —
 **verified on real physical hardware**, including a bug real hardware caught
-that no CPython/unix-`micropython` test could (see "Gotchas" below). T17 and
-T18 are not started. Waves 0 and 6 were blocked on physical hardware no
-environment had until now; see "Hardware is now available." Everything is
-pushed to `origin` — no work exists only on a local disk.
+that no CPython/unix-`micropython` test could (see "Gotchas" below).
+**T17 (full scope, not a minimal pass this time — the user's goal is now
+"implement all of the plan" in full) is in progress**, split into
+sequential phases the same way T15/T16 were internally sequenced; check
+branch `vs2/T17-blockly-behaviors` for exactly how far it's gotten. T18 is
+not started. Two of Waves 1-5's outstanding hardware-only gaps (T6 paint
+timing, T11's `vs2beh` over a real serial link) were closed for real on
+2026-09-13; T0's two new hardware experiments were not (see below) — Wave 6
+stays blocked until they are. Everything is pushed to `origin` — no work
+exists only on a local disk.
 
 ## How this work was done, so you can keep doing it the same way
 
@@ -292,16 +298,74 @@ things a future session should know:
   pixel count each time, suspect instability before suspecting the capture
   mechanism or the game.
 
-T0 (the hardware gate: GPU-idle comparison and a flattened-record probe on
-physical rotor hardware, `tools/vs2_behaviors_gate.py`) still has **not**
-been run — the 2026-09-13 session's hardware time went entirely to getting
-T16 verified and fixing the firmware/filesystem mismatch it uncovered, not
-to Wave 0/6. It is now genuinely unblocked, technically, for whichever
-session picks it up next. **Wave 6 (T13 native `Collide`, T14 flat sprite
-records) remains explicitly gated by the plan on T0's verdict** ("Do not
-start these until T0 reports") — do not start Wave 6 until T0 actually runs
-and a verdict is recorded in the proposal's "How to read it" section, per
-the plan.
+### T0 — partially run (2026-09-13); the two new experiments still aren't
+
+`tools/vs2_behaviors_gate.py --rpms 600 700` was actually run for real on
+this hardware (the existing `system/vs2_behavior_gate/` app needs no new
+code — it was already on the board's filesystem from the same
+`deploy_micropython_fs.py` flash used for T16). Result: **the ratios still
+pass**, exit 0, `failures: []` at both RPMs — `column` ≤ `inline`×1.10,
+`hybrid` ≤ `inline`×1.25, `per_sprite` measurably slower than `column`,
+heap deltas within the allowance, zero overruns, positive slack at both 600
+and 700 RPM. Absolute `avg_us` figures were in the 14.5-17.2 ms range,
+which is the same order of magnitude as the proposal's own recorded
+baseline table (16.1-18.7 ms), not a red flag.
+
+**What's still not done**: the two *new* experiments the plan actually asks
+for (GPU-idle comparison, the flattened-record probe) — both need new code
+(a way to idle the GPU/rendering task without hanging the display, and a
+throwaway native C function), and both are genuine physical-hardware risk
+territory (a botched FreeRTOS task-suspend on the wrong task, or bad
+timing around the SPI/DMA path, can hang the board in a way that needs a
+manual power cycle, not just a clean MicroPython traceback). **Do this as
+its own dedicated, careful pass** — grep `hall_init`/the main POV task loop
+in `hardware/rotor/modules/povdisplay/povdisplay.c` first to actually
+understand whether the rotor's own column-phase computation free-runs off
+elapsed time (it looks like it does, from `scaled_phase = (esp_timer_get_time()
+- last_turn) * COLUMNS`) or genuinely halts when hall pulses stop, before
+assuming the workbench's `rpm 0` ("freezes the column at 0") gives you a
+safe, already-built GPU-idle switch for free — that freezing behavior is
+documented for the *workbench's own simulated hall output*, not confirmed
+here for what the rotor's task does in response. **Wave 6 (T13 native
+`Collide`, T14 flat sprite records) remains explicitly gated by the plan on
+T0's full verdict** ("Do not start these until T0 reports") — the ratios
+passing again is encouraging but is not the written verdict the plan asks
+for; don't start Wave 6 on the strength of this alone.
+
+### T6 — real on-console paint timing, captured for the first time (2026-09-13)
+
+T6 shipped "measured host-only, honestly labeled as such." That gap is now
+partially closed: `povperf start`/`stop` (`apps/micropython/ventilastation/pov_profiling.py`,
+`display.set_performance_profiling(True)`) is a real, already-existing,
+zero-new-code native profiling toggle — no need to touch the GPU task or
+write anything new to get a real number. Run against `demos.povstress`
+("a fixed, reproducible heavy vs2 scene built for profiling") at 600 and
+700 RPM: `avg_render_us` 227-228, `max_render_us` 732-735, zero skipped
+columns, zero overruns, positive `worst_slack_us` at both RPMs, comfortably
+inside the ~334-390us deadline. **This is real, and it's healthy** — but it
+is *not* the exact "unchanged within noise" comparison T6's acceptance
+line asks for, because there is no genuine pre-camera/pre-curve figure
+measured *the same way, on this same hardware* to diff against — T6's own
+host-only number is a different measurement context, and getting a valid
+"before" would mean checking out a pre-T6 revision and doing a full
+firmware+filesystem cycle just to measure it, not attempted here. Treat
+this as "paint timing is real and healthy post-camera/curve," not as
+"T6's acceptance bullet is now checked off."
+
+### T11 — verified over an actual physical serial link (2026-09-13)
+
+The other outstanding Wave-5 gap: `vs2beh` was "verified via `handle_command()`/
+`director._dispatch_control()` directly and under the real MicroPython unix
+binary, never over an actual serial link." Now it has been, for real,
+against a live `vs2_examples.vixeous` on the physical rotor, over the
+workbench's USB-serial bridge: `vs2beh list` (a real JSON census, including
+the real `enemies.moving`/`Move` parameter tree), `vs2beh set
+enemies.moving.speed_y -3` → `vs2beh_ok enemies.moving.speed_y=-3`, `vs2beh
+reset enemies.moving.speed_y` → `vs2beh_ok enemies.moving.speed_y=0`, and a
+deliberately bad path (`enemies.nope.bogus`) → `vs2beh_error unknown path
+'enemies.nope.bogus'; did you mean 'project.score'?` — the fuzzy-match
+suggestion genuinely works too. **T11's hardware gap is now closed**, no
+caveats.
 
 ## Wave 7 — in progress, sequential (not parallel like Waves 1-5)
 
