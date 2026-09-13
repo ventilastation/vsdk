@@ -34,6 +34,29 @@ Matching ``tools/vs2_event_gen/generator.py``'s own ``render_expr``: the
 generator's whole job is producing readable Python text, so there is
 nothing to gain from a richer intermediate representation the way a real
 compiler would want one.
+
+**Phase 2: state hats emit a ``StateMachine`` subclass, not a mixin.**
+When ``model["state_machine"]`` is present, the generated class subclasses
+:class:`~vs2.behaviors.StateMachine` directly (a real, already-existing
+base -- not a bare mixin), and does **not** override ``step``/``step_one``/
+``attached`` unless the model actually needs to (only ``attached``, and
+only when the model declares Actions to compose -- see
+:func:`_render_state_machine_attached`): every other bit of dispatch
+machinery (the despawn-safe per-sprite loop, ``hold()``, the ``enter_``/
+``exit_`` hook lookup, ``fsm_state``/``fsm_hold``/``fsm_then`` priming) is
+inherited unchanged from the real class. This sidesteps the exact
+MicroPython ``super()`` gotcha ``tools/vs2_event_gen/generator.py``'s own
+docstring documents (a mixin with no declared base, whose
+``super().on_enter()`` call crashes on real MicroPython because its
+``super()`` only walks the class's *own declared base*, not
+``type(self).__mro__`` the way CPython's does): there is no bare mixin
+here to begin with, and the one place this generator's own output calls
+into its base class explicitly (:func:`_render_state_machine_attached`,
+when a model declares Actions) spells that call as the real class's own
+docstring instructs -- ``StateMachine.attached(self, subject)``, the
+unbound-call form, never ``super().attached(subject)`` -- which works
+identically on both interpreters regardless of MRO-walking differences,
+so this is not merely "avoided by accident".
 """
 
 from tools.vs2_scene_gen.blob import encode_blob
@@ -175,6 +198,67 @@ def _render_per_sprite_node(node, indent, hit_var):
                 "despawn_hit used outside an if_action's then/else stack")
         return ["%s%s.despawn()" % (indent, hit_var)]
 
+    if kind == "set_state":
+        # accumulate's non-accumulating sibling: a plain assignment, for
+        # e.g. resetting an invulnerability countdown to its configured
+        # length on a fresh hit rather than adding to whatever was left.
+        return ["%ssprite.%s = %s" % (indent, node["state"], render_expr(node["value"]))]
+
+    if kind == "call_callback":
+        # Every existing Callback in apps/micropython/vs2/behaviors.py
+        # (Transient.on_end, Lifetime.on_expire, Blinking.on_end) calls its
+        # callback as `cb(sprite)` -- read into a local first (never twice)
+        # so a game that passes a Callback once and swaps it never sees a
+        # torn read. `args` extends that with more positional arguments
+        # after `sprite` -- e.g. Damageable.on_death's own points argument,
+        # see this task's report for why that one Callback's contract is
+        # richer than every other one in the catalog.
+        name = node["name"]
+        local = "_cb_" + name
+        call_args = ["sprite"] + [render_expr(arg) for arg in node.get("args", [])]
+        return [
+            "%s%s = self.%s" % (indent, local, name),
+            "%sif %s is not None:" % (indent, local),
+            "%s    %s(%s)" % (indent, local, ", ".join(call_args)),
+        ]
+
+    if kind == "spawn":
+        # Spawns into a declared PoolRef parameter (e.g. an explosion
+        # pool) -- guarded the same way every PoolRef consumer in this
+        # codebase guards a full pool's spawn() returning None (see
+        # games/vs2_examples/vixeous/code/vixeous.py's own burst()).
+        pool_name = node["pool"]
+        local = "_spawn_" + pool_name
+        return [
+            "%s%s = self.%s" % (indent, local, pool_name),
+            "%sif %s is not None:" % (indent, local),
+            "%s    %s.spawn(%s, %s)" % (
+                indent, local, render_expr(node["x"]), render_expr(node["y"])),
+        ]
+
+    if kind == "play_sound":
+        # _choose_sound picks one name when the declared Sound parameter
+        # is a tuple (vs2.params.Sound's own "tuple of names picked from
+        # at random" contract) -- see Transient._expire's identical idiom.
+        name = node["name"]
+        local = "_sound_" + name
+        return [
+            "%s%s = self.%s" % (indent, local, name),
+            "%sif %s is not None:" % (indent, local),
+            "%s    audio.sound(_choose_sound(%s))" % (indent, local),
+        ]
+
+    if kind == "goto_state":
+        # A per-state method's own contract (see StateMachine's class
+        # docstring): return the next state's name, or fall off the end
+        # (rendered by _render_per_sprite_list's own "pass" for an empty
+        # list, or simply nothing further to render otherwise) for "stay".
+        return ["%sreturn %r" % (indent, node["name"])]
+
+    if kind == "hold":
+        return ["%sself.hold(sprite, %s, then=%r)"
+                % (indent, render_expr(node["ticks"]), node["then"])]
+
     if kind == "if_else":
         lines = ["%sif %s:" % (indent, render_condition(node["condition"]))]
         lines.extend(_render_per_sprite_list(node["then"], indent + "    ", hit_var))
@@ -235,6 +319,99 @@ def _render_step_one(model):
 
 
 # ---------------------------------------------------------------------------
+# State-machine assembly (Phase 2): one method per declared state, plus
+# whichever enter_/exit_ hooks the model actually declares. No step()/
+# step_one() at all -- see this module's docstring's "Phase 2" section for
+# why: every one of those is inherited from the real StateMachine base.
+# ---------------------------------------------------------------------------
+
+def _render_state_machine_attached(model):
+    """``def attached(self, subject):`` composing this model's declared
+    Actions -- only emitted when there are any. When there are none, this
+    function returns ``[]`` and the generated class defines no ``attached``
+    override at all, so the base :meth:`StateMachine.attached` (which
+    primes ``fsm_state``/``fsm_hold``/``fsm_then``) runs unmodified -- the
+    same "override only when there is build-time setup to do" contract
+    :class:`~vs2.behaviors.Behavior.attached`'s own docstring states.
+
+    When there *are* Actions, the override must still prime those fsm
+    fields itself -- :class:`~vs2.behaviors.StateMachine`'s own docstring:
+    "A subclass overriding this ... must call ``StateMachine.attached(self,
+    subject)`` too, or nothing above will run." Spelled exactly that way
+    (the unbound-call form the real class's docstring itself uses), never
+    ``super().attached(subject)`` -- see this module's docstring for why
+    that distinction matters on real MicroPython."""
+    actions = model.get("actions", [])
+    if not actions:
+        return []
+    lines = ["    def attached(self, subject):"]
+    lines.append("%sStateMachine.attached(self, subject)" % (INDENT,))
+    for action_decl in actions:
+        lines.append("%sself.%s = self.action(%s)"
+                      % (INDENT, action_decl["bind"], _render_action_call(action_decl)))
+    return lines
+
+
+def _render_state_methods(model):
+    """One ``def <state>(self, sprite):`` per declared state, each preceded
+    by ``enter_<state>``/followed by ``exit_<state>`` when the model
+    actually declares one -- see model.py's own "## State hats" docstring
+    section for why those two are optional and ``step`` is not."""
+    state_machine = model["state_machine"]
+    states = state_machine["states"]
+    bodies = state_machine["bodies"]
+    lines = []
+    for index, name in enumerate(states):
+        if index > 0:
+            lines.append("")
+        body = bodies[name]
+        if "enter" in body:
+            lines.append("    def enter_%s(self, sprite):" % (name,))
+            lines.extend(_render_per_sprite_list(body["enter"], INDENT, None))
+            lines.append("")
+        lines.append("    def %s(self, sprite):" % (name,))
+        lines.extend(_render_per_sprite_list(body["step"], INDENT, None))
+        if "exit" in body:
+            lines.append("")
+            lines.append("    def exit_%s(self, sprite):" % (name,))
+            lines.extend(_render_per_sprite_list(body["exit"], INDENT, None))
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Import selection: which node kinds does this model actually use anywhere
+# (a plain Behavior's flat per_sprite list, or any state's own body)? Only
+# "play_sound" currently changes what the generated file needs to import
+# (vs2.audio, and vs2.behaviors._choose_sound) -- walking the whole model
+# once, up front, keeps that decision in one place rather than re-deriving
+# it separately for each shape render_body() can produce.
+# ---------------------------------------------------------------------------
+
+def _iter_nodes(nodes):
+    for node in nodes:
+        yield node
+        kind = node["kind"]
+        if kind in ("if_else", "if_action"):
+            for nested in _iter_nodes(node.get("then", [])):
+                yield nested
+            for nested in _iter_nodes(node.get("else", [])):
+                yield nested
+
+
+def _used_node_kinds(model):
+    kinds = set()
+    for node in _iter_nodes(model.get("per_sprite", [])):
+        kinds.add(node["kind"])
+    state_machine = model.get("state_machine")
+    if state_machine:
+        for body in state_machine["bodies"].values():
+            for hook in ("enter", "step", "exit"):
+                for node in _iter_nodes(body.get(hook, [])):
+                    kinds.add(node["kind"])
+    return kinds
+
+
+# ---------------------------------------------------------------------------
 # Full-file assembly
 # ---------------------------------------------------------------------------
 
@@ -251,28 +428,47 @@ def render_body(model):
         param_lines.append("    %s = %s" % (param["name"], decl_src))
 
     state = model.get("state", [])
+    state_machine = model.get("state_machine")
+    needs_audio = "play_sound" in _used_node_kinds(model)
 
     lines = []
     if model.get("actions"):
         lines.append("from vs2 import actions")
-    lines.append("from vs2.behaviors import Behavior")
+    if needs_audio:
+        lines.append("from vs2 import audio")
+    base_class = "StateMachine" if state_machine else "Behavior"
+    behavior_import_names = [base_class]
+    if needs_audio:
+        behavior_import_names.append("_choose_sound")
+    lines.append("from vs2.behaviors import %s" % (", ".join(sorted(behavior_import_names)),))
     if param_classes:
         lines.append("from vs2.params import %s" % (", ".join(sorted(param_classes)),))
     lines.append("")
     lines.append("")
-    lines.append("class %s(Behavior):" % (model["class_name"],))
+    lines.append("class %s(%s):" % (model["class_name"], base_class))
     if param_lines:
         lines.extend(param_lines)
         lines.append("")
     if state:
         lines.append("    state = %r" % (tuple(state),))
         lines.append("")
-    lines.extend(_render_attached(model))
-    lines.append("")
-    if model["subject_kind"] == "pool":
-        lines.extend(_render_step_pool(model))
+
+    if state_machine:
+        lines.append("    states = %r" % (tuple(state_machine["states"]),))
+        lines.append("    initial = %r" % (state_machine["initial"],))
+        lines.append("")
+        attached_lines = _render_state_machine_attached(model)
+        if attached_lines:
+            lines.extend(attached_lines)
+            lines.append("")
+        lines.extend(_render_state_methods(model))
     else:
-        lines.extend(_render_step_one(model))
+        lines.extend(_render_attached(model))
+        lines.append("")
+        if model["subject_kind"] == "pool":
+            lines.extend(_render_step_pool(model))
+        else:
+            lines.extend(_render_step_one(model))
     return "\n".join(lines)
 
 

@@ -212,7 +212,8 @@
       ],
       "subject_kinds": [
         "pool"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Transient",
@@ -252,7 +253,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Lifetime",
@@ -280,7 +282,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "DespawnBeyond",
@@ -325,7 +328,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Recycling",
@@ -356,7 +360,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Blinking",
@@ -402,7 +407,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Pinned",
@@ -433,7 +439,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Shaking",
@@ -475,7 +482,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Animated",
@@ -560,7 +568,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Moving",
@@ -611,7 +620,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Patrolling",
@@ -684,7 +694,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "PathFollowing",
@@ -755,7 +766,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Pilotable",
@@ -866,7 +878,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Aiming",
@@ -928,7 +941,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Chasing",
@@ -987,7 +1001,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Orbiting",
@@ -1018,7 +1033,8 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
     },
     {
       "name": "Laned",
@@ -1056,7 +1072,29 @@
       "subject_kinds": [
         "pool",
         "sprite"
-      ]
+      ],
+      "extra": {}
+    },
+    {
+      "name": "StateMachine",
+      "doc": "A :class:`Behavior` whose per-sprite logic is a named state machine::",
+      "params": [],
+      "state": [],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ],
+      "extra": {
+        "structural_attrs": [
+          "states",
+          "initial"
+        ],
+        "reserved_state": [
+          "fsm_state",
+          "fsm_hold",
+          "fsm_then"
+        ]
+      }
     }
   ]
 }

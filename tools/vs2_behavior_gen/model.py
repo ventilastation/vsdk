@@ -81,13 +81,110 @@ family of sprites) -- "family" was never a third *code shape*, only a third
 *attachment site*, so it does not need its own schema branch.
 
 **What this format cannot express, on purpose** (Phase 1 scope, see this
-package's docstring): no state hats, no ``StateMachine``, no ``Var``-bound
-parameters, no ``Spawn``/``PlaySound``/damage Actions (they do not exist in
-the shipped catalog yet -- see ``apps/micropython/vs2/behaviors.py``'s own
-``Projectile`` docstring for why its real hand-written form is trimmed the
-same way). ``if_action``/``despawn_hit`` exist because ``Projectile``'s real
-``step()`` needs exactly this ("if Collide finds something, despawn it and
-myself") and nothing richer.
+package's docstring): no ``Var``-bound parameters, no ``Spawn``/damage
+Actions as *Action classes* (they do not exist in the shipped catalog yet --
+see ``apps/micropython/vs2/behaviors.py``'s own ``Projectile`` docstring for
+why its real hand-written form is trimmed the same way). ``if_action``/
+``despawn_hit`` exist because ``Projectile``'s real ``step()`` needs exactly
+this ("if Collide finds something, despawn it and myself") and nothing
+richer.
+
+**Phase 2: state hats.** A model may additionally carry a top-level
+``"state_machine"`` key -- see the ``## State hats`` section below -- which
+switches the *generated base class* from :class:`~vs2.behaviors.Behavior` to
+:class:`~vs2.behaviors.StateMachine` and replaces the flat
+``per_sprite``/``apply_to_all`` zones with one method per declared state.
+Phase 2 also adds four new per-sprite node kinds usable in *either* shape
+(a plain Behavior's ``per_sprite`` list, or a state's own body): ``set_state``
+(a plain assignment, the ``accumulate`` node's non-accumulating sibling),
+``call_callback`` (invoke a declared ``Callback`` parameter), ``spawn``
+(spawn into a declared ``PoolRef`` parameter -- e.g. an explosion pool) and
+``play_sound`` (play a declared ``Sound`` parameter, honouring the real
+:class:`~vs2.params.Sound`'s "tuple of names picked from at random" contract
+via the same ``vs2.behaviors._choose_sound`` helper ``Transient`` already
+uses). None of these needed a *new* expression kind: ``spawn``'s ``x``/``y``
+arguments read ``sprite.x``/``sprite.y`` through the existing ``"state"``
+expression kind, extended to accept the two built-in Sprite fields
+(:data:`BUILTIN_SPRITE_FIELDS`) alongside a Behavior's own declared
+``state`` names -- from the renderer's point of view both already mean
+"read ``sprite.<name>``", so there was nothing to add there.
+
+## State hats
+
+Shape, one state cycle from ``games/vs2_examples/vasura_states_demo`` (see
+that game's own model.json for the real thing)::
+
+    {
+      ...,
+      "apply_to_all": [], "per_sprite": [],   # unused in this shape
+      "state_machine": {
+        "states": ["orbiting", "chiller_falling", "falling", "exploding"],
+        "initial": "orbiting",
+        "bodies": {
+          "orbiting": {
+            "enter": [{"kind": "hold", "ticks": {"kind": "literal", "value": 128},
+                       "then": "chiller_falling"}],
+            "step": [{"kind": "accumulate", "state": "theta",
+                      "amount": {"kind": "param", "name": "speed_x"}}]
+          },
+          "chiller_falling": {
+            "enter": [{"kind": "hold", "ticks": {"kind": "literal", "value": 40},
+                       "then": "falling"}],
+            "step": []
+          },
+          "falling": {
+            "step": [
+              {"kind": "accumulate", "state": "y", "amount": {"kind": "param", "name": "speed_y"}},
+              {"kind": "if_else",
+               "condition": {"kind": "compare", "op": ">=",
+                              "left": {"kind": "state", "name": "y"},
+                              "right": {"kind": "param", "name": "ground_y"}},
+               "then": [{"kind": "goto_state", "name": "exploding"}], "else": []}
+            ]
+          },
+          "exploding": {
+            "enter": [{"kind": "play_sound", "name": "sound"}],
+            "step": [{"kind": "despawn"}]
+          }
+        }
+      }
+    }
+
+**Why one ``"state_machine"`` object, not flat top-level keys.** Everything
+a state-hat program needs (``states``, ``initial``, each state's body) is
+its own namespace, exactly the way ``actions``/``per_sprite`` already keep
+the two-zone skeleton's own concerns visibly separate -- and it makes "is
+this a state-hat program at all" a single ``model.get("state_machine")``
+truthiness check, both here and in :mod:`generator`.
+
+**Why ``apply_to_all``/``per_sprite`` are mutually exclusive with
+``state_machine``.** The generated class does not override ``step``/
+``step_one`` at all -- see :mod:`generator`'s docstring -- so there is no
+"uniform prologue" phase left to hang ``apply_to_all`` off of, and no flat
+per-sprite zone outside a state's own body for ``per_sprite`` to describe.
+A model declaring both is almost certainly an authoring mistake (dragging
+a per-sprite block outside any state hat), so it is rejected outright
+rather than silently ignored.
+
+**Each declared state needs a ``"step"`` body** (matching
+:class:`~vs2.behaviors.StateMachine`'s own "every declared state needs its
+own method, even a no-op one" rule) **but ``"enter"``/``"exit"`` are
+optional**, generated only when the model actually supplies one -- the
+same "optional hooks, matched by name, skipped when absent" contract the
+real class documents. A state body's node list ends either in a
+``goto_state`` node (rendered as ``return "<name>"``, matching "a per-state
+method... returns the next state's name") or simply runs out (falls off the
+end, rendered as an implicit ``None`` return -- "stay").
+
+**``hold`` and ``goto_state`` are new node kinds, valid *only* inside a
+state's own ``enter``/``step``/``exit`` body** (see
+:data:`STATE_BODY_EXTRA_KINDS`) -- ``self.hold(sprite, ...)`` only exists on
+:class:`~vs2.behaviors.StateMachine`, and "return this state's name" only
+means anything inside a per-state method. Both name their target state by a
+plain string checked against the model's own declared ``states``, not
+through the ``EXPR_KINDS`` vocabulary (there is no "literal vs. param vs.
+state" choice for *which state to enter next* the way there is for a
+numeric amount).
 """
 
 import keyword
@@ -128,7 +225,47 @@ ACTION_REQUIRED_FIELDS = {
 EXPR_KINDS = ("literal", "param", "state")
 CONDITION_KINDS = ("compare",)
 COMPARE_OPS = ("==", "!=", "<", ">", "<=", ">=")
-PER_SPRITE_KINDS = ("accumulate", "if_else", "if_action", "despawn", "despawn_hit")
+
+#: Built-in :class:`~vs2.Sprite` fields a ``"state"``-kind expression may
+#: also *read*, and a ``set_state``/``accumulate`` node may also *write*,
+#: alongside a Behavior's own declared ``state`` names -- see this module's
+#: docstring on why reading did not need a new expression kind. Three
+#: fields, deliberately: ``x``/``y`` (Phase 2's ``spawn`` node needs them,
+#: to spawn at the dying sprite's own position) and ``visible`` (the
+#: ``Damageable`` reference model's own "hide while invulnerable" toggle
+#: needs to write it, and vs2.behaviors.Blinking/Transient/DespawnBeyond
+#: all treat it as an ordinary, safe, game-facing field to flip) -- not
+#: every ``Sprite`` attribute, which would let a block program reach into
+#: framework internals (``frame``, layer membership, ...) this schema has
+#: never otherwise exposed.
+BUILTIN_SPRITE_FIELDS = ("x", "y", "visible")
+
+#: Per-sprite node kinds valid in *either* shape: a plain Behavior's flat
+#: ``per_sprite`` list, or one state's own ``enter``/``step``/``exit`` body
+#: (see :data:`STATE_BODY_EXTRA_KINDS` for the two kinds valid only in the
+#: latter). ``set_state``/``call_callback``/``spawn``/``play_sound`` are
+#: Phase 2 additions -- see this module's docstring for why each exists and
+#: why none of them needed a new expression kind.
+PER_SPRITE_KINDS = ("accumulate", "if_else", "if_action", "despawn", "despawn_hit",
+                     "set_state", "call_callback", "spawn", "play_sound")
+
+#: Node kinds valid *only* inside a state's own body -- see this module's
+#: docstring's "## State hats" section for why ``hold``/``goto_state`` make
+#: no sense outside one.
+STATE_BODY_EXTRA_KINDS = ("goto_state", "hold")
+STATE_BODY_KINDS = PER_SPRITE_KINDS + STATE_BODY_EXTRA_KINDS
+
+#: Method names a state-hat model's own machinery already claims on the
+#: generated class (everything :class:`~vs2.behaviors.StateMachine` itself
+#: defines, plus ``states``/``initial``, the two structural class
+#: attributes -- not ``vs2.params.Parameter`` declarations, see
+#: :mod:`generator`) -- a declared state name colliding with one of these
+#: would silently shadow real framework machinery instead of failing loudly
+#: at build time.
+_RESERVED_STATEMACHINE_NAMES = {
+    "attached", "action", "actions", "step", "step_one", "step_scene",
+    "hold", "state_name", "force_state", "recycle", "states", "initial",
+}
 
 #: One entry per ``vs2.params`` parameter type this schema accepts on a
 #: Behavior's own ``params`` list (see ``apps/micropython/vs2/params.py``).
@@ -197,8 +334,17 @@ def _check_expr(expr, where, param_names, state_names):
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         value = expr.get("value")
-        if isinstance(value, bool) or not isinstance(value, (int, float, str, type(None))):
-            raise ModelError("%s.value: must be a number, string or null" % (where,))
+        # Phase 1 never needed a bool literal (Projectile's own condition
+        # is a plain numeric compare). Phase 2's Damageable reference model
+        # needs one -- comparing its own "blink" Flag parameter against a
+        # literal true/false, to gate a set_state node on a runtime
+        # configuration value the model itself cannot know ahead of time
+        # (a Parameter's actual value is only fixed at construction,
+        # e.g. ``Damageable(blink=True)`` vs. ``Damageable(blink=False)``
+        # for the very same generated class) -- so bool is now allowed
+        # alongside number/string/null.
+        if not isinstance(value, (int, float, str, bool, type(None))):
+            raise ModelError("%s.value: must be a number, string, bool or null" % (where,))
         return
     if kind == "param":
         name = expr.get("name")
@@ -209,10 +355,12 @@ def _check_expr(expr, where, param_names, state_names):
         return
     # kind == "state"
     name = expr.get("name")
-    if name not in state_names:
+    if name not in state_names and name not in BUILTIN_SPRITE_FIELDS:
         raise ModelError(
-            "%s.name: %r is not a declared state field (%s)"
-            % (where, name, ", ".join(sorted(state_names)) or "none declared"))
+            "%s.name: %r is not a declared state field, and not one of "
+            "the built-in sprite fields %s (%s declared)"
+            % (where, name, BUILTIN_SPRITE_FIELDS,
+               ", ".join(sorted(state_names)) or "none"))
 
 
 def _check_condition(condition, where, param_names, state_names):
@@ -262,31 +410,72 @@ def _check_action_decl(action, where, param_names):
         _check_expr(expr, "%s.args.%s" % (where, field_name), param_names, ())
 
 
-def _check_per_sprite_list(nodes, where, param_names, state_names, action_binds):
+def _check_per_sprite_list(nodes, where, param_names, state_names, action_binds,
+                            allowed_kinds=PER_SPRITE_KINDS, declared_states=None):
     if not isinstance(nodes, list):
         raise ModelError("%s: must be a list" % (where,))
     for index, node in enumerate(nodes):
         _check_per_sprite_node(node, "%s[%d]" % (where, index),
-                                param_names, state_names, action_binds)
+                                param_names, state_names, action_binds,
+                                allowed_kinds, declared_states)
 
 
-def _check_per_sprite_node(node, where, param_names, state_names, action_binds):
+def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
+                            allowed_kinds=PER_SPRITE_KINDS, declared_states=None):
+    """Validate one per-sprite (or state-body) node. ``allowed_kinds`` is
+    :data:`PER_SPRITE_KINDS` for a plain Behavior's flat ``per_sprite`` list,
+    or :data:`STATE_BODY_KINDS` inside a state hat's own body (see
+    :func:`_check_state_machine`) -- the two extra kinds that set enables,
+    ``goto_state``/``hold``, need ``declared_states`` (the enclosing state
+    machine's own ``states``, as a set) to validate the state name they
+    name against."""
     if not isinstance(node, dict):
         raise ModelError("%s: must be an object with a 'kind'" % (where,))
     kind = node.get("kind")
-    if kind not in PER_SPRITE_KINDS:
-        raise ModelError("%s.kind: %r is not one of %s" % (where, kind, PER_SPRITE_KINDS))
+    if kind not in allowed_kinds:
+        raise ModelError("%s.kind: %r is not one of %s" % (where, kind, allowed_kinds))
 
     if kind == "accumulate":
+        # Also accepts the built-in sprite fields (x/y), alongside a
+        # declared per-sprite state field -- a state-hat body driving a
+        # sprite's own descent directly (this package's own
+        # games/vs2_examples/vasura_states_demo reference game: "falling"
+        # accumulates straight into sprite.y) is exactly as legitimate as
+        # vs2.behaviors.Recycling's own direct ``sprite.x = ...``
+        # teleport: neither is trying to *compose* with a separate
+        # Move/MoveTo Action on the same subject the way the dx/dy
+        # accumulator exists for. A model that *does* also want Move/
+        # MoveTo on the same field should prefer those instead -- this
+        # schema does not force that choice either way, matching the real
+        # catalog's own precedent of Behaviors reaching directly into x/y
+        # when the effect is not meant to compose.
         extra = set(node.keys()) - {"kind", "state", "amount"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         state = node.get("state")
-        if state not in state_names:
-            raise ModelError("%s.state: %r is not a declared state field" % (where, state))
+        if state not in state_names and state not in BUILTIN_SPRITE_FIELDS:
+            raise ModelError(
+                "%s.state: %r is not a declared state field, and not one "
+                "of the built-in sprite fields %s"
+                % (where, state, BUILTIN_SPRITE_FIELDS))
         if "amount" not in node:
             raise ModelError("%s: missing 'amount'" % (where,))
         _check_expr(node["amount"], where + ".amount", param_names, state_names)
+        return
+
+    if kind == "set_state":
+        extra = set(node.keys()) - {"kind", "state", "value"}
+        if extra:
+            raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+        state = node.get("state")
+        if state not in state_names and state not in BUILTIN_SPRITE_FIELDS:
+            raise ModelError(
+                "%s.state: %r is not a declared state field, and not one "
+                "of the built-in sprite fields %s"
+                % (where, state, BUILTIN_SPRITE_FIELDS))
+        if "value" not in node:
+            raise ModelError("%s: missing 'value'" % (where,))
+        _check_expr(node["value"], where + ".value", param_names, state_names)
         return
 
     if kind == "despawn":
@@ -301,6 +490,67 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds):
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         return
 
+    if kind == "call_callback":
+        extra = set(node.keys()) - {"kind", "name", "args"}
+        if extra:
+            raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+        name = node.get("name")
+        if name not in param_names:
+            raise ModelError("%s.name: %r is not a declared parameter" % (where, name))
+        args = node.get("args", [])
+        if not isinstance(args, list):
+            raise ModelError("%s.args: must be a list" % (where,))
+        for index, arg in enumerate(args):
+            _check_expr(arg, "%s.args[%d]" % (where, index), param_names, state_names)
+        return
+
+    if kind == "spawn":
+        extra = set(node.keys()) - {"kind", "pool", "x", "y"}
+        if extra:
+            raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+        pool = node.get("pool")
+        if pool not in param_names:
+            raise ModelError("%s.pool: %r is not a declared parameter" % (where, pool))
+        if "x" not in node or "y" not in node:
+            raise ModelError("%s: 'spawn' needs both 'x' and 'y'" % (where,))
+        _check_expr(node["x"], where + ".x", param_names, state_names)
+        _check_expr(node["y"], where + ".y", param_names, state_names)
+        return
+
+    if kind == "play_sound":
+        extra = set(node.keys()) - {"kind", "name"}
+        if extra:
+            raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+        name = node.get("name")
+        if name not in param_names:
+            raise ModelError("%s.name: %r is not a declared parameter" % (where, name))
+        return
+
+    if kind == "goto_state":
+        extra = set(node.keys()) - {"kind", "name"}
+        if extra:
+            raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+        name = node.get("name")
+        if name not in declared_states:
+            raise ModelError(
+                "%s.name: %r is not one of this state machine's states (%s)"
+                % (where, name, ", ".join(sorted(declared_states)) or "none"))
+        return
+
+    if kind == "hold":
+        extra = set(node.keys()) - {"kind", "ticks", "then"}
+        if extra:
+            raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+        if "ticks" not in node:
+            raise ModelError("%s: missing 'ticks'" % (where,))
+        _check_expr(node["ticks"], where + ".ticks", param_names, state_names)
+        then = node.get("then")
+        if then not in declared_states:
+            raise ModelError(
+                "%s.then: %r is not one of this state machine's states (%s)"
+                % (where, then, ", ".join(sorted(declared_states)) or "none"))
+        return
+
     if kind == "if_else":
         extra = set(node.keys()) - {"kind", "condition", "then", "else"}
         if extra:
@@ -311,9 +561,9 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds):
         if "then" not in node:
             raise ModelError("%s: missing 'then'" % (where,))
         _check_per_sprite_list(node["then"], where + ".then", param_names, state_names,
-                                action_binds)
+                                action_binds, allowed_kinds, declared_states)
         _check_per_sprite_list(node.get("else", []), where + ".else", param_names,
-                                state_names, action_binds)
+                                state_names, action_binds, allowed_kinds, declared_states)
         return
 
     # kind == "if_action": "if <bound Action>.run_one(sprite) found something, do..."
@@ -328,9 +578,90 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds):
     if "then" not in node:
         raise ModelError("%s: missing 'then'" % (where,))
     _check_per_sprite_list(node["then"], where + ".then", param_names, state_names,
-                            action_binds)
+                            action_binds, allowed_kinds, declared_states)
     _check_per_sprite_list(node.get("else", []), where + ".else", param_names,
-                            state_names, action_binds)
+                            state_names, action_binds, allowed_kinds, declared_states)
+
+
+def _check_state_machine(state_machine, where, param_names, state_names, action_binds):
+    """Validate ``model.state_machine`` -- see this module's docstring's
+    "## State hats" section for the shape. ``state_names`` here is the
+    model's own ordinary per-sprite ``state`` list (e.g. a counter a state
+    body accumulates into), a different set from the state machine's own
+    ``states`` (the named FSM states themselves, checked separately)."""
+    if not isinstance(state_machine, dict):
+        raise ModelError("%s: must be an object" % (where,))
+    allowed = {"states", "initial", "bodies"}
+    extra = set(state_machine.keys()) - allowed
+    if extra:
+        raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+
+    states = state_machine.get("states")
+    if not isinstance(states, list) or not states:
+        raise ModelError("%s.states: must be a non-empty list" % (where,))
+
+    declared_states = set()
+    generated_names = set()
+    for index, name in enumerate(states):
+        state_where = "%s.states[%d]" % (where, index)
+        _check_identifier(name, state_where, reserved=_RESERVED_STATEMACHINE_NAMES)
+        if name in param_names:
+            raise ModelError(
+                "%s: %r collides with a declared parameter of the same name"
+                % (state_where, name))
+        if name in state_names:
+            raise ModelError(
+                "%s: %r collides with a declared (ordinary) state field"
+                % (state_where, name))
+        if name in declared_states:
+            raise ModelError("%s.states: duplicate state name %r" % (where, name))
+        declared_states.add(name)
+        generated_names.add(name)
+
+    initial = state_machine.get("initial")
+    if initial not in declared_states:
+        raise ModelError(
+            "%s.initial: %r is not one of its own states: %s"
+            % (where, initial, ", ".join(sorted(declared_states))))
+
+    bodies = state_machine.get("bodies")
+    if not isinstance(bodies, dict):
+        raise ModelError("%s.bodies: must be an object" % (where,))
+    unknown_bodies = set(bodies.keys()) - declared_states
+    if unknown_bodies:
+        raise ModelError(
+            "%s.bodies: %r is not one of this state machine's states"
+            % (where, sorted(unknown_bodies)))
+    missing_bodies = declared_states - set(bodies.keys())
+    if missing_bodies:
+        raise ModelError(
+            "%s.bodies: missing a body for state(s) %r -- every declared "
+            "state needs one, even an empty 'step' list"
+            % (where, sorted(missing_bodies)))
+
+    for name in states:
+        body = bodies[name]
+        body_where = "%s.bodies.%s" % (where, name)
+        if not isinstance(body, dict):
+            raise ModelError("%s: must be an object" % (body_where,))
+        allowed_hooks = {"enter", "step", "exit"}
+        extra_hooks = set(body.keys()) - allowed_hooks
+        if extra_hooks:
+            raise ModelError("%s: unknown key(s) %r" % (body_where, sorted(extra_hooks)))
+        if "step" not in body:
+            raise ModelError("%s: missing 'step'" % (body_where,))
+        for hook, method_name in (("enter", "enter_" + name), ("step", name),
+                                   ("exit", "exit_" + name)):
+            if hook not in body:
+                continue
+            if method_name in generated_names and method_name != name:
+                raise ModelError(
+                    "%s.bodies: generated method name %r collides with "
+                    "another state's own method" % (where, method_name))
+            generated_names.add(method_name)
+            _check_per_sprite_list(
+                body[hook], "%s.%s" % (body_where, hook), param_names, state_names,
+                action_binds, STATE_BODY_KINDS, declared_states)
 
 
 def validate_model(model):
@@ -340,7 +671,7 @@ def validate_model(model):
     if not isinstance(model, dict):
         raise ModelError("model: must be an object")
     allowed = {"version", "class_name", "subject_kind", "params", "state",
-               "actions", "apply_to_all", "per_sprite"}
+               "actions", "apply_to_all", "per_sprite", "state_machine"}
     extra = set(model.keys()) - allowed
     if extra:
         raise ModelError("model: unknown key(s) %r" % (sorted(extra),))
@@ -405,5 +736,26 @@ def validate_model(model):
                 "model.apply_to_all[%d]: %r is not a declared action" % (index, bind))
 
     per_sprite = model.get("per_sprite", [])
-    _check_per_sprite_list(per_sprite, "model.per_sprite", param_names, state_names,
-                            action_binds)
+
+    state_machine = model.get("state_machine")
+    if state_machine is not None:
+        # See model.py's own docstring ("Why apply_to_all/per_sprite are
+        # mutually exclusive with state_machine") -- the generated class
+        # never overrides step()/step_one(), so neither zone has anywhere
+        # to render into once a model is state-hat shaped.
+        if apply_to_all:
+            raise ModelError(
+                "model.apply_to_all: not allowed together with "
+                "model.state_machine -- the generated class inherits "
+                "step()/step_one() unchanged, so there is no uniform "
+                "prologue to run these against")
+        if per_sprite:
+            raise ModelError(
+                "model.per_sprite: not allowed together with "
+                "model.state_machine -- put per-sprite decisions inside "
+                "the relevant state's own body instead")
+        _check_state_machine(state_machine, "model.state_machine", param_names,
+                              state_names, action_binds)
+    else:
+        _check_per_sprite_list(per_sprite, "model.per_sprite", param_names, state_names,
+                                action_binds)

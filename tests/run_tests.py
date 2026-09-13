@@ -59,6 +59,7 @@ CPYTHON_TESTS = [
     "tests/test_vs2_behavior_gen_catalog.py",
     "tests/test_vs2_behavior_gen_model.py",
     "tests/test_vs2_behavior_gen_generator.py",
+    "tests/test_vasura_states_demo.py",
     "tests/test_base_control.py",
     "tests/test_uart_logging.py",
     "tests/test_apa102_preview.py",
@@ -114,6 +115,7 @@ MICROPYTHON_TESTS = [
     "tests/test_director_headless.py",
     "tests/test_installer_micropython.py",
     "tests/test_vs2_behavior_gen_micropython.py",
+    "tests/test_vasura_states_demo_micropython.py",
 ]
 
 NODE_TESTS = [

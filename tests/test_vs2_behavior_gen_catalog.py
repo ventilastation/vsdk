@@ -71,16 +71,40 @@ class BehaviorCatalogTests(unittest.TestCase):
         self.catalog = catalog.build_catalog()
         self.by_name = {e["name"]: e for e in self.catalog["behaviors"]}
 
-    def test_exactly_the_phase_one_behavior_classes_no_statemachine_no_shufflebag(self):
+    def test_exactly_the_phase_two_behavior_classes_no_shufflebag(self):
+        """StateMachine joined the catalog in Phase 2 -- see catalog.py's
+        own docstring for why it is listed even though (unlike every other
+        entry here) a block program's generated class really does
+        subclass it directly."""
         expected = {
             "Projectile", "Transient", "Lifetime", "DespawnBeyond", "Recycling",
             "Blinking", "Pinned", "Shaking", "Animated", "Moving", "Patrolling",
             "PathFollowing", "Pilotable", "Aiming", "Chasing", "Orbiting", "Laned",
+            "StateMachine",
         }
         self.assertEqual(set(self.by_name), expected)
-        self.assertNotIn("StateMachine", self.by_name)
         self.assertNotIn("ShuffleBag", self.by_name)
         self.assertNotIn("Damageable", self.by_name)  # not a real shipped Behavior
+
+    def test_state_machine_has_no_introspected_params_or_state_but_real_extra_notes(self):
+        """The real gap this module's EXTRA_BEHAVIOR_NOTES patches:
+        StateMachine's base class declares no vs2.params.Parameter and
+        primes its three fsm_* fields by hand rather than via state = (...)
+        -- see catalog.py's own docstring for the full reasoning."""
+        state_machine = self.by_name["StateMachine"]
+        self.assertEqual(state_machine["params"], [])
+        self.assertEqual(state_machine["state"], [])
+        self.assertEqual(state_machine["subject_kinds"], ["pool", "sprite"])
+        self.assertEqual(state_machine["extra"], {
+            "structural_attrs": ["states", "initial"],
+            "reserved_state": ["fsm_state", "fsm_hold", "fsm_then"],
+        })
+
+    def test_every_other_behavior_has_an_empty_extra_dict(self):
+        for entry in self.catalog["behaviors"]:
+            if entry["name"] == "StateMachine":
+                continue
+            self.assertEqual(entry["extra"], {}, entry["name"])
 
     def test_projectile_is_pool_only(self):
         """Projectile.step() exists; it defines no step_one/step_scene --

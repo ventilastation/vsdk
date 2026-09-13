@@ -70,7 +70,7 @@ two-zone skeleton (see ``tools/vs2_behavior_gen/model.py``); it does not
 let a block program embed an *existing* catalog Behavior as a sub-unit --
 nothing in the proposal describes that shape, and ``Behavior`` has no
 ``run``/``run_one`` contract an embedding could call the way an Action's
-does. So the 16 catalog Behaviors appear in this JSON as a browsable
+does. So the 17 catalog Behaviors appear in this JSON as a browsable
 reference (what already exists, its knobs, what subject it needs) -- the
 same job ``docs/vs2/reference/behaviors.md`` will eventually do from this
 same introspection, per the proposal's own "## What has to change under the
@@ -78,6 +78,17 @@ hood" list -- not as new block types an author drags into a program. This
 is a judgment call, not a mandate the spec states outright; flagged here so
 a later phase can revisit it deliberately rather than rediscover the
 question.
+
+**Phase 2: ``StateMachine`` is catalog-listed too, but its own block
+*generator* output is not "compose an existing Behavior" either.**
+:class:`~vs2.behaviors.StateMachine` is a real, meaningful base a block
+program's generated class now subclasses directly (see
+``tools/vs2_behavior_gen/generator.py``'s "Phase 2" docstring section) --
+unlike every other entry above, whose only role in this module is being
+*read about*. It is included here anyway, for the same browsable-reference
+reason, but its ``params``/``state`` alone would understate it (see
+:data:`EXTRA_BEHAVIOR_NOTES`, and the ``"extra"`` key every behavior entry
+now carries).
 """
 
 import json
@@ -97,7 +108,37 @@ BEHAVIOR_CLASSES = (
     "Projectile", "Transient", "Lifetime", "DespawnBeyond", "Recycling",
     "Blinking", "Pinned", "Shaking", "Animated", "Moving", "Patrolling",
     "PathFollowing", "Pilotable", "Aiming", "Chasing", "Orbiting", "Laned",
+    "StateMachine",
 )
+
+#: Structural facts about a Behavior that ``vs2.params.introspect()`` alone
+#: cannot see -- the same category of gap :data:`EXTRA_ACTION_FIELDS`
+#: already patches for ``Collide``/``Animate``, applied to a *Behavior*
+#: entry instead of an Action one. Confirmed directly (not assumed):
+#: ``introspect(StateMachine)`` yields zero entries and
+#: ``StateMachine.state`` is ``()`` -- the base class declares no
+#: ``vs2.params.Parameter`` at all (real usable ones, like ``speed_x``, only
+#: exist on a *subclass* -- see the class's own docstring's worked example),
+#: and its three per-sprite fields (``fsm_state``/``fsm_hold``/``fsm_then``)
+#: are primed by hand in :meth:`~vs2.behaviors.StateMachine.attached`
+#: rather than declared via ``state = (...)`` (see that method's own
+#: docstring for why: every name in ``state = (...)`` is rejected outright
+#: if it collides with the framework's own reserved-name list, and all
+#: three of these names are on it). A catalog consumer trusting
+#: ``params``/``state`` alone would conclude ``StateMachine`` carries no
+#: tunable knobs and no per-sprite footprint at all -- both technically
+#: true of the *base class* and both misleading about what actually
+#: reaches every sprite of a subject once any subclass attaches. Every
+#: other entry in :data:`BEHAVIOR_CLASSES` gets an empty ``{}`` here
+#: (nothing extra to say), kept visibly separate from ``params``/``state``
+#: rather than merged into them, matching ``EXTRA_ACTION_FIELDS``'s own
+#: "possibly empty ... kept visibly separate" convention.
+EXTRA_BEHAVIOR_NOTES = {
+    "StateMachine": {
+        "structural_attrs": ["states", "initial"],
+        "reserved_state": ["fsm_state", "fsm_hold", "fsm_then"],
+    },
+}
 
 #: Constructor-level fields ``vs2.params.introspect()`` cannot see -- see
 #: this module's docstring. ``(type_name, default, required)`` per field,
@@ -245,6 +286,7 @@ def build_catalog():
             "params": _param_entries(cls),
             "state": list(cls.state),
             "subject_kinds": _subject_kinds(cls),
+            "extra": dict(EXTRA_BEHAVIOR_NOTES.get(name, {})),
         })
 
     return {
