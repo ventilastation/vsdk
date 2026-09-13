@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from tools.vs2_event_gen import build_events, checksum, detach, generator
+from tools.vs2_event_gen import build_events, checksum, detach, generator, linemap
 from tools.vs2_event_gen.model import ModelError, validate_model
 
 
@@ -390,6 +390,174 @@ class BuildEventsCliTests(GeneratorFixture):
         model_path = self.tmpdir / "bad.vs2events.json"
         model_path.write_text(json.dumps({"version": 2}))
         self.assertEqual(build_events.main([str(model_path)]), 1)
+
+
+# ---------------------------------------------------------------------------
+# T17 Phase 3: model.py's optional "block_id"
+# ---------------------------------------------------------------------------
+
+class BlockIdModelTests(unittest.TestCase):
+    def test_accepts_block_id_on_event_and_action(self):
+        model = _small_model()
+        model["events"][0]["block_id"] = "BLK_EVENT"
+        model["events"][0]["actions"][0]["block_id"] = "BLK_ACTION"
+        self.assertIsNone(validate_model(model))
+
+    def test_rejects_non_string_block_id(self):
+        model = _small_model()
+        model["events"][0]["block_id"] = 42
+        with self.assertRaises(ModelError) as ctx:
+            validate_model(model)
+        self.assertIn("block_id", str(ctx.exception))
+
+    def test_rejects_empty_string_block_id(self):
+        model = _small_model()
+        model["events"][0]["actions"][0]["block_id"] = ""
+        with self.assertRaises(ModelError) as ctx:
+            validate_model(model)
+        self.assertIn("block_id", str(ctx.exception))
+
+    def test_omitting_block_id_still_validates(self):
+        # No test model above ever set one -- this is really just making
+        # the "optional everywhere" claim explicit.
+        self.assertIsNone(validate_model(_small_model()))
+
+
+# ---------------------------------------------------------------------------
+# T17 Phase 3: generator.py's "# block: <id>" trailing comments
+# ---------------------------------------------------------------------------
+
+class BlockCommentTests(unittest.TestCase):
+    def test_action_with_block_id_gets_a_trailing_comment(self):
+        model = _small_model()
+        model["events"][0]["actions"][0]["block_id"] = "BLK_SET"
+        body = generator.render_body(model)
+        self.assertIn("vs2.project.score = 0  # block: BLK_SET", body)
+
+    def test_action_without_block_id_gets_no_comment(self):
+        body = generator.render_body(_small_model())
+        self.assertIn("vs2.project.score = 0", body)
+        self.assertNotIn("# block:", body)
+
+    def test_event_block_id_lands_on_the_if_line(self):
+        model = _small_model()
+        model["events"][1]["block_id"] = "BLK_TICK_EVENT"
+        body = generator.render_body(model)
+        line = next(l for l in body.splitlines() if "self._vs2_events_ticks >= 5" in l)
+        self.assertTrue(line.rstrip().endswith("# block: BLK_TICK_EVENT"), line)
+
+    def test_goto_scene_every_line_gets_the_same_comment(self):
+        model = _small_model()
+        model["events"][2]["actions"][0]["block_id"] = "BLK_GOTO"
+        body = generator.render_body(model)
+        goto_lines = [l for l in body.splitlines() if "_scene" in l or "_target" in l]
+        self.assertTrue(goto_lines)
+        for line in goto_lines:
+            self.assertTrue(line.rstrip().endswith("# block: BLK_GOTO"), line)
+
+
+# ---------------------------------------------------------------------------
+# T17 Phase 3: the "fast" backend
+# ---------------------------------------------------------------------------
+
+class FastBackendTests(unittest.TestCase):
+    def test_unknown_backend_is_rejected(self):
+        with self.assertRaises(generator.GeneratorError):
+            generator.render_body(_small_model(), backend="ludicrous")
+
+    def test_literal_compare_folds_to_a_boolean_literal(self):
+        model = _small_model()
+        model["events"].append({
+            "kind": "on_tick",
+            "conditions": [{"kind": "compare", "left": _literal(10), "op": ">=",
+                             "right": _literal(5)}],
+            "actions": [{"kind": "set_variable", "name": "always", "value": _literal(1)}],
+        })
+        fast = generator.render_body(model, backend="fast")
+        readable = generator.render_body(model, backend="readable")
+        self.assertIn("if True:", fast)
+        self.assertIn("if 10 >= 5:", readable)
+
+    def test_folding_never_removes_the_if_statement_itself(self):
+        # Constant-folding must precompute the condition's value, not
+        # restructure control flow away -- the spec's own invariant.
+        model = _small_model()
+        model["events"].append({
+            "kind": "on_tick",
+            "conditions": [{"kind": "compare", "left": _literal(1), "op": "==",
+                             "right": _literal(2)}],
+            "actions": [{"kind": "set_variable", "name": "never", "value": _literal(1)}],
+        })
+        fast = generator.render_body(model, backend="fast")
+        self.assertIn("if False:", fast)
+        self.assertIn("vs2.project.never = 1", fast)
+
+    def test_non_literal_compare_is_not_folded(self):
+        # This package's real proving model's own compare (var vs literal)
+        # -- confirms the fast backend does not touch what it cannot fold.
+        fast = generator.render_body(_small_model(), backend="fast")
+        readable = generator.render_body(_small_model(), backend="readable")
+        self.assertEqual(fast, readable,
+            "with no literal-vs-literal compare anywhere, fast must be "
+            "byte-identical to readable -- an honest near-no-op, see this "
+            "package's own generator.py docstring")
+
+    def test_mismatched_literal_types_are_left_unfolded_not_crashed(self):
+        model = _small_model()
+        model["events"][2]["conditions"][0]["left"] = _literal("nope")
+        model["events"][2]["conditions"][0]["op"] = "<"
+        model["events"][2]["conditions"][0]["right"] = _literal(5)
+        # Must not raise at generate time...
+        fast = generator.render_body(model, backend="fast")
+        self.assertIn("if 'nope' < 5:", fast)
+
+
+# ---------------------------------------------------------------------------
+# T17 Phase 3: linemap.py
+# ---------------------------------------------------------------------------
+
+class LineMapTests(unittest.TestCase):
+    def _model_and_source(self):
+        model = _small_model()
+        model["events"][0]["actions"][0]["block_id"] = "BLK_SET"
+        source = generator.generate_source(model, "demo_scene_events.py")
+        return model, source
+
+    def test_build_line_map_finds_the_commented_line(self):
+        _, source = self._model_and_source()
+        line_map = linemap.build_line_map(source)
+        lines = source.splitlines()
+        commented = [i + 1 for i, l in enumerate(lines) if l.rstrip().endswith("BLK_SET")]
+        self.assertEqual(len(commented), 1)
+        self.assertEqual(line_map[commented[0]], "BLK_SET")
+
+    def test_resolve_traceback_blocks_matches_exact_filename(self):
+        _, source = self._model_and_source()
+        lines = source.splitlines()
+        line_no = next(i + 1 for i, l in enumerate(lines) if l.rstrip().endswith("BLK_SET"))
+        tb = 'Traceback (most recent call last):\n  File "demo_scene_events.py", line %d, in update\nTypeError: x\n' % (line_no,)
+        result = linemap.resolve_traceback_blocks(tb, "demo_scene_events.py", source)
+        self.assertEqual(result, [{"line": line_no, "block_id": "BLK_SET"}])
+
+    def test_resolve_traceback_blocks_matches_by_basename(self):
+        _, source = self._model_and_source()
+        lines = source.splitlines()
+        line_no = next(i + 1 for i, l in enumerate(lines) if l.rstrip().endswith("BLK_SET"))
+        tb = 'File "games/x/code/demo_scene_events.py", line %d, in update' % (line_no,)
+        result = linemap.resolve_traceback_blocks(tb, "demo_scene_events.py", source)
+        self.assertEqual(result, [{"line": line_no, "block_id": "BLK_SET"}])
+
+    def test_resolve_traceback_blocks_skips_uncommented_lines(self):
+        _, source = self._model_and_source()
+        tb = 'File "demo_scene_events.py", line 1, in update'  # the banner line
+        result = linemap.resolve_traceback_blocks(tb, "demo_scene_events.py", source)
+        self.assertEqual(result, [])
+
+    def test_resolve_traceback_blocks_ignores_other_files(self):
+        _, source = self._model_and_source()
+        tb = 'File "not_this_file.py", line 5, in update'
+        result = linemap.resolve_traceback_blocks(tb, "demo_scene_events.py", source)
+        self.assertEqual(result, [])
 
 
 if __name__ == "__main__":

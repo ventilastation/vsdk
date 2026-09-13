@@ -23,6 +23,19 @@
  * and :func:`loadModelIntoWorkspace` is its inverse, used both to edit an
  * existing event sheet and to prove the round-trip (see this task's
  * report for how that was actually exercised in a browser).
+ *
+ * **T17 Phase 3: every event/action block's own ``.id`` rides along as
+ * ``block_id`` in the serialized model.** Blockly assigns every block a
+ * unique opaque id the moment it is created; this module previously threw
+ * that away entirely (nothing here ever read `.id`). Threading it through
+ * lets tools/vs2_event_gen/generator.py emit a trailing ``# block: <id>``
+ * comment on the line(s) each block produced (see that package's own
+ * ``linemap.py``), so a captured traceback can be resolved back to the
+ * exact offending block -- docs/vs2-behaviors-proposal.md's "###
+ * Debugging generated code". :func:`loadModelIntoWorkspace` restores the
+ * same ids on re-creation (``workspace.newBlock(type, id)``), so
+ * save -> load -> save is not just model-identical but block-id-identical
+ * too.
  */
 
 const BLOCKLY_BASE_URL = "./vendor/blockly";
@@ -310,18 +323,21 @@ function blockToAction(block) {
         kind: "set_variable",
         name: String(block.getFieldValue("NAME")),
         value: blockToExpr(block.getInputTargetBlock("VALUE")),
+        block_id: block.id,
       };
     case "vs2_action_goto_scene":
       return {
         kind: "goto_scene",
         module: String(block.getFieldValue("MODULE")),
         class_name: String(block.getFieldValue("CLASS_NAME")),
+        block_id: block.id,
       };
     case "vs2_action_set_label_text":
       return {
         kind: "set_label_text",
         label_attr: String(block.getFieldValue("LABEL_ATTR")),
         text: blockToExpr(block.getInputTargetBlock("TEXT")),
+        block_id: block.id,
       };
     default:
       throw new Error(`not an action block: ${block.type}`);
@@ -342,6 +358,7 @@ function blockToEvent(block) {
   const kind = block.type === "vs2_event_on_start" ? "on_start" : "on_tick";
   return {
     kind,
+    block_id: block.id,
     conditions: collectStack(block.getInputTargetBlock("CONDITIONS"), blockToCondition),
     actions: collectStack(block.getInputTargetBlock("ACTIONS"), blockToAction),
   };
@@ -365,8 +382,8 @@ export function serializeWorkspaceToModel(workspace, className) {
 // (load a hand-authored .vs2events.json, re-serialize, diff).
 // ---------------------------------------------------------------------------
 
-function newRenderedBlock(workspace, type) {
-  const block = workspace.newBlock(type);
+function newRenderedBlock(workspace, type, id) {
+  const block = workspace.newBlock(type, id);
   block.initSvg();
   block.render();
   return block;
@@ -416,19 +433,19 @@ function conditionToBlock(workspace, condition) {
 
 function actionToBlock(workspace, action) {
   if (action.kind === "set_variable") {
-    const block = newRenderedBlock(workspace, "vs2_action_set_variable");
+    const block = newRenderedBlock(workspace, "vs2_action_set_variable", action.block_id);
     block.setFieldValue(action.name, "NAME");
     connectValueInput(block, "VALUE", exprToBlock(workspace, action.value));
     return block;
   }
   if (action.kind === "goto_scene") {
-    const block = newRenderedBlock(workspace, "vs2_action_goto_scene");
+    const block = newRenderedBlock(workspace, "vs2_action_goto_scene", action.block_id);
     block.setFieldValue(action.module, "MODULE");
     block.setFieldValue(action.class_name, "CLASS_NAME");
     return block;
   }
   if (action.kind === "set_label_text") {
-    const block = newRenderedBlock(workspace, "vs2_action_set_label_text");
+    const block = newRenderedBlock(workspace, "vs2_action_set_label_text", action.block_id);
     block.setFieldValue(action.label_attr, "LABEL_ATTR");
     connectValueInput(block, "TEXT", exprToBlock(workspace, action.text));
     return block;
@@ -457,7 +474,8 @@ export function loadModelIntoWorkspace(workspace, model) {
   let y = 20;
   for (const event of model.events) {
     const eventBlock = newRenderedBlock(
-      workspace, event.kind === "on_start" ? "vs2_event_on_start" : "vs2_event_on_tick");
+      workspace, event.kind === "on_start" ? "vs2_event_on_start" : "vs2_event_on_tick",
+      event.block_id);
     eventBlock.moveBy(20, y);
     y += 160;
 
