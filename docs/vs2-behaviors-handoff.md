@@ -1,26 +1,46 @@
-# VS2 Behaviors: handoff (2026-09-12)
+# VS2 Behaviors: handoff (2026-09-13, updated)
 
 Status snapshot for resuming orchestration of `docs/vs2-behaviors-implementation.md`
 on a different machine. Read this before re-reading the plan itself — it tells
 you what's already true on disk versus what the plan still describes as future
 work.
 
+**This doc was updated 2026-09-13** by a session that had real hardware access
+(a workbench + a ventilastation rotor, both USB-attached) — the first time
+anything in this whole effort was verified beyond CPython-shim tests and the
+`micropython` unix binary. See "Hardware is now available" below before
+assuming the earlier "no hardware in this environment" framing still holds.
+
 ## TL;DR for a fresh orchestrating session
 
-Waves 1-5 are **done, merged, tested, and in PR #158**
-(`design/vs2-behaviors ← vs2/wave5-integration`, not yet merged — check its
-review status first). Wave 7 is in progress: **T15 is partially built** on
-branch `vs2/T15-scene-editor` (generator pipeline solid; recovery tool, tests,
-and the actual game port are the next concrete steps, all scoped in detail
-below). Waves 0 and 6 are blocked on physical hardware this environment never
-had. Everything is pushed to `origin` — no work exists only on a local disk.
+Waves 1-5 are **done, merged (CI fixed and green), and in PR #158**
+(`design/vs2-behaviors ← vs2/wave5-integration`) — it had two real,
+previously-unflagged CI failures (a CPython-version-fragile allocation test,
+and a missing `pyserial` dependency), both fixed and pushed; check current
+review/merge status, it may already be mergeable or merged by the time you
+read this. **T15 is done**, merged into `vs2/wave6-integration`. **T16 (a
+deliberately minimal first pass, not the full five-tier palette) is done**,
+merged into `vs2/wave7-integration`, and — unusually for this effort —
+**verified on real physical hardware**, including a bug real hardware caught
+that no CPython/unix-`micropython` test could (see "Gotchas" below). T17 and
+T18 are not started. Waves 0 and 6 were blocked on physical hardware no
+environment had until now; see "Hardware is now available." Everything is
+pushed to `origin` — no work exists only on a local disk.
 
 ## How this work was done, so you can keep doing it the same way
 
 This entire effort was built by an orchestrating session dispatching parallel
 background subagents (the `Agent` tool, `isolation: "worktree"`), one per task
 card in `docs/vs2-behaviors-implementation.md`, each in its own git worktree
-and branch (`vs2/T<N>-<slug>`). The orchestrator:
+and branch (`vs2/T<N>-<slug>`). **This held through T15** (whose two
+remaining pieces — recover.py+tests and the vixeous port — ran as two
+parallel sibling branches since their file scopes never overlapped). **The
+user explicitly asked to stop running subagents in parallel starting with
+T16**, citing machine load — check whether that constraint still applies on
+whatever machine you're running on before parallelizing anything; if it
+doesn't, parallel dispatch across genuinely disjoint file scopes (as T15's
+two pieces were) is still the faster, previously-proven approach. The
+orchestrator, in general:
 
 1. Reads the relevant spec section(s) in `docs/vs2-behaviors-proposal.md` and
    grounds itself in the *current* code (not just the plan's description of
@@ -80,8 +100,39 @@ and branch (`vs2/T<N>-<slug>`). The orchestrator:
   in every worktree of this repo, present before any of this work started:
   `tests/test_native_exit_transition.py` (the `apps/retro-go` git submodule
   isn't checked out in any of these worktrees) and an intermittent
-  `tests/test_vs2_hardware_test.py` "no workbench found" flake. Treat
-  `python3 tests/run_tests.py` as clean when only these two appear.
+  `tests/test_vs2_hardware_test.py` "no workbench found" flake (CI itself
+  never installed `pyserial`, so until that's fixed on your branch this one
+  reads as a hard `ModuleNotFoundError` instead — see the PR #158 fix).
+  A third, environment-only one can also show up: `tests/test_vixeous_vs2.py`
+  failing on `Image.get_flattened_data` if the local Pillow install predates
+  the version that added that method (CI's `pip install pillow` always gets
+  current, so this is a stale-local-environment artifact, not a real
+  failure — confirm by checking `python3 -c "import PIL; print(PIL.__version__)"`
+  and/or re-running in a fresh venv). Treat `python3 tests/run_tests.py` as
+  clean when only failures from this list appear.
+- **MicroPython's `super()` does not walk the runtime MRO the way CPython's
+  does.** A zero-argument (and even explicit two-argument) `super().foo()`
+  call inside a class declared with *no* base at all (`class Mixin:`) fails
+  with `AttributeError: 'super' object has no attribute 'foo'` on real
+  MicroPython, even though the exact same code works fine under CPython —
+  MicroPython only looks at the class's own declared base(s), not
+  `type(self).__mro__`. This bit T16's generated event-sheet mixins
+  specifically (see `tools/vs2_event_gen/generator.py`'s module docstring
+  for the full story and the reproduction), and will bite **any** future
+  generator emitting a cooperative-inheritance mixin the same way T15/T16
+  do (`class Foo(TitleSceneEvents, vs2.Scene): ...` composing a generated
+  mixin with a hand-written base). **The fix**: give the generated mixin an
+  explicit matching base (`class TitleSceneEvents(vs2.Scene):` instead of
+  `class TitleSceneEvents:`) — a harmless diamond once combined with the
+  hand-written subclass's own `(Mixin, vs2.Scene)` bases, and it makes
+  MicroPython's simplified `super()` resolution work correctly on both
+  interpreters. **The CPython-shim test suite cannot catch this bug at
+  all** — CPython's real MRO-walking `super()` papers right over the exact
+  case that breaks on-device. If you're reviewing or writing a generator
+  that emits `super()` calls inside a class with no (or a different) base
+  than its eventual real parent, check this on real MicroPython
+  (`micropython` unix binary is enough, no board needed) before trusting a
+  CPython-only test pass.
 
 ## Every branch, and where it stands
 
@@ -97,8 +148,11 @@ how each wave was built.
 | `vs2/wave2-integration` | Wave 1 + T3 merged. |
 | `vs2/wave3-integration` | Wave 2 + T4+T5+T6+T7 merged. |
 | `vs2/wave4-integration` | Wave 3 + T8 merged. |
-| `vs2/wave5-integration` | Wave 4 + T9a+T9b+T10+T11+T12 merged, plus one orchestrator-authored integration fix (see below). **This is the current head of all completed, tested work.** Open as **PR #158** against `design/vs2-behaviors` — check its review/merge status before doing anything else. |
-| `vs2/T15-scene-editor` | Wave 7, T15, **in progress**, branched from `vs2/wave5-integration`. Two commits, working tree clean, not yet merged into any integration branch (Wave 7 has no wave-integration branch yet since T15 hasn't landed). See the T15 section below for exactly what's built and what isn't. |
+| `vs2/wave5-integration` | Wave 4 + T9a+T9b+T10+T11+T12 merged, plus one orchestrator-authored integration fix, plus (2026-09-13) two CI fixes (see below). Open as **PR #158** against `design/vs2-behaviors` — check its review/merge status before doing anything else. |
+| `vs2/T15-scene-editor` | T15, **done**. Two sub-branches (`vs2/T15-recover-tests`, `vs2/T15-vixeous-port`) built in parallel off this one and merged back into it, then this merged into `vs2/wave6-integration`. Kept for history. |
+| `vs2/wave6-integration` | `vs2/wave5-integration` + T15 merged. **Head of all completed, hardware-untested work before T16.** |
+| `vs2/T16-event-sheet` | T16 (minimal first pass), **done**. Merged into `vs2/wave7-integration`, then a post-merge fix commit landed directly on `wave7-integration` for the `super()` bug real hardware caught (see Gotchas) — that fix was never backported onto this branch itself, `wave7-integration` is the one with the real fix. |
+| `vs2/wave7-integration` | `vs2/wave6-integration` + T16 merged, plus the `super()` fix. **This is the current head of all completed, tested, and (for T16's proving game) real-hardware-verified work.** Not yet opened as a PR — do that (against `design/vs2-behaviors`, or against `vs2/wave5-integration`'s PR #158 once that merges) once T17/T18 land, or sooner if a checkpoint is useful. |
 
 If GitHub's branch list ever looks stale, `git ls-remote --heads origin` is
 the ground truth.
@@ -158,19 +212,96 @@ documented, scoped follow-ups):
   host-only, honestly labeled as such), and physical USB-serial confirmation
   of the `vs2beh` protocol (T11 verified via `handle_command()`/
   `director._dispatch_control()` directly and under the real MicroPython
-  unix binary, never over an actual serial link).
+  unix binary, never over an actual serial link). **Now that hardware is
+  available (see below), both of these are actually doable** — neither was
+  attempted in the 2026-09-13 session, which focused on T16, but both would
+  be quick wins for a future session with hardware access.
+- (2026-09-13) PR #158's CI was **failing**, undetected until a session with
+  no other task actually looked: `tests/test_vs2_variables.py`'s zero-
+  allocation test hard-coded a warm-up assumption that only holds on
+  CPython 3.13+'s tier-2 JIT, and failed deterministically on CI's 3.12 —
+  fixed by switching to an O(1)-vs-O(N) growth check (the same pattern
+  the very next test in that file already used for an identical hazard).
+  CI's "Install tools" step also never installed `pyserial`, so the
+  hardware-test suite crashed with `ModuleNotFoundError` instead of
+  exercising its intended graceful-failure path — fixed by adding it to
+  the install line. Both fixes are small, already pushed to
+  `vs2/wave5-integration`, and CI is green now — but it's a reminder to
+  actually check CI status rather than trusting "should be fine," even on
+  a PR nobody's actively touching.
 
-## Wave 0 / Wave 6 — blocked, not attempted
+## Hardware is now available (as of 2026-09-13) — read this before Wave 0/6
+
+A prior version of this doc said Waves 0 and 6 were blocked because no
+environment building this effort had ever had physical hardware. **That's no
+longer true of at least one environment**: a session on 2026-09-13 had both
+boards USB-attached (a `workbench` and a `ventilastation` rotor — both
+registered, `python3 tools/find_board.py --list` finds them instantly) and
+used them for real, including a full firmware rebuild. Concretely, useful
+things a future session should know:
+
+- **The board's firmware can be, and was found to be, stale relative to the
+  filesystem.** `hardware/rotor/deploy_micropython_fs.py` only reflashes the
+  VFS (filesystem) partition — it does *not* touch the compiled firmware
+  (the native C modules, e.g. `vs2_native.c`/`gpu.c`). If the board was last
+  firmware-flashed before some native-code wave landed (in this session's
+  case, Wave 3b's per-layer camera support), the filesystem's Python source
+  calls into a native method that doesn't exist on that firmware and
+  crashes — in this exact case, `AttributeError: 'Layer' object has no
+  attribute 'set_camera'`, crashing inside the *launcher's own menu code*,
+  so badly that the board boot-crash-looped and couldn't reach any game at
+  all, T16's or otherwise. **This is not specific to T16** — it would have
+  happened with a `vs2/wave1-integration`-vintage filesystem too, since
+  Wave 3b's camera work predates all of Waves 4-5/T15/T16. If you flash a
+  filesystem and the board won't boot into the menu, suspect this first.
+  **The fix**: a full firmware rebuild and flash, `make initial-flash
+  PORT=...`, then re-run `deploy_micropython_fs.py` (`initial-flash` wipes
+  the filesystem with an empty one). This needs the ESP-IDF v5.5.2
+  toolchain (`source /path/to/esp-idf/esp-5.5.2/export.sh`) and the
+  MicroPython source cloned at `hardware/rotor/micropython` — see
+  `docs/internals/building.md`. **Two setup gotchas hit directly**:
+  (1) the clone command in that doc has no version pin at all — clone the
+  plain default branch, not the `v1.24.1` tag CI's `.github/workflows/ci.yml`
+  uses for the *unix-port* test binary only (that tag's `ports/esp32/boards/`
+  layout is missing files the current board config expects; this cost a
+  wasted clone-and-rebuild cycle to discover). (2) `export.sh` activates
+  its *own* Python virtualenv, which shadows any other venv (including one
+  with `esptool`/`littlefs-python`/`pyserial` already installed) for every
+  subprocess `make`/`idf.py` spawns afterward — install those three
+  packages into ESP-IDF's own env directly
+  (`/path/to/.espressif/python_env/idf<ver>_py<ver>_env/bin/python -m pip
+  install esptool littlefs-python pyserial`) rather than assuming your
+  existing venv is what `make` will actually use.
+- **A workbench USB-serial capture gives real visual confirmation without
+  Wi-Fi.** `0xD3 capture\n` over the *workbench's* serial port (not the
+  rotor's own) returns a CRC32-checked raw APA102 frame snapshot of what
+  the rotor is actually driving to its LEDs right now — see
+  `docs/internals/vs2-hardware-acceptance.md` and
+  `tools/pov_profile_report.py`'s `capture_workbench_frame()`/
+  `send_workbench_command()`. Pair it with the `"launch <slug>\n"` in-band
+  debug command (`director.py`'s `_dispatch_control`, forwarded transparently
+  through the same workbench serial bridge) to boot straight into a specific
+  game/scene by `app_loader` slug, and `"povperf status\n"` to read back a
+  live `layers=/sprites=/tilemaps=` census of whatever's actually on screen
+  — a much more precise way to confirm a scene's structure than eyeballing
+  an LED snapshot. `tools/vs2_hardware_report.save_frame_screenshot()` turns
+  a captured frame into a polar PNG. **A crash-looping or just-rebooted
+  board makes captures look like meaningless random noise** (each capture
+  catches a different point in an unstable boot cycle) — if two captures of
+  what should be the same stable state differ by a large, similar-magnitude
+  pixel count each time, suspect instability before suspecting the capture
+  mechanism or the game.
 
 T0 (the hardware gate: GPU-idle comparison and a flattened-record probe on
-physical rotor hardware) needs a physical ESP32-S3 rotor + workbench this
-environment has never had access to. Per the plan's own text, Waves 1-5
-explicitly don't depend on it and were correctly built without it. **Wave 6
-(T13 native `Collide`, T14 flat sprite records) is explicitly gated by the
-plan on T0's verdict** ("Do not start these until T0 reports") — do not start
-Wave 6 until someone runs the actual hardware gate experiment
-(`tools/vs2_behaviors_gate.py`) on real hardware and records a verdict in the
-proposal's "How to read it" section, per the plan.
+physical rotor hardware, `tools/vs2_behaviors_gate.py`) still has **not**
+been run — the 2026-09-13 session's hardware time went entirely to getting
+T16 verified and fixing the firmware/filesystem mismatch it uncovered, not
+to Wave 0/6. It is now genuinely unblocked, technically, for whichever
+session picks it up next. **Wave 6 (T13 native `Collide`, T14 flat sprite
+records) remains explicitly gated by the plan on T0's verdict** ("Do not
+start these until T0 reports") — do not start Wave 6 until T0 actually runs
+and a verdict is recorded in the proposal's "How to read it" section, per
+the plan.
 
 ## Wave 7 — in progress, sequential (not parallel like Waves 1-5)
 
@@ -196,10 +327,18 @@ control flow, so **this generator does not need Blockly at all** — that's
 only needed later, for `update()`/tick-logic authoring (T16/T17). Carry this
 scoping forward into T16/T17/T18 rather than re-litigating it.
 
-### T15 (in progress) — exactly where it stands
+### T15 — done, merged into `vs2/wave6-integration`
 
-Branch `vs2/T15-scene-editor`, based on `vs2/wave5-integration`, two commits,
-clean tree, **pushed to origin**, not merged into anything yet.
+Branch `vs2/T15-scene-editor`, based on `vs2/wave5-integration`. Finished by
+splitting the remaining work (recover.py+tests, and the vixeous port) into
+two sibling branches built in parallel (their file scopes never overlapped:
+`tools/vs2_scene_gen/`+`tests/` vs. `games/vs2_examples/vixeous/`), merged
+back into `vs2/T15-scene-editor`, then that into `vs2/wave6-integration`.
+Verified: the full `python3 tests/run_tests.py` suite clean, plus the ported
+Vixeous actually loaded and played correctly in the browser emulator (`cd
+web && python3 -m http.server`, after `python3 tools/generate_roms.py` and
+`python3 tools/generate_web_runtime_bundle.py` to pick up the new game) —
+terrain, player, enemies, explosions all rendering and animating correctly.
 
 The proving case was redirected mid-task, at the user's explicit request,
 away from the plan's original suggestion (`mapdemo` — too small, no
@@ -257,32 +396,36 @@ package; nothing under `apps/micropython/` or `games/` touched):
   `vs2.export_scene_payload()` bytes, ready for the recovery tool below to
   consume.
 
-All of the above was **hand-verified manually** (byte-identical
-regeneration, hand-edit detection leaving the file untouched, one-way
-`Detach` surviving a subsequent sweep, and a working driver script that
-loads a real game headlessly under the `micropython` unix binary and reads
-back a parseable `export_scene_payload()`) — but **none of that verification
-is committed as an automated test yet.**
+All of the above is now **both hand-verified and covered by automated
+tests**: `tools/vs2_scene_gen/recover.py` (real-MicroPython payload capture
++ model comparison, `tests/test_vs2_scene_gen_recover.py`), plus
+`tests/test_vs2_scene_gen_model.py`/`test_vs2_scene_gen_generator.py`
+covering the invariants above. `recover.py`'s image-identity check is a
+documented heuristic (same declared image name -> same strip everywhere,
+and vice versa) — it cannot prove a specific name, only internal
+consistency; a single-occurrence swap of two same-shaped images is
+provably invisible to it. Known, accepted, documented in the module's own
+docstring, not a gap to silently fix.
 
-**Not yet built — the concrete next steps, in order:**
-
-1. **`tools/vs2_scene_gen/recover.py`** — package the manually-verified
-   driver-script pattern (subprocess to `micropython`, `sys.path.insert` of
-   `apps/micropython` and `.`, `configure_runtime("headless")`,
-   `export_scene_payload()`, hex-encode over stdout) into an actual module/
-   function. **Remember**: use `sorted()` over any stripe/asset dict, never
-   raw iteration — confirmed directly that MicroPython's dict order is
-   hash-based, not insertion-order, unlike CPython.
-2. **Tests.** Nothing under `tests/` exists for this package yet. Write
-   `tests/test_vs2_scene_gen_*.py` covering every invariant listed as
-   "hand-verified" above, register in `CPYTHON_TESTS` in
-   `tests/run_tests.py`.
-3. **The `vixeous` port itself.** No `games/vs2_examples/` directory exists
-   yet. Design work is done (see below) but nothing is written: no model
-   JSON, no generated scene file, no companion `update()` file, no copied
-   assets.
-4. Re-run `python3 tests/run_tests.py`, confirm clean apart from the two
-   known pre-existing failures.
+**The vixeous port** landed at `games/vs2_examples/vixeous/`, built exactly
+per the Behavior-mapping decisions below. A few things that came up while
+actually writing it, worth knowing before porting the next game the same
+way: **the model file suffix is `.vs2model.json`** (not `.model.json` as
+an earlier draft of this doc and `model.py`'s own docstring example
+suggested — `regenerate.py`'s actual `MODEL_SUFFIX` is the source of
+truth, follow the code over any doc including this one); **`Scene._run_behaviors`
+dispatches the whole scene's behaviors first, then does one global
+`_commit_pool_motion()` pass** — so a `DespawnBeyond` paired with `Moving`
+on the same pool checks a sprite's position *before* that same tick's
+`Moving` commit lands, meaning a bound crossed on tick N only actually
+despawns on tick N+1, not N (a real, deliberate one-tick-later semantics,
+not a bug — write tests expecting it); and **not every pool needs `kinds()`
+or per-type behaviors** — vixeous's `targets` pool, for instance, has a
+per-tick movement rate that varies with the terrain-scroll cadence, which
+no shipped Behavior (a constant-rate `Moving`) can express, so it stayed a
+plain declarative pool with fully hand-written movement, same as the
+original — don't force a Behavior onto every pool just because the schema
+supports one.
 
 **Vixeous port — the Behavior-mapping design decisions already made, with
 reasoning, so you don't have to re-derive them:**
@@ -328,25 +471,99 @@ reasoning, so you don't have to re-derive them:**
   tile automatically with zero launcher edits. Leave both alone; full
   registry/icon plumbing is T18's card, not T15's.
 
-### T16, T17, T18 — not started
+### T16 — done (deliberately minimal first pass), merged into `vs2/wave7-integration`
+
+The full T16 card describes a five-tier Blockly palette (events/conditions,
+expressions, variables, system actions, sprite-Action blocks), a two-zone
+tick skeleton, state hats, a debugger line-map, and two codegen backends —
+genuinely the largest single task in the whole plan, and the proposal's own
+text calls it out as "the one *not* to defer." Building all of that in one
+pass was judged too large/risky for one shot, so **the user explicitly chose
+a deliberately minimal first pass** instead: a small, bounded vocabulary (2
+events, 2 conditions, 3 expressions, 3 system actions — see
+`tools/vs2_event_gen/model.py`'s docstring for the exact list), a real (not
+mocked) but minimal Blockly panel, and one small original 3-scene proving
+game (`games/vs2_examples/event_sheet_demo/`: title screen, playable scene,
+game-over, a project-level score surviving the transition — the proposal's
+acceptance line, verbatim). Explicitly deferred and **not built**: the full
+system-action/expression breadth, sprite/Behavior Action blocks and state
+hats (both entirely T17's job), the debugger line-map, and the fast-backend
+distinction (only the readable backend exists).
+
+Built: `tools/vs2_event_gen/` (model schema, generator, its own `checksum.py`/
+`detach.py` using the `# blocks:` comment prefix `blob.py`'s docstring
+already reserved for this, reusing `tools/vs2_scene_gen.blob`'s
+`encode_blob`/`decode_blob` directly since those are fully generic), a
+vendored Blockly panel in `web/` (`web/vendor/blockly/`, `web/vs2-event-sheet.js`,
+wired into `index.html`), and the proving game. Headless tests
+(`tests/test_vs2_event_gen.py`, `tests/test_event_sheet_demo.py`) pass, and
+the Blockly round-trip was verified for real in a browser (loaded a
+hand-authored `.vs2events.json` into the actual panel, confirmed the blocks
+it rendered, re-serialized, byte-identical diff).
+
+**Real hardware caught a real bug the CPython-shim tests could not**: the
+generated mixin's `super().on_enter()`/`super().update()` calls crashed on
+real MicroPython (`AttributeError: 'super' object has no attribute
+'on_enter'`) even though the identical code worked fine under CPython —
+see the `super()` gotcha above for the full mechanism and the fix (give the
+generated mixin an explicit `(vs2.Scene)` base). This was found, fixed,
+verified against the real `micropython` unix binary, then verified a second
+time on the actual physical rotor (a real `povperf status` census matched
+exactly at every scene transition — Title `layers=1 sprites=0 tilemaps=1`,
+Playing `layers=1 sprites=0 tilemaps=0`, Game Over `layers=1 sprites=0
+tilemaps=2` — plus a workbench LED capture showing legible "PRESS A" and
+"GAME OVER" text). The fix is a small, separate commit directly on
+`vs2/wave7-integration`, on top of the merge — it was never backported onto
+`vs2/T16-event-sheet` itself, so build from `wave7-integration`, not that
+branch, if you need this fix.
+
+**Judgment calls made along the way, not re-litigated:**
+
+- `goto_scene`-generated code must copy `_vs_api_slug`/`_vs_declared_api`
+  from the source scene onto the freshly-constructed target before
+  `self.switch(...)` — `Director._enter_scene` re-establishes the
+  "current app" context via `api_guard.begin_app(...)` on *every* scene
+  entry including a `switch()`, and `vs2.project` variables are wiped the
+  moment that context's slug changes (`_Project._ensure_current_app`). Skip
+  this and the score — the entire point of the proving game — silently
+  resets to 0 on every transition instead of surviving. Every existing
+  game in this repo only ever pushes/switches within one app, so nothing
+  hit this until a multi-scene VS2 game (this one) existed.
+- `goto_scene`'s `import ... as _scene` line must be lazy (inside the
+  method body, not module-level) — a 3-scene cycle (title -> playing ->
+  game-over -> title) makes the hand-written scene modules import each
+  other in a cycle too, one hop later, and a top-level import deadlocks on
+  a partially-initialized module.
+- No arithmetic in the expression grammar means no real "increment" —
+  faked via successive `on_tick` entries at increasing `timer_elapsed`
+  thresholds, each a plain literal `set_variable`, relying on later entries
+  in the same generated `update()` overriding earlier ones on the same
+  tick. A real, deliberate property of the generator (documented in
+  `model.py`), not an oversight.
+- Title's "press A to start" is a hand-written escape hatch in a thin
+  subclass (`title_scene.py`) — the minimal condition vocabulary has no
+  button-press/edge-trigger condition, exactly the kind of gap this
+  minimal-pass scope explicitly pre-approved living with, the same spirit
+  as T15's `on_build_N()` hooks.
+- The user wants `vasura_espacial` used as a `StateMachine` demonstration —
+  still not done, still fits best alongside T18's porting work or as an
+  alternative to T16's synthetic proving game if a future session revisits
+  scope; not forgotten, just not yet placed.
+
+### T17, T18 — not started
 
 Read their cards in `docs/vs2-behaviors-implementation.md` fresh; they're
-short enough that re-summarizing here would just be a lossy copy. Two things
-worth knowing before starting T16 specifically:
-
-- It depends on T15's generator/file-split conventions (`build()` vs.
-  `update()` as separate generated-or-handwritten files) landing first,
-  which is why it's sequential rather than parallel with T15.
-- The user wants `vasura_espacial` used as a `StateMachine` demonstration —
-  fold that in wherever it fits best once T16-T18's actual shape is clearer
-  (most likely alongside T18's porting work, but T16's "one complete small
-  game" acceptance criterion is also a plausible fit if a small
-  StateMachine-driven example serves that requirement better than an
-  arbitrary synthetic one).
+short enough that re-summarizing here would just be a lossy copy. T17
+(Blockly for Behaviors: the Action palette, state hats, `Projectile`/
+`Damageable` re-authored as block programs) depends on T16's file-split
+conventions, which now exist for real (not just in a doc), including the
+one hard-won lesson: **any future generator emitting a `super()`-calling
+mixin needs an explicit matching base, not `class Foo:` with none at all**
+— see the gotcha above, and don't rediscover it the slow way.
 
 ## Suggested immediate next action
 
-Finish T15 to a real done state (recover.py, tests, the vixeous port),
-merge it into a new `vs2/wave6-integration`-style branch off
-`vs2/wave5-integration` (or whatever `vs2/wave5-integration`'s successor is
-once PR #158 merges), push, then proceed to T16.
+Proceed to T17, off `vs2/wave7-integration`. Consider opening a PR for
+`vs2/wave7-integration` (against `design/vs2-behaviors` or against PR
+#158's branch) as a checkpoint before T17/T18 land, given how much is now
+verified and how large T17/T18 both are.
