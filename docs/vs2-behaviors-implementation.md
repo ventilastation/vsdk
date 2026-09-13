@@ -36,27 +36,30 @@ the plan it tracks.
   proving game (satisfies the user's ask below). Merged into
   `vs2/wave7-integration`. Only the debugger line-map and the fast backend
   remain of the original card — an explicit, undispatched Phase 3.
-- **T18** — done at the software level, merged into `vs2/wave7-integration`.
-  `vyruss_vs2` ported; launcher/registry plumbing done for both ports.
-  Found a third real Behavior-catalog mismatch (a lone-sprite Behavior's
-  `step_one` runs every tick regardless of `visible`, the wrong shape for
-  a sprite shown/hidden by game logic) — see the handoff doc. **One thing
-  outstanding**: the physical-hardware side-by-side comparison at 600
-  RPM — blocked because the rotor was disconnected when attempted (only
-  the workbench was reachable). This was present earlier in the same
-  session, so it's a real disconnection to fix, not a permanent
-  environment limitation.
+- **T18** — **fully done**, merged into `vs2/wave7-integration`, including
+  physical-hardware acceptance. `vyruss_vs2` ported; launcher/registry
+  plumbing done for both ports. Found a third real Behavior-catalog
+  mismatch (a lone-sprite Behavior's `step_one` runs every tick regardless
+  of `visible`, the wrong shape for a sprite shown/hidden by game logic) —
+  see the handoff doc. The physical-hardware side-by-side comparison at
+  600 RPM (blocked earlier in the session on the rotor being disconnected)
+  ran successfully once the rotor reconnected: both `vyruss_vs2` and
+  `vixeous` ports matched their hand-written originals' structural census
+  and timing, with zero overruns/skipped frames on either, and LED
+  captures confirmed correct rendering.
 
-**Blocked right now on the rotor being disconnected** (reconnect it and
-these are otherwise ready to run/finish):
-- **T0** — the hardware gate. Never run, by anyone, ever. Was briefly
-  unblocked on 2026-09-13 when the rotor was connected; blocked again now.
-- **Wave 6** (T13, T14) — gated on T0's verdict.
-- T18's final physical-hardware comparison (see above).
+**Rotor-dependent, now actionable again** (rotor reconnected mid-session,
+confirmed present alongside the workbench):
+- **T0** — the hardware gate. Never run, by anyone, ever. Deliberately
+  deferred to its own dedicated pass given the physical hang risk of
+  untested native code, rather than rushed alongside other work.
+- **Wave 6** (T13, T14) — gated on T0's verdict, still blocked until T0
+  actually runs.
 
 **Not started, not hardware-blocked:**
 - T17 Phase 3: the debugger line-map / block-ID trailing comments, and
-  the "fast backend" (only the readable generator exists).
+  the "fast backend" (only the readable generator exists). Dispatched to
+  a subagent; check its status before redispatching.
 
 **Satisfied:** the user's ask to use `vasura_espacial` as a `StateMachine`
 demonstration — `games/vs2_examples/vasura_states_demo`, built as part of
@@ -581,11 +584,11 @@ sealed slot range and mirrored live count; `pool.move_all()`.
 
 ## Wave 7 — the editor
 
-**Status: T15, T16, T17 done, T18 not started.** See "Status" above for
+**Status: T15, T16, T17, T18 all done** (T17 minus an explicit Phase 3:
+the line map and fast backend, in progress). See "Status" above for
 the full picture — in particular, T15's proving case was `vixeous`, not
-`mapdemo` (an explicit, reasoned redirect, not a deviation to flag), T16
-shipped as a deliberately minimal first pass, and T17 shipped in full
-(minus an explicit Phase 3: the line map and fast backend).
+`mapdemo` (an explicit, reasoned redirect, not a deviation to flag), and
+T16 shipped as a deliberately minimal first pass.
 
 ### T15 · Scene editor and `build()` generator — **done**
 Round-trip blob, body checksum, `Detach`, numbered `on_build` hooks. Port
@@ -624,7 +627,7 @@ hats or `Damageable` specifically — the model/generator support is real
 and tested, just not yet exposed in the browser panel, the same
 proportion call T16 made before its own panel existed.
 
-### T18 · Ports — **done at the software level; hardware comparison outstanding**
+### T18 · Ports — **fully done, including hardware comparison**
 Copies of `vyruss_vs2` and `vixeous` into `games/vs2_examples/`, plus the group
 icon, the launcher icon-map line, and `games/registry.py` slugs.
 **Acceptance:** shorter than the originals, play identically at 600 RPM,
@@ -637,11 +640,18 @@ icon added via `make_menu_icons.py`'s existing recipe; `games/registry.py`'s
 `GAME_SLUGS` confirmed genuinely dead code, left alone). Verified: full
 CPython test suite (16 new tests), and separately confirmed by the
 orchestrating session under the real MicroPython unix binary (200 ticks,
-no errors). **"Play identically at 600 RPM, compared side by side"
-specifically still needs the physical rotor, which was disconnected when
-last attempted** — reconnect it to finish this task for real; everything
-else is done. No file outside `games/vs2_examples/` was touched under
-`games/` — confirmed via `git diff --stat` against the original folders.
+no errors), and finally **on the physical rotor** at 600 RPM (rotor
+reconnected mid-session after being briefly disconnected): both ports ran
+side by side against their untouched originals via the workbench's
+serial bridge (`povperf status` census + LED frame capture) —
+`vyruss_vs2` matched `layers=3 sprites=71 tilemaps=1` with zero
+overruns on either side and comparable timing (port `avg_total_us=46`
+vs original `avg_total_us=49`); `vixeous` matched `layers=2 sprites=27
+tilemaps=2`, likewise zero overruns and comparable timing (port
+`avg_total_us=51` vs original `avg_total_us=48`). LED captures confirm
+correct, matching rendering for both. No file outside
+`games/vs2_examples/` was touched under `games/` — confirmed via `git
+diff --stat` against the original folders.
 
 ---
 
