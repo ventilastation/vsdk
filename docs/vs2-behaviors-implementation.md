@@ -7,6 +7,54 @@ people or agents at once, and how each piece proves it is done.
 The proposal says *what*. This says *who can start now, and what breaks if two
 of them start at once*.
 
+## Status (2026-09-13)
+
+See `docs/vs2-behaviors-handoff.md` for the full blow-by-blow (branches,
+gotchas, exact verification done). This is the compact version, kept next to
+the plan it tracks.
+
+**Done:**
+- **Waves 1–5** — done, in PR #158 (`design/vs2-behaviors ← vs2/wave5-integration`).
+  CI green (two real, previously-unflagged failures found and fixed:
+  a CPython-version-fragile allocation test, and a missing `pyserial` install
+  step). No reviews yet.
+- **T15** — done, merged into `vs2/wave6-integration`. Vixeous ported and
+  confirmed playing correctly in the browser emulator.
+- **T16** — done, but as **a deliberately minimal first pass**, not the full
+  card (see below) — an explicit scope call the user made, not a shortfall
+  discovered later. Merged into `vs2/wave7-integration`. **Verified on real
+  physical hardware**, which caught and led to fixing a real bug
+  (`super()` doesn't walk the runtime MRO on MicroPython the way it does on
+  CPython — see the handoff doc's gotchas) that no CPython-shim test could
+  have caught.
+
+**Not started:**
+- **T0** — the hardware gate. Never run, by anyone, ever. **No longer
+  blocked** — hardware is available as of 2026-09-13 (see the handoff doc) —
+  just not yet done.
+- **Wave 6** (T13, T14) — gated on T0's verdict, so blocked until T0 runs.
+- **T17, T18** — not started. T18 is effectively just `vyruss_vs2` now
+  (`vixeous` already landed as T15's proving case), plus the launcher/
+  registry plumbing T15 deliberately left for it.
+- The user's ask to use `vasura_espacial` as a `StateMachine` demonstration
+  — not placed anywhere yet.
+
+**Deferred within T16's minimal first pass** (not part of T16's card as
+written above, moved to T17/a future pass by explicit scope decision):
+full system-action/expression breadth (only 2 events, 2 conditions, 3
+expressions, 3 system actions exist), sprite/Behavior Action blocks and
+state hats (entirely T17's job anyway), the debugger line-map, the fast
+backend (only the readable one exists).
+
+**Known gaps carried from Waves 1–5** (documented at the time, not bugs):
+`Carried`/`Flashing`/`Cycling` catalog attributes blocked on named palette
+colours, which no task in this plan builds; Behavior `state=` not reset on
+`RECYCLE` respawn; `vs2beh` has no write verb for a live `kinds()` edit and
+T12's `mountKindsEditor` isn't mounted into the live panel; T6's paint
+timing was measured host-only and T11's `vs2beh` protocol was never
+exercised over a real serial link — both are now genuinely doable with the
+hardware available, just not done.
+
 ## How to use this
 
 - **One task per agent.** Each task below owns a named set of files. Two agents
@@ -111,6 +159,9 @@ concurrently.
 
 ## Wave 0 — the gate
 
+**Status: not started.** No longer hardware-blocked (see "Status" above) —
+just not yet run.
+
 ### T0 · Gate experiments (hardware, blocking)
 
 **Spec:** *Gate: prove the numbers on hardware first*.
@@ -144,6 +195,8 @@ optimisation.
 ---
 
 ## Wave 1 — standalone foundations
+
+**Status: done.** In PR #158.
 
 Three tasks, no shared files, no dependencies. Start all three at once.
 
@@ -225,6 +278,8 @@ too.
 
 ## Wave 2 — the surface
 
+**Status: done.** In PR #158.
+
 ### T3 · `vs2/__init__.py` attachment points — **SERIALIZING**
 
 **Spec:** *What has to change under the hood*.
@@ -264,6 +319,9 @@ do nothing). Signatures and semantics may not.
 ---
 
 ## Wave 3 — parallel build-out
+
+**Status: done.** In PR #158. T6's paint-per-column timing was measured
+host-only, never on hardware — now doable, not yet done.
 
 Four tasks, disjoint files. T3 must have landed.
 
@@ -359,6 +417,8 @@ above and useful on its own.
 
 ## Wave 4 — behaviors
 
+**Status: done.** In PR #158.
+
 ### T8 · `vs2/behaviors.py` core
 
 **Spec:** *Behaviors*, *The Step*.
@@ -389,6 +449,13 @@ above and useful on its own.
 ---
 
 ## Wave 5 — catalog, machines, tooling
+
+**Status: done.** In PR #158. Known gaps: `Carried`/`Flashing`/`Cycling`
+attributes blocked on named palette colours (no task builds that
+prerequisite); Behavior `state=` not reset on `RECYCLE` respawn; `vs2beh`
+has no write verb for `kinds()` and T12's `mountKindsEditor` isn't mounted;
+T11's protocol was never exercised over a real serial link (now doable, not
+yet done).
 
 Four tasks, disjoint. All depend on T8.
 
@@ -468,6 +535,8 @@ table editor, live-tune against a hand-written game.
 
 ## Wave 6 — offload (scope decided by T0)
 
+**Status: not started, still blocked on T0.**
+
 Do not start these until T0 reports. If the GPU-idle experiment shows memory
 contention dominates, **T14 comes first and T13 may not be needed at all.**
 
@@ -490,11 +559,16 @@ sealed slot range and mirrored live count; `pool.move_all()`.
 
 ## Wave 7 — the editor
 
-### T15 · Scene editor and `build()` generator
+**Status: T15 and T16 done, T17/T18 not started.** See "Status" above for
+the full picture — in particular, T15's proving case was `vixeous`, not
+`mapdemo` (an explicit, reasoned redirect, not a deviation to flag), and
+T16 shipped as a deliberately minimal first pass, not the full card below.
+
+### T15 · Scene editor and `build()` generator — **done**
 Round-trip blob, body checksum, `Detach`, numbered `on_build` hooks. Port
 `mapdemo` into `games/vs2_examples/` end to end.
 
-### T16 · The event sheet — **do not defer this**
+### T16 · The event sheet — **do not defer this** — **done (minimal pass)**
 Events/conditions, expressions, variables, system actions, and the `update()`
 generator. This is what the no-MicroPython requirement rests on and it depends
 on none of the Action work.
@@ -502,17 +576,30 @@ on none of the Action work.
 game-over, a score surviving the transition — authored with **no Python
 written**, running on the physical console.
 
-### T17 · Blockly for behaviors
+**What actually shipped**: exactly this acceptance criterion, met and
+verified on real hardware — but with a deliberately small vocabulary (2
+events, 2 conditions, 3 expressions, 3 system actions), not the breadth the
+card implies. Deferred to T17 or a later pass: full system-action/
+expression breadth, the debugger line-map, the fast backend. Also caught a
+real MicroPython `super()`/MRO bug along the way — see the handoff doc.
+
+### T17 · Blockly for behaviors — **not started**
 Action palette, two-zone tick skeleton, state hats, line map, fast backend.
 Re-author `Projectile` and `Damageable` as block programs; the shipped `.py` is
-the generator's output.
+the generator's output. Depends on T16's file-split conventions, which now
+exist for real; also inherits T16's `super()`/MRO lesson for any mixin it
+generates.
 
-### T18 · Ports
+### T18 · Ports — **not started (partially satisfied)**
 Copies of `vyruss_vs2` and `vixeous` into `games/vs2_examples/`, plus the group
 icon, the launcher icon-map line, and `games/registry.py` slugs.
 **Acceptance:** shorter than the originals, play identically at 600 RPM,
 compared side by side against untouched originals. No file under `games/`
 outside `vs2_examples/` is modified.
+
+`vixeous` already landed, as T15's proving case — its own launcher/registry
+plumbing was deliberately left for this task, per T15's own notes. So T18 is
+now really just `vyruss_vs2` plus that plumbing for both games.
 
 ---
 
