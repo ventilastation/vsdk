@@ -1,8 +1,8 @@
-# gameover_scene_events.py  -- generated, do not edit. body-sha: 34381f9d
+# gameover_scene_events.py  -- generated, do not edit. body-sha: 5b616d7f
 import vs2
 
 
-class GameOverSceneEvents:
+class GameOverSceneEvents(vs2.Scene):
     def on_enter(self):
         super().on_enter()
         self._vs2_events_ticks = 0

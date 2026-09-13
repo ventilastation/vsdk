@@ -1,14 +1,34 @@
 """Model -> generated ``<name>_events.py`` mixin source, and the safe write
 path.
 
-**A mixin, not a scene.** Per this package's docstring, this generator does
-not produce a ``vs2.Scene`` subclass -- it produces a plain class carrying
-``on_enter(self)`` and ``update(self)``, meant to sit first in a hand-
-written scene's bases (``class Title(TitleSceneEvents, vs2.Scene):``) so
-``super().on_enter()``/``super().update()`` inside the generated methods
-reach the real ``vs2.Scene`` implementation through cooperative MRO --
-exactly the shape every hand-written ``on_enter`` override in this repo
-already uses.
+**A mixin that explicitly extends ``vs2.Scene``, never instantiated on its
+own.** It carries only ``on_enter(self)`` and ``update(self)``, meant to
+sit first in a hand-written scene's bases
+(``class Title(TitleSceneEvents, vs2.Scene):``) so its ``super().on_enter()``/
+``super().update()`` calls reach the real ``vs2.Scene`` implementation.
+
+**Why the mixin declares ``(vs2.Scene)`` instead of no base at all**
+(confirmed directly against the real ``micropython`` unix binary, not
+assumed): a zero-argument ``super()`` call inside ``TitleSceneEvents.on_enter``
+needs to find "whatever comes after ``TitleSceneEvents``" in ``Title``'s
+actual runtime MRO (``Title -> TitleSceneEvents -> vs2.Scene -> object``) --
+that is how CPython resolves it, and it is what a class with no declared
+base at all does under CPython. But MicroPython's ``super()`` does not walk
+the runtime MRO of ``type(self)`` at all; it only looks at the class's own
+declared base(s) at the point ``super()`` is written. A base-less mixin's
+own base is ``object``, which has no ``on_enter``/``update``, so
+MicroPython raises ``AttributeError: 'super' object has no attribute
+'on_enter'`` immediately -- reproduced directly, and confirmed that even
+the explicit two-argument ``super(TitleSceneEvents, self)`` form does not
+help, since the limitation is in how MicroPython locates the *next* class,
+not in which spelling of ``super()`` is used. Giving the mixin its own
+explicit ``(vs2.Scene)`` base fixes this on both interpreters: it is a
+harmless diamond (``Title(TitleSceneEvents, vs2.Scene)`` where
+``TitleSceneEvents`` already is a ``vs2.Scene``), CPython's C3
+linearization resolves it exactly as before, and MicroPython's simplified
+``super()`` now finds ``vs2.Scene`` as literally the mixin's own declared
+base. This is why the CPython-shim test suite never caught the original
+bug: CPython's real MRO-walking ``super()`` papered right over it.
 
 **Why ``goto_scene`` imports its target module lazily, inside the method
 body, instead of at the top of the generated file.** Three scenes that
@@ -198,7 +218,7 @@ def render_body(model):
         lines.append("from urandom import randrange")
     lines.append("")
     lines.append("")
-    lines.append("class %s:" % (model["class_name"],))
+    lines.append("class %s(vs2.Scene):" % (model["class_name"],))
     lines.append("    def on_enter(self):")
     lines.extend(on_enter_lines)
     lines.append("")

@@ -1,8 +1,8 @@
-# title_scene_events.py  -- generated, do not edit. body-sha: d79b1f42
+# title_scene_events.py  -- generated, do not edit. body-sha: f5404c29
 import vs2
 
 
-class TitleSceneEvents:
+class TitleSceneEvents(vs2.Scene):
     def on_enter(self):
         super().on_enter()
         self._vs2_events_ticks = 0

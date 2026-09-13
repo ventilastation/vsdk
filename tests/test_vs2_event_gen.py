@@ -207,7 +207,7 @@ class RenderExprTests(unittest.TestCase):
 class RenderBodyTests(unittest.TestCase):
     def test_body_defines_the_mixin_and_both_methods(self):
         body = generator.render_body(_small_model())
-        self.assertIn("class DemoSceneEvents:", body)
+        self.assertIn("class DemoSceneEvents(vs2.Scene):", body)
         self.assertIn("    def on_enter(self):", body)
         self.assertIn("    def update(self):", body)
         self.assertIn("super().on_enter()", body)
@@ -317,7 +317,8 @@ class HandEditDetectionTests(GeneratorFixture):
         original_text = path.read_text()
 
         edited = original_text.replace(
-            "class DemoSceneEvents:", "class DemoSceneEvents:  # tweaked")
+            "class DemoSceneEvents(vs2.Scene):",
+            "class DemoSceneEvents(vs2.Scene):  # tweaked")
         self.assertNotEqual(edited, original_text)
         path.write_text(edited)
 
@@ -380,7 +381,7 @@ class BuildEventsCliTests(GeneratorFixture):
         self.assertEqual(result.status, "created")
         output_path = self.tmpdir / "demo_scene_events.py"
         self.assertTrue(output_path.exists())
-        self.assertIn("class DemoSceneEvents:", output_path.read_text())
+        self.assertIn("class DemoSceneEvents(vs2.Scene):", output_path.read_text())
 
     def test_main_reports_nonzero_on_missing_argument(self):
         self.assertEqual(build_events.main([]), 2)

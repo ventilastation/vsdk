@@ -1,9 +1,9 @@
-# playing_scene_events.py  -- generated, do not edit. body-sha: e7145127
+# playing_scene_events.py  -- generated, do not edit. body-sha: 9950d073
 import vs2
 from urandom import randrange
 
 
-class PlayingSceneEvents:
+class PlayingSceneEvents(vs2.Scene):
     def on_enter(self):
         super().on_enter()
         self._vs2_events_ticks = 0
