@@ -1381,12 +1381,57 @@ shared octal-PSRAM bus, with core 1's heap contending against core 0 streaming
 the framebuffer. That is cheap to test, and if it is the answer the fix is
 memory placement and no kernel needs writing.
 
+**Verdict, 2026-09-13 (both experiments run for real on hardware, 600 and 700
+RPM, `tools/vs2_behaviors_gate.py`, zero Handoff overruns in every run):**
+
+- **The GPU-idle comparison confirms memory contention, not the "no blocking
+  wait" framing above.** With the GPU task's own column-serve/render work
+  skipped entirely for the run (a new `povdisplay.set_gpu_idle()` toggle —
+  see `docs/vs2-behaviors-handoff.md`), every one of the four dispatch shapes
+  got **~28-30% faster**, uniformly, at both RPMs: inline 14.8ms → 10.7ms at
+  600 RPM (14.8ms → 10.7ms at 700 RPM too — RPM made no measurable
+  difference to either figure). The four shapes' *relative* ranking and the
+  existing ratio checks (column ≤ 1.10×inline, hybrid ≤ 1.25×inline,
+  per-sprite measurably worse) hold under both conditions, so those
+  conclusions were never an artifact of GPU contention. But the *absolute*
+  16.1-18.7ms baseline table above was measured with the GPU task active, and
+  roughly 30% of it is that contention — real, uniform, and not explained by
+  "pinned to separate cores, not waiting behind a rotation" (true for
+  *blocking*, but the shared octal-PSRAM bus still costs real cycles on every
+  access from either core, exactly the alternative this paragraph already
+  named). **The lever is memory placement, confirmed** — moving sprite
+  records and the behavior working set to internal SRAM should recover
+  something on the order of that 30%, no kernel rewrite required.
+- **The flattened-record probe passes emphatically.** A throwaway native
+  loop (`vshw_vs2.flattened_probe()`) walking a static, contiguous
+  90-record array and adding two fixed-point deltas per record — the same
+  90 behavior slots the Python gate dispatches — took **4us total** per full
+  pass (20,000 passes averaged, both RPMs identical). Against the
+  Python-side figures for the *same* 90 slots (10.6-17.6ms across shapes and
+  GPU states), that is roughly **2,500-3,700x faster**, not merely
+  "meaningfully less" as the table below asked for. Caveat this proportionally:
+  the probe has no despawn-safe iteration, no per-kind Action dispatch, no
+  callbacks, no branching — it is a floor, not a projection of what a real
+  flattened `pool.move_all()` would cost once actual Behavior semantics are
+  added back. But the floor is so far below the Python figures that even a
+  real implementation costing 50-100x more than this probe would still beat
+  every Python dispatch shape by one to two orders of magnitude.
+- **Combined verdict: both.** Memory placement (moving working sets to
+  internal SRAM) is a real, confirmed, ~30% win on the current Python
+  dispatch loop and costs nothing structurally. Offload (flattened native
+  records, Wave 6's T14) is a much larger, order-of-magnitude lever on top
+  of that. Neither result changes the dispatch-shape conclusion — column
+  stays the right default — but both mean Wave 6 (T13's native `Collide`,
+  T14's flat sprite records) is a real optimization opportunity, not just a
+  rescue for a budget that would otherwise be blown. See
+  `docs/vs2-behaviors-handoff.md`'s T0 section for the full run data.
+
 ### What to measure, at 600 and 700 RPM
 
 | Measurement | Passes if |
 |---|---|
-| **The same workload with the GPU task idle** | Tells us what fraction of the 16-18 ms is memory contention rather than compute. If Step collapses, the lever is placement — sprite records and behavior working set in internal SRAM |
-| **A flattened record table plus `pool.move_all(dx, dy)` as one native call** | Moves 60 sprites for meaningfully less than the 90-slot Python pass costs. Needs no `Action` or `Behavior` code to try |
+| **The same workload with the GPU task idle** | Tells us what fraction of the 16-18 ms is memory contention rather than compute. If Step collapses, the lever is placement — sprite records and behavior working set in internal SRAM — **confirmed at both RPMs: ~28-30% of the behavior pass is GPU-task contention** |
+| **A flattened record table plus `pool.move_all(dx, dy)` as one native call** | Moves 60 sprites for meaningfully less than the 90-slot Python pass costs. Needs no `Action` or `Behavior` code to try — **confirmed at both RPMs: a 90-slot flattened-array probe is ~2,500-3,700x faster than any Python dispatch shape** |
 | The three dispatch shapes, ported as a microbench | Column-wise ≤ hand-written inline; per-sprite dispatch measurably worse — **confirmed at both RPMs** |
 | A realistic scene — ten or more behaviors, 60-100 sprites, half carrying a second | Step fits its 30 ms budget with margin and holds cadence; Handoff has no overruns and positive slack; Paint stays within its per-rotation budget — **not yet met** |
 | The same scene with a representative generated event sheet in `update()` | Still fits. Not modelled today, and now half of what runs in a Step |
@@ -1413,10 +1458,9 @@ on the dispatch model and survive either way.
 
 0. **The hardware gate.** A narrow standalone harness: four benchmark kernels
    plus a `scene_step()` timer exposed through `povperf`, with no `Behavior`,
-   Action, Blockly or `vs2beh` dependency. **Done, and the ratios passed** — but
-   see *How to read it*. Two experiments now belong here because either can
-   change everything below: the GPU-idle comparison, and a flattened record
-   table with `pool.move_all()` as a single native call.
+   Action, Blockly or `vs2beh` dependency. **Done, ratios passed, and both
+   follow-up experiments (GPU-idle comparison, flattened record probe) run
+   for real on hardware 2026-09-13 — see *How to read it* for the verdict.**
 1. `vs2/params.py` and `vs2/actions.py` with four Actions (`Move`, `MoveTo`,
    `Animate`, `Collide`), including `Var` binding and the `dx`/`dy` accumulator.
 2. `Behavior`, `behave()`, the run list, the tick pass, `limits.behaviors`.
