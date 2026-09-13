@@ -2082,20 +2082,10 @@ class StateMachine(Behavior):
                 "this pool are already owned by %r; %r cannot attach a "
                 "second StateMachine to the same subject" % (owner, self))
         pool._fsm_owner = self
-        initial = self._initial_index
-        enter_hook = self._enter_hooks[initial]
         for sprite in pool._free:
-            sprite.fsm_state = initial
-            sprite.fsm_hold = 0
-            sprite.fsm_then = initial
-            if enter_hook is not None:
-                enter_hook(sprite)
+            self._reset_sprite_fsm(sprite)
         for sprite in pool._live:
-            sprite.fsm_state = initial
-            sprite.fsm_hold = 0
-            sprite.fsm_then = initial
-            if enter_hook is not None:
-                enter_hook(sprite)
+            self._reset_sprite_fsm(sprite)
 
     def _prime_sprite(self, sprite):
         """Prime one standalone sprite. See :meth:`_prime_pool`."""
@@ -2106,6 +2096,16 @@ class StateMachine(Behavior):
                 "this sprite are already owned by %r; %r cannot attach a "
                 "second StateMachine to the same subject" % (owner, self))
         sprite._fsm_owner = self
+        self._reset_sprite_fsm(sprite)
+
+    def _reset_sprite_fsm(self, sprite):
+        """Set ``sprite`` to :attr:`initial`, run its enter hook if any, and
+        cancel any in-flight :meth:`hold`. Shared by :meth:`_prime_pool`/
+        :meth:`_prime_sprite` (first priming, ownership already checked)
+        and by :meth:`recycle` (a pool's :meth:`SpritePool.spawn` handing
+        back a sprite that carried a previous occupant's fsm fields --
+        see that method's own reasoning for why this is load-bearing, not
+        decorative)."""
         initial = self._initial_index
         sprite.fsm_state = initial
         sprite.fsm_hold = 0
@@ -2113,6 +2113,19 @@ class StateMachine(Behavior):
         enter_hook = self._enter_hooks[initial]
         if enter_hook is not None:
             enter_hook(sprite)
+
+    def recycle(self, sprite):
+        """Reset ``sprite``'s ``fsm_state``/``fsm_hold``/``fsm_then`` to
+        :attr:`initial` and run the initial state's enter hook, if any --
+        called by :meth:`SpritePool.spawn` on a recycled sprite this
+        :class:`StateMachine` owns, the same way a declared ``state=``
+        field is reset via the pool's own ``_behavior_state_owners``. A
+        sprite handed back through ``on_empty=vs2.RECYCLE`` would otherwise
+        resume mid-way through whatever state its previous occupant was in,
+        including a stale ``fsm_hold`` countdown -- a real bug, not a
+        cosmetic one, since :meth:`hold`'s countdown firing early or late
+        changes which state a freshly spawned sprite ends up in."""
+        self._reset_sprite_fsm(sprite)
 
     def hold(self, sprite, ticks, then):
         """Schedule a timed transition: ``ticks`` Steps from now, force

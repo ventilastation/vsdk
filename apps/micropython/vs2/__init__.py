@@ -2401,6 +2401,20 @@ class SpritePool:
         if self._var_defaults:
             for var_name, parameter in self._var_defaults.items():
                 setattr(sprite, var_name, parameter.default)
+        # A recycled sprite must not carry a previous occupant's Behavior
+        # state -- declared `state=` fields (`_behavior_state_owners`,
+        # primed to 0 at attach time the same way `_var_defaults` is here)
+        # and, separately, a StateMachine's `fsm_state`/`fsm_hold`/
+        # `fsm_then` (not part of `_behavior_state_owners` at all -- see
+        # `StateMachine.recycle`'s own docstring for why it needs its own
+        # reset instead of reusing this loop).
+        owners = getattr(self, "_behavior_state_owners", None)
+        if owners:
+            for state_name in owners:
+                setattr(sprite, state_name, 0)
+        fsm_owner = getattr(self, "_fsm_owner", None)
+        if fsm_owner is not None:
+            fsm_owner.recycle(sprite)
         if kind is not None:
             try:
                 row = self._kind_rows[kind]

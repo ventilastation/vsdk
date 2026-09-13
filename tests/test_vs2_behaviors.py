@@ -62,7 +62,7 @@ from ventilastation.scene import Scene as LegacyScene  # noqa: E402
 
 import vs2  # noqa: E402
 from vs2 import actions  # noqa: E402
-from vs2.behaviors import Behavior, Projectile  # noqa: E402
+from vs2.behaviors import Behavior, Projectile, StateMachine  # noqa: E402
 from vs2.params import Number  # noqa: E402
 
 
@@ -824,6 +824,86 @@ def test_projectile_despawns_both_sprites_on_a_hit():
         _teardown()
 
 
+def test_recycled_sprite_does_not_inherit_a_previous_occupants_state():
+    """A ``state=`` field (``Projectile.shot_flown`` here) must reset to 0
+    on every ``spawn()``, the same way a declared ``var()`` default already
+    does -- not just at attach time. Previously it did not: a sprite
+    despawned mid-flight and respawned kept its old ``shot_flown``, so it
+    could despawn again on the very next Step, past a range it had not
+    actually re-travelled."""
+    _setup()
+    try:
+        def build(scene):
+            scene.world = scene.layer("world", projection=vs2.TUNNEL)
+            scene.shots = scene.world.sprite_pool("ship.png", count=1)
+            scene.targets = scene.world.sprite_pool("ship.png", count=1)
+            scene.shots.behave(Projectile(speed_x=0, speed_y=10, range=25,
+                                            hits=scene.targets))
+            scene.shots.spawn(0, 0)
+
+        game = _build_scene(build)
+        behavior = game.shots.behavior(Projectile)
+        for _ in range(2):
+            behavior.step(game.shots)
+        sprite = game.shots._live[0]
+        check("shot_flown advanced but not yet past range",
+              0 < sprite.shot_flown <= 25)
+        game.shots.despawn(sprite)
+        respawned = game.shots.spawn(0, 0)
+        check("respawn reused the same slot", respawned is sprite)
+        check("shot_flown reset to 0 on respawn", respawned.shot_flown == 0)
+        behavior.step(game.shots)
+        check("the freshly respawned shot is still alive after one Step",
+              len(game.shots) == 1)
+    finally:
+        _teardown()
+
+
+def test_recycled_sprite_does_not_inherit_a_previous_occupants_fsm_state():
+    """The same bug, for a :class:`StateMachine` -- ``fsm_state``/
+    ``fsm_hold``/``fsm_then`` are not part of ``state=``/
+    ``_behavior_state_owners`` at all (they are exempted from it on
+    purpose, see ``StateMachine``'s own module docstring), so they need
+    their own reset path (:meth:`StateMachine.recycle`, called from
+    ``SpritePool.spawn()``). Without it, a sprite recycled mid-``hold()``
+    would resume with a stale countdown and land in whatever state that
+    countdown was heading to, not the fresh spawn's initial state."""
+    _setup()
+    try:
+        class Blinker(StateMachine):
+            states = ("on", "off")
+            initial = "on"
+
+            def on(self, sprite):
+                self.hold(sprite, 3, then="off")
+
+            def off(self, sprite):
+                self.hold(sprite, 3, then="on")
+
+        def build(scene):
+            scene.world = scene.layer("world", projection=vs2.TUNNEL)
+            scene.blinkers = scene.world.sprite_pool("ship.png", count=1)
+            scene.blinkers.behave(Blinker())
+            scene.blinkers.spawn(0, 0)
+
+        game = _build_scene(build)
+        behavior = game.blinkers.behavior(Blinker)
+        behavior.step(game.blinkers)
+        sprite = game.blinkers._live[0]
+        check("fsm_state starts at the initial index", sprite.fsm_state == 0)
+        check("hold() left a countdown in flight", sprite.fsm_hold == 2)
+        game.blinkers.despawn(sprite)
+        respawned = game.blinkers.spawn(0, 0)
+        check("respawn reused the same slot", respawned is sprite)
+        check("fsm_state reset to the initial index on respawn",
+              respawned.fsm_state == 0)
+        check("fsm_hold reset to 0 on respawn", respawned.fsm_hold == 0)
+        check("fsm_then reset to the initial index on respawn",
+              respawned.fsm_then == 0)
+    finally:
+        _teardown()
+
+
 # ---------------------------------------------------------------------------
 # Zero allocation: Projectile (+ a second co-attached Behavior) over 100
 # sprites across 1000 real Steps -- the closest this task can get to "the
@@ -1208,6 +1288,8 @@ TESTS = [
     test_projectile_moves_via_the_hoisted_move_action,
     test_projectile_despawns_past_its_range,
     test_projectile_despawns_both_sprites_on_a_hit,
+    test_recycled_sprite_does_not_inherit_a_previous_occupants_state,
+    test_recycled_sprite_does_not_inherit_a_previous_occupants_fsm_state,
     test_scene_with_projectile_over_100_sprites_allocates_nothing_across_1000_steps,
     test_hybrid_move_and_arithmetic_decision_within_25_percent_of_inline,
     test_full_projectile_with_collide_dispatch_cost_informational,
