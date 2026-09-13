@@ -314,6 +314,31 @@ things a future session should know:
   what should be the same stable state differ by a large, similar-magnitude
   pixel count each time, suspect instability before suspecting the capture
   mechanism or the game.
+- **The local browser IDE (`web/`, `make web-emulator`/`python3 -m
+  http.server 8008 --directory web`) does not see new game folders until
+  its runtime manifest is rebuilt.** The WASM worker's virtual filesystem
+  is populated entirely from `web/runtime-manifest.json` +
+  `web/runtime-bundle.json` (a generated file list + bundle,
+  `tools/generate_web_runtime_bundle.py`, wrapped as `make
+  web-runtime-bundle`) — it does *not* read `games/` off disk live, even
+  though `web/games` is a real symlink to the top-level `games/`
+  directory. Adding `games/vs2_examples/` this session (T15/T18) without
+  re-running that step left the browser IDE's game picker silently missing
+  all four `vs2_examples` games (no error — `getGameEntries()` just
+  returns fewer entries than exist on disk), discovered only when actually
+  testing the editor live in a browser rather than just running the
+  CPython/MicroPython test suites. **Fixed by running `make
+  web-runtime-bundle`** (bumped `micropython-bridge.js`'s
+  `WORKER_SCRIPT_VERSION` and `wasm-worker.js`'s
+  `runtimeBundleUrl`/`runtimeManifestUrl` `?v=` query strings too, same
+  cache-busting convention as every other `web/*.js` change this session)
+  — verified working afterward by loading `vs2_examples/vyruss_vs2` in a
+  real browser tab and watching it run live. **This is already documented**
+  in `web/README.md` ("Python-side changes only reach the browser after
+  `make web-runtime-bundle` regenerates `runtime-bundle.json`") — the gap
+  was in this session's own workflow, not a doc gap: run it after adding or
+  moving any file under `games/` before trusting a browser test of new
+  content.
 
 ### T0 — partially run (2026-09-13); the two new experiments still aren't
 
