@@ -27,39 +27,41 @@ the plan it tracks.
   (`super()` doesn't walk the runtime MRO on MicroPython the way it does on
   CPython — see the handoff doc's gotchas) that no CPython-shim test could
   have caught.
-- **T17** — done, **in full this time** (the user's goal became "implement
-  all of the plan," not a minimal pass), built as two sequential phases.
-  Phase 1: the generic Action/Behavior palette, the two-zone tick skeleton,
-  `Projectile` re-authored. Phase 2: state hats, `StateMachine` added to
-  the catalog, a brand-new `Damageable` Behavior (designed from scratch —
-  nothing to port from), and a `vasura_espacial`-shaped `StateMachine`
-  proving game (satisfies the user's ask below). Merged into
-  `vs2/wave7-integration`. Only the debugger line-map and the fast backend
-  remain of the original card — an explicit, undispatched Phase 3.
+- **T17** — **fully done, all three phases** (the user's goal became
+  "implement all of the plan," not a minimal pass). Phase 1: the generic
+  Action/Behavior palette, the two-zone tick skeleton, `Projectile`
+  re-authored. Phase 2: state hats, `StateMachine` added to the catalog, a
+  brand-new `Damageable` Behavior (designed from scratch), and a
+  `vasura_espacial`-shaped `StateMachine` proving game (satisfies the
+  user's ask below). Phase 3: the debugger line-map (`# block: <id>`
+  trailing comments, re-parsed and resolved against real MicroPython
+  tracebacks) and the fast backend (constant-folding, loop-invariant
+  hoisting, single-use inlining) for both generators — built by a
+  background subagent, independently reviewed before merging (full test
+  suite, same three pre-existing unrelated failures as this branch's own
+  baseline, nothing new). All merged into `vs2/wave7-integration`.
 - **T18** — **fully done**, merged into `vs2/wave7-integration`, including
   physical-hardware acceptance. `vyruss_vs2` ported; launcher/registry
   plumbing done for both ports. Found a third real Behavior-catalog
   mismatch (a lone-sprite Behavior's `step_one` runs every tick regardless
   of `visible`, the wrong shape for a sprite shown/hidden by game logic) —
   see the handoff doc. The physical-hardware side-by-side comparison at
-  600 RPM (blocked earlier in the session on the rotor being disconnected)
-  ran successfully once the rotor reconnected: both `vyruss_vs2` and
-  `vixeous` ports matched their hand-written originals' structural census
-  and timing, with zero overruns/skipped frames on either, and LED
-  captures confirmed correct rendering.
+  600 RPM ran successfully: both `vyruss_vs2` and `vixeous` ports matched
+  their hand-written originals' structural census and timing, with zero
+  overruns/skipped frames on either, and LED captures confirmed correct
+  rendering.
+- **T0** — **fully done**, including both new experiments and a written
+  verdict. `povdisplay.set_gpu_idle()` and `vshw_vs2.flattened_probe()`
+  (both new, minimal, throwaway native code — see the handoff doc) run for
+  real at 600/700 RPM: GPU-idle made every dispatch shape ~28-30% faster
+  uniformly (confirms shared-PSRAM-bus contention); the flattened-record
+  probe was ~2,500-3,700x faster than any Python dispatch shape. Verdict
+  ("both": memory placement and offload are real, validated levers)
+  written into `docs/vs2-behaviors-proposal.md`'s "How to read it", per
+  the plan's own instruction.
 
-**Rotor-dependent, now actionable again** (rotor reconnected mid-session,
-confirmed present alongside the workbench):
-- **T0** — the hardware gate. Never run, by anyone, ever. Deliberately
-  deferred to its own dedicated pass given the physical hang risk of
-  untested native code, rather than rushed alongside other work.
-- **Wave 6** (T13, T14) — gated on T0's verdict, still blocked until T0
-  actually runs.
-
-**Not started, not hardware-blocked:**
-- T17 Phase 3: the debugger line-map / block-ID trailing comments, and
-  the "fast backend" (only the readable generator exists). Dispatched to
-  a subagent; check its status before redispatching.
+**Now fully unblocked** (T0's written verdict is in):
+- **Wave 6** (T13, T14) — no longer gated on anything. Next up.
 
 **Satisfied:** the user's ask to use `vasura_espacial` as a `StateMachine`
 demonstration — `games/vs2_examples/vasura_states_demo`, built as part of
@@ -187,7 +189,7 @@ concurrently.
 **Status: not started.** No longer hardware-blocked (see "Status" above) —
 just not yet run.
 
-### T0 · Gate experiments (hardware, blocking)
+### T0 · Gate experiments (hardware, blocking) — **fully done (2026-09-13)**
 
 **Spec:** *Gate: prove the numbers on hardware first*.
 **Owns:** `system/vs2_behavior_gate/`, `tools/vs2_behaviors_gate.py`,
@@ -216,6 +218,26 @@ optimisation.
 
 > Nothing in Wave 6 is scoped until this lands. Waves 1–5 do not depend on it
 > and start immediately.
+
+**What actually shipped**: both experiments, as real native code
+(`povdisplay.set_gpu_idle()`, `vshw_vs2.flattened_probe()` — both
+throwaway/bench-only, wired through new `povperf gpuidle`/`flatprobe`
+commands) and wired into `tools/vs2_behaviors_gate.py` itself (the
+already-named tool), run for real at 600 and 700 RPM with `failures: []`
+and zero overruns at every row. GPU-idle: every dispatch shape ~28-30%
+faster uniformly at both RPMs. Flattened-record probe: 4us total vs.
+10.6-17.6ms for any Python dispatch shape, ~2,500-3,700x faster (with the
+honest caveat that the probe has none of a real pool's Behavior/Action
+semantics — a floor, not a projection). **Verdict written into
+`docs/vs2-behaviors-proposal.md`'s "How to read it": both** — memory
+placement is a real, confirmed, no-kernel-needed ~30% win, and offload
+(Wave 6's T14) is a much larger lever on top of it. **Wave 6 is now fully
+unblocked.** One real, unrelated scare during the run: the workbench hit a
+genuine power-brownout reboot loop partway through the first 700 RPM
+attempt (confirmed via its own serial log — not a guess, not caused by
+this session's code), needing a physical USB cable swap before a clean
+re-run succeeded. See the handoff doc's T0 section for the full story and
+numbers.
 
 ---
 
@@ -584,11 +606,10 @@ sealed slot range and mirrored live count; `pool.move_all()`.
 
 ## Wave 7 — the editor
 
-**Status: T15, T16, T17, T18 all done** (T17 minus an explicit Phase 3:
-the line map and fast backend, in progress). See "Status" above for
-the full picture — in particular, T15's proving case was `vixeous`, not
-`mapdemo` (an explicit, reasoned redirect, not a deviation to flag), and
-T16 shipped as a deliberately minimal first pass.
+**Status: T15, T16, T17 (all three phases), T18 all done.** See "Status"
+above for the full picture — in particular, T15's proving case was
+`vixeous`, not `mapdemo` (an explicit, reasoned redirect, not a deviation
+to flag), and T16 shipped as a deliberately minimal first pass.
 
 ### T15 · Scene editor and `build()` generator — **done**
 Round-trip blob, body checksum, `Detach`, numbered `on_build` hooks. Port
@@ -609,7 +630,7 @@ card implies. Deferred to T17 or a later pass: full system-action/
 expression breadth, the debugger line-map, the fast backend. Also caught a
 real MicroPython `super()`/MRO bug along the way — see the handoff doc.
 
-### T17 · Blockly for behaviors — **done (line map + fast backend deferred)**
+### T17 · Blockly for behaviors — **fully done, all three phases**
 Action palette, two-zone tick skeleton, state hats, line map, fast backend.
 Re-author `Projectile` and `Damageable` as block programs; the shipped `.py` is
 the generator's output.
@@ -620,12 +641,25 @@ skeleton (Blockly connection types make the uniform/per-sprite mix-up
 structurally unrepresentable, not just generator-checked), state hats,
 `Projectile` and a newly-designed `Damageable` both re-authored/authored
 as block programs and proven behaviorally equivalent/correct on both
-CPython and real MicroPython. **Not shipped, explicitly deferred**: the
-debugger line-map / block-ID trailing comments, and the "fast backend"
-(only the readable generator exists). No Blockly UI was added for state
-hats or `Damageable` specifically — the model/generator support is real
-and tested, just not yet exposed in the browser panel, the same
-proportion call T16 made before its own panel existed.
+CPython and real MicroPython, **the debugger line-map** (both generators
+emit a trailing `# block: <id>` comment on every line a modeled node
+produced; `linemap.py`'s `build_line_map()`/`resolve_traceback_blocks()`
+re-derive `{line: block_id}` by re-parsing those comments rather than a
+second stored structure, and resolve a real captured MicroPython
+traceback against it — verified against an actual `micropython` subprocess
+raising inside a deliberately-broken generated file, both backends; the
+browser's error banner now appends "Implicated block(s): ..." via
+`web/vs2-debug-linemap.js`, reaching the banner text but not yet driving
+Blockly's own block-selection API — an explicitly-allowed stretch goal
+not reached), **and the fast backend** (constant-folding a literal
+compare, hoisting a repeated `self.<param>` read out of a pool's `while`
+loop, inlining a single-use `if_action` result local — verified
+behaviorally identical to the readable backend tick-by-tick, on both
+CPython and real MicroPython, for `Projectile`, a state-hat `Enemy`, and
+`Damageable`). No Blockly UI was added for state hats or `Damageable`
+specifically — the model/generator support is real and tested, just not
+yet exposed in the browser panel, the same proportion call T16 made
+before its own panel existed.
 
 ### T18 · Ports — **fully done, including hardware comparison**
 Copies of `vyruss_vs2` and `vixeous` into `games/vs2_examples/`, plus the group

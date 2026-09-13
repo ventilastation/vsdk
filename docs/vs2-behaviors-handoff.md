@@ -24,25 +24,27 @@ merged into `vs2/wave7-integration`, and — unusually for this effort —
 **verified on real physical hardware**, including a bug real hardware caught
 that no CPython/unix-`micropython` test could (see "Gotchas" below).
 **T17 (full scope, not a minimal pass this time — the user's goal is now
-"implement all of the plan" in full) is done in two phases**, merged into
-`vs2/wave7-integration` — Phase 1 (generic palette, tick skeleton,
-`Projectile`) and Phase 2 (state hats, `StateMachine`, a new `Damageable`
-Behavior, a `vasura_espacial`-shaped `StateMachine` proving game). Phase 3
-(debugger line-map, fast backend) was dispatched to a subagent and is
-in progress as of this update — check its status before redispatching.
-**T18 is fully done**, merged into `vs2/wave7-integration` — the
-`vyruss_vs2` port plus launcher/registry plumbing for both ports, **and
-now also verified on physical hardware** (the rotor reconnected; both
-ports run side by side against their originals at 600 RPM with zero
+"implement all of the plan" in full) is done in all three phases**, merged
+into `vs2/wave7-integration` — Phase 1 (generic palette, tick skeleton,
+`Projectile`), Phase 2 (state hats, `StateMachine`, a new `Damageable`
+Behavior, a `vasura_espacial`-shaped `StateMachine` proving game), and
+Phase 3 (debugger line-map with real `# block: <id>` trailing comments
+re-parsed and resolved against real MicroPython tracebacks; a fast
+backend doing constant-folding/loop-invariant-hoisting/single-use-inlining
+for both generators) — built by a background subagent, independently
+reviewed (same test suite, same three pre-existing unrelated failures,
+nothing new) and merged. **T18 is fully done**, merged into
+`vs2/wave7-integration` — the `vyruss_vs2` port plus launcher/registry
+plumbing for both ports, **and now also verified on physical hardware**
+(both ports run side by side against their originals at 600 RPM with zero
 overruns and matching structural/timing/visual results — see the T18
-section below for numbers). Two of Waves 1-5's
-outstanding hardware-only gaps (T6 paint timing, T11's `vs2beh` over a
-real serial link) were closed for real on 2026-09-13; T0's two new
-hardware experiments were not (see below) — Wave 6 stays blocked until
-they are. The rotor is back (reconnected mid-session, confirmed present
-alongside the workbench), so T0 is actionable again, but it's deliberately
-deferred to its own dedicated pass given the physical hang risk of
-untested native code.
+section below for numbers). **T0 is fully done too** — both new
+experiments (GPU-idle comparison, flattened-record probe) built as real
+native code and run for real at 600/700 RPM, with a written verdict now
+in `docs/vs2-behaviors-proposal.md`'s "How to read it" — see the T0
+section below. **Wave 6 (T13/T14) is now fully unblocked.** All of Waves
+1-5's outstanding hardware-only gaps (T6 paint timing, T11's `vs2beh` over
+a real serial link) were also closed for real on 2026-09-13.
 Also closed on 2026-09-13, as known Wave 1-5 gaps rather than Wave 7 work:
 the RECYCLE state-reset bug (both the generic `state=` case and
 `StateMachine`'s `fsm_state`/`fsm_hold`/`fsm_then`), a `vs2beh` write verb
@@ -175,7 +177,7 @@ how each wave was built.
 | `vs2/T15-scene-editor` | T15, **done**. Two sub-branches (`vs2/T15-recover-tests`, `vs2/T15-vixeous-port`) built in parallel off this one and merged back into it, then this merged into `vs2/wave6-integration`. Kept for history. |
 | `vs2/wave6-integration` | `vs2/wave5-integration` + T15 merged. **Head of all completed, hardware-untested work before T16.** |
 | `vs2/T16-event-sheet` | T16 (minimal first pass), **done**. Merged into `vs2/wave7-integration`, then a post-merge fix commit landed directly on `wave7-integration` for the `super()` bug real hardware caught (see Gotchas) — that fix was never backported onto this branch itself, `wave7-integration` is the one with the real fix. |
-| `vs2/wave7-integration` | `vs2/wave6-integration` + T16 (+ its `super()` fix, the RECYCLE fix, the `vs2beh` kinds write verb, `mountKindsEditor` mounted, its own CSS cache-bust fix) + T17 Phases 1 and 2 (`vs2/T17-blockly-behaviors`, `vs2/T17-phase2-state-hats`) + T18 (`vs2/T18-vyruss-port`) merged, all kept for history. **This is the current head of all completed, tested work — real-hardware-verified for T15/T16/T18** (T17 Phase 3 in progress, dispatched separately). Not yet opened as a PR — do that (against `design/vs2-behaviors`, or against `vs2/wave5-integration`'s PR #158 once that merges) whenever a checkpoint is useful; nothing about T0/Wave 6/T17-Phase-3 blocks opening one now. |
+| `vs2/wave7-integration` | `vs2/wave6-integration` + T16 (+ its `super()` fix, the RECYCLE fix, the `vs2beh` kinds write verb, `mountKindsEditor` mounted, its own CSS cache-bust fix) + T17 Phases 1, 2 and 3 (`vs2/T17-blockly-behaviors`, `vs2/T17-phase2-state-hats`, `vs2/T17-phase3-linemap`) + T18 (`vs2/T18-vyruss-port`) + T0's GPU-idle/flattened-probe native code merged, all kept for history. **This is the current head of all completed, tested work — real-hardware-verified for T15/T16/T18/T0.** Not yet opened as a PR — do that (against `design/vs2-behaviors`, or against `vs2/wave5-integration`'s PR #158 once that merges) whenever a checkpoint is useful; nothing blocks opening one now. |
 
 If GitHub's branch list ever looks stale, `git ls-remote --heads origin` is
 the ground truth.
@@ -340,39 +342,61 @@ things a future session should know:
   moving any file under `games/` before trusting a browser test of new
   content.
 
-### T0 — partially run (2026-09-13); the two new experiments still aren't
+### T0 — fully done, including both new experiments and a written verdict (2026-09-13)
 
-`tools/vs2_behaviors_gate.py --rpms 600 700` was actually run for real on
-this hardware (the existing `system/vs2_behavior_gate/` app needs no new
-code — it was already on the board's filesystem from the same
-`deploy_micropython_fs.py` flash used for T16). Result: **the ratios still
-pass**, exit 0, `failures: []` at both RPMs — `column` ≤ `inline`×1.10,
-`hybrid` ≤ `inline`×1.25, `per_sprite` measurably slower than `column`,
-heap deltas within the allowance, zero overruns, positive slack at both 600
-and 700 RPM. Absolute `avg_us` figures were in the 14.5-17.2 ms range,
-which is the same order of magnitude as the proposal's own recorded
-baseline table (16.1-18.7 ms), not a red flag.
+`tools/vs2_behaviors_gate.py --rpms 600 700` was run for real on this
+hardware. Result: **the ratios pass**, exit 0, `failures: []` at both RPMs
+— `column` ≤ `inline`×1.10, `hybrid` ≤ `inline`×1.25, `per_sprite`
+measurably slower than `column`, heap deltas within the allowance, zero
+overruns, positive slack at both 600 and 700 RPM. Absolute `avg_us`
+figures were in the 14.6-17.6 ms range, the same order of magnitude as the
+proposal's own recorded baseline table (16.1-18.7 ms).
 
-**What's still not done**: the two *new* experiments the plan actually asks
-for (GPU-idle comparison, the flattened-record probe) — both need new code
-(a way to idle the GPU/rendering task without hanging the display, and a
-throwaway native C function), and both are genuine physical-hardware risk
-territory (a botched FreeRTOS task-suspend on the wrong task, or bad
-timing around the SPI/DMA path, can hang the board in a way that needs a
-manual power cycle, not just a clean MicroPython traceback). **Do this as
-its own dedicated, careful pass** — grep `hall_init`/the main POV task loop
-in `hardware/rotor/modules/povdisplay/povdisplay.c` first to actually
-understand whether the rotor's own column-phase computation free-runs off
-elapsed time (it looks like it does, from `scaled_phase = (esp_timer_get_time()
-- last_turn) * COLUMNS`) or genuinely halts when hall pulses stop, before
-assuming the workbench's `rpm 0` ("freezes the column at 0") gives you a
-safe, already-built GPU-idle switch for free — that freezing behavior is
-documented for the *workbench's own simulated hall output*, not confirmed
-here for what the rotor's task does in response. **Wave 6 (T13 native
-`Collide`, T14 flat sprite records) remains explicitly gated by the plan on
-T0's full verdict** ("Do not start these until T0 reports") — the ratios
-passing again is encouraging but is not the written verdict the plan asks
-for; don't start Wave 6 on the strength of this alone.
+**Both new experiments are done too**, added as real, minimal, low-risk
+native code rather than reusing the workbench's `rpm 0` freeze (confirmed
+that mechanism is documented for the workbench's own simulated hall output
+only, not the rotor's response to it — not assumed safe):
+
+- **`povdisplay.set_gpu_idle(enabled)`** (`hardware/rotor/modules/povdisplay/povdisplay.c`):
+  a new `gpu_idle_enabled` flag checked at the top of `coreTask()`'s main
+  loop — when set, skips `gpu_serve()`/`project_next_column()` entirely and
+  `vTaskDelay(1)`s instead of busy-spinning (keeps the per-core FreeRTOS
+  IDLE task fed so the watchdog never fires). Defaults off; no existing
+  boot path touched. Wired through `povperf gpuidle on|off|status`.
+- **`vshw_vs2.flattened_probe(count, passes)`** (`hardware/rotor/modules/povdisplay/vs2_native.c`):
+  a throwaway, self-contained timing loop over a *static* array shaped
+  like the eventual flattened pool layout — not the real
+  `vs2_active_scene` (whose sprite records are borrowed pointers into
+  individually heap-allocated Python objects, not contiguous, so there was
+  nothing real to flatten yet). Wired through `povperf flatprobe <count>
+  <passes>`.
+
+**Verdict** (written into `docs/vs2-behaviors-proposal.md`'s "How to read
+it", per the plan's own instruction — full numbers there):
+GPU-idle made every dispatch shape ~28-30% faster, uniformly, at both
+RPMs — confirms the shared-PSRAM-bus contention this doc's proposal
+already suspected, even though the two tasks never block on each other.
+The flattened-record probe took 4us total against 10.6-17.6ms for any
+Python dispatch shape — ~2,500-3,700x faster, with the honest caveat that
+it carries none of a real pool's Behavior/Action semantics. **Combined
+verdict: both** — memory placement is a real, confirmed, no-kernel-needed
+win, and offload (Wave 6's T14) is a much larger lever on top of it.
+**Wave 6 (T13 native `Collide`, T14 flat sprite records) is now fully
+unblocked** — T0's written verdict is in, this is not "encouraging ratios"
+alone.
+
+**One real scare during this run, worth flagging**: the workbench dropped
+into a genuine power-brownout reboot loop (`E BOD: Brownout detector was
+triggered` → reboot → repeat) partway through the first 700 RPM attempt —
+confirmed via the workbench's own serial log, not a guess. This stopped
+the run cleanly (no data corruption, no board damage) but needed the user
+to physically swap USB cables before a clean re-run at both RPMs
+succeeded with zero failures. **Not caused by this session's code** —
+idling the GPU task reduces power draw if anything — almost certainly a
+marginal cable/hub under sustained load. If a future session sees the gate
+script go dead mid-run with all-zero fields, check `find_board.py --list`
+and the workbench's own serial output for brownout lines before suspecting
+new code.
 
 ### T6 — real on-console paint timing, captured for the first time (2026-09-13)
 
@@ -782,13 +806,12 @@ remaining open items for this task.
 
 ## Suggested immediate next action
 
-T18 is fully closed. The only remaining work in the whole plan is T17
-Phase 3 (debugger line-map, fast backend — a subagent was dispatched for
-this and should be reviewed/merged once it reports back) and T0's two new
-hardware experiments (GPU-idle comparison, flattened-record probe — now
-actionable again since the rotor is back, but deliberately deferred as
-needing a careful, dedicated pass given the physical hang risk of
-untested native code). Wave 6 (T13/T14) stays gated on T0's verdict.
+T15-T18, T0, and all three phases of T17 are now fully done, merged into
+`vs2/wave7-integration`, and verified (in software and, for T15/T16/T18/T0,
+on real physical hardware too). **Wave 6 (T13 native `Collide`, T14 flat
+sprite records) is next and fully unblocked** — T0's written verdict
+("both": memory placement and offload are real, confirmed, validated
+levers, see `docs/vs2-behaviors-proposal.md`'s "How to read it") is in.
 Consider opening a PR for `vs2/wave7-integration` (against
-`design/vs2-behaviors` or against PR #158's branch) as a checkpoint now
-that T15-T18 are all done and verified in software AND on real hardware.
+`design/vs2-behaviors` or against PR #158's branch) as a checkpoint before
+starting Wave 6 — this is a clean, fully-verified stopping point.
