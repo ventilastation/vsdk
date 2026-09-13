@@ -551,5 +551,48 @@ class InvalidModelTests(unittest.TestCase):
         self.assertIn("model.per_sprite[0].amount", str(ctx.exception))
 
 
+# ---------------------------------------------------------------------------
+# T17 Phase 3: the optional "block_id"
+# ---------------------------------------------------------------------------
+
+class BlockIdModelTests(unittest.TestCase):
+    def test_accepts_block_id_on_action_decl_and_per_sprite_nodes(self):
+        model = _projectile_model()
+        model["actions"][0]["block_id"] = "BLK_MOVE"
+        model["per_sprite"][0]["block_id"] = "BLK_ACC"
+        model["per_sprite"][1]["block_id"] = "BLK_IF"
+        model["per_sprite"][1]["else"][0]["block_id"] = "BLK_IFACTION"
+        self.assertIsNone(validate_model(model))
+
+    def test_accepts_block_id_on_every_state_body_node_kind(self):
+        model = _state_machine_model()
+        self.assertIsNone(validate_model(model))
+        # Tag every node kind actually present with a block_id and confirm
+        # none of them are rejected.
+        for body in model["state_machine"]["bodies"].values():
+            for hook in ("enter", "step", "exit"):
+                for node in body.get(hook, []):
+                    node["block_id"] = "BLK_%s" % (node["kind"],)
+        self.assertIsNone(validate_model(model))
+
+    def test_rejects_non_string_block_id(self):
+        model = _projectile_model()
+        model["per_sprite"][0]["block_id"] = 7
+        with self.assertRaises(ModelError) as ctx:
+            validate_model(model)
+        self.assertIn("block_id", str(ctx.exception))
+
+    def test_rejects_empty_string_block_id_on_action_decl(self):
+        model = _projectile_model()
+        model["actions"][0]["block_id"] = ""
+        with self.assertRaises(ModelError) as ctx:
+            validate_model(model)
+        self.assertIn("block_id", str(ctx.exception))
+
+    def test_omitting_block_id_still_validates(self):
+        self.assertIsNone(validate_model(_projectile_model()))
+        self.assertIsNone(validate_model(_state_machine_model()))
+
+
 if __name__ == "__main__":
     unittest.main()

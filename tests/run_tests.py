@@ -116,6 +116,8 @@ MICROPYTHON_TESTS = [
     "tests/test_director_headless.py",
     "tests/test_installer_micropython.py",
     "tests/test_vs2_behavior_gen_micropython.py",
+    "tests/test_vs2_behavior_gen_fast_backend_micropython.py",
+    "tests/test_vs2_event_gen_fast_backend_micropython.py",
     "tests/test_vasura_states_demo_micropython.py",
 ]
 
@@ -128,6 +130,7 @@ NODE_TESTS = [
     "tests/test_vs2_kinds_editor.mjs",
     "tests/test_vs2beh_client.mjs",
     "tests/test_vs2beh_live_tune_e2e.mjs",
+    "tests/test_vs2_debug_linemap_js.mjs",
 ]
 
 

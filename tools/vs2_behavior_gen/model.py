@@ -294,6 +294,24 @@ class ModelError(ValueError):
     ``tools.vs2_event_gen.model``'s own convention."""
 
 
+def _check_block_id(value, where):
+    """T17 Phase 3: every action declaration and every per-sprite (or
+    state-body) node may optionally carry the originating Blockly block's
+    own opaque ``.id`` -- see ``web/vs2-behavior-blocks.js``'s
+    ``serializeApplyToAll``/``serializePerSpriteStack`` -- so
+    :mod:`generator` can emit a trailing ``# block: <id>`` comment on the
+    line(s) that block produced (``docs/vs2-behaviors-proposal.md``,
+    "### Debugging generated code", and this package's own
+    ``linemap.py``). Optional everywhere, matching
+    ``tools.vs2_event_gen.model``'s identical convention, so a
+    hand-authored or test model still validates with none. When present,
+    must be a non-empty string -- Blockly's own block ids are opaque
+    strings, never numbers, and the trailing-comment round-trip would not
+    survive any other type."""
+    if not isinstance(value, str) or not value:
+        raise ModelError("%s: must be a non-empty string" % (where,))
+
+
 def _check_identifier(value, where, reserved=()):
     if not isinstance(value, str) or not _IDENTIFIER_RE.match(value):
         raise ModelError("%s: %r is not a valid Python identifier" % (where, value))
@@ -384,9 +402,11 @@ def _check_condition(condition, where, param_names, state_names):
 def _check_action_decl(action, where, param_names):
     if not isinstance(action, dict):
         raise ModelError("%s: must be an object" % (where,))
-    extra = set(action.keys()) - {"bind", "action_class", "args"}
+    extra = set(action.keys()) - {"bind", "action_class", "args", "block_id"}
     if extra:
         raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+    if "block_id" in action:
+        _check_block_id(action["block_id"], where + ".block_id")
     _check_identifier(action.get("bind"), where + ".bind")
     action_class = action.get("action_class")
     if action_class not in ACTION_FIELDS:
@@ -434,6 +454,8 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
     kind = node.get("kind")
     if kind not in allowed_kinds:
         raise ModelError("%s.kind: %r is not one of %s" % (where, kind, allowed_kinds))
+    if "block_id" in node:
+        _check_block_id(node["block_id"], where + ".block_id")
 
     if kind == "accumulate":
         # Also accepts the built-in sprite fields (x/y), alongside a
@@ -449,7 +471,7 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         # schema does not force that choice either way, matching the real
         # catalog's own precedent of Behaviors reaching directly into x/y
         # when the effect is not meant to compose.
-        extra = set(node.keys()) - {"kind", "state", "amount"}
+        extra = set(node.keys()) - {"kind", "state", "amount", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         state = node.get("state")
@@ -464,7 +486,7 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         return
 
     if kind == "set_state":
-        extra = set(node.keys()) - {"kind", "state", "value"}
+        extra = set(node.keys()) - {"kind", "state", "value", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         state = node.get("state")
@@ -479,19 +501,19 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         return
 
     if kind == "despawn":
-        extra = set(node.keys()) - {"kind"}
+        extra = set(node.keys()) - {"kind", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         return
 
     if kind == "despawn_hit":
-        extra = set(node.keys()) - {"kind"}
+        extra = set(node.keys()) - {"kind", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         return
 
     if kind == "call_callback":
-        extra = set(node.keys()) - {"kind", "name", "args"}
+        extra = set(node.keys()) - {"kind", "name", "args", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         name = node.get("name")
@@ -505,7 +527,7 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         return
 
     if kind == "spawn":
-        extra = set(node.keys()) - {"kind", "pool", "x", "y"}
+        extra = set(node.keys()) - {"kind", "pool", "x", "y", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         pool = node.get("pool")
@@ -518,7 +540,7 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         return
 
     if kind == "play_sound":
-        extra = set(node.keys()) - {"kind", "name"}
+        extra = set(node.keys()) - {"kind", "name", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         name = node.get("name")
@@ -527,7 +549,7 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         return
 
     if kind == "goto_state":
-        extra = set(node.keys()) - {"kind", "name"}
+        extra = set(node.keys()) - {"kind", "name", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         name = node.get("name")
@@ -538,7 +560,7 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         return
 
     if kind == "hold":
-        extra = set(node.keys()) - {"kind", "ticks", "then"}
+        extra = set(node.keys()) - {"kind", "ticks", "then", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         if "ticks" not in node:
@@ -552,7 +574,7 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         return
 
     if kind == "if_else":
-        extra = set(node.keys()) - {"kind", "condition", "then", "else"}
+        extra = set(node.keys()) - {"kind", "condition", "then", "else", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         if "condition" not in node:
@@ -567,7 +589,7 @@ def _check_per_sprite_node(node, where, param_names, state_names, action_binds,
         return
 
     # kind == "if_action": "if <bound Action>.run_one(sprite) found something, do..."
-    extra = set(node.keys()) - {"kind", "bind", "then", "else"}
+    extra = set(node.keys()) - {"kind", "bind", "then", "else", "block_id"}
     if extra:
         raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
     bind = node.get("bind")

@@ -68,9 +68,24 @@
  * requires (apply-to-all cannot land in the per-sprite zone) *is* fully
  * Blockly-enforced; this finer one is not, and is flagged here rather than
  * silently assumed equivalent.
+ *
+ * **T17 Phase 3: every Action-declaration and per-sprite-node block's own
+ * ``.id`` rides along as ``block_id`` in the serialized model**, the same
+ * addition ``vs2-event-sheet.js`` makes for T16's schema -- see that
+ * module's own docstring for why (``tools/vs2_behavior_gen/generator.py``
+ * emits a trailing ``# block: <id>`` comment on the line(s) each block
+ * produced, so a captured traceback resolves back to the exact block --
+ * ``linemap.py``). Not every node kind in this schema has a Blockly block
+ * yet (state-hat-only kinds -- ``hold``/``goto_state``/``set_state``/
+ * ``call_callback``/``spawn``/``play_sound`` -- have no palette entry in
+ * this file at all, a pre-existing Phase 1/2 scope gap this task does not
+ * fill, see this task's report), so only the kinds this module actually
+ * serializes carry a real ``block_id``; the rest simply validate with
+ * none, exactly as the model schema's own "optional everywhere" design
+ * allows.
  */
 
-import { loadBlockly } from "./vs2-event-sheet.js?v=20260912a";
+import { loadBlockly } from "./vs2-event-sheet.js?v=20260913b";
 
 const CATALOG_URL = "./vs2-behavior-catalog.json";
 
@@ -509,7 +524,10 @@ function serializeApplyToAll(firstBlock, allocateBind) {
       throw new Error(`not an apply-to-all action block: ${block.type}`);
     }
     const bind = allocateBind(spec.actionName);
-    actions.push({ bind, action_class: spec.actionName, args: actionArgsFromBlock(block, spec) });
+    actions.push({
+      bind, action_class: spec.actionName, args: actionArgsFromBlock(block, spec),
+      block_id: block.id,
+    });
     applyToAll.push(bind);
   }
   return { actions, applyToAll };
@@ -528,6 +546,7 @@ function serializePerSpriteStack(firstBlock, allocateBind) {
         kind: "accumulate",
         state: String(block.getFieldValue("STATE")),
         amount: blockToExpr(block.getInputTargetBlock("AMOUNT")),
+        block_id: block.id,
       });
     } else if (block.type === "vs2beh_if_else") {
       const thenResult = serializePerSpriteStack(
@@ -545,11 +564,12 @@ function serializePerSpriteStack(firstBlock, allocateBind) {
         },
         then: thenResult.nodes,
         else: elseResult.nodes,
+        block_id: block.id,
       });
     } else if (block.type === "vs2beh_despawn") {
-      nodes.push({ kind: "despawn" });
+      nodes.push({ kind: "despawn", block_id: block.id });
     } else if (block.type === "vs2beh_despawn_hit") {
-      nodes.push({ kind: "despawn_hit" });
+      nodes.push({ kind: "despawn_hit", block_id: block.id });
     } else {
       const spec = actionBlockSpecsByType.get(block.type);
       if (!spec || spec.flavor !== "if") {
@@ -558,10 +578,11 @@ function serializePerSpriteStack(firstBlock, allocateBind) {
       const bind = allocateBind(spec.actionName);
       actions.push({
         bind, action_class: spec.actionName, args: actionArgsFromBlock(block, spec),
+        block_id: block.id,
       });
       const doResult = serializePerSpriteStack(block.getInputTargetBlock("DO"), allocateBind);
       actions.push(...doResult.actions);
-      nodes.push({ kind: "if_action", bind, then: doResult.nodes, else: [] });
+      nodes.push({ kind: "if_action", bind, then: doResult.nodes, else: [], block_id: block.id });
     }
   }
   return { nodes, actions };
@@ -664,8 +685,8 @@ export function serializeWorkspaceToModel(workspace) {
 // trip visually in a live browser (see this task's report).
 // ---------------------------------------------------------------------------
 
-function newRenderedBlock(workspace, type) {
-  const block = workspace.newBlock(type);
+function newRenderedBlock(workspace, type, id) {
+  const block = workspace.newBlock(type, id);
   block.initSvg();
   block.render();
   return block;
@@ -718,7 +739,7 @@ function findActionSpec(actionClass, flavor) {
 
 function actionBlockFromDecl(workspace, actionDecl, flavor) {
   const spec = findActionSpec(actionDecl.action_class, flavor);
-  const block = newRenderedBlock(workspace, spec.blockType);
+  const block = newRenderedBlock(workspace, spec.blockType, actionDecl.block_id);
   for (const fieldSpec of spec.specs) {
     const value = actionDecl.args[fieldSpec.name];
     if (value === undefined) {
@@ -737,13 +758,13 @@ function actionBlockFromDecl(workspace, actionDecl, flavor) {
 
 function perSpriteNodeToBlock(workspace, node, actionsByBind) {
   if (node.kind === "accumulate") {
-    const block = newRenderedBlock(workspace, "vs2beh_accumulate");
+    const block = newRenderedBlock(workspace, "vs2beh_accumulate", node.block_id);
     block.setFieldValue(node.state, "STATE");
     connectValueInput(block, "AMOUNT", exprToBlock(workspace, node.amount));
     return block;
   }
   if (node.kind === "if_else") {
-    const block = newRenderedBlock(workspace, "vs2beh_if_else");
+    const block = newRenderedBlock(workspace, "vs2beh_if_else", node.block_id);
     connectValueInput(block, "LEFT", exprToBlock(workspace, node.condition.left));
     block.setFieldValue(node.condition.op, "OP");
     connectValueInput(block, "RIGHT", exprToBlock(workspace, node.condition.right));
@@ -754,10 +775,10 @@ function perSpriteNodeToBlock(workspace, node, actionsByBind) {
     return block;
   }
   if (node.kind === "despawn") {
-    return newRenderedBlock(workspace, "vs2beh_despawn");
+    return newRenderedBlock(workspace, "vs2beh_despawn", node.block_id);
   }
   if (node.kind === "despawn_hit") {
-    return newRenderedBlock(workspace, "vs2beh_despawn_hit");
+    return newRenderedBlock(workspace, "vs2beh_despawn_hit", node.block_id);
   }
   // kind === "if_action"
   const actionDecl = actionsByBind.get(node.bind);

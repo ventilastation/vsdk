@@ -44,6 +44,7 @@ import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { ChipAudioHost } from "./chip-audio-host.js?v=20260727b";
 import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260729a";
 import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722e";
+import { resolveTracebackBlocksFromProject } from "./vs2-debug-linemap.js?v=20260913b";
 
 
 class FailedRuntimeAdapter {
@@ -2512,6 +2513,60 @@ class BrowserHostApp {
     sceneErrorBanner.hidden = false;
     sceneErrorTitle.textContent = this.executionError.title;
     sceneErrorMessage.textContent = this.executionError.message;
+    this.resolveSceneErrorBlocks();
+  }
+
+  /**
+   * T17 Phase 3: real-but-proportionate UI integration for the debugger
+   * line map (docs/vs2-behaviors-proposal.md, "### Debugging generated
+   * code"). ``this.executionError.message`` is the actual Python
+   * traceback text a generated ``vs2_event_gen``/``vs2_behavior_gen``
+   * file's own exception carried all the way from
+   * ``director.report_traceback`` (see
+   * apps/micropython/ventilastation/browser.py's own
+   * ``_consume_traceback_messages``/``tick()``) into this banner. This
+   * fetches whichever generated files the traceback names (through the
+   * same project-file bridge the Save/Load panel buttons already use) and,
+   * when one of them carries a ``# block: <id>`` line map that resolves a
+   * frame, appends that to the banner's own text.
+   *
+   * **Where this stops, and why.** This extends the banner's *text* only
+   * -- it does not open the relevant Blockly workspace panel or select/
+   * highlight the implicated block there. Doing that would need to know
+   * which of the three panels (event-sheet vs. behavior-blocks) owns the
+   * named file, load its model, find the block by id in a *live*
+   * workspace, and drive Blockly's own selection/scroll-into-view APIs --
+   * a real, separate feature, not a small extension of this one. The task
+   * brief calls that a legitimate stretch goal, not a hard requirement;
+   * this pass reaches "the resolved block-id information appears
+   * somewhere real" (the banner's own text) and stops there.
+   */
+  async resolveSceneErrorBlocks() {
+    const error = this.executionError;
+    if (!error || !error.message) {
+      return;
+    }
+    let blocks;
+    try {
+      blocks = await resolveTracebackBlocksFromProject(
+        error.message, (path, encoding) => this.readProjectFile(path, encoding));
+    } catch {
+      return; // never let a debugger convenience break the banner itself
+    }
+    // Stale by the time the async read finished (a newer error landed, or
+    // the error was cleared) -- drop this result rather than overwrite a
+    // banner that has already moved on.
+    if (this.executionError !== error || !blocks.length) {
+      return;
+    }
+    const { sceneErrorMessage } = this.elements;
+    if (!sceneErrorMessage) {
+      return;
+    }
+    const summary = blocks
+      .map((block) => `${block.file} line ${block.line} -> block ${block.blockId}`)
+      .join("; ");
+    sceneErrorMessage.textContent = `${error.message}\n\nImplicated block(s): ${summary}`;
   }
 
   renderMemorySummary(error = null) {

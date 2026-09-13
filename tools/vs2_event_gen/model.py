@@ -48,6 +48,15 @@ a staged step function once you know later-wins-same-tick.
 docstring for the full out-of-scope list): no arithmetic in expressions, no
 sprite/pool Action blocks, no state hats, exactly the two condition kinds
 and three action kinds enumerated below -- nothing else.
+
+**T17 Phase 3: an optional ``"block_id"`` on any event or action.** The
+originating Blockly block's own opaque ``.id`` (see
+``web/vs2-event-sheet.js``'s ``blockToEvent``/``blockToAction``), threaded
+through so :mod:`generator` can emit a trailing ``# block: <id>`` comment
+on the line(s) that block produced -- see ``docs/vs2-behaviors-proposal.md``,
+"### Debugging generated code", and this package's own ``linemap.py``.
+Optional everywhere it appears so a hand-authored or test model (with no
+real Blockly workspace behind it) still validates with none.
 """
 
 import keyword
@@ -73,6 +82,20 @@ class ModelError(ValueError):
     """Raised by :func:`validate_model` with a message naming the exact
     offending path (e.g. ``"events[1].actions[0].value.a"``), the same
     convention :mod:`tools.vs2_scene_gen.model` uses."""
+
+
+def _check_block_id(value, where):
+    """``block_id`` is optional everywhere it appears (a hand-authored or
+    test model carries none; a real Blockly-serialized one carries the
+    originating block's own ``.id`` on every event/action -- see
+    ``web/vs2-event-sheet.js``'s ``blockToEvent``/``blockToAction``) but
+    when present must be a non-empty string: Blockly's own block ids are
+    opaque strings (``"K@3G0jz2u!..."``-shaped, never numbers), and the
+    generator's line-map machinery (``linemap.py``) re-parses it back out
+    of a trailing ``# block: <id>`` comment, which would not round-trip a
+    non-string value anyway."""
+    if not isinstance(value, str) or not value:
+        raise ModelError("%s: must be a non-empty string" % (where,))
 
 
 def _check_identifier(value, where):
@@ -157,8 +180,11 @@ def _check_action(action, where):
     if kind not in ACTION_KINDS:
         raise ModelError("%s.kind: %r is not one of %s" % (where, kind, ACTION_KINDS))
 
+    if "block_id" in action:
+        _check_block_id(action["block_id"], where + ".block_id")
+
     if kind == "set_variable":
-        extra = set(action.keys()) - {"kind", "name", "value"}
+        extra = set(action.keys()) - {"kind", "name", "value", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         _check_identifier(action.get("name"), where + ".name")
@@ -168,7 +194,7 @@ def _check_action(action, where):
         return
 
     if kind == "goto_scene":
-        extra = set(action.keys()) - {"kind", "module", "class_name"}
+        extra = set(action.keys()) - {"kind", "module", "class_name", "block_id"}
         if extra:
             raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
         module = action.get("module")
@@ -182,7 +208,7 @@ def _check_action(action, where):
         return
 
     # kind == "set_label_text"
-    extra = set(action.keys()) - {"kind", "label_attr", "text"}
+    extra = set(action.keys()) - {"kind", "label_attr", "text", "block_id"}
     if extra:
         raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
     _check_identifier(action.get("label_attr"), where + ".label_attr")
@@ -194,9 +220,11 @@ def _check_action(action, where):
 def _check_event(event, where):
     if not isinstance(event, dict):
         raise ModelError("%s: must be an object" % (where,))
-    extra = set(event.keys()) - {"kind", "conditions", "actions"}
+    extra = set(event.keys()) - {"kind", "conditions", "actions", "block_id"}
     if extra:
         raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+    if "block_id" in event:
+        _check_block_id(event["block_id"], where + ".block_id")
 
     kind = event.get("kind")
     if kind not in EVENT_KINDS:

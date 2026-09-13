@@ -76,12 +76,33 @@ tick (see :mod:`model`'s docstring for why the proving game relies on
 exactly this to fake "increment" without arithmetic).
 """
 
+import operator
+
 from tools.vs2_scene_gen.blob import encode_blob
 
 from . import checksum
 from . import model as model_module
 
 INDENT = "        "  # inside a method body: 4 (class) + 4 (def) spaces
+
+#: T17 Phase 3: the two render paths ``render_body``/``generate_source``
+#: accept. "readable" (the default, and the only path this generator had
+#: before this phase) renders every condition exactly as authored. "fast"
+#: applies the one mechanical transform this schema's grammar actually has
+#: a site for -- see ``render_condition``'s own docstring on why constant-
+#: folding a literal-vs-literal ``compare`` is the *only* one of the three
+#: permitted transforms (constant-fold / hoist / inline) that applies here
+#: at all: there is no arithmetic expression to fold, no per-sprite loop
+#: to hoist a repeated read out of (this generator has no sprites at all),
+#: and no single-use local worth inlining (``goto_scene``'s own ``_target``
+#: is read three times, never once). Reported honestly rather than
+#: inventing a transform with no real site -- see this task's report.
+BACKENDS = ("readable", "fast")
+
+_COMPARE_FUNCS = {
+    "==": operator.eq, "!=": operator.ne, "<": operator.lt,
+    ">": operator.gt, "<=": operator.le, ">=": operator.ge,
+}
 
 
 class GeneratorError(ValueError):
@@ -114,9 +135,40 @@ def render_expr(expr, imports):
     return "randrange(%s, (%s) + 1)" % (a_src, b_src)
 
 
-def render_condition(condition, imports):
-    """``condition`` -> a Python boolean expression source string."""
+def _try_constant_fold_compare(condition):
+    """``condition`` (a ``"compare"``-kind node) -> the folded Python
+    ``bool`` if both operands are literals and the comparison can be
+    evaluated at generate time, else ``None`` (leave it as a runtime
+    expression). ``None`` also covers the case where the operator raises
+    at generate time (e.g. ``<`` between a number and a string literal --
+    exactly what the *unfolded* expression would also raise, at runtime,
+    for the same nonsensical model): never fold what could behave
+    differently from leaving the original expression to fail exactly
+    where a hand-authored model told it to."""
+    left, right = condition["left"], condition["right"]
+    if left["kind"] != "literal" or right["kind"] != "literal":
+        return None
+    try:
+        return _COMPARE_FUNCS[condition["op"]](left["value"], right["value"])
+    except TypeError:
+        return None
+
+
+def render_condition(condition, imports, backend="readable"):
+    """``condition`` -> a Python boolean expression source string.
+    ``backend="fast"`` additionally constant-folds a ``"compare"`` whose
+    both operands are literals into a plain ``True``/``False`` -- the only
+    one of the three permitted fast-backend transforms (constant-fold /
+    hoist / inline) this package's grammar has any site for at all, see
+    :data:`BACKENDS`'s own docstring. Folding never removes the ``if``
+    statement itself (that would be restructuring control flow, which the
+    spec explicitly forbids); it only precomputes the condition's own
+    value."""
     if condition["kind"] == "compare":
+        if backend == "fast":
+            folded = _try_constant_fold_compare(condition)
+            if folded is not None:
+                return repr(folded)
         left = render_expr(condition["left"], imports)
         right = render_expr(condition["right"], imports)
         return "%s %s %s" % (left, condition["op"], right)
@@ -124,28 +176,50 @@ def render_condition(condition, imports):
     return "self._vs2_events_ticks >= %d" % (condition["ticks"],)
 
 
-def render_action(action, indent, imports):
+def _with_block_comment(lines, block_id):
+    """T17 Phase 3: append a trailing ``# block: <id>`` comment to every
+    line in ``lines`` when ``block_id`` is present -- see this package's
+    own ``linemap.py`` for why the comment is re-parsed rather than kept
+    as a second structure. A no-op (returns ``lines`` unchanged) when
+    ``block_id`` is falsy, so every call site below reads the same
+    whether or not the originating model actually carried one."""
+    if not block_id:
+        return lines
+    return [line + ("  # block: %s" % (block_id,)) for line in lines]
+
+
+def render_action(action, indent, imports, backend="readable"):
     """``action`` -> a list of source lines, each already prefixed with
-    ``indent``."""
+    ``indent`` and, when ``action`` carries a ``"block_id"``, suffixed
+    with a trailing ``# block: <id>`` comment (every line this function
+    returns belongs to the one action it renders, so every line gets the
+    same comment). ``backend`` is accepted for symmetry with
+    :func:`render_condition`/:func:`render_body` even though no action
+    kind here has anything to fast-render differently -- see
+    :data:`BACKENDS`'s docstring."""
+    del backend  # no action kind has a fast-path transform; see docstring above
     kind = action["kind"]
+    block_id = action.get("block_id")
 
     if kind == "set_variable":
         value_src = render_expr(action["value"], imports)
-        return ["%svs2.project.%s = %s" % (indent, action["name"], value_src)]
+        return _with_block_comment(
+            ["%svs2.project.%s = %s" % (indent, action["name"], value_src)], block_id)
 
     if kind == "set_label_text":
         text_src = render_expr(action["text"], imports)
-        return ["%sself.%s.text = %s" % (indent, action["label_attr"], text_src)]
+        return _with_block_comment(
+            ["%sself.%s.text = %s" % (indent, action["label_attr"], text_src)], block_id)
 
     # kind == "goto_scene": the import is local to this action's own block,
     # not module-level -- see this module's docstring for why.
-    return [
+    return _with_block_comment([
         "%simport %s as _scene" % (indent, action["module"]),
         "%s_target = _scene.%s()" % (indent, action["class_name"]),
         "%s_target._vs_api_slug = self._vs_api_slug" % (indent,),
         "%s_target._vs_declared_api = self._vs_declared_api" % (indent,),
         "%sself.switch(_target)" % (indent,),
-    ]
+    ], block_id)
 
 
 # ---------------------------------------------------------------------------
@@ -167,51 +241,56 @@ def _collect_declared_vars(model):
 # Method-body assembly
 # ---------------------------------------------------------------------------
 
-def _render_event_block(event, imports):
+def _render_event_block(event, imports, backend="readable"):
     conditions = event.get("conditions", [])
     if conditions:
-        cond_src = " and ".join(render_condition(c, imports) for c in conditions)
-        lines = ["%sif %s:" % (INDENT, cond_src)]
+        cond_src = " and ".join(render_condition(c, imports, backend) for c in conditions)
+        lines = _with_block_comment(["%sif %s:" % (INDENT, cond_src)], event.get("block_id"))
         action_indent = INDENT + "    "
     else:
         lines = []
         action_indent = INDENT
     for action in event["actions"]:
-        lines.extend(render_action(action, action_indent, imports))
+        lines.extend(render_action(action, action_indent, imports, backend))
     return lines
 
 
-def _render_on_enter(model, imports, declared_vars):
+def _render_on_enter(model, imports, declared_vars, backend="readable"):
     lines = ["%ssuper().on_enter()" % (INDENT,)]
     lines.append("%sself._vs2_events_ticks = 0" % (INDENT,))
     for name in declared_vars:
         lines.append("%svs2.project.var(%r, 0)" % (INDENT, name))
     for event in model["events"]:
         if event["kind"] == "on_start":
-            lines.extend(_render_event_block(event, imports))
+            lines.extend(_render_event_block(event, imports, backend))
     return lines
 
 
-def _render_update(model, imports):
+def _render_update(model, imports, backend="readable"):
     lines = ["%ssuper().update()" % (INDENT,)]
     lines.append("%sself._vs2_events_ticks += 1" % (INDENT,))
     for event in model["events"]:
         if event["kind"] == "on_tick":
-            lines.extend(_render_event_block(event, imports))
+            lines.extend(_render_event_block(event, imports, backend))
     return lines
 
 
-def render_body(model):
+def render_body(model, backend="readable"):
     """The generated file's body -- everything except the banner and the
-    trailing blob line. Deterministic: the same model always renders the
-    same body, byte for byte. ``goto_scene`` needs no header-level import
-    at all -- see this module's docstring for why its ``import`` line is
-    local to the action's own block instead."""
+    trailing blob line. Deterministic: the same model and the same
+    ``backend`` always render the same body, byte for byte. ``goto_scene``
+    needs no header-level import at all -- see this module's docstring for
+    why its ``import`` line is local to the action's own block instead.
+    ``backend`` is one of :data:`BACKENDS`; see its docstring for what
+    ``"fast"`` actually changes here (very little -- constant-folding a
+    literal-vs-literal compare, and nothing else, honestly)."""
+    if backend not in BACKENDS:
+        raise GeneratorError("backend: %r is not one of %s" % (backend, BACKENDS))
     imports = set()
     declared_vars = _collect_declared_vars(model)
 
-    on_enter_lines = _render_on_enter(model, imports, declared_vars)
-    update_lines = _render_update(model, imports)
+    on_enter_lines = _render_on_enter(model, imports, declared_vars, backend)
+    update_lines = _render_update(model, imports, backend)
 
     lines = ["import vs2"]
     if "randrange" in imports:
@@ -227,12 +306,17 @@ def render_body(model):
     return "\n".join(lines)
 
 
-def generate_source(model, basename):
+def generate_source(model, basename, backend="readable"):
     """The full generated file text: banner, body, blank line, blob.
     ``basename`` (e.g. ``"playing_scene_events.py"``) is recorded in the
-    banner only -- it plays no role in the checksum or the blob."""
+    banner only -- it plays no role in the checksum or the blob.
+    ``backend`` (:data:`BACKENDS`) is likewise not recorded anywhere in
+    the file: the embedded blob always carries the same model regardless
+    of which backend rendered it, so switching backends and regenerating
+    is not a model change -- it changes only the body (and therefore the
+    banner's body-sha, correctly)."""
     model_module.validate_model(model)
-    body = render_body(model)
+    body = render_body(model, backend)
     sha = checksum.body_sha(body)
     banner_line = checksum.make_banner(basename, sha)
     blob_line = checksum.make_blob_line(encode_blob(model))
@@ -255,13 +339,13 @@ class WriteResult:
         return "WriteResult(%r, %r, %r)" % (self.status, str(self.path), self.message)
 
 
-def write_events_file(model, output_path):
+def write_events_file(model, output_path, backend="readable"):
     """Regenerate ``output_path`` from ``model`` if it is safe to do so.
     Never raises for any of the five normal outcomes above -- only a
     malformed ``model`` (a :class:`~model.ModelError`) or an unwritable
-    path can raise."""
+    path can raise. ``backend`` -- see :func:`generate_source`."""
     basename = output_path.name
-    new_text = generate_source(model, basename)
+    new_text = generate_source(model, basename, backend)
 
     if not output_path.exists():
         output_path.write_text(new_text)
