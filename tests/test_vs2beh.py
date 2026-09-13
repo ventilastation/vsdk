@@ -823,11 +823,102 @@ def test_a_pool_with_no_kinds_omits_the_kinds_field():
         _teardown()
 
 
+def _build_kinds_game():
+    def build(scene):
+        scene.world = scene.layer("world", projection=vs2.TUNNEL)
+        scene.enemies = scene.world.sprite_pool("ship.png", count=6)
+        scene.enemies.var("hp", 1, min=0, max=99)
+        scene.enemies.var("score", 40, min=0, max=9999)
+        scene.enemies.kinds(driller=(3, 75), chiller=(1, 40), boss=(9, 500))
+    return _build_scene(build)
+
+
+def test_set_writes_one_kinds_cell_and_leaves_other_cells_and_rows_alone():
+    # The write half of the read path above: no new top-level command,
+    # `set`/`reset` address a kinds cell the same way they address a
+    # scalar parameter, at `<subject>.kinds.<kind_name>.<field_name>`.
+    _setup()
+    try:
+        game = _build_kinds_game()
+        sent, send = _send_capture()
+        behavior_control.handle_command(
+            ["set", "enemies.kinds.boss.hp", "12"], send, scene=game)
+        check("set reports the applied value",
+              sent[-1] == b"vs2beh_ok enemies.kinds.boss.hp=12")
+        check("the pool's live row actually changed",
+              game.enemies._kind_rows["boss"] == (12, 500))
+        check("boss's other field is untouched",
+              game.enemies._kind_rows["boss"][1] == 500)
+        check("a sibling kind's row is untouched",
+              game.enemies._kind_rows["chiller"] == (1, 40))
+
+        sent2, send2 = _send_capture()
+        behavior_control.handle_command(["list"], send2, scene=game)
+        payload = _last_json(sent2)
+        kinds = _find_subject(payload, "enemies")["kinds"]
+        boss_row = next(row for row in kinds["rows"] if row["name"] == "boss")
+        check("list reflects the edit immediately, no restart",
+              boss_row["values"] == [12, 500])
+    finally:
+        _teardown()
+
+
+def test_set_on_a_kinds_cell_is_visible_to_a_later_spawn():
+    _setup()
+    try:
+        game = _build_kinds_game()
+        behavior_control.handle_command(
+            ["set", "enemies.kinds.boss.hp", "12"], lambda *_: None, scene=game)
+        sprite = game.enemies.spawn(0, 0, kind="boss")
+        check("spawn(kind=...) applies the live-edited value, not the "
+              "originally-declared one", sprite.hp == 12)
+    finally:
+        _teardown()
+
+
+def test_set_on_a_kinds_cell_validates_via_the_declared_variable():
+    _setup()
+    try:
+        game = _build_kinds_game()
+        sent, send = _send_capture()
+        behavior_control.handle_command(
+            ["set", "enemies.kinds.boss.hp", "999"], send, scene=game)
+        check("out-of-range write to a kinds cell is rejected",
+              sent[-1].startswith(b"vs2beh_error"))
+        check("the row is unchanged after a rejected write",
+              game.enemies._kind_rows["boss"] == (9, 500))
+    finally:
+        _teardown()
+
+
+def test_reset_restores_a_kinds_cell_to_its_declared_row():
+    _setup()
+    try:
+        game = _build_kinds_game()
+        behavior_control.handle_command(
+            ["set", "enemies.kinds.boss.hp", "12"], lambda *_: None, scene=game)
+        check("sanity: the edit landed", game.enemies._kind_rows["boss"][0] == 12)
+
+        sent, send = _send_capture()
+        behavior_control.handle_command(
+            ["reset", "enemies.kinds.boss.hp"], send, scene=game)
+        check("reset reports the restored value",
+              sent[-1] == b"vs2beh_ok enemies.kinds.boss.hp=9")
+        check("the live row is restored to exactly what kinds() declared",
+              game.enemies._kind_rows["boss"] == (9, 500))
+    finally:
+        _teardown()
+
+
 TESTS = [
     test_list_allocates_only_when_called_and_never_during_ticks,
     test_list_reports_pool_vars_behaviors_and_nested_action_params,
     test_list_reports_a_pools_kinds_table_sorted_and_stable,
     test_a_pool_with_no_kinds_omits_the_kinds_field,
+    test_set_writes_one_kinds_cell_and_leaves_other_cells_and_rows_alone,
+    test_set_on_a_kinds_cell_is_visible_to_a_later_spawn,
+    test_set_on_a_kinds_cell_validates_via_the_declared_variable,
+    test_reset_restores_a_kinds_cell_to_its_declared_row,
     test_a_pool_with_neither_vars_nor_behaviors_is_not_listed,
     test_a_pool_reachable_through_no_scene_attribute_is_not_addressable,
     test_two_attributes_referencing_one_pool_use_the_first_sorted_name,

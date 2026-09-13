@@ -2337,6 +2337,17 @@ class SpritePool:
                         kind_name, len(row), len(fields), ", ".join(fields)))
         self._kind_fields = fields
         self._kind_rows = dict(rows)
+        #: A frozen snapshot of the rows exactly as declared, kept
+        #: alongside the live, possibly ``vs2beh``-edited copy above so a
+        #: live-tune ``reset`` of one cell has something to restore --
+        #: `_kind_rows` itself is now mutable (see
+        #: `ventilastation.behavior_control`'s kinds-cell write path),
+        #: unlike every scalar `var()` default, which never changes after
+        #: `build()` and so needs no separate snapshot. Sharing the same
+        #: tuples is safe: a row tuple is replaced wholesale on write
+        #: (`ventilastation.behavior_control`'s apply rebuilds a new tuple
+        #: rather than mutating one in place), never edited in place.
+        self._kind_rows_default = dict(self._kind_rows)
 
     def behave(self, behavior, name=None):
         """Attach ``behavior`` to this pool. Structural: only callable

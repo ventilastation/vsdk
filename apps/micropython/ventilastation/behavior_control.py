@@ -51,11 +51,20 @@ against the real interpreter), unlike ``var()``'s own ``_var_order`` fix
 (T5), which works because each variable is declared in its own call. Rows
 are sorted by name instead -- deterministic and stable across repeated
 ``list`` calls, which is what the panel's "editing a cell never reorders
-other rows" contract actually needs. **Still open:** there is no wire verb
-for *writing* a kinds-table edit back to a running game (``set``/``reset``
-only address scalar parameters), and the panel's ``mountKindsEditor`` is not
-yet mounted into the live panel tree -- both real, scoped follow-up work,
-not silently swept under this fix.
+other rows" contract actually needs.
+
+**The kinds-table write path.** Added later: one ``_Target`` per cell,
+addressed as ``<subject>.kinds.<kind_name>.<field_name>`` and going
+through the exact same ``set``/``reset`` verbs every scalar parameter
+already uses -- no new top-level command, see :func:`_register_kind_cells`.
+Writing replaces the whole row tuple (``SpritePool._kind_rows`` moved from
+build-time-immutable to live-tune-writable the moment this landed);
+``vs2.SpritePool.kinds()`` now also keeps ``_kind_rows_default``, a frozen
+snapshot of the rows exactly as declared, since a kinds cell has no
+scalar-``Parameter``-style fixed default of its own to restore from once
+its live copy can change. **Still open:** the panel's
+``mountKindsEditor`` is not yet mounted into the live panel tree -- real,
+scoped follow-up work, not silently swept under this fix.
 
 **Never crashes the control loop.** ``director.py.step_once()`` calls
 ``_dispatch_control()`` with no surrounding ``try``/``except`` (only the
@@ -280,6 +289,56 @@ def _var_coerce(parameter):
     def coerce(raw):
         return _coerce_scalar(raw, type_name, options)
     return coerce
+
+
+def _kind_cell_get(pool, kind_name, field_index):
+    def get():
+        return pool._kind_rows[kind_name][field_index]
+    return get
+
+
+def _kind_cell_apply(pool, kind_name, field_index, parameter, owner_label):
+    def apply(value):
+        if parameter is not None and hasattr(parameter, "validate"):
+            value = parameter.validate(owner_label, "kinds." + kind_name, value)
+        row = list(pool._kind_rows[kind_name])
+        row[field_index] = value
+        pool._kind_rows[kind_name] = tuple(row)
+        return value
+    return apply
+
+
+def _register_kind_cells(registry, subject_name, pool):
+    """Register one writable ``_Target`` per kinds-table cell
+    (``<subject>.kinds.<kind_name>.<field_name>``), the write half of the
+    read path already built into the ``list`` payload above. Reads and
+    writes both go through ``pool._kind_rows`` directly (never cached),
+    so a ``list`` right after a ``set`` always reflects it -- the same
+    "no restart needed" contract every other ``vs2beh`` path already
+    gives.
+
+    ``reset`` restores from ``pool._kind_rows_default``, a frozen
+    snapshot ``kinds()`` takes at declaration time -- unlike a scalar
+    ``var()``'s single, never-changing default, a kinds row has no
+    fixed default of its own once ``_kind_rows`` itself becomes
+    writable, so that snapshot is the only thing a live-tune ``reset``
+    can mean here.
+    """
+    if not pool._kind_rows:
+        return
+    fields = pool._kind_fields
+    for kind_name in sorted(pool._kind_rows.keys()):
+        for field_index, field_name in enumerate(fields):
+            path = "%s.kinds.%s.%s" % (subject_name, kind_name, field_name)
+            parameter = pool._var_defaults.get(field_name)
+            owner_label = "%s.kinds.%s" % (subject_name, kind_name)
+            default_row = pool._kind_rows_default.get(kind_name)
+            default_value = default_row[field_index] if default_row is not None else None
+            coerce = _var_coerce(parameter) if parameter is not None else _identity_coerce
+            registry[path] = _Target(
+                _kind_cell_get(pool, kind_name, field_index),
+                _kind_cell_apply(pool, kind_name, field_index, parameter, owner_label),
+                coerce, default_value)
 
 
 def _poolref_coerce(name_to_object):
@@ -625,6 +684,7 @@ def _build_registry(scene):
                         for kind_name in sorted(obj._kind_rows.keys())
                     ],
                 }
+                _register_kind_cells(registry, name, obj)
         elif kind == "family":
             entry["count"] = len(obj)
         entry["behaviors"] = _register_behaviors(
