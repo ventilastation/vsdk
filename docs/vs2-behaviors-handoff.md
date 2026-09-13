@@ -29,10 +29,19 @@ that no CPython/unix-`micropython` test could (see "Gotchas" below).
 `Projectile`) and Phase 2 (state hats, `StateMachine`, a new `Damageable`
 Behavior, a `vasura_espacial`-shaped `StateMachine` proving game). Only
 the debugger line-map and the fast backend remain, as an explicit,
-undispatched Phase 3. T18 is not started. Two of Waves 1-5's outstanding
-hardware-only gaps (T6 paint timing, T11's `vs2beh` over a real serial
-link) were closed for real on 2026-09-13; T0's two new hardware
-experiments were not (see below) — Wave 6 stays blocked until they are.
+undispatched Phase 3. **T18 is done at the software level**, merged into
+`vs2/wave7-integration` — the `vyruss_vs2` port plus launcher/registry
+plumbing for both ports — with exactly one thing outstanding: the
+physical-hardware side-by-side comparison, blocked because **the rotor
+board is currently disconnected** (only the workbench shows up in
+`tools/find_board.py --list` as of the end of this session — it was
+present earlier in this same session, so check the physical connection
+before assuming this environment lacks one). Two of Waves 1-5's
+outstanding hardware-only gaps (T6 paint timing, T11's `vs2beh` over a
+real serial link) were closed for real on 2026-09-13; T0's two new
+hardware experiments were not (see below) — Wave 6 stays blocked until
+they are, and T0 is also rotor-dependent, so it's blocked by the same
+disconnection right now too.
 Also closed on 2026-09-13, as known Wave 1-5 gaps rather than Wave 7 work:
 the RECYCLE state-reset bug (both the generic `state=` case and
 `StateMachine`'s `fsm_state`/`fsm_hold`/`fsm_then`), a `vs2beh` write verb
@@ -165,7 +174,7 @@ how each wave was built.
 | `vs2/T15-scene-editor` | T15, **done**. Two sub-branches (`vs2/T15-recover-tests`, `vs2/T15-vixeous-port`) built in parallel off this one and merged back into it, then this merged into `vs2/wave6-integration`. Kept for history. |
 | `vs2/wave6-integration` | `vs2/wave5-integration` + T15 merged. **Head of all completed, hardware-untested work before T16.** |
 | `vs2/T16-event-sheet` | T16 (minimal first pass), **done**. Merged into `vs2/wave7-integration`, then a post-merge fix commit landed directly on `wave7-integration` for the `super()` bug real hardware caught (see Gotchas) — that fix was never backported onto this branch itself, `wave7-integration` is the one with the real fix. |
-| `vs2/wave7-integration` | `vs2/wave6-integration` + T16 (+ its `super()` fix, the RECYCLE fix, the `vs2beh` kinds write verb, `mountKindsEditor` mounted, its own CSS cache-bust fix) + T17 Phases 1 and 2 (`vs2/T17-blockly-behaviors`, `vs2/T17-phase2-state-hats`, both merged and kept for history) merged. **This is the current head of all completed, tested, and (for T15/T16's proving cases) real-hardware-verified work.** Not yet opened as a PR — do that (against `design/vs2-behaviors`, or against `vs2/wave5-integration`'s PR #158 once that merges) once T18 lands, or sooner if a checkpoint is useful. |
+| `vs2/wave7-integration` | `vs2/wave6-integration` + T16 (+ its `super()` fix, the RECYCLE fix, the `vs2beh` kinds write verb, `mountKindsEditor` mounted, its own CSS cache-bust fix) + T17 Phases 1 and 2 (`vs2/T17-blockly-behaviors`, `vs2/T17-phase2-state-hats`) + T18 (`vs2/T18-vyruss-port`) merged, all kept for history. **This is the current head of all completed, tested work — real-hardware-verified for T15/T16; T18 is verified everywhere except the physical rotor comparison, blocked on the rotor being disconnected as of end-of-session.** Not yet opened as a PR — do that (against `design/vs2-behaviors`, or against `vs2/wave5-integration`'s PR #158 once that merges) whenever a checkpoint is useful; nothing about T0/Wave 6/T17-Phase-3 blocks opening one now. |
 
 If GitHub's branch list ever looks stale, `git ls-remote --heads origin` is
 the ground truth.
@@ -683,23 +692,61 @@ form the real class's own docstring explicitly instructs), not
 `super().attached(subject)` — verified this is correct by reading the
 real class's docstring directly, not assumed.
 
-### T18 — not started
+### T18 — done at the software level (2026-09-13); one hardware step outstanding
 
-Read its card in `docs/vs2-behaviors-implementation.md` fresh. `vixeous`
-already landed as T15's proving case (see above); T18 is now really just
-`games/alecu/vyruss_vs2` (a single 477-line file, similar scale and shape
-to vixeous — same porting pattern should apply directly) plus the
-launcher/registry plumbing (`games/registry.py`'s `GAME_SLUGS`, the
-launcher icon-map line) for both ports, which T15 deliberately left for
-this task. Does not depend on T17's Blockly work at all — it could have
-run in parallel with T17, in hindsight, though it didn't here.
+`vyruss_vs2` ported into `games/vs2_examples/vyruss_vs2/`, following the
+exact `vixeous`/T15 precedent (model JSON + generated `build()` + a
+hand-written companion). Merged into `vs2/wave7-integration`. Found a
+**third, new Behavior-catalog mismatch** beyond the two vixeous's port
+already documented: a Behavior attached to a lone (non-pool) sprite has
+its `step_one` called unconditionally every tick regardless of
+`sprite.visible` (confirmed directly in `vs2/__init__.py`'s
+`_run_behaviors` — no visibility guard anywhere in the `"sprite"`
+branch), which makes `Transient` the wrong shape for a sprite that's
+repeatedly shown/hidden by game logic (like `vyruss_vs2`'s
+`player_explosion`) rather than living in a `RECYCLE` pool — it would
+count down once, expire long before the sprite is ever shown again, and
+never fire a second time. Kept hand-written, documented, not forced.
+Also confirmed directly: `Transient`'s frame math (`elapsed =
+transient_elapsed + 1` computed *before* `frame = elapsed * frames //
+ticks`) shows frame 1 on a sprite's very first tick, never frame 0 — a
+real, minor, previously-undocumented divergence from the original
+age-indexed loops both `vixeous` and `vyruss_vs2` replaced.
+
+The launcher/registry plumbing T15 left for this task is also done, for
+both ports: confirmed `games/registry.py`'s `GAME_SLUGS` is genuinely
+dead code (grepped the whole repo, only its own definition reads it) and
+left it alone rather than half-fixing something with no functional
+effect; `vs2_examples` had no `GROUP_ICONS`/`GROUP_LABELS`/
+`FOLDER_GROUP_ORDER` entry (it worked fine as a plain-label fallback,
+just undecorated) — added a real badge icon via the existing
+`make_menu_icons.py` recipe and registered it.
+
+**Verified**: full CPython test suite (16 new tests mirroring
+`test_vixeous_vs2_examples.py`'s rigor), and — independently, by the
+orchestrating session, not just the subagent — the port actually loaded
+and ticked 200 times without error under the **real MicroPython unix
+binary**, not just the CPython shim.
+
+**Not yet verified: physical hardware.** The task's acceptance line
+("play identically at 600 RPM, compared side by side against untouched
+originals") needs the actual rotor, and **the rotor was not connected
+when this was attempted** — `tools/find_board.py --list` showed only the
+workbench (confirmed independently by the orchestrating session too, not
+a subagent-environment quirk: the rotor really was disconnected at that
+point, a genuine change from earlier in this same session when both
+boards were present). This is the one open item blocking T18's full
+acceptance — reconnect the rotor and re-run the same
+`deploy_micropython_fs.py` + workbench-serial-capture procedure T15/T16
+already used successfully.
 
 ## Suggested immediate next action
 
-Proceed to T18, off `vs2/wave7-integration`. `tools/vs2_scene_gen`
-already has everything needed (T15 built it, and it's been exercised once
-for real on `vixeous`) — this should be a more mechanical port than either
-T15 or T17 needed to be. Consider opening a PR for `vs2/wave7-integration`
-(against `design/vs2-behaviors` or against PR #158's branch) as a
-checkpoint now that T15-T17 are all done and verified, including on real
-hardware for T15/T16.
+**Reconnect the rotor and finish T18's physical-hardware comparison** —
+everything else is done. After that, T17 Phase 3 (debugger line-map,
+fast backend) and T0's two new hardware experiments (also rotor-
+dependent) are the only remaining work in the whole plan, per the
+"Status" table in `docs/vs2-behaviors-implementation.md`. Consider
+opening a PR for `vs2/wave7-integration` (against `design/vs2-behaviors`
+or against PR #158's branch) as a checkpoint now that T15-T18 are all
+done and verified in software, including on real hardware for T15/T16.

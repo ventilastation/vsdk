@@ -36,16 +36,25 @@ the plan it tracks.
   proving game (satisfies the user's ask below). Merged into
   `vs2/wave7-integration`. Only the debugger line-map and the fast backend
   remain of the original card — an explicit, undispatched Phase 3.
+- **T18** — done at the software level, merged into `vs2/wave7-integration`.
+  `vyruss_vs2` ported; launcher/registry plumbing done for both ports.
+  Found a third real Behavior-catalog mismatch (a lone-sprite Behavior's
+  `step_one` runs every tick regardless of `visible`, the wrong shape for
+  a sprite shown/hidden by game logic) — see the handoff doc. **One thing
+  outstanding**: the physical-hardware side-by-side comparison at 600
+  RPM — blocked because the rotor was disconnected when attempted (only
+  the workbench was reachable). This was present earlier in the same
+  session, so it's a real disconnection to fix, not a permanent
+  environment limitation.
 
-**Not started:**
-- **T0** — the hardware gate. Never run, by anyone, ever. **No longer
-  blocked** — hardware is available as of 2026-09-13 (see the handoff doc) —
-  just not yet done.
-- **Wave 6** (T13, T14) — gated on T0's verdict, so blocked until T0 runs.
-- **T18** — not started. Effectively just `vyruss_vs2` now (`vixeous`
-  already landed as T15's proving case), plus the launcher/registry
-  plumbing T15 deliberately left for it. Does not depend on T17 at all,
-  in hindsight — could have run in parallel.
+**Blocked right now on the rotor being disconnected** (reconnect it and
+these are otherwise ready to run/finish):
+- **T0** — the hardware gate. Never run, by anyone, ever. Was briefly
+  unblocked on 2026-09-13 when the rotor was connected; blocked again now.
+- **Wave 6** (T13, T14) — gated on T0's verdict.
+- T18's final physical-hardware comparison (see above).
+
+**Not started, not hardware-blocked:**
 - T17 Phase 3: the debugger line-map / block-ID trailing comments, and
   the "fast backend" (only the readable generator exists).
 
@@ -615,16 +624,24 @@ hats or `Damageable` specifically — the model/generator support is real
 and tested, just not yet exposed in the browser panel, the same
 proportion call T16 made before its own panel existed.
 
-### T18 · Ports — **not started (partially satisfied)**
+### T18 · Ports — **done at the software level; hardware comparison outstanding**
 Copies of `vyruss_vs2` and `vixeous` into `games/vs2_examples/`, plus the group
 icon, the launcher icon-map line, and `games/registry.py` slugs.
 **Acceptance:** shorter than the originals, play identically at 600 RPM,
 compared side by side against untouched originals. No file under `games/`
 outside `vs2_examples/` is modified.
 
-`vixeous` already landed, as T15's proving case — its own launcher/registry
-plumbing was deliberately left for this task, per T15's own notes. So T18 is
-now really just `vyruss_vs2` plus that plumbing for both games.
+`vixeous` already landed, as T15's proving case. `vyruss_vs2` now ported
+too, plus the launcher/registry plumbing for both games (a real group
+icon added via `make_menu_icons.py`'s existing recipe; `games/registry.py`'s
+`GAME_SLUGS` confirmed genuinely dead code, left alone). Verified: full
+CPython test suite (16 new tests), and separately confirmed by the
+orchestrating session under the real MicroPython unix binary (200 ticks,
+no errors). **"Play identically at 600 RPM, compared side by side"
+specifically still needs the physical rotor, which was disconnected when
+last attempted** — reconnect it to finish this task for real; everything
+else is done. No file outside `games/vs2_examples/` was touched under
+`games/` — confirmed via `git diff --stat` against the original folders.
 
 ---
 
