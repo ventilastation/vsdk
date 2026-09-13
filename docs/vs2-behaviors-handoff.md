@@ -24,14 +24,21 @@ merged into `vs2/wave7-integration`, and — unusually for this effort —
 **verified on real physical hardware**, including a bug real hardware caught
 that no CPython/unix-`micropython` test could (see "Gotchas" below).
 **T17 (full scope, not a minimal pass this time — the user's goal is now
-"implement all of the plan" in full) is in progress**, split into
-sequential phases the same way T15/T16 were internally sequenced; check
-branch `vs2/T17-blockly-behaviors` for exactly how far it's gotten. T18 is
-not started. Two of Waves 1-5's outstanding hardware-only gaps (T6 paint
-timing, T11's `vs2beh` over a real serial link) were closed for real on
-2026-09-13; T0's two new hardware experiments were not (see below) — Wave 6
-stays blocked until they are. Everything is pushed to `origin` — no work
-exists only on a local disk.
+"implement all of the plan" in full) is done in two phases**, merged into
+`vs2/wave7-integration` — Phase 1 (generic palette, tick skeleton,
+`Projectile`) and Phase 2 (state hats, `StateMachine`, a new `Damageable`
+Behavior, a `vasura_espacial`-shaped `StateMachine` proving game). Only
+the debugger line-map and the fast backend remain, as an explicit,
+undispatched Phase 3. T18 is not started. Two of Waves 1-5's outstanding
+hardware-only gaps (T6 paint timing, T11's `vs2beh` over a real serial
+link) were closed for real on 2026-09-13; T0's two new hardware
+experiments were not (see below) — Wave 6 stays blocked until they are.
+Also closed on 2026-09-13, as known Wave 1-5 gaps rather than Wave 7 work:
+the RECYCLE state-reset bug (both the generic `state=` case and
+`StateMachine`'s `fsm_state`/`fsm_hold`/`fsm_then`), a `vs2beh` write verb
+for `kinds()` table cells, and mounting T12's `mountKindsEditor` into the
+live panel (verified in a real browser). Everything is pushed to
+`origin` — no work exists only on a local disk.
 
 ## How this work was done, so you can keep doing it the same way
 
@@ -158,7 +165,7 @@ how each wave was built.
 | `vs2/T15-scene-editor` | T15, **done**. Two sub-branches (`vs2/T15-recover-tests`, `vs2/T15-vixeous-port`) built in parallel off this one and merged back into it, then this merged into `vs2/wave6-integration`. Kept for history. |
 | `vs2/wave6-integration` | `vs2/wave5-integration` + T15 merged. **Head of all completed, hardware-untested work before T16.** |
 | `vs2/T16-event-sheet` | T16 (minimal first pass), **done**. Merged into `vs2/wave7-integration`, then a post-merge fix commit landed directly on `wave7-integration` for the `super()` bug real hardware caught (see Gotchas) — that fix was never backported onto this branch itself, `wave7-integration` is the one with the real fix. |
-| `vs2/wave7-integration` | `vs2/wave6-integration` + T16 merged, plus the `super()` fix. **This is the current head of all completed, tested, and (for T16's proving game) real-hardware-verified work.** Not yet opened as a PR — do that (against `design/vs2-behaviors`, or against `vs2/wave5-integration`'s PR #158 once that merges) once T17/T18 land, or sooner if a checkpoint is useful. |
+| `vs2/wave7-integration` | `vs2/wave6-integration` + T16 (+ its `super()` fix, the RECYCLE fix, the `vs2beh` kinds write verb, `mountKindsEditor` mounted, its own CSS cache-bust fix) + T17 Phases 1 and 2 (`vs2/T17-blockly-behaviors`, `vs2/T17-phase2-state-hats`, both merged and kept for history) merged. **This is the current head of all completed, tested, and (for T15/T16's proving cases) real-hardware-verified work.** Not yet opened as a PR — do that (against `design/vs2-behaviors`, or against `vs2/wave5-integration`'s PR #158 once that merges) once T18 lands, or sooner if a checkpoint is useful. |
 
 If GitHub's branch list ever looks stale, `git ls-remote --heads origin` is
 the ground truth.
@@ -614,20 +621,85 @@ branch, if you need this fix.
   alternative to T16's synthetic proving game if a future session revisits
   scope; not forgotten, just not yet placed.
 
-### T17, T18 — not started
+### T17 — done in two phases (2026-09-13), merged into `vs2/wave7-integration`
 
-Read their cards in `docs/vs2-behaviors-implementation.md` fresh; they're
-short enough that re-summarizing here would just be a lossy copy. T17
-(Blockly for Behaviors: the Action palette, state hats, `Projectile`/
-`Damageable` re-authored as block programs) depends on T16's file-split
-conventions, which now exist for real (not just in a doc), including the
-one hard-won lesson: **any future generator emitting a `super()`-calling
-mixin needs an explicit matching base, not `class Foo:` with none at all**
-— see the gotcha above, and don't rediscover it the slow way.
+Built as two sequential phases (same worktree-per-phase, merge-and-verify
+pattern as T15). Both are done; the debugger line-map and the "fast
+backend" are the only pieces of the original card still not built —
+deliberately, a documented Phase 3 that hasn't been dispatched yet.
+
+**Phase 1**: `tools/vs2_behavior_gen/` (model/generator/catalog for a
+generic Action/Behavior palette, driven by `vs2.params.introspect()` —
+mirrors T12's own "no parameter type special-cased" principle), the
+two-zone tick skeleton (enforced by real Blockly connection-check types,
+not just generator-side validation), and `Projectile` re-authored as a
+block program, proven behaviorally equivalent to the hand-written class.
+**Two real bugs found and fixed during review, both worth knowing about
+for future phases**: (1) the generated-Projectile behavioral tests only
+ran under CPython — the harness used `unittest`/`tempfile`/`importlib`,
+none of which exist on MicroPython, so the "verified under real
+MicroPython" claim in the original report wasn't actually backed by a
+committed, repeatable test. Fixed by adding a plain-assert MicroPython
+test file against a checked-in fixture (mirroring
+`tests/test_director_headless.py`'s style), plus a CPython-side test
+asserting the fixture matches the generator's current output (so it can't
+silently drift). **This checked-in-fixture-plus-freshness-check pattern is
+now the template for any future generated-code behavioral test that needs
+to run on real MicroPython but whose generator/test-harness doesn't.**
+(2) `web/styles.css` was edited (new `.vs2behblocks-*` rules) but
+`web/index.html`'s `styles.css?v=...` cache-busting query was never
+bumped — the whole new Blockly workspace rendered at zero height in a
+browser with the old stylesheet cached, real DOM elements present
+(confirmed via the accessibility tree) but invisible (confirmed via
+`getBoundingClientRect()`). **Any time `web/styles.css` changes, bump its
+`?v=` in `index.html`, then actually verify in a real browser** — an
+accessibility-tree check alone would have missed this; only a real
+rendered screenshot and a `getBoundingClientRect()` check caught it.
+
+**Phase 2**: state hats (a new `state_machine` model shape: `states`/
+`initial`/per-state `enter`/`step`/`exit` bodies, two new per-sprite node
+kinds `goto_state`/`hold`, plus `set_state`/`call_callback`/`spawn`/
+`play_sound` usable in either shape), `StateMachine` added to the
+catalog, and **`Damageable`** — a brand-new Behavior designed from
+scratch (nothing like it existed anywhere in the codebase; the identically-
+named class in `tests/test_vs2_params.py` is an unrelated parameter-shape
+test fixture, not a spec to satisfy literally — it's missing a "what
+damages this" field entirely, which the real one needed and added). Also:
+a small original game, `games/vs2_examples/vasura_states_demo`,
+recreating the *shape* of `vasura_espacial`'s real hand-rolled state
+machine (`orbiting → chiller_falling → falling → exploding`, with
+`hold()`-based timed transitions and a `Collide`-driven interrupt) through
+the new state-hat blocks — this is the `StateMachine` demonstration the
+user asked for, scoped down from a full port of the 1815-line original
+(out of scope; not on T18's port list either) to a small, focused proving
+case, the same proportion as T16's own `event_sheet_demo`.
+**Deliberately not done**: no Blockly UI for state hats or `Damageable`
+(judged out of proportion for this phase, same as T16 shipping without a
+panel before one existed) — `Damageable` and the state-hat model shape
+are real and tested, just not yet exposed in the browser panel. The
+generated `StateMachine` subclass correctly avoids the `super()` gotcha
+above by calling `StateMachine.attached(self, subject)` (the unbound-call
+form the real class's own docstring explicitly instructs), not
+`super().attached(subject)` — verified this is correct by reading the
+real class's docstring directly, not assumed.
+
+### T18 — not started
+
+Read its card in `docs/vs2-behaviors-implementation.md` fresh. `vixeous`
+already landed as T15's proving case (see above); T18 is now really just
+`games/alecu/vyruss_vs2` (a single 477-line file, similar scale and shape
+to vixeous — same porting pattern should apply directly) plus the
+launcher/registry plumbing (`games/registry.py`'s `GAME_SLUGS`, the
+launcher icon-map line) for both ports, which T15 deliberately left for
+this task. Does not depend on T17's Blockly work at all — it could have
+run in parallel with T17, in hindsight, though it didn't here.
 
 ## Suggested immediate next action
 
-Proceed to T17, off `vs2/wave7-integration`. Consider opening a PR for
-`vs2/wave7-integration` (against `design/vs2-behaviors` or against PR
-#158's branch) as a checkpoint before T17/T18 land, given how much is now
-verified and how large T17/T18 both are.
+Proceed to T18, off `vs2/wave7-integration`. `tools/vs2_scene_gen`
+already has everything needed (T15 built it, and it's been exercised once
+for real on `vixeous`) — this should be a more mechanical port than either
+T15 or T17 needed to be. Consider opening a PR for `vs2/wave7-integration`
+(against `design/vs2-behaviors` or against PR #158's branch) as a
+checkpoint now that T15-T17 are all done and verified, including on real
+hardware for T15/T16.

@@ -27,33 +27,46 @@ the plan it tracks.
   (`super()` doesn't walk the runtime MRO on MicroPython the way it does on
   CPython — see the handoff doc's gotchas) that no CPython-shim test could
   have caught.
+- **T17** — done, **in full this time** (the user's goal became "implement
+  all of the plan," not a minimal pass), built as two sequential phases.
+  Phase 1: the generic Action/Behavior palette, the two-zone tick skeleton,
+  `Projectile` re-authored. Phase 2: state hats, `StateMachine` added to
+  the catalog, a brand-new `Damageable` Behavior (designed from scratch —
+  nothing to port from), and a `vasura_espacial`-shaped `StateMachine`
+  proving game (satisfies the user's ask below). Merged into
+  `vs2/wave7-integration`. Only the debugger line-map and the fast backend
+  remain of the original card — an explicit, undispatched Phase 3.
 
 **Not started:**
 - **T0** — the hardware gate. Never run, by anyone, ever. **No longer
   blocked** — hardware is available as of 2026-09-13 (see the handoff doc) —
   just not yet done.
 - **Wave 6** (T13, T14) — gated on T0's verdict, so blocked until T0 runs.
-- **T17, T18** — not started. T18 is effectively just `vyruss_vs2` now
-  (`vixeous` already landed as T15's proving case), plus the launcher/
-  registry plumbing T15 deliberately left for it.
-- The user's ask to use `vasura_espacial` as a `StateMachine` demonstration
-  — not placed anywhere yet.
+- **T18** — not started. Effectively just `vyruss_vs2` now (`vixeous`
+  already landed as T15's proving case), plus the launcher/registry
+  plumbing T15 deliberately left for it. Does not depend on T17 at all,
+  in hindsight — could have run in parallel.
+- T17 Phase 3: the debugger line-map / block-ID trailing comments, and
+  the "fast backend" (only the readable generator exists).
 
-**Deferred within T16's minimal first pass** (not part of T16's card as
-written above, moved to T17/a future pass by explicit scope decision):
-full system-action/expression breadth (only 2 events, 2 conditions, 3
-expressions, 3 system actions exist), sprite/Behavior Action blocks and
-state hats (entirely T17's job anyway), the debugger line-map, the fast
-backend (only the readable one exists).
+**Satisfied:** the user's ask to use `vasura_espacial` as a `StateMachine`
+demonstration — `games/vs2_examples/vasura_states_demo`, built as part of
+T17 Phase 2, recreating the shape of the real hand-rolled state machine
+(scoped down from a full port of the 1815-line original, which is out of
+scope for this and not on T18's port list either).
 
-**Known gaps carried from Waves 1–5** (documented at the time, not bugs):
-`Carried`/`Flashing`/`Cycling` catalog attributes blocked on named palette
-colours, which no task in this plan builds; Behavior `state=` not reset on
-`RECYCLE` respawn; `vs2beh` has no write verb for a live `kinds()` edit and
-T12's `mountKindsEditor` isn't mounted into the live panel; T6's paint
-timing was measured host-only and T11's `vs2beh` protocol was never
-exercised over a real serial link — both are now genuinely doable with the
-hardware available, just not done.
+**Known gaps carried from Waves 1–5, now closed (2026-09-13):** Behavior
+`state=` not reset on `RECYCLE` respawn (fixed, both the generic case and
+`StateMachine`'s `fsm_state`/`fsm_hold`/`fsm_then`); `vs2beh` had no write
+verb for a live `kinds()` edit (fixed, reusing the existing `set`/`reset`
+verbs); T12's `mountKindsEditor` wasn't mounted into the live panel
+(fixed, verified in a real browser); T6's paint timing was measured
+host-only (a real number now exists, though not a strict before/after
+comparison — see the handoff doc); T11's `vs2beh` protocol was never
+exercised over a real serial link (now verified, no caveats).
+
+**Still open:** `Carried`/`Flashing`/`Cycling` catalog attributes blocked
+on named palette colours, which no task in this plan builds.
 
 ## How to use this
 
@@ -559,10 +572,11 @@ sealed slot range and mirrored live count; `pool.move_all()`.
 
 ## Wave 7 — the editor
 
-**Status: T15 and T16 done, T17/T18 not started.** See "Status" above for
+**Status: T15, T16, T17 done, T18 not started.** See "Status" above for
 the full picture — in particular, T15's proving case was `vixeous`, not
-`mapdemo` (an explicit, reasoned redirect, not a deviation to flag), and
-T16 shipped as a deliberately minimal first pass, not the full card below.
+`mapdemo` (an explicit, reasoned redirect, not a deviation to flag), T16
+shipped as a deliberately minimal first pass, and T17 shipped in full
+(minus an explicit Phase 3: the line map and fast backend).
 
 ### T15 · Scene editor and `build()` generator — **done**
 Round-trip blob, body checksum, `Detach`, numbered `on_build` hooks. Port
@@ -583,12 +597,23 @@ card implies. Deferred to T17 or a later pass: full system-action/
 expression breadth, the debugger line-map, the fast backend. Also caught a
 real MicroPython `super()`/MRO bug along the way — see the handoff doc.
 
-### T17 · Blockly for behaviors — **not started**
+### T17 · Blockly for behaviors — **done (line map + fast backend deferred)**
 Action palette, two-zone tick skeleton, state hats, line map, fast backend.
 Re-author `Projectile` and `Damageable` as block programs; the shipped `.py` is
-the generator's output. Depends on T16's file-split conventions, which now
-exist for real; also inherits T16's `super()`/MRO lesson for any mixin it
-generates.
+the generator's output.
+
+**What actually shipped**: the Action/Behavior palette (generated from
+`vs2.params.introspect()`, not hand-authored per class), the two-zone
+skeleton (Blockly connection types make the uniform/per-sprite mix-up
+structurally unrepresentable, not just generator-checked), state hats,
+`Projectile` and a newly-designed `Damageable` both re-authored/authored
+as block programs and proven behaviorally equivalent/correct on both
+CPython and real MicroPython. **Not shipped, explicitly deferred**: the
+debugger line-map / block-ID trailing comments, and the "fast backend"
+(only the readable generator exists). No Blockly UI was added for state
+hats or `Damageable` specifically — the model/generator support is real
+and tested, just not yet exposed in the browser panel, the same
+proportion call T16 made before its own panel existed.
 
 ### T18 · Ports — **not started (partially satisfied)**
 Copies of `vyruss_vs2` and `vixeous` into `games/vs2_examples/`, plus the group
