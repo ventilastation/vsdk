@@ -1,0 +1,1062 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "name": "Move",
+      "doc": "Constant velocity, with optional acceleration. Writes into",
+      "params": [
+        {
+          "name": "accel_x",
+          "type": "angle",
+          "default": 0,
+          "min": -8,
+          "max": 8,
+          "step": 0.05,
+          "label": "Angular acceleration",
+          "unit": "col/tick^2"
+        },
+        {
+          "name": "accel_y",
+          "type": "number",
+          "default": 0,
+          "min": -8,
+          "max": 8,
+          "step": 0.05,
+          "label": "Radial acceleration",
+          "unit": "led/tick^2"
+        },
+        {
+          "name": "speed_x",
+          "type": "angle",
+          "default": 0,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular speed",
+          "unit": "col/tick"
+        },
+        {
+          "name": "speed_y",
+          "type": "number",
+          "default": 0,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Radial speed",
+          "unit": "led/tick"
+        }
+      ],
+      "extra_fields": []
+    },
+    {
+      "name": "MoveTo",
+      "doc": "Move toward an absolute position at up to ``speed_x``/``speed_y``",
+      "params": [
+        {
+          "name": "speed_x",
+          "type": "angle",
+          "default": 0,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular speed",
+          "unit": "col/tick"
+        },
+        {
+          "name": "speed_y",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Radial speed",
+          "unit": "led/tick"
+        },
+        {
+          "name": "x",
+          "type": "angle",
+          "default": 0,
+          "label": "Target angle",
+          "unit": "col"
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "default": 0,
+          "label": "Target depth",
+          "unit": "led"
+        }
+      ],
+      "extra_fields": []
+    },
+    {
+      "name": "Animate",
+      "doc": "Step a frame index from ``first`` to ``last`` over ``ticks`` ticks",
+      "params": [
+        {
+          "name": "first",
+          "type": "frames",
+          "default": 0,
+          "label": "First frame"
+        },
+        {
+          "name": "last",
+          "type": "frames",
+          "default": 0,
+          "label": "Last frame"
+        },
+        {
+          "name": "mode",
+          "type": "choice",
+          "default": "loop",
+          "label": "Mode",
+          "options": [
+            "loop",
+            "once",
+            "pingpong"
+          ]
+        },
+        {
+          "name": "ticks",
+          "type": "number",
+          "default": 1,
+          "min": 1,
+          "step": 1,
+          "label": "Ticks per frame",
+          "unit": "tick"
+        }
+      ],
+      "extra_fields": [
+        {
+          "name": "field",
+          "type": "string",
+          "default": "frame",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Collide",
+      "doc": "Whether the subject sprite overlaps anything in ``targets`` (a",
+      "params": [],
+      "extra_fields": [
+        {
+          "name": "radius",
+          "type": "number",
+          "default": null,
+          "required": false
+        },
+        {
+          "name": "space",
+          "type": "choice",
+          "default": "world",
+          "required": false,
+          "options": [
+            "world",
+            "screen"
+          ]
+        },
+        {
+          "name": "targets",
+          "type": "pool",
+          "default": null,
+          "required": true
+        }
+      ]
+    }
+  ],
+  "behaviors": [
+    {
+      "name": "Projectile",
+      "doc": "Travels at a constant angular/radial velocity, expires past",
+      "params": [
+        {
+          "name": "hits",
+          "type": "pool",
+          "default": null,
+          "label": "Hits what"
+        },
+        {
+          "name": "range",
+          "type": "number",
+          "default": 180,
+          "min": 1,
+          "max": 255,
+          "step": 1,
+          "label": "Range",
+          "unit": "led"
+        },
+        {
+          "name": "speed_x",
+          "type": "angle",
+          "default": 0,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular speed",
+          "unit": "col/tick"
+        },
+        {
+          "name": "speed_y",
+          "type": "number",
+          "default": 8,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Radial speed",
+          "unit": "led/tick"
+        }
+      ],
+      "state": [
+        "shot_flown"
+      ],
+      "subject_kinds": [
+        "pool"
+      ]
+    },
+    {
+      "name": "Transient",
+      "doc": "A sprite that lives for exactly :attr:`ticks` ticks, then retires",
+      "params": [
+        {
+          "name": "animate",
+          "type": "flag",
+          "default": false,
+          "label": "Animate across its lifetime"
+        },
+        {
+          "name": "on_end",
+          "type": "callback",
+          "default": null,
+          "label": "On expiry"
+        },
+        {
+          "name": "sound",
+          "type": "sound",
+          "default": null,
+          "label": "Sound on expiry"
+        },
+        {
+          "name": "ticks",
+          "type": "number",
+          "default": 30,
+          "min": 1,
+          "step": 1,
+          "label": "Lifetime",
+          "unit": "tick"
+        }
+      ],
+      "state": [
+        "transient_elapsed"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Lifetime",
+      "doc": "The plain form of :class:`Transient`: despawns a sprite exactly",
+      "params": [
+        {
+          "name": "on_expire",
+          "type": "callback",
+          "default": null,
+          "label": "On expiry"
+        },
+        {
+          "name": "ticks",
+          "type": "number",
+          "default": 30,
+          "min": 1,
+          "step": 1,
+          "label": "Lifetime",
+          "unit": "tick"
+        }
+      ],
+      "state": [
+        "lifetime_elapsed"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "DespawnBeyond",
+      "doc": "Retires a sprite the tick it leaves a world-space box: any of",
+      "params": [
+        {
+          "name": "on_leave",
+          "type": "callback",
+          "default": null,
+          "label": "On leaving bounds"
+        },
+        {
+          "name": "x_max",
+          "type": "number",
+          "default": null,
+          "label": "Max angle",
+          "unit": "col"
+        },
+        {
+          "name": "x_min",
+          "type": "number",
+          "default": null,
+          "label": "Min angle",
+          "unit": "col"
+        },
+        {
+          "name": "y_max",
+          "type": "number",
+          "default": null,
+          "label": "Max depth",
+          "unit": "led"
+        },
+        {
+          "name": "y_min",
+          "type": "number",
+          "default": null,
+          "label": "Min depth",
+          "unit": "led"
+        }
+      ],
+      "state": [],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Recycling",
+      "doc": "Keeps a sprite alive forever, teleporting it to a fresh random",
+      "params": [
+        {
+          "name": "x_range",
+          "type": "points",
+          "default": [
+            0,
+            255
+          ],
+          "label": "X range",
+          "unit": "col"
+        },
+        {
+          "name": "y_range",
+          "type": "points",
+          "default": [
+            0,
+            255
+          ],
+          "label": "Y range",
+          "unit": "led"
+        }
+      ],
+      "state": [],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Blinking",
+      "doc": "Toggles :attr:`~vs2.Sprite.visible` on for :attr:`on_ticks`, off",
+      "params": [
+        {
+          "name": "duration",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "step": 1,
+          "label": "Duration (0 = forever)",
+          "unit": "tick"
+        },
+        {
+          "name": "off_ticks",
+          "type": "number",
+          "default": 4,
+          "min": 1,
+          "step": 1,
+          "label": "Off ticks",
+          "unit": "tick"
+        },
+        {
+          "name": "on_end",
+          "type": "callback",
+          "default": null,
+          "label": "On finished blinking"
+        },
+        {
+          "name": "on_ticks",
+          "type": "number",
+          "default": 4,
+          "min": 1,
+          "step": 1,
+          "label": "On ticks",
+          "unit": "tick"
+        }
+      ],
+      "state": [
+        "blink_elapsed"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Pinned",
+      "doc": "Copies :attr:`to`'s position, plus a fixed offset, onto this",
+      "params": [
+        {
+          "name": "offset_x",
+          "type": "number",
+          "default": 0,
+          "label": "X offset",
+          "unit": "col"
+        },
+        {
+          "name": "offset_y",
+          "type": "number",
+          "default": 0,
+          "label": "Y offset",
+          "unit": "led"
+        },
+        {
+          "name": "to",
+          "type": "pool",
+          "default": null,
+          "label": "Follow"
+        }
+      ],
+      "state": [],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Shaking",
+      "doc": "A temporary, zero-centred jitter added to a sprite's position for",
+      "params": [
+        {
+          "name": "amplitude_x",
+          "type": "number",
+          "default": 2,
+          "min": 0,
+          "step": 0.25,
+          "label": "X amplitude",
+          "unit": "col"
+        },
+        {
+          "name": "amplitude_y",
+          "type": "number",
+          "default": 2,
+          "min": 0,
+          "step": 0.25,
+          "label": "Y amplitude",
+          "unit": "led"
+        },
+        {
+          "name": "ticks",
+          "type": "number",
+          "default": 10,
+          "min": 1,
+          "step": 1,
+          "label": "Duration",
+          "unit": "tick"
+        }
+      ],
+      "state": [
+        "shake_elapsed",
+        "shake_off_x",
+        "shake_off_y"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Animated",
+      "doc": "Steps a sprite's displayed frame (or, with :attr:`images`, its",
+      "params": [
+        {
+          "name": "bank",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "step": 1,
+          "label": "Bank"
+        },
+        {
+          "name": "bank_size",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "step": 1,
+          "label": "Bank size",
+          "unit": "frame"
+        },
+        {
+          "name": "duration",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "step": 1,
+          "label": "Duration (0 = use ticks)",
+          "unit": "tick"
+        },
+        {
+          "name": "first",
+          "type": "frames",
+          "default": 0,
+          "label": "First frame"
+        },
+        {
+          "name": "frames",
+          "type": "points",
+          "default": [],
+          "label": "Explicit frame sequence"
+        },
+        {
+          "name": "images",
+          "type": "points",
+          "default": [],
+          "label": "Image sequence"
+        },
+        {
+          "name": "last",
+          "type": "frames",
+          "default": 0,
+          "label": "Last frame"
+        },
+        {
+          "name": "mode",
+          "type": "choice",
+          "default": "loop",
+          "label": "Mode",
+          "options": [
+            "loop",
+            "once",
+            "pingpong"
+          ]
+        },
+        {
+          "name": "ticks",
+          "type": "number",
+          "default": 1,
+          "min": 1,
+          "step": 1,
+          "label": "Ticks per frame",
+          "unit": "tick"
+        }
+      ],
+      "state": [
+        "anim_elapsed",
+        "anim_index",
+        "anim_dir"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Moving",
+      "doc": "Constant velocity, with optional acceleration -- a thin Behavior",
+      "params": [
+        {
+          "name": "accel_x",
+          "type": "angle",
+          "default": 0,
+          "min": -8,
+          "max": 8,
+          "step": 0.05,
+          "label": "Angular acceleration",
+          "unit": "col/tick^2"
+        },
+        {
+          "name": "accel_y",
+          "type": "number",
+          "default": 0,
+          "min": -8,
+          "max": 8,
+          "step": 0.05,
+          "label": "Radial acceleration",
+          "unit": "led/tick^2"
+        },
+        {
+          "name": "speed_x",
+          "type": "angle",
+          "default": 0,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular speed",
+          "unit": "col/tick"
+        },
+        {
+          "name": "speed_y",
+          "type": "number",
+          "default": 0,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Radial speed",
+          "unit": "led/tick"
+        }
+      ],
+      "state": [],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Patrolling",
+      "doc": "Oscillates back and forth on one axis (``field``) around wherever",
+      "params": [
+        {
+          "name": "amplitude",
+          "type": "number",
+          "default": 8,
+          "min": 0,
+          "max": 255,
+          "step": 0.25,
+          "label": "Amplitude"
+        },
+        {
+          "name": "drift_x",
+          "type": "angle",
+          "default": 0,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular drift",
+          "unit": "col/tick"
+        },
+        {
+          "name": "drift_y",
+          "type": "number",
+          "default": 0,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Radial drift",
+          "unit": "led/tick"
+        },
+        {
+          "name": "field",
+          "type": "choice",
+          "default": "y",
+          "label": "Oscillation axis",
+          "options": [
+            "x",
+            "y"
+          ]
+        },
+        {
+          "name": "period",
+          "type": "number",
+          "default": 60,
+          "min": 1,
+          "max": 6000,
+          "step": 1,
+          "label": "Period",
+          "unit": "tick"
+        },
+        {
+          "name": "wave",
+          "type": "choice",
+          "default": "sine",
+          "label": "Waveform",
+          "options": [
+            "sine",
+            "triangle",
+            "square"
+          ]
+        }
+      ],
+      "state": [
+        "patrol_phase"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "PathFollowing",
+      "doc": "Moves toward each of ``points`` in turn at up to",
+      "params": [
+        {
+          "name": "loop",
+          "type": "flag",
+          "default": true,
+          "label": "Loop"
+        },
+        {
+          "name": "on_finish",
+          "type": "callback",
+          "default": null,
+          "label": "On finish"
+        },
+        {
+          "name": "points",
+          "type": "points",
+          "default": [],
+          "label": "Waypoints"
+        },
+        {
+          "name": "relative",
+          "type": "flag",
+          "default": false,
+          "label": "Relative to start"
+        },
+        {
+          "name": "speed_x",
+          "type": "angle",
+          "default": 4,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular speed",
+          "unit": "col/tick"
+        },
+        {
+          "name": "speed_y",
+          "type": "number",
+          "default": 4,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Radial speed",
+          "unit": "led/tick"
+        },
+        {
+          "name": "then",
+          "type": "choice",
+          "default": "hold",
+          "label": "When the path finishes",
+          "options": [
+            "hold",
+            "despawn"
+          ]
+        }
+      ],
+      "state": [
+        "path_index",
+        "path_done",
+        "path_started",
+        "path_origin_x",
+        "path_origin_y"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Pilotable",
+      "doc": "Player-controlled movement. One parameter set collapses rim",
+      "params": [
+        {
+          "name": "bounds",
+          "type": "points",
+          "default": null,
+          "label": "Bounds (x_min, x_max, y_min, y_max)"
+        },
+        {
+          "name": "damping",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "label": "Damping"
+        },
+        {
+          "name": "fire_button",
+          "type": "choice",
+          "default": 16,
+          "label": "Fire button",
+          "options": [
+            16,
+            32,
+            64
+          ]
+        },
+        {
+          "name": "fire_sound",
+          "type": "sound",
+          "default": null,
+          "label": "Fire sound"
+        },
+        {
+          "name": "fires",
+          "type": "pool",
+          "default": null,
+          "label": "Fires from"
+        },
+        {
+          "name": "follow_lag",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 255,
+          "step": 1,
+          "label": "Camera follow lag",
+          "unit": "tick"
+        },
+        {
+          "name": "inertia",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Inertia"
+        },
+        {
+          "name": "player",
+          "type": "choice",
+          "default": 1,
+          "label": "Player",
+          "options": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "scheme",
+          "type": "choice",
+          "default": "eight_way",
+          "label": "Control scheme",
+          "options": [
+            "eight_way",
+            "rim"
+          ]
+        },
+        {
+          "name": "speed_x",
+          "type": "angle",
+          "default": 2,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular speed",
+          "unit": "col/tick"
+        },
+        {
+          "name": "speed_y",
+          "type": "number",
+          "default": 2,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Radial speed",
+          "unit": "led/tick"
+        }
+      ],
+      "state": [
+        "pilot_vx",
+        "pilot_vy"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Aiming",
+      "doc": "A crosshair: an internal cartesian stick position, nudged by",
+      "params": [
+        {
+          "name": "bounds",
+          "type": "points",
+          "default": null,
+          "label": "Bounds (radius_min, radius_max)"
+        },
+        {
+          "name": "fire_button",
+          "type": "choice",
+          "default": 16,
+          "label": "Fire button",
+          "options": [
+            16,
+            32,
+            64
+          ]
+        },
+        {
+          "name": "fire_sound",
+          "type": "sound",
+          "default": null,
+          "label": "Fire sound"
+        },
+        {
+          "name": "fires",
+          "type": "pool",
+          "default": null,
+          "label": "Fires from"
+        },
+        {
+          "name": "player",
+          "type": "choice",
+          "default": 1,
+          "label": "Player",
+          "options": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "speed",
+          "type": "number",
+          "default": 0.05,
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "label": "Aim speed"
+        }
+      ],
+      "state": [
+        "aim_x",
+        "aim_y"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Chasing",
+      "doc": "Homes toward the nearest live member of ``target`` (a",
+      "params": [
+        {
+          "name": "give_up_range",
+          "type": "number",
+          "default": 255,
+          "min": 0,
+          "max": 1000,
+          "step": 1,
+          "label": "Give-up range"
+        },
+        {
+          "name": "on_reach",
+          "type": "callback",
+          "default": null,
+          "label": "On reach"
+        },
+        {
+          "name": "speed_x",
+          "type": "angle",
+          "default": 2,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular speed",
+          "unit": "col/tick"
+        },
+        {
+          "name": "speed_y",
+          "type": "number",
+          "default": 2,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Radial speed",
+          "unit": "led/tick"
+        },
+        {
+          "name": "turn_rate",
+          "type": "number",
+          "default": 0.15,
+          "min": 0,
+          "max": 3.141592653589793,
+          "step": 0.01,
+          "label": "Turn rate",
+          "unit": "rad/tick"
+        }
+      ],
+      "state": [
+        "chase_heading",
+        "chase_reached"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Orbiting",
+      "doc": "Circular motion, expressed in this display's own polar terms",
+      "params": [
+        {
+          "name": "centre_y",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 255,
+          "step": 0.25,
+          "label": "Orbit radius",
+          "unit": "led"
+        },
+        {
+          "name": "speed",
+          "type": "angle",
+          "default": 2,
+          "min": -32,
+          "max": 32,
+          "step": 0.25,
+          "label": "Angular speed",
+          "unit": "col/tick"
+        }
+      ],
+      "state": [],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    },
+    {
+      "name": "Laned",
+      "doc": "Confines the radial (``y``) position to one of a fixed set of lane",
+      "params": [
+        {
+          "name": "centres",
+          "type": "points",
+          "default": [
+            0
+          ],
+          "label": "Lane centres (depth)"
+        },
+        {
+          "name": "on_change",
+          "type": "callback",
+          "default": null,
+          "label": "On lane arrival"
+        },
+        {
+          "name": "speed",
+          "type": "number",
+          "default": 4,
+          "min": 0,
+          "max": 32,
+          "step": 0.25,
+          "label": "Lane-change speed",
+          "unit": "led/tick"
+        }
+      ],
+      "state": [
+        "lane_index",
+        "lane_arrived_at"
+      ],
+      "subject_kinds": [
+        "pool",
+        "sprite"
+      ]
+    }
+  ]
+}
