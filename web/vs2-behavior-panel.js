@@ -54,7 +54,8 @@ import {
   kindsTableToWire,
   setKindsCell,
   displayRowOrder,
-} from "./vs2-widgets.js?v=20260911a";
+  diffOneKindsCell,
+} from "./vs2-widgets.js?v=20260913a";
 
 /**
  * A Transport talking to a real board over the Web Serial API
@@ -275,6 +276,34 @@ export function mountSubjectTree(container, listResult, client, options = {}) {
         );
       }
       subjectDetails.append(varsGroup);
+    }
+
+    if (subject.kinds) {
+      const kindsGroup = el("div", { className: "vs2beh-group vs2beh-kinds-group" }, [
+        el("h4", {}, ["kinds"]),
+      ]);
+      const kindsContainer = el("div", { className: "vs2beh-kinds-container" });
+      kindsGroup.append(kindsContainer);
+      subjectDetails.append(kindsGroup);
+      // mountKindsEditor's own onChange hands back the *whole* wire table
+      // after exactly one cell changed (its own docstring: "editing a
+      // cell only ever calls setKindsCell()"). The wire protocol
+      // (ventilastation.behavior_control's _register_kind_cells)
+      // addresses one cell at a time, at
+      // `<subject>.kinds.<kind_name>.<field_name>` -- the same set/reset
+      // verb every other param already uses -- so diff against the
+      // table this closure already has to find exactly that one cell
+      // rather than re-sending the whole table.
+      let previousTable = subject.kinds;
+      mountKindsEditor(kindsContainer, previousTable, (nextTable) => {
+        const changed = diffOneKindsCell(previousTable, nextTable);
+        previousTable = nextTable;
+        if (!changed) {
+          return;
+        }
+        const path = `${subject.name}.kinds.${changed.kindName}.${changed.fieldName}`;
+        client.set(path, changed.value).then(() => onDirty(path, changed.value));
+      });
     }
 
     for (const behavior of subject.behaviors || []) {

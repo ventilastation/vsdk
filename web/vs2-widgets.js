@@ -295,3 +295,36 @@ export function displayFieldOrder(table, displayFieldNames) {
     return index;
   });
 }
+
+/**
+ * Compare two *wire*-shaped kinds tables (`{fields, rows: [{name,
+ * values}]}` -- the shape `mountKindsEditor`'s `onChange` in
+ * vs2-behavior-panel.js hands back, via `kindsTableToWire`) and return the
+ * single `{kindName, fieldName, value}` that changed, or `null` if
+ * nothing did. `mountKindsEditor` only ever changes one cell per call
+ * (its own docstring: "editing a cell only ever calls setKindsCell()"),
+ * so this never needs to report more than one -- the panel uses this to
+ * turn "the whole table changed" back into the single
+ * `<subject>.kinds.<kind_name>.<field_name>` `vs2beh set` every other
+ * param already addresses one cell at, rather than inventing a
+ * whole-table wire verb.
+ */
+export function diffOneKindsCell(previousTable, nextTable) {
+  const previousByName = new Map(previousTable.rows.map((row) => [row.name, row]));
+  for (const row of nextTable.rows) {
+    const previousRow = previousByName.get(row.name);
+    if (!previousRow) {
+      continue;
+    }
+    for (let fieldIndex = 0; fieldIndex < nextTable.fields.length; fieldIndex += 1) {
+      if (row.values[fieldIndex] !== previousRow.values[fieldIndex]) {
+        return {
+          kindName: row.name,
+          fieldName: nextTable.fields[fieldIndex],
+          value: row.values[fieldIndex],
+        };
+      }
+    }
+  }
+  return null;
+}

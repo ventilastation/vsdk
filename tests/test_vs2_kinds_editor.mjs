@@ -21,6 +21,7 @@ import {
   setKindsCell,
   displayRowOrder,
   displayFieldOrder,
+  diffOneKindsCell,
 } from "../web/vs2-widgets.js";
 
 function assert(condition, message) {
@@ -189,6 +190,46 @@ function testUnknownDisplayFieldNameRaises() {
   assert(threw, "an unknown field name in a display order request raises");
 }
 
+// ---------------------------------------------------------------------------
+// diffOneKindsCell: the panel's own bridge from "mountKindsEditor's
+// onChange handed back a whole wire table" to "one vs2beh set call at
+// <subject>.kinds.<kind_name>.<field_name>" (vs2-behavior-panel.js's
+// mountSubjectTree). Pure, so it's tested here with plain wire objects,
+// no DOM.
+// ---------------------------------------------------------------------------
+
+function testDiffOneKindsCellFindsTheSingleChangedCell() {
+  const before = sampleWireTable();
+  const table = kindsTableFromWire(before);
+  const after = kindsTableToWire(setKindsCell(table, 2, 1, 999)); // tank.score
+  const diff = diffOneKindsCell(before, after);
+  assertEqual(diff, { kindName: "tank", fieldName: "score", value: 999 },
+    "reports exactly the row/field/value that changed");
+}
+
+function testDiffOneKindsCellReturnsNullWhenNothingChanged() {
+  const before = sampleWireTable();
+  const after = kindsTableFromWire(before); // round-tripped, not edited
+  const diff = diffOneKindsCell(before, kindsTableToWire(after));
+  assert(diff === null, "no cell changed, so there is nothing to report");
+}
+
+function testDiffOneKindsCellWorksRegardlessOfRowOrder() {
+  const before = sampleWireTable();
+  const shuffled = {
+    fields: before.fields,
+    rows: [...before.rows].reverse(),
+  };
+  const diff = diffOneKindsCell(before, {
+    fields: shuffled.fields,
+    rows: shuffled.rows.map((row) =>
+      row.name === "chiller" ? { name: row.name, values: [2, row.values[1]] } : row
+    ),
+  });
+  assertEqual(diff, { kindName: "chiller", fieldName: "hp", value: 2 },
+    "finds the changed cell by kind name, not by row position");
+}
+
 const tests = [
   testEditingAnInteriorRowLeavesEveryOtherRowUntouched,
   testEditingTheFirstAndLastRowsAlsoPreservesEveryoneElse,
@@ -197,6 +238,9 @@ const tests = [
   testSortingForDisplayNeverMutatesCanonicalRowOrder,
   testReorderingColumnsForDisplayNeverMutatesFieldStorage,
   testUnknownDisplayFieldNameRaises,
+  testDiffOneKindsCellFindsTheSingleChangedCell,
+  testDiffOneKindsCellReturnsNullWhenNothingChanged,
+  testDiffOneKindsCellWorksRegardlessOfRowOrder,
 ];
 
 for (const test of tests) {
