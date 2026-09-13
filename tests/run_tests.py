@@ -56,6 +56,9 @@ CPYTHON_TESTS = [
     "tests/test_vs2_scene_gen_recover.py",
     "tests/test_vs2_event_gen.py",
     "tests/test_event_sheet_demo.py",
+    "tests/test_vs2_behavior_gen_catalog.py",
+    "tests/test_vs2_behavior_gen_model.py",
+    "tests/test_vs2_behavior_gen_generator.py",
     "tests/test_base_control.py",
     "tests/test_uart_logging.py",
     "tests/test_apa102_preview.py",
@@ -110,6 +113,7 @@ MICROPYTHON_TESTS = [
     "tests/test_browser_input_v2.py",
     "tests/test_director_headless.py",
     "tests/test_installer_micropython.py",
+    "tests/test_vs2_behavior_gen_micropython.py",
 ]
 
 NODE_TESTS = [
