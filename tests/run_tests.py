@@ -113,6 +113,7 @@ MICROPYTHON_TESTS = [
     "tests/test_browser_input_v2.py",
     "tests/test_director_headless.py",
     "tests/test_installer_micropython.py",
+    "tests/test_vs2_behavior_gen_micropython.py",
 ]
 
 NODE_TESTS = [

@@ -120,6 +120,23 @@ class RoundTripTests(unittest.TestCase):
         second = generator.generate_source(model, "x.py")
         self.assertEqual(first, second)
 
+    def test_fixture_matches_current_generator_output(self):
+        """tests/fixtures/generated_projectile_fixture.py is a checked-in
+        copy of one real generate_source() run, not generated at test
+        time -- see tests/test_vs2_behavior_gen_micropython.py's own
+        docstring for why (the generator itself isn't guaranteed
+        MicroPython-importable, so that test needs a fixture it doesn't
+        have to generate on the fly). This guards against that fixture
+        silently drifting out of sync with what the generator actually
+        produces today -- a failure here means regenerate the fixture,
+        not edit this assertion."""
+        fixture_path = Path(ROOT) / "tests" / "fixtures" / "generated_projectile_fixture.py"
+        current = generator.generate_source(projectile_model(), fixture_path.name)
+        self.assertEqual(
+            fixture_path.read_text(), current,
+            "regenerate tests/fixtures/generated_projectile_fixture.py from "
+            "the current generator (see this test's docstring)")
+
     def test_blob_round_trips_the_exact_model(self):
         from tools.vs2_scene_gen.blob import decode_blob
         model = projectile_model()
