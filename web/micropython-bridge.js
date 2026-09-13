@@ -202,7 +202,7 @@ class WorkerBridge {
   }
 }
 
-const WORKER_SCRIPT_VERSION = "worker-debug-20260714-input-v2b";
+const WORKER_SCRIPT_VERSION = "worker-debug-20260913-vs2-examples-manifest";
 
 export async function createVentilastationWasmBridge(options = {}) {
   const workerUrl = options.workerUrl || new URL(`./wasm-worker.js?v=${WORKER_SCRIPT_VERSION}`, import.meta.url).href;

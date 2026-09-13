@@ -5,8 +5,8 @@ const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T204800Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: `./vendor/micropython/micropython.wasm?v=${MICROPYTHON_WASM_VERSION}`,
-  runtimeBundleUrl: "./runtime-bundle.json?v=20260714b",
-  runtimeManifestUrl: "./runtime-manifest.json?v=20260714b",
+  runtimeBundleUrl: "./runtime-bundle.json?v=20260913a",
+  runtimeManifestUrl: "./runtime-manifest.json?v=20260913a",
   fsRoot: "/games",
   pystack: 32 * 1024,
   heapsize: 8 * 1024 * 1024,
