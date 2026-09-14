@@ -219,6 +219,10 @@ class Director:
         elif cmd == "hallfilter":
             from ventilastation import hall_filter_control
             hall_filter_control.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
+        elif cmd == "vs2beh":
+            from ventilastation import behavior_control
+            scene = self.scene_stack[-1] if self.scene_stack else None
+            behavior_control.handle_command(parts[1:], self.platform.comms.send, scene=scene)
         elif cmd == "launch":
             # "launch <slug> [rom_path]" -- load a game or native app by its
             # app_loader slug (e.g. "alecu.vixeous", "emulators.voom") without

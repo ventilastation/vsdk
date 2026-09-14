@@ -7,12 +7,17 @@ once, then mutates it without allocating renderer records while it runs.
 
 import struct
 import utime
+from math import atan2, pi, sqrt
 
 from ventilastation import api_guard
 from ventilastation.director import director, stripes
 from ventilastation.display_geometry import DISPLAY_HEIGHT, DISPLAY_WIDTH
 from ventilastation.scene import Scene as _Scene
 from ventilastation.runtime import get_platform
+
+from . import params
+from . import projection as _curves
+from .store import store
 
 
 def _claim():
@@ -31,6 +36,32 @@ TRANSPARENT = 255
 EMPTY_TILE = 255
 NO_LAYER = 255
 RECYCLE = object()
+
+#: Sentinel an Action's or Behavior's per-sprite dispatch returns when a
+#: durative operation finished this tick (``MoveTo`` arrived, ``Animate``
+#: completed a ``once`` cycle, ``Wait`` elapsed). Distinct from ``None``,
+#: which means "nothing notable happened".
+DONE = object()
+
+#: Curve-family surface re-exported at the package's top level so a curve
+#: reads as ``vs2.VS1_TUNNEL`` / ``vs2.tunnel(...)``, matching
+#: :data:`vs2.TUNNEL` and friends. ``vs2.TUNNEL``/``vs2.HUD``/
+#: ``vs2.FULLSCREEN`` above stay the revision-2 wire-format mode ints,
+#: unchanged; these are the 256-byte depth<->row tables a layer's
+#: :attr:`Layer.projection` can also be set to. See "How the int-mode
+#: projection and curve-accepting projection reconcile" in this module's
+#: notes for why the two namespaces don't collide.
+VS1_TUNNEL = _curves.VS1_TUNNEL
+tunnel = _curves.tunnel
+
+#: Names the framework reserves on any sprite, pool, scene or project --
+#: for the movement accumulator (``dx``, ``dy``), the state-machine fields
+#: (``fsm_state``, ``fsm_hold``, ``fsm_then``), and a Behavior's own
+#: ``enabled`` switch. :meth:`SpritePool.var`, :meth:`Scene.var` and
+#: :meth:`_Project.var` all reject these.
+_RESERVED_VAR_NAMES = frozenset((
+    "dx", "dy", "fsm_state", "fsm_hold", "fsm_then", "enabled",
+))
 
 FLAG_VISIBLE = 0x01
 FLAG_FLIP_X = 0x02
@@ -91,6 +122,24 @@ class FrameError(ValueError):
     """
 
 
+class StateConflictError(RuntimeError):
+    """A Behavior's ``state = (...)`` declaration collides with something
+    else already living on the same subject.
+
+    Priming state -- writing every declared name to ``0`` on every sprite of
+    a Behavior's subject at attach time -- is what makes ``sprite.name +=
+    ...`` allocation-free in a Step (see :meth:`SpritePool.var`'s identical
+    priming loop). That only holds if the name is unique across everything
+    else already on the sprite, so this is raised, naming both sides, when:
+    a second Behavior on the same subject declares the same state name; a
+    state name shadows a pool's own :meth:`SpritePool.var`-declared
+    variable, a scene's own :meth:`Scene.var`-declared variable, or a
+    built-in :class:`Sprite` property; or a state name is one of the
+    framework's reserved names (``dx``, ``dy``, ``fsm_state``, ``fsm_hold``,
+    ``fsm_then``, ``enabled``).
+    """
+
+
 class _Limits:
     """Per-target resource budgets, exposed as ``vs2.limits``."""
 
@@ -98,6 +147,10 @@ class _Limits:
     sprites = 100
     tilemaps = 16
     image_strips = 100
+    #: Behaviors attached anywhere in one scene, enforced by
+    #: :func:`_attach_behavior` -- see its per-kind census in the
+    #: :class:`ResourceLimitError` it raises when this is exceeded.
+    behaviors = 32
 
 
 limits = _Limits()
@@ -253,6 +306,96 @@ class _BaseControl:
 
 
 base = _BaseControl()
+
+
+#: Sentinel distinct from any real app slug (including the legitimate "no
+#: app is current" state, which is ``None``), so a freshly constructed
+#: :class:`_Project` always rebinds on its first access. Mirrors
+#: :mod:`vs2.store`'s identical ``_UNBOUND`` sentinel and the reason for it.
+_PROJECT_UNBOUND = object()
+
+
+class _Project:
+    """Project-scoped variables that outlive a scene transition, exposed as
+    ``vs2.project``.
+
+    Unlike :meth:`Scene.var`, which resets every :meth:`Scene.build`, a
+    project variable is declared once -- the first :meth:`var` call for a
+    name wins, and a later call with the same name is a no-op that just
+    returns the current value -- and lives above the scene stack for the
+    life of the app, so it survives :meth:`Scene.push`, :meth:`Scene.pop`
+    and :meth:`Scene.switch`::
+
+        vs2.project.var("high_score", 0, persist=True)
+
+    ``persist=True`` additionally reads the variable's initial value from
+    :data:`vs2.store` and writes it back on :meth:`save`.
+
+    **Rebinds when the current app changes**, the same way :data:`vs2.store`
+    does: :func:`~ventilastation.api_guard.current_app` is checked on every
+    call, and a different slug than last seen means a different game is
+    running in this same process (a launcher-hosted session switching
+    between games, the emulator, or a test), so every declared variable --
+    and the plain instance attribute each one was ``setattr()`` onto this
+    singleton -- is dropped before the new app's own declarations apply.
+    Without this, a second game declaring a name the first game already
+    declared would silently read the first game's value instead of its own.
+    """
+
+    def __init__(self):
+        self._app_slug = _PROJECT_UNBOUND
+        self._vars = {}
+        self._persisted = set()
+
+    def _ensure_current_app(self):
+        slug = api_guard.current_app()
+        if slug != self._app_slug:
+            for name in self._vars:
+                try:
+                    delattr(self, name)
+                except AttributeError:
+                    pass
+            self._vars = {}
+            self._persisted = set()
+            self._app_slug = slug
+
+    def var(self, name, default=0, persist=False, min=None, max=None,
+            step=None, label=None, unit=None, options=None):
+        """Declare a project variable, returning its current value.
+
+        Raises:
+            ValueError: If ``name`` is one of the framework's reserved
+                names (``dx``, ``dy``, ``fsm_state``, ``fsm_hold``,
+                ``fsm_then``, ``enabled``).
+        """
+        self._ensure_current_app()
+        if name in self._vars:
+            return getattr(self, name)
+        if name in _RESERVED_VAR_NAMES:
+            raise ValueError("%r is a reserved name; choose another" % (name,))
+        parameter = _var_parameter(default, min=min, max=max, step=step,
+                                    label=label, unit=unit, options=options)
+        self._vars[name] = parameter
+        value = parameter.default
+        if persist:
+            self._persisted.add(name)
+            value = store.get(name, value)
+        setattr(self, name, value)
+        return value
+
+    def save(self):
+        """Write every ``persist=True`` project variable to
+        :data:`vs2.store` and save it. No-ops when nothing is persisted."""
+        self._ensure_current_app()
+        if not self._persisted:
+            return
+        for name in self._persisted:
+            store[name] = getattr(self, name)
+        store.save()
+
+
+#: The project-variable singleton. See :class:`_Project`.
+project = _Project()
 
 
 from . import controls
@@ -436,6 +579,290 @@ def _intersects_circular(x1, width1, x2, width2):
     return x1 < x2 + width2 and x1 + width1 > x2
 
 
+def _var_parameter(default, min=None, max=None, step=None, label=None,
+                    unit=None, options=None):
+    """Pick a :mod:`vs2.params` type for a declared instance variable, the
+    same way :meth:`SpritePool.var`, :meth:`Scene.var` and
+    :attr:`vs2.project`'s ``var`` all declare one: ``options=`` makes it a
+    :class:`~vs2.params.Choice`, a boolean default makes it a
+    :class:`~vs2.params.Flag`, anything else a :class:`~vs2.params.Number`.
+    The returned :class:`~vs2.params.Parameter` is used only for its
+    ``default``/metadata bookkeeping here -- it is never installed as a
+    class-level descriptor, since these are per-instance declarations made
+    at build time, not class-level Action/Behavior parameters.
+    """
+    if options is not None:
+        return params.Choice(default, options=options, label=label, unit=unit)
+    if isinstance(default, bool):
+        return params.Flag(default, label=label)
+    return params.Number(default, min=min, max=max, step=step, label=label, unit=unit)
+
+
+def _behavior_snake_name(behavior):
+    """The default name a Behavior gets on a subject when ``behave()`` is
+    not given an explicit ``name=``: its class name in snake_case."""
+    cls_name = type(behavior).__name__
+    chars = []
+    for index, char in enumerate(cls_name):
+        if char.isupper():
+            if index > 0:
+                chars.append("_")
+            chars.append(char.lower())
+        else:
+            chars.append(char)
+    return "".join(chars)
+
+
+#: The three step-dispatch method names :meth:`Scene._run_behaviors` looks
+#: for, and the one each subject kind actually calls. ``"family"`` accepts
+#: either, since a family dispatches each member to whichever fits its own
+#: kind (see :meth:`Scene._run_behaviors`).
+_STEP_METHODS = ("step", "step_one", "step_scene")
+
+_KIND_REQUIRED_METHOD = {
+    "pool": "step",
+    "sprite": "step_one",
+    "scene": "step_scene",
+}
+
+_KIND_NEEDS_TEXT = {
+    "pool": "step()",
+    "sprite": "step_one()",
+    "family": "step() or step_one()",
+    "scene": "step_scene()",
+}
+
+
+def _behavior_kind_mismatch(behavior, kind):
+    """Whether ``behavior`` is shaped for a *different* subject kind than
+    ``kind`` -- the mistake this catches is attaching a Behavior written for
+    one subject (say, one that defines only ``step_one``) to another kind
+    (a pool, which dispatches through ``step``).
+
+    A ``behavior`` defining **none** of ``step``/``step_one``/``step_scene``
+    is not flagged: that is either a Behavior doing all of its work in
+    :meth:`Behavior.attached` with no per-tick logic of its own (legitimate
+    -- see the proposal's *Cross-behavior wiring* on a passive
+    ``Damageable``), or, pre-:class:`Behavior`, a bare duck-typed stand-in
+    like the ones :mod:`tests.test_vs2_api` attaches -- both cases
+    :meth:`Scene._run_behaviors` already tolerates by no-oping on whichever
+    of the three a subject's dispatch does not find, so attaching one is
+    legal on any subject.
+    """
+    if kind == "family":
+        if (getattr(behavior, "step", None) is not None
+                or getattr(behavior, "step_one", None) is not None):
+            return False
+        return getattr(behavior, "step_scene", None) is not None
+    required = _KIND_REQUIRED_METHOD[kind]
+    if getattr(behavior, required, None) is not None:
+        return False
+    for method in _STEP_METHODS:
+        if method != required and getattr(behavior, method, None) is not None:
+            return True
+    return False
+
+
+_SPRITE_PUBLIC_ATTRS = None
+
+
+def _sprite_public_attrs():
+    """Every non-private name :class:`Sprite` exposes (``x``, ``frame``,
+    ``despawn``, ``behavior``, ...), computed once and cached: what a
+    Behavior's ``state`` declaration must not shadow on a sprite subject.
+    Deferred (rather than computed at import time) because :class:`Sprite`
+    is defined later in this module than :func:`_attach_behavior` is.
+    """
+    global _SPRITE_PUBLIC_ATTRS
+    if _SPRITE_PUBLIC_ATTRS is None:
+        _SPRITE_PUBLIC_ATTRS = frozenset(
+            attr for attr in dir(Sprite) if not attr.startswith("_"))
+    return _SPRITE_PUBLIC_ATTRS
+
+
+def _check_state_owner(owners, name, behavior, label):
+    existing = owners.get(name)
+    if existing is not None:
+        raise StateConflictError(
+            "state name %r is already declared on this %s by %r; %r cannot "
+            "declare it again" % (name, label, existing, behavior))
+
+
+def _prime_pool_state(pool, names, behavior):
+    """Validate then prime ``names`` (a Behavior's ``state`` tuple) to ``0``
+    on every sprite of ``pool``, free ones included -- the same priming
+    idiom :meth:`SpritePool.var` uses, walking ``_free`` then ``_live``.
+    Ownership (for cross-Behavior collision detection) is recorded directly
+    on the pool object, so a family member primed this way and a pool
+    attached to directly are checked against the same registry.
+    """
+    owners = getattr(pool, "_behavior_state_owners", None)
+    if owners is None:
+        owners = {}
+        pool._behavior_state_owners = owners
+    for name in names:
+        if name in _RESERVED_VAR_NAMES:
+            raise StateConflictError(
+                "%r is a reserved name; %r cannot declare it as state"
+                % (name, behavior))
+        if name in pool._var_defaults:
+            raise StateConflictError(
+                "state name %r on %r collides with this pool's own "
+                "declared variable %r" % (name, behavior, name))
+        _check_state_owner(owners, name, behavior, "pool")
+    for name in names:
+        owners[name] = behavior
+        for sprite in pool._free:
+            setattr(sprite, name, 0)
+        for sprite in pool._live:
+            setattr(sprite, name, 0)
+
+
+def _prime_sprite_state(sprite, names, behavior):
+    """Validate then prime ``names`` to ``0`` on one standalone sprite."""
+    owners = getattr(sprite, "_behavior_state_owners", None)
+    if owners is None:
+        owners = {}
+        sprite._behavior_state_owners = owners
+    reserved_props = _sprite_public_attrs()
+    for name in names:
+        if name in _RESERVED_VAR_NAMES:
+            raise StateConflictError(
+                "%r is a reserved name; %r cannot declare it as state"
+                % (name, behavior))
+        if name in reserved_props:
+            raise StateConflictError(
+                "state name %r on %r collides with Sprite's own %r property"
+                % (name, behavior, name))
+        _check_state_owner(owners, name, behavior, "sprite")
+    for name in names:
+        owners[name] = behavior
+        setattr(sprite, name, 0)
+
+
+def _prime_scene_state(scene, names, behavior):
+    """Validate then prime ``names`` to ``0`` on the scene itself -- a
+    scene is its own single subject instance, so this primes ``scene``
+    directly rather than walking a collection of sprites."""
+    owners = getattr(scene, "_behavior_state_owners", None)
+    if owners is None:
+        owners = {}
+        scene._behavior_state_owners = owners
+    for name in names:
+        if name in _RESERVED_VAR_NAMES:
+            raise StateConflictError(
+                "%r is a reserved name; %r cannot declare it as state"
+                % (name, behavior))
+        if name in scene._vars:
+            raise StateConflictError(
+                "state name %r on %r collides with this scene's own "
+                "declared variable %r" % (name, behavior, name))
+        _check_state_owner(owners, name, behavior, "scene")
+    for name in names:
+        owners[name] = behavior
+        setattr(scene, name, 0)
+
+
+def _prime_behavior_state(subject, kind, behavior):
+    """Prime ``behavior.state`` (a plain tuple of field names, defaulting
+    to ``()`` and costing nothing when absent) across every sprite of
+    ``subject`` -- one sprite for a ``sprite`` subject, every sprite (free
+    included) of a ``pool`` subject, every member's sprites for a
+    ``family`` subject, or the scene object itself for a ``scene`` subject.
+    """
+    names = getattr(behavior, "state", ())
+    if not names:
+        return
+    if kind == "pool":
+        _prime_pool_state(subject, names, behavior)
+    elif kind == "sprite":
+        _prime_sprite_state(subject, names, behavior)
+    elif kind == "family":
+        for member_kind, member in subject._members:
+            if member_kind == "pool":
+                _prime_pool_state(member, names, behavior)
+            else:
+                _prime_sprite_state(member, names, behavior)
+    else:  # "scene"
+        _prime_scene_state(subject, names, behavior)
+
+
+def _attach_behavior(scene, subject, kind, by_name, order, behavior, name):
+    """Shared body of ``behave()`` on every subject kind (:class:`Sprite`,
+    :class:`SpritePool`, :class:`Family`, :class:`Scene`).
+
+    Structural: legal only while ``scene`` is building. Validates that
+    ``behavior`` is shaped for ``kind`` (:func:`_behavior_kind_mismatch`),
+    that its name does not collide with another Behavior already on this
+    subject, that attaching it would not exceed ``vs2.limits.behaviors``,
+    and primes any ``state`` it declares (:func:`_prime_behavior_state`) --
+    then registers it under ``name`` (defaulting to its class's snake_case
+    name) into the subject's own ``by_name``/``order`` bookkeeping, appends
+    it to the scene-wide attachment log that :meth:`Scene._seal_drawables`
+    freezes into the subject-kind-tagged Step run list, and finally calls
+    ``behavior.attached(subject)`` if it defines one -- once, here, with
+    every other Behavior attached earlier on this subject already fully
+    registered (call order in :meth:`Scene.build` is what lets one
+    Behavior's ``attached()`` look an earlier sibling up via
+    ``subject.behavior(OtherClass)`` and cache a direct reference, per the
+    proposal's *Cross-behavior wiring*).
+
+    Dispatch itself stays duck-typed (:meth:`Scene._run_behaviors` still
+    reads through ``getattr(..., None)``, not an ``isinstance`` check
+    against :class:`~vs2.behaviors.Behavior`) -- this function only
+    validates the *shape* ``behavior`` needs for ``kind`` to make sense,
+    which is why a bare stand-in defining none of the three step methods
+    (see :func:`_behavior_kind_mismatch`) still attaches without error,
+    and calling ``attached()`` through ``getattr(..., None)`` the same way
+    means a stand-in with no ``attached()`` of its own costs nothing extra.
+    """
+    scene._require_build("behave")
+    if _behavior_kind_mismatch(behavior, kind):
+        defined = "/".join(
+            method for method in _STEP_METHODS
+            if getattr(behavior, method, None) is not None)
+        raise TypeError(
+            "%s cannot attach to a %s: it defines %s, but a %s subject "
+            "dispatches through %s"
+            % (type(behavior).__name__, kind, defined, kind,
+               _KIND_NEEDS_TEXT[kind]))
+    if name is None:
+        name = _behavior_snake_name(behavior)
+    if name in by_name:
+        raise ValueError(
+            "behavior name %r is already attached to this %s (%r and %r)"
+            % (name, kind, by_name[name], behavior))
+    requested = len(scene._behavior_attachments) + 1
+    if requested > limits.behaviors:
+        counts = {}
+        for existing_kind, _existing_subject, _existing_behavior in scene._behavior_attachments:
+            counts[existing_kind] = counts.get(existing_kind, 0) + 1
+        counts[kind] = counts.get(kind, 0) + 1
+        census = ", ".join("%s: %d" % (k, counts[k]) for k in sorted(counts))
+        raise ResourceLimitError(
+            "behavior %d/%d in %s (%s); reduce the behavior budget"
+            % (requested, limits.behaviors, scene.__class__.__name__, census))
+    _prime_behavior_state(subject, kind, behavior)
+    by_name[name] = behavior
+    order.append(behavior)
+    scene._behavior_attachments.append((kind, subject, behavior))
+    attached = getattr(behavior, "attached", None)
+    if attached is not None:
+        attached(subject)
+    return behavior
+
+
+def _lookup_behavior(by_name, order, key):
+    """Shared body of ``behavior()`` on every subject kind: look up by name
+    (a string) or by class, returning ``None`` when nothing matches."""
+    if isinstance(key, str):
+        return by_name.get(key)
+    for behavior in order:
+        if isinstance(behavior, key):
+            return behavior
+    return None
+
+
 class Scene(_Scene):
     """One screen of a game: a display graph plus the logic that drives it.
 
@@ -494,6 +921,28 @@ class Scene(_Scene):
         self._payload_tilemaps = ()
         self._payload_drawables = ()
         self._payload_frames_size = 0
+        #: This scene's own declared variables (:meth:`var`), reset fresh on
+        #: every :meth:`build`.
+        self._vars = {}
+        #: This scene's own attached Behaviors (subject == the scene
+        #: itself), as ``{name: behavior}`` plus attachment order.
+        self._behaviors = {}
+        self._behavior_order = []
+        #: Every ``behave()`` call anywhere in the scene, in call order --
+        #: what :attr:`behaviors` reads back and what
+        #: :meth:`_seal_drawables` freezes into the Step run list.
+        self._behavior_attachments = []
+        self._behavior_run_list = ()
+        #: Every :class:`SpritePool` created on any layer, in creation
+        #: order -- what the per-tick ``dx``/``dy`` commit pass walks.
+        self._pools = []
+        self._payload_pools = ()
+        #: Distinct non-default projection curves seen on this scene's
+        #: layers, assigned small indices on first sight for
+        #: ``export_scene_payload()``'s reserved curve-index byte. Index 0
+        #: is never stored here -- it always means "this layer's mode
+        #: default curve".
+        self._curve_registry = {}
 
     def build(self):
         """Create this scene's layers and drawables. Override this.
@@ -601,10 +1050,111 @@ class Scene(_Scene):
             ResourceLimitError: If the scene already has ``vs2.limits.layers``.
         """
         self._require_build("layer")
+        if name == "scene":
+            raise ValueError("a layer cannot be named 'scene'; that name is "
+                             "reserved for the scene itself as a Behavior subject")
         self._reserve("layer", 1, self)
         layer = Layer(self, name, projection, visible)
         self.layers.append(layer)
         return layer
+
+    def var(self, name, default=0, min=None, max=None, step=None,
+            label=None, unit=None, options=None):
+        """Declare a scene-level variable, primed now and reset again on
+        every :meth:`build` (a scene rebuilds its whole graph on every
+        entry, and its variables reset the same way). For state that must
+        survive a :meth:`push`/:meth:`pop` or a :meth:`switch`, declare it
+        on :data:`vs2.project` instead.
+
+        Readable and writable afterwards as a plain attribute::
+
+            self.var("score", 0, min=0, max=999999)
+            self.score += 10
+
+        Only callable from :meth:`build`.
+
+        Raises:
+            SceneSealedError: If called outside ``build()``.
+            ValueError: If ``name`` is already declared on this scene, or
+                is one of the framework's reserved names (``dx``, ``dy``,
+                ``fsm_state``, ``fsm_hold``, ``fsm_then``, ``enabled``).
+        """
+        self._require_build("var")
+        if name in _RESERVED_VAR_NAMES:
+            raise ValueError("%r is a reserved name; choose another" % (name,))
+        if name in self._vars:
+            raise ValueError("scene variable %r is already declared" % (name,))
+        parameter = _var_parameter(default, min=min, max=max, step=step,
+                                    label=label, unit=unit, options=options)
+        self._vars[name] = parameter
+        setattr(self, name, parameter.default)
+        return parameter.default
+
+    def family(self, *members):
+        """Group ``members`` -- :class:`SpritePool` and/or :class:`Sprite`
+        objects, all on the same layer -- into a :class:`Family`: a legal
+        :class:`~vs2.actions.Action` target and a legal Behavior subject in
+        its own right, addressed as one unit without ever being iterated in
+        a Step. Only callable from :meth:`build`.
+
+        Raises:
+            SceneSealedError: If called outside ``build()``.
+            ValueError: If ``members`` is empty, or its members do not all
+                share one layer.
+            TypeError: If a member is neither a :class:`SpritePool` nor a
+                :class:`Sprite`.
+        """
+        self._require_build("family")
+        if not members:
+            raise ValueError("family() needs at least one pool or sprite")
+        tagged = []
+        layer = None
+        for member in members:
+            if isinstance(member, SpritePool):
+                kind = "pool"
+            elif isinstance(member, Sprite):
+                kind = "sprite"
+            else:
+                raise TypeError(
+                    "family() members must be a SpritePool or Sprite; got %r"
+                    % (member,))
+            member_layer = member.layer
+            if layer is None:
+                layer = member_layer
+            elif member_layer is not layer:
+                raise ValueError(
+                    "family() members must share one layer; got %s and %s"
+                    % (layer.name or "unnamed", member_layer.name or "unnamed"))
+            tagged.append((kind, member))
+        return Family(self, layer, tagged)
+
+    def behave(self, behavior, name=None):
+        """Attach ``behavior`` to the scene itself -- for conduct with no
+        sprite behind it, like wave spawning, which decides *when*
+        something is born rather than what an existing sprite does.
+        Structural: only callable from :meth:`build`. Returns ``behavior``.
+        """
+        return _attach_behavior(self, self, "scene",
+                                self._behaviors, self._behavior_order,
+                                behavior, name)
+
+    @property
+    def behaviors(self):
+        """Every Behavior attached anywhere in this scene -- on any layer's
+        pools, sprites and families, and on the scene itself -- in the
+        order ``behave()`` was called. This is the Step's run order, and
+        what the panel lists. For only the Behaviors attached to the scene
+        itself (as opposed to one of its pools, sprites or families), use
+        :meth:`behavior`.
+        """
+        return tuple(behavior for _kind, _subject, behavior in self._behavior_attachments)
+
+    def behavior(self, key):
+        """Look up a Behavior attached directly to the scene itself (not
+        one of its pools, sprites or families) by name (a string) or by
+        class. Returns ``None`` if nothing matches.
+        """
+        return _lookup_behavior(self._behaviors, self._behavior_order, key)
 
     def on_enter(self):
         backend = _vs2_backend()
@@ -618,6 +1168,14 @@ class Scene(_Scene):
         self._payload_tilemaps = ()
         self._payload_drawables = ()
         self._payload_frames_size = 0
+        self._vars = {}
+        self._behaviors = {}
+        self._behavior_order = []
+        self._behavior_attachments = []
+        self._behavior_run_list = ()
+        self._pools = []
+        self._payload_pools = ()
+        self._curve_registry = {}
         if backend is not None:
             backend.reset_scene()
             backend.set_active(True)
@@ -661,6 +1219,14 @@ class Scene(_Scene):
             self._payload_tilemaps = ()
             self._payload_drawables = ()
             self._payload_frames_size = 0
+            self._vars = {}
+            self._behaviors = {}
+            self._behavior_order = []
+            self._behavior_attachments = []
+            self._behavior_run_list = ()
+            self._pools = []
+            self._payload_pools = ()
+            self._curve_registry = {}
             self._phase = "closed"
             setter = getattr(get_platform().display, "set_starfield", None)
             if setter is not None:
@@ -697,6 +1263,13 @@ class Scene(_Scene):
         self._payload_tilemaps = tuple(tilemaps)
         self._payload_drawables = tuple(drawables)
         self._payload_frames_size = frames_size
+        # Freeze the pools (for the per-tick dx/dy commit pass) and the
+        # subject-kind-tagged Behavior attachments (for the Step's run
+        # list) the same way drawables are frozen above: once, here, so
+        # neither the Step nor the commit pass ever walks a live Python
+        # list or builds an iterator.
+        self._payload_pools = tuple(self._pools)
+        self._behavior_run_list = tuple(self._behavior_attachments)
         backend = _vs2_backend()
         if backend is not None:
             setter = getattr(backend, "set_draw_order", None)
@@ -814,12 +1387,101 @@ class Scene(_Scene):
     def scene_step(self):
         self.update()
         if self._pending_transition is None:
+            self._run_behaviors()
+        if self._pending_transition is None:
             self._run_defaults()
         if self._pending_transition is None:
             self._drain_timers()
         # Director re-reads the stack after scene_step(), so callbacks that
         # queued a transition cannot run against a scene that has just left.
         self._commit_transition()
+
+    def _run_behaviors(self):
+        """The Behavior pass: attach-order dispatch across the whole scene,
+        followed by the per-pool ``dx``/``dy`` commit.
+
+        Runs after :meth:`update` and before :meth:`_run_defaults`, exactly
+        once per Step, guarded the same way as the rest of the pass by
+        ``scene_step()`` -- a transition queued in ``update()`` skips this
+        entirely. A transition queued *by* a Behavior stops the dispatch
+        loop immediately, after the entry that queued it, without visiting
+        any Behavior attached later; the motion commit still runs
+        regardless, so whatever a sprite accumulated before the stop is not
+        silently dropped.
+
+        Dispatch is duck-typed against ``getattr(behavior, "step*", None)``
+        rather than a ``Behavior`` base class, because that base class does
+        not exist in this module -- it is a later task's
+        ``vs2/behaviors.py``. A stand-in object attached today (as this
+        module's own tests do) simply runs whichever of ``step``/
+        ``step_one``/``step_scene`` it defines for the subject kind it was
+        attached to.
+        """
+        run_list = self._behavior_run_list
+        index = 0
+        count = len(run_list)
+        while index < count:
+            kind, subject, behavior = run_list[index]
+            if kind == "pool":
+                step = getattr(behavior, "step", None)
+                if step is not None:
+                    step(subject)
+            elif kind == "sprite":
+                step_one = getattr(behavior, "step_one", None)
+                if step_one is not None:
+                    step_one(subject)
+            elif kind == "family":
+                step = getattr(behavior, "step", None)
+                step_one = getattr(behavior, "step_one", None)
+                members = subject._members
+                member_index = 0
+                member_count = len(members)
+                while member_index < member_count:
+                    member_kind, member = members[member_index]
+                    if member_kind == "pool":
+                        if step is not None:
+                            step(member)
+                    elif step_one is not None:
+                        step_one(member)
+                    member_index += 1
+            else:  # "scene"
+                step_scene = getattr(behavior, "step_scene", None)
+                if step_scene is not None:
+                    step_scene(self)
+            if self._pending_transition is not None:
+                break
+            index += 1
+        self._commit_pool_motion()
+
+    def _commit_pool_motion(self):
+        """Apply every live sprite's accumulated ``dx``/``dy`` to its
+        ``x``/``y`` and zero the accumulator, once per pool per tick.
+
+        Indexed and downward per pool -- the same zero-allocation,
+        despawn-safe shape every Behavior/Action loop in this framework
+        uses -- over the pools :meth:`_seal_drawables` froze, not a
+        ``for sprite in pool`` iterator. A sprite nobody wrote ``dx``/
+        ``dy`` on (every sprite in a scene using none of this API) costs
+        one ``or`` comparison and nothing else: no property write, no
+        native call.
+        """
+        pools = self._payload_pools
+        pool_index = 0
+        pool_count = len(pools)
+        while pool_index < pool_count:
+            live = pools[pool_index]._live
+            slot = len(live) - 1
+            while slot >= 0:
+                sprite = live[slot]
+                dx = sprite.dx
+                dy = sprite.dy
+                if dx or dy:
+                    sprite.x = sprite._x + dx
+                    sprite.y = sprite._y + dy
+                    sprite.dx = 0
+                    sprite.dy = 0
+                slot -= 1
+            pool_index += 1
 
 
 class Layer:
@@ -844,14 +1506,25 @@ class Layer:
     def __init__(self, scene, name, projection, visible):
         self.scene = scene
         self.name = name
-        self._projection = _projection(projection)
+        self._projection, self._curve = _resolve_projection(projection)
         self._visible = bool(visible)
         self._drawables = []
         self._closed = False
         self._sprite_count = 0
         self._tilemap_count = 0
+        #: Render-time translation applied to everything this layer draws.
+        #: See :attr:`camera_x`/:attr:`camera_y`.
+        self._camera_x = 0
+        self._camera_y = 0
         backend = _vs2_backend()
         self._layer = backend.Layer(mode=self._projection, visible=self._visible) if backend else None
+        if self._layer is not None:
+            # Without this, a native-backed layer never hears about camera_x/
+            # camera_y or a non-default curve until something else happens to
+            # call set_camera()/set_curve() -- see the camera_x/camera_y and
+            # projection setters below, which keep this in sync afterward.
+            self._layer.set_camera(0, 0)
+            self._layer.set_curve(self._curve)
 
     def _require_build(self, method):
         if self._closed:
@@ -869,17 +1542,120 @@ class Layer:
 
     @property
     def projection(self):
-        """How this layer maps Y to LEDs -- :data:`~vs2.TUNNEL`,
-        :data:`~vs2.HUD` or :data:`~vs2.FULLSCREEN`. Writable at runtime, e.g.
-        a radar layer that flips between tunnel and HUD."""
+        """How this layer maps Y to LEDs -- always reads back as one of the
+        revision-2 wire values :data:`~vs2.FULLSCREEN`, :data:`~vs2.TUNNEL`
+        or :data:`~vs2.HUD`, even after assigning a curve (a curve refines
+        *which* depth-to-row table TUNNEL/FULLSCREEN paint through; it does
+        not add a fourth mode, and every existing native call, payload byte
+        and ``== vs2.HUD``-style check keeps working unchanged). Writable at
+        runtime, e.g. a radar layer that flips between tunnel and HUD."""
         return self._projection
 
     @projection.setter
     def projection(self, value):
+        """Set this layer's rendering mode, or its projection curve.
+
+        Passing one of :data:`vs2.FULLSCREEN`/:data:`vs2.TUNNEL`/
+        :data:`vs2.HUD` behaves exactly as revision 2: it selects that mode
+        and resets this layer's curve to the mode's own default
+        (:data:`vs2.VS1_TUNNEL` for TUNNEL and FULLSCREEN, the identity
+        curve for HUD).
+
+        Passing a 256-byte curve -- :data:`vs2.VS1_TUNNEL`, one from
+        :mod:`vs2.projection`, or the result of :func:`vs2.tunnel` --
+        replaces only the curve :meth:`to_depth`/:meth:`to_row`/
+        :meth:`polar` read, leaving :attr:`projection`'s mode untouched.
+        """
         self._require_open("projection")
-        self._projection = _projection(value)
+        self._projection, self._curve = _resolve_projection(value, self._projection)
         if self._layer is not None:
             self._layer.set_mode(self._projection)
+            self._layer.set_curve(self._curve)
+
+    @property
+    def camera_x(self):
+        """Render-time X translation applied to everything this layer
+        draws, in the same angular units as sprite ``x`` -- wraps at
+        :data:`vs2.display.width`, at no extra cost, because the renderer's
+        column arithmetic is already modular. Defaults to 0."""
+        return self._camera_x
+
+    @camera_x.setter
+    def camera_x(self, value):
+        self._require_open("camera_x")
+        self._camera_x = value
+        if self._layer is not None:
+            self._layer.set_camera(self._camera_x, self._camera_y)
+
+    @property
+    def camera_y(self):
+        """Render-time Y translation, interpreted like sprite ``y`` under
+        this layer's projection: LEDs on HUD, depth on a tunnel. Defaults
+        to 0."""
+        return self._camera_y
+
+    @camera_y.setter
+    def camera_y(self, value):
+        self._require_open("camera_y")
+        self._camera_y = value
+        if self._layer is not None:
+            self._layer.set_camera(self._camera_x, self._camera_y)
+
+    def to_row(self, depth):
+        """World depth (``0..255``) -> LED row, through this layer's
+        curve. The inverse of :meth:`to_depth`."""
+        index = int(depth)
+        if index < 0:
+            index = 0
+        elif index > 255:
+            index = 255
+        return self._curve[index]
+
+    def to_depth(self, led_row):
+        """LED row -> world depth (``0..255``), through this layer's
+        curve. The inverse of :meth:`to_row`."""
+        return _curves.to_depth(int(led_row), self._curve)
+
+    def polar(self, x, y):
+        """Convert a cartesian offset ``(x, y)`` to this layer's polar
+        terms: ``(angle, depth)``.
+
+        ``angle`` follows the disc's own convention -- 0 at the bottom, 64
+        left, 128 top, 192 right, wrapping at :data:`vs2.display.width` --
+        matching the ``atan2``-based aiming maths already hand-written in
+        the VS jam games (``2bam_sencom``), generalised to any display
+        width. ``depth`` is the plain Euclidean distance from the origin,
+        in the same world-space units as sprite ``y`` -- *not* run through
+        this layer's curve (see :meth:`to_row` for that), since a Behavior
+        computing "how far away is this" wants world-space depth, the same
+        space :class:`~vs2.actions.Collide` tests in.
+        """
+        angle = (0.75 * display.width - atan2(y, x) * display.width / (2 * pi)) % display.width
+        depth = sqrt(x * x + y * y)
+        return angle, depth
+
+    def _curve_index(self):
+        """This layer's curve, resolved to the small integer
+        ``export_scene_payload()`` packs into the layer record's reserved
+        curve-index byte. 0 always means "this layer's mode default
+        curve" -- the case that keeps the payload byte-identical to
+        revision 2 for every scene that never assigns a custom curve.
+        A distinct custom curve is assigned the next free index in the
+        scene's registry the first time it is seen; the same curve object
+        (or an equal one, e.g. two separately-built ``vs2.tunnel(...)``
+        calls with the same arguments) always resolves to the same index.
+        """
+        default = _DEFAULT_CURVE_BY_MODE[self._projection]
+        curve = self._curve
+        if curve is default or bytes(curve) == bytes(default):
+            return 0
+        registry = self.scene._curve_registry
+        key = bytes(curve)
+        index = registry.get(key)
+        if index is None:
+            index = len(registry) + 1
+            registry[key] = index
+        return index
 
     @property
     def visible(self):
@@ -971,7 +1747,9 @@ class Layer:
             sprite = Sprite(self, image, 0, 0, frame, False, False, False)
             self._drawables.append(sprite)
             sprites.append(sprite)
-        return SpritePool(sprites, on_empty)
+        pool = SpritePool(self, sprites, on_empty)
+        self.scene._pools.append(pool)
+        return pool
 
     def tilemap(self, image, columns, rows, cells=None, x=0, y=0,
                 view_width=None, view_height=None, view_x=0, view_y=0,
@@ -1073,11 +1851,44 @@ class Layer:
         return label
 
 
-def _projection(value):
-    value = int(value)
-    if value not in (FULLSCREEN, TUNNEL, HUD):
-        raise ValueError("projection must be vs2.FULLSCREEN, TUNNEL, or HUD")
-    return value
+#: The curve each classic mode implies when nothing custom is assigned.
+#: FULLSCREEN "stays a mode rather than a curve... but reads the layer's
+#: curve" for its radial extent (see the projection-curves spec section),
+#: so it gets the same historical shape TUNNEL always had rather than no
+#: curve at all.
+_DEFAULT_CURVE_BY_MODE = {
+    FULLSCREEN: _curves.VS1_TUNNEL,
+    TUNNEL: _curves.VS1_TUNNEL,
+    HUD: _curves.HUD,
+}
+
+
+def _resolve_projection(value, current_mode=None):
+    """Split a :attr:`Layer.projection` argument into ``(mode, curve)``.
+
+    ``value`` is either one of the revision-2 wire ints
+    (:data:`FULLSCREEN`/:data:`TUNNEL`/:data:`HUD`) or a 256-byte curve
+    (:data:`VS1_TUNNEL`, one from :mod:`vs2.projection`, or the result of
+    :func:`tunnel`). A mode selects that mode's default curve and is
+    always returned as ``mode`` unchanged -- this is the whole reason
+    every existing native call, payload byte and ``layer.projection ==
+    vs2.HUD``-style comparison keeps working untouched. A curve keeps
+    whichever mode was already active (``current_mode``, or
+    :data:`TUNNEL` on a brand new layer with no prior mode, since a curve
+    describes exactly the depth-to-row mapping TUNNEL already means) and
+    replaces only the curve.
+    """
+    if isinstance(value, (bytes, bytearray)):
+        if len(value) != 256:
+            raise ValueError("a projection curve must be exactly 256 bytes")
+        mode = current_mode if current_mode is not None else TUNNEL
+        return mode, bytes(value)
+    mode = int(value)
+    if mode not in (FULLSCREEN, TUNNEL, HUD):
+        raise ValueError(
+            "projection must be vs2.FULLSCREEN, vs2.TUNNEL, vs2.HUD, "
+            "or a 256-byte curve from vs2.projection")
+    return mode, _DEFAULT_CURVE_BY_MODE[mode]
 
 
 class Sprite:
@@ -1114,6 +1925,17 @@ class Sprite:
         self._flip_y = bool(flip_y)
         self._pool = None
         self._pool_live_index = -1
+        #: Per-tick movement accumulator, in the same units as :attr:`x`.
+        #: An Action or Behavior writes here (never straight to :attr:`x`),
+        #: and the scene's one commit pass per pool per tick adds it into
+        #: :attr:`x` and resets it to 0. Plain instance attributes, not
+        #: descriptors, so a Step that never touches them costs nothing
+        #: beyond the ``if dx or dy`` check in the commit pass.
+        self.dx = 0
+        #: Per-tick movement accumulator for :attr:`y`. See :attr:`dx`.
+        self.dy = 0
+        self._behaviors = {}
+        self._behavior_order = []
         self._set_frame(frame)
         self._sync_all()
 
@@ -1308,6 +2130,46 @@ class Sprite:
                 return other
         return None
 
+    def despawn(self):
+        """Return this sprite to its pool. A convenience over
+        ``pool.despawn(sprite)`` -- a sprite already knows its own pool.
+
+        Raises:
+            ValueError: If this sprite was not created by a
+                :class:`SpritePool` (a standalone :meth:`Layer.sprite`),
+                or is not currently live in one.
+        """
+        if self._pool is None:
+            raise ValueError("despawn() is only for sprites from a SpritePool")
+        self._pool.despawn(self)
+
+    def behave(self, behavior, name=None):
+        """Attach ``behavior`` to this sprite. Structural: only callable
+        from :meth:`build`. Returns ``behavior``, so attaching and keeping
+        a handle is one line::
+
+            self.turret = boss.behave(Aiming(target=self.ship))
+        """
+        # Check closedness before touching self._layer -- Layer._close()
+        # nulls a closed drawable's own _layer, so a bare
+        # self._layer.scene here would crash with a raw AttributeError
+        # instead of the clean SceneSealedError a stale handle should
+        # raise (see _require_open, the pattern every other mutator uses).
+        self._require_open("behave")
+        return _attach_behavior(self._layer.scene, self, "sprite",
+                                self._behaviors, self._behavior_order,
+                                behavior, name)
+
+    @property
+    def behaviors(self):
+        """This sprite's attached Behaviors, in attachment order."""
+        return tuple(self._behavior_order)
+
+    def behavior(self, key):
+        """Look up a Behavior attached to this sprite by name (a string)
+        or by class. Returns ``None`` if nothing matches."""
+        return _lookup_behavior(self._behaviors, self._behavior_order, key)
+
 
 class _PoolIterator:
     def __init__(self, pool):
@@ -1355,17 +2217,49 @@ class SpritePool:
     ``len(pool)`` is the live count and :attr:`free` is the remainder.
     """
 
-    def __init__(self, sprites, on_empty):
+    def __init__(self, layer, sprites, on_empty):
+        self._layer = layer
         self._free = sprites
         self._live = []
         self._on_empty = on_empty
+        #: ``{name: Parameter}`` declared by :meth:`var`.
+        self._var_defaults = {}
+        #: Declaration order of :attr:`_var_defaults`'s names, tracked
+        #: explicitly rather than read back from the dict: MicroPython's
+        #: dict does not preserve insertion order the way CPython's does
+        #: (confirmed on the unix port -- ``{"hp": 1, "score": 10}.keys()``
+        #: comes back ``["score", "hp"]``), so deriving :meth:`kinds`'
+        #: field order from ``self._var_defaults.keys()`` silently swapped
+        #: values between variables on real MicroPython. This list is what
+        #: :meth:`kinds` reads instead.
+        self._var_order = []
+        #: Field order (from :attr:`_var_order`) a :meth:`kinds` row's
+        #: positional values line up against.
+        self._kind_fields = ()
+        #: ``{kind_name: row}`` declared by :meth:`kinds`.
+        self._kind_rows = {}
+        self._behaviors = {}
+        self._behavior_order = []
         for sprite in sprites:
             sprite._pool = self
+
+    @property
+    def layer(self):
+        """The :class:`Layer` this pool's sprites belong to."""
+        return self._layer
 
     @property
     def free(self):
         """How many sprites are still available to :meth:`spawn`."""
         return len(self._free)
+
+    @property
+    def capacity(self):
+        """This pool's total sprite budget -- ``len(pool) + pool.free`` --
+        fixed for the life of the scene once :meth:`Layer.sprite_pool`
+        reserved it. Live count is :func:`len`; :attr:`free` is the
+        remainder."""
+        return len(self._free) + len(self._live)
 
     def __len__(self):
         """The number of live sprites."""
@@ -1375,8 +2269,104 @@ class SpritePool:
         """Iterate the live sprites, tolerating despawns during the loop."""
         return _PoolIterator(self)
 
-    def spawn(self, x, y, frame=0, flip_x=False, flip_y=False):
+    def var(self, name, default=0, min=None, max=None, step=None,
+            label=None, unit=None, options=None):
+        """Declare a per-sprite instance variable on every sprite in this
+        pool, with the same parameter types an Action or Behavior
+        parameter uses (``options=`` for a :class:`~vs2.params.Choice`, a
+        boolean default for a :class:`~vs2.params.Flag`, otherwise a
+        :class:`~vs2.params.Number`).
+
+        Primed to ``default`` on every sprite now -- free ones included --
+        and reset to it by :meth:`spawn`, so a recycled sprite never
+        inherits the previous occupant's value::
+
+            self.enemies.var("hp", 1, min=0, max=99)
+            self.enemies.var("angry", False)
+
+        Only callable from :meth:`build`.
+
+        Raises:
+            SceneSealedError: If called outside ``build()``.
+            ValueError: If ``name`` is already declared on this pool, or
+                is one of the framework's reserved names.
+        """
+        self._layer._require_build("var")
+        if name in _RESERVED_VAR_NAMES:
+            raise ValueError("%r is a reserved name; choose another" % (name,))
+        if name in self._var_defaults:
+            raise ValueError("variable %r is already declared on this pool" % (name,))
+        parameter = _var_parameter(default, min=min, max=max, step=step,
+                                    label=label, unit=unit, options=options)
+        self._var_defaults[name] = parameter
+        self._var_order.append(name)
+        for sprite in self._free:
+            setattr(sprite, name, parameter.default)
+        for sprite in self._live:
+            setattr(sprite, name, parameter.default)
+        return parameter.default
+
+    def kinds(self, **rows):
+        """Declare named per-type default rows over this pool's own
+        instance variables, one positional value per variable in
+        declaration order. ``spawn(kind=...)`` applies a row, resolved to
+        an index here at build time so spawning costs the same reset loop
+        that already applies the plain declared defaults::
+
+            self.enemies.var("hp", 1)
+            self.enemies.var("score", 40)
+            self.enemies.kinds(driller=(3, 75), chiller=(1, 40))
+            self.enemies.spawn(x, y, kind="chiller")
+
+        Only callable from :meth:`build`, and only once per pool.
+
+        Raises:
+            SceneSealedError: If called outside ``build()``.
+            ValueError: If called twice, or a row's length does not match
+                the number of variables :meth:`var` declared.
+        """
+        self._layer._require_build("kinds")
+        if self._kind_rows:
+            raise ValueError("kinds() has already been called on this pool")
+        fields = tuple(self._var_order)
+        for kind_name, row in rows.items():
+            if len(row) != len(fields):
+                raise ValueError(
+                    "kind %r has %d value(s); this pool declared %d "
+                    "variable(s) (%s)" % (
+                        kind_name, len(row), len(fields), ", ".join(fields)))
+        self._kind_fields = fields
+        self._kind_rows = dict(rows)
+
+    def behave(self, behavior, name=None):
+        """Attach ``behavior`` to this pool. Structural: only callable
+        from :meth:`build`. Returns ``behavior``.
+        """
+        # Layer._require_build checks the layer's own closed flag before
+        # touching .scene (which Layer._close() sets to None), the same
+        # safe order var()/kinds() above already use.
+        self._layer._require_build("behave")
+        return _attach_behavior(self._layer.scene, self, "pool",
+                                self._behaviors, self._behavior_order,
+                                behavior, name)
+
+    @property
+    def behaviors(self):
+        """This pool's attached Behaviors, in attachment order."""
+        return tuple(self._behavior_order)
+
+    def behavior(self, key):
+        """Look up a Behavior attached to this pool by name (a string) or
+        by class. Returns ``None`` if nothing matches."""
+        return _lookup_behavior(self._behaviors, self._behavior_order, key)
+
+    def spawn(self, x, y, frame=0, flip_x=False, flip_y=False, kind=None):
         """Take a free sprite, position it, show it, and return it.
+
+        Every declared :meth:`var` is reset to its default first, so a
+        recycled sprite never inherits the previous occupant's values;
+        ``kind=``, if given, then overrides those defaults with the named
+        :meth:`kinds` row.
 
         Args:
             x: Angular position.
@@ -1384,11 +2374,16 @@ class SpritePool:
             frame: Frame to show.
             flip_x: Mirror horizontally.
             flip_y: Mirror vertically.
+            kind: A name declared by :meth:`kinds`, applying that row's
+                values over the plain declared defaults.
 
         Returns:
             Sprite or None: The spawned sprite. ``None`` when the pool is
             exhausted and it was not created with
             ``on_empty=vs2.RECYCLE``.
+
+        Raises:
+            ValueError: If ``kind`` does not name a declared row.
         """
         if not self._free:
             if self._on_empty is not RECYCLE:
@@ -1401,6 +2396,20 @@ class SpritePool:
         sprite.flip_x = flip_x
         sprite.flip_y = flip_y
         sprite.visible = True
+        sprite.dx = 0
+        sprite.dy = 0
+        if self._var_defaults:
+            for var_name, parameter in self._var_defaults.items():
+                setattr(sprite, var_name, parameter.default)
+        if kind is not None:
+            try:
+                row = self._kind_rows[kind]
+            except KeyError:
+                valid = ", ".join(sorted(self._kind_rows.keys()))
+                raise ValueError("unknown kind %r; valid: %s" % (kind, valid))
+            fields = self._kind_fields
+            for field_index in range(len(fields)):
+                setattr(sprite, fields[field_index], row[field_index])
         sprite._pool_live_index = len(self._live)
         self._live.append(sprite)
         return sprite
@@ -1427,6 +2436,70 @@ class SpritePool:
         """Despawn every live sprite. The usual way to reset a level."""
         while self._live:
             self.despawn(self._live[-1])
+
+
+class Family:
+    """A build-time, sealed group of pools and sprites on one layer,
+    addressed as a single :class:`~vs2.actions.Action` target (e.g. a
+    ``Collide`` hit list) or Behavior subject.
+
+    Created by :meth:`Scene.family`, never directly. **Not iterable.** Its
+    main job is being the target of ``Collide``, which runs inside a
+    per-sprite loop; one iterator per sprite per tick would be exactly the
+    allocation a zero-allocation Behavior pass exists to avoid. Its
+    members are a sealed tuple instead, walked by index -- see
+    :attr:`members` -- which is also what a native ``Collide`` kernel
+    wants handed to it.
+    """
+
+    def __init__(self, scene, layer, members):
+        self.scene = scene
+        self._layer = layer
+        #: Sealed ``((kind, member), ...)`` tuple, ``kind`` being
+        #: ``"pool"`` or ``"sprite"``. Internal: :attr:`members` and the
+        #: Behavior dispatcher are what consume this.
+        self._members = tuple(members)
+        self._behaviors = {}
+        self._behavior_order = []
+
+    @property
+    def layer(self):
+        """The single :class:`Layer` every member of this family shares."""
+        return self._layer
+
+    @property
+    def members(self):
+        """This family's pools and sprites, in declared order, as a plain
+        tuple. Read freely -- the family object itself is still not
+        iterable."""
+        return tuple(member for _kind, member in self._members)
+
+    def __iter__(self):
+        raise TypeError("a Family is not iterable; use .members, or attach "
+                        "a Behavior/Collide instead of looping")
+
+    def __len__(self):
+        return len(self._members)
+
+    def behave(self, behavior, name=None):
+        """Attach ``behavior`` to the family as a whole -- one Behavior
+        instance with one parameter set covering every member, its state
+        primed across all of them. Structural: only callable from
+        :meth:`Scene.build`. Returns ``behavior``.
+        """
+        return _attach_behavior(self.scene, self, "family",
+                                self._behaviors, self._behavior_order,
+                                behavior, name)
+
+    @property
+    def behaviors(self):
+        """This family's attached Behaviors, in attachment order."""
+        return tuple(self._behavior_order)
+
+    def behavior(self, key):
+        """Look up a Behavior attached to this family by name (a string)
+        or by class. Returns ``None`` if nothing matches."""
+        return _lookup_behavior(self._behaviors, self._behavior_order, key)
 
 
 class Tilemap:
@@ -1672,6 +2745,35 @@ class Tilemap:
             raise IndexError("tilemap cell out of range")
         return row * self.columns + column
 
+    def cell_at(self, x, y):
+        """The ``(column, row)`` of the cell under world point ``(x, y)``,
+        or ``None`` if it falls outside the grid.
+
+        Accounts for the map's own :attr:`x`/:attr:`y` origin, its
+        :attr:`view_x`/:attr:`view_y` scroll offset, the tile size taken
+        from its image, and the circular wrap of X -- the same geometry
+        the ``TileUnder`` Action (a later task) drives its divide from::
+
+            tile = self.ground.cell_at(sprite.x, sprite.y)
+            if tile is not None:
+                column, row = tile
+
+        Returns:
+            tuple or None: ``(column, row)``, or ``None`` if the point
+            falls outside the grid (its Y is above the rim or below the
+            floor of the map).
+        """
+        relative_x = (x - self._x) % display.width
+        grid_x = relative_x + self._view_x
+        grid_y = (y - self._y) + self._view_y
+        if grid_y < 0:
+            return None
+        column = int(grid_x) // self._tile_width
+        row = int(grid_y) // self._tile_height
+        if column < 0 or column >= self._columns or row < 0 or row >= self._rows:
+            return None
+        return (column, row)
+
     def fill(self, value):
         """Set every cell to ``value``, in place."""
         self._require_open("cells")
@@ -1867,8 +2969,18 @@ def export_scene_payload(scene=None):
                      PAYLOAD_LAYER_SIZE, PAYLOAD_SPRITE_SIZE, PAYLOAD_TILEMAP_SIZE)
     offset = PAYLOAD_HEADER_SIZE
     for index, layer in enumerate(layers):
+        # Of the five reserved bytes: camera X (wraps at display.width,
+        # same as any other X), camera Y (clamped 0..255, same range as a
+        # tunnel depth), then the curve index -- 0 meaning "this layer's
+        # mode default curve", which is exactly the no-camera/default-curve
+        # case every existing (pre-camera, pre-curve) scene is in, so its
+        # payload stays byte-identical. The last two bytes stay reserved.
+        camera_x_byte = _floor_coord(layer.camera_x) % display.width
+        camera_y_byte = _render_coord(_floor_coord(layer.camera_y), 0, 255)
+        curve_index = layer._curve_index()
         struct.pack_into("<BBBBBBBB", payload, offset, index, layer.projection,
-                         FLAG_VISIBLE if layer.visible else 0, 0, 0, 0, 0, 0)
+                         FLAG_VISIBLE if layer.visible else 0, camera_x_byte,
+                         camera_y_byte, curve_index, 0, 0)
         offset += PAYLOAD_LAYER_SIZE
     for sprite, layer_index in sprites:
         struct.pack_into("<BBBBBBhhii", payload, offset, layer_index,

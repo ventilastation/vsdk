@@ -40,6 +40,17 @@ CPYTHON_TESTS = [
     "tests/test_ventilagon_parity.py",
     "tests/test_rom_format.py",
     "tests/test_vs2_api.py",
+    "tests/test_vs2_actions.py",
+    "tests/test_vs2_variables.py",
+    "tests/test_vs2_families.py",
+    "tests/test_vs2_behaviors.py",
+    "tests/test_vs2_catalog.py",
+    "tests/test_vs2_catalog_movements.py",
+    "tests/test_vs2_statemachine.py",
+    "tests/test_vs2beh.py",
+    "tests/test_vs2_params.py",
+    "tests/test_vs2_store.py",
+    "tests/test_vs2_projection.py",
     "tests/test_base_control.py",
     "tests/test_uart_logging.py",
     "tests/test_apa102_preview.py",
@@ -86,6 +97,10 @@ CPYTHON_TESTS = [
 
 MICROPYTHON_TESTS = [
     "tests/test_vs2_api_micropython.py",
+    "tests/test_vs2_variables_micropython.py",
+    "tests/test_vs2_families_micropython.py",
+    "tests/test_vs2_params.py",
+    "tests/test_vs2_store_micropython.py",
     "tests/test_browser_input_v2.py",
     "tests/test_director_headless.py",
     "tests/test_installer_micropython.py",
@@ -95,6 +110,11 @@ NODE_TESTS = [
     "tests/test_web_input_v2.mjs",
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",
+    "web/render-parity-test.js",
+    "tests/test_vs2_widget_dispatch.mjs",
+    "tests/test_vs2_kinds_editor.mjs",
+    "tests/test_vs2beh_client.mjs",
+    "tests/test_vs2beh_live_tune_e2e.mjs",
 ]
 
 

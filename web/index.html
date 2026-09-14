@@ -84,6 +84,7 @@
         <div class="stage-primary-actions">
           <button type="button" class="stage-control-button" id="toggle-editor-button" aria-pressed="false">Editor</button>
           <button type="button" class="stage-control-button" id="toggle-inspector-button" aria-expanded="false">Options</button>
+          <button type="button" class="stage-control-button" id="toggle-vs2beh-button" aria-expanded="false">VS2 Tuner</button>
           <button type="button" class="stage-control-button" id="remote-connect-button">Connect board</button>
           <button type="button" class="stage-control-button" id="remote-control-button" hidden>Request control</button>
           <button type="button" class="stage-control-button" id="remote-reset-button" hidden>Reset board</button>
@@ -234,6 +235,16 @@
           <textarea id="copy-diagnostics" rows="18" readonly></textarea>
         </div>
     </section>
+
+    <section class="vs2beh-panel" id="vs2beh-panel" aria-label="VS2 behaviors inspector" hidden>
+      <div class="vs2beh-panel-toolbar">
+        <h2>VS2 Behaviors</h2>
+        <button type="button" class="stage-control-button" id="vs2beh-connect-button">Connect serial</button>
+        <button type="button" class="stage-control-button" id="vs2beh-refresh-button">Refresh</button>
+        <span class="vs2beh-status" id="vs2beh-status" aria-live="polite">Not connected</span>
+      </div>
+      <div class="vs2beh-tree" id="vs2beh-tree"></div>
+    </section>
   </main>
 
   <script type="module" src="./micropython-bridge.js?v=20260714b"></script>
@@ -243,5 +254,18 @@
   <script src="./rom-builder-browser.js?v=20260622c"></script>
   <script type="module" src="./app.js?v=20260729a"></script>
   <script type="module" src="./monaco-ide.js?v=20260715a"></script>
+  <script type="module" src="./vs2-behavior-panel.js?v=20260911a"></script>
+  <script type="module">
+    import { createVS2BehaviorPanel } from "./vs2-behavior-panel.js?v=20260911a";
+
+    createVS2BehaviorPanel({
+      container: document.querySelector("#vs2beh-tree"),
+      panelElement: document.querySelector("#vs2beh-panel"),
+      toggleButton: document.querySelector("#toggle-vs2beh-button"),
+      connectButton: document.querySelector("#vs2beh-connect-button"),
+      refreshButton: document.querySelector("#vs2beh-refresh-button"),
+      statusElement: document.querySelector("#vs2beh-status"),
+    });
+  </script>
 </body>
 </html>

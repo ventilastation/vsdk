@@ -70,6 +70,31 @@
 // and u_led_axis selecting the output orientation (0: x=led, y=column --
 // the web ledColorTexture; 1: x=column, y=led -- the desktop
 // led_color_texture).
+//
+// ## Layer cameras and curves (T6)
+//
+// A layer's camera is a per-frame-constant translation (see "Cameras" in
+// docs/vs2-behaviors-proposal.md), so packSceneVs2Bytes() folds each
+// layer's camera X/Y straight into every one of its drawables' stored x/y
+// at pack time, once per scene, instead of adding a per-entity camera
+// uniform/lane the shader would re-apply on every fragment. The two are
+// mathematically identical (render_column - sprite_x - camera_x ==
+// render_column - (sprite_x + camera_x)); pre-folding is simply cheaper and
+// needed no change to the GLSL or the software executor below. With no
+// camera (the byte is 0, same as every payload before cameras existed) the
+// fold is a no-op, which is what keeps this byte-identical to a pre-camera
+// scene.
+//
+// Per-layer curves do NOT get the same treatment: export_scene_payload()
+// only ever sends a small curve *index* (0 == this layer's mode default),
+// never the 256 curve bytes themselves, so there is nothing here to look
+// up for a non-default curve. Every drawable in this renderer paints
+// through the shared default u_deepspace table (rows 2/3 below) regardless
+// of its layer's actual curve -- exactly today's pre-T6 behavior, and
+// exactly what curve index 0 means, so the common case stays correct. A
+// custom per-layer curve assigned in-game will not (yet) look different
+// through this renderer; see the T6 render-parity report for the wire
+// format work that would be needed to close that gap.
 
 (function (root, factory) {
   const api = factory();
@@ -351,9 +376,24 @@
       if (offset + layerSize > bytes.length) {
         return finishScene(packer);
       }
+      // Reserved bytes 3/4 (see export_scene_payload() in vs2/__init__.py):
+      // camera X (wraps at COLUMNS, so a plain byte already carries the
+      // wrap) and camera Y (clamped 0..255, the same domain as sprite y).
+      // Camera is a per-frame constant, so folding it straight into each
+      // drawable's stored x/y below (instead of threading a new per-entity
+      // uniform through the shader) is exactly equivalent to a per-fragment
+      // fold and far simpler. Byte 5 (curve index) is intentionally not
+      // decoded: a custom curve's 256 bytes never travel over this wire
+      // format -- export_scene_payload() only ever sends the small index --
+      // so every layer here renders through the shared default deepspace
+      // table regardless of index, same as before per-layer curves existed.
+      const cameraX = layerSize > 3 ? bytes[offset + 3] : 0;
+      const cameraY = layerSize > 4 ? bytes[offset + 4] : 0;
       layers[bytes[offset]] = {
         mode: bytes[offset + 1],
         visible: Boolean(bytes[offset + 2] & 1),
+        cameraX,
+        cameraY,
       };
       offset += layerSize;
     }
@@ -371,8 +411,8 @@
         continue;
       }
       spriteBySlot[slot] = {
-        x: Math.floor(view.getInt32(recordOffset + 10, true) / 256),
-        y: Math.floor(view.getInt32(recordOffset + 14, true) / 256),
+        x: Math.floor(view.getInt32(recordOffset + 10, true) / 256) + (layer ? layer.cameraX : 0),
+        y: Math.floor(view.getInt32(recordOffset + 14, true) / 256) + (layer ? layer.cameraY : 0),
         strip: bytes[recordOffset + 1],
         frame: bytes[recordOffset + 2],
         mode: layer ? layer.mode : bytes[recordOffset + 3],
@@ -408,8 +448,8 @@
         continue; // FULLSCREEN tilemaps are unsupported in every renderer.
       }
       tilemapBySlot[slot] = {
-        x: Math.floor(view.getInt32(recordOffset + 20, true) / 256),
-        y: Math.floor(view.getInt32(recordOffset + 24, true) / 256),
+        x: Math.floor(view.getInt32(recordOffset + 20, true) / 256) + (layer ? layer.cameraX : 0),
+        y: Math.floor(view.getInt32(recordOffset + 24, true) / 256) + (layer ? layer.cameraY : 0),
         strip: bytes[recordOffset + 1],
         mode,
         columns,
