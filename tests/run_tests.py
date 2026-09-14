@@ -132,6 +132,7 @@ NODE_TESTS = [
     "tests/test_vs2beh_client.mjs",
     "tests/test_vs2beh_live_tune_e2e.mjs",
     "tests/test_vs2_debug_linemap_js.mjs",
+    "tests/test_vs2_behavior_blocks_roundtrip.mjs",
 ]
 
 
