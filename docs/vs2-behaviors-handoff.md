@@ -1100,19 +1100,92 @@ itself** — check for the actual traceback frame or an unexpected scene
 shape before concluding anything broke. `overruns=0`/`frame_overruns=0`
 held throughout both runs.
 
+### The Blockly UI's boolean-literal gap, found and closed
+
+Found while independently re-verifying progress live in the browser (per
+this session's own "never trust a subagent's claim without re-checking"
+rule): loaded the real `baddie_formation.vs2behavior.json` (whose
+`formed`/`attack_closer` states set `formation_done`/`in_attack_run` to a
+bare `true`/`false`) into the Behavior Blocks panel and it failed —
+`"literal expression true is not a number; this palette has only a
+number literal block"`. The merged UI's `exprToBlock`/`blockToExpr` only
+ever handled number literals in the generic expression socket; a comment
+in the subagent's own code explicitly (and incorrectly) assumed bool/
+string literals "never travel through here" — the schema (`model.py`)
+had allowed a bool literal since Phase 2, the UI just never grew a block
+for it. Closed: a new `vs2beh_expr_literal_bool` block (a checkbox field)
+wired into both serialization directions and the toolbox
+(`web/vs2-behavior-blocks.js`), two updated/new Node tests
+(`tests/test_vs2_behavior_blocks_roundtrip.mjs`), and reverified live —
+the real reference file now loads, all three boolean-literal blocks
+render as checkboxes with correct `TRUE`/`FALSE` values, and Save round-
+trips real booleans, not `0`/`1`.
+
+### The `on_build_N` gap itself, closed
+
+`on_build_5`/`on_build_9` above were never a design choice — they were
+the one real, named gap (`tools/vs2_scene_gen/generator.py` hardcoding
+`from vs2.behaviors import <classes>`) that forced every game-local
+generated Behavior through a hand-written hook instead of the
+declarative model, flagged repeatedly above as it kept recurring
+(`BaddieFormation`, `BossOrbit`, the same escape hatch
+`vasura_states_demo.py` uses for its fully hand-written scene). Asked
+directly ("what's missing so we can get rid of them?"), the actual
+answer turned out narrower than it looked: a behavior entry's
+constructor params could already reference a runtime expression like
+`vs2.display.width` via the existing `{"expr": ...}` value tag (added
+for T16), and reaching an attached behavior later from hand-written code
+already had `.behavior(NameOrClass)` on every subject — the *only*
+missing piece was letting a `behave()` entry name a module other than
+`vs2.behaviors`.
+
+Closed by giving a behavior entry an optional `"module"` key (defaults
+to `vs2.behaviors`, so every existing model is untouched), with the
+generator grouping the resulting imports per module instead of emitting
+one hardcoded line. `vixeous_scene.vs2model.json`'s `boss` and
+`vyruss_vs2_scene.vs2model.json`'s `baddies` now declare `BossOrbit`/
+`BaddieFormation` directly — `on_build_9`/`on_build_5` are gone from both
+companion files. `vyruss_vs2.py`'s `update_attacking()` now reaches
+`BaddieFormation` via `self.baddies.behavior(BaddieFormation)` (a fresh
+lookup, not a cached attribute — correct even though `build()` reruns
+every scene entry) rather than the attribute `on_build_5` used to stash;
+this exact class-based lookup mechanism was already exercised on real
+MicroPython by `tests/test_vs2_behavior_gen_micropython.py`
+(`game.shots.behavior(GeneratedProjectile)`), so it carried no new
+on-device risk. `vyruss_vs2_scene.vs2model.json`'s `game_over.x`
+(`vs2.display.width - 32`) moved into the model too, via the same
+`{"expr": ...}` tag — it turned out it was never actually inexpressible,
+just never revisited once `on_build_9` already existed for
+`start_level()`. Generated-file diffs are exactly the expected mechanical
+move (new import line, the `behave()`/`x=` line inline instead of inside
+the hook); the full CPython test suite (including both games' own parity
+suites) and the regeneration-freshness check both pass unchanged. Not
+separately reflashed on hardware for this specific change — the
+generated code's own execution order is provably identical (same class,
+same params, same position in `build()`), the risk this session would
+normally reflash to catch (a MicroPython-specific runtime quirk) is
+already covered by the passing `.behavior(Class)` MicroPython test above,
+and the full software suite (CPython parity tests included) passed
+clean.
+
 ## Suggested immediate next action
 
-T15-T18, T0, all three phases of T17, the Blockly UI for state hats,
-`vyruss_vs2`'s `BaddieFormation` port (now covering the *entire* original
-six-part choreography except `TravelTo` itself, entrance and attack run
-both), and `vixeous`'s `BossOrbit` port are all fully done, merged into
-`vs2/wave7-integration`, verified in software and (all except
-`BossOrbit`'s own visual activation, see above) on real hardware, and in
+T15-T18, T0, all three phases of T17, the Blockly UI for state hats (plus
+its own boolean-literal follow-on fix), `vyruss_vs2`'s `BaddieFormation`
+port (now covering the *entire* original six-part choreography except
+`TravelTo` itself, entrance and attack run both), `vixeous`'s `BossOrbit`
+port, and the `on_build_N` gap itself (a behave() entry can now name a
+`module`, so neither port needs a hand-written hook anymore) are all
+fully done, merged into `vs2/wave7-integration`, verified in software
+and (all except `BossOrbit`'s own visual activation and the `on_build_N`
+fix, see above for why each was judged sufficient without one) on real
+hardware, and in
 [PR #159](https://github.com/ventilastation/vsdk/pull/159) against
 `design/vs2-behaviors` — **its description needs one more update** to
-mention the attack-run port before assuming it's current (everything
-through `BossOrbit` is already reflected there). **Two threads remain
-open, neither blocking the other:**
+mention the boolean-literal fix and the `on_build_N` closure before
+assuming it's current (everything through the attack-run port is already
+reflected there). **Two threads remain open, neither blocking the
+other:**
 
 1. **Continue the Blockly-porting goal.** `vyruss_vs2` now has exactly
    one deliberately-hand-written piece left (`TravelTo`, a "move toward"
