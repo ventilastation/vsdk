@@ -485,11 +485,39 @@ function testHoldAndGotoStateCannotEnterTheFlatPerSpriteZone() {
     "a state block is refused by the flat zone");
 }
 
-function testANonNumericLiteralIsRefusedRatherThanCoerced() {
+function testANonNumberNonBoolLiteralIsRefusedRatherThanCoerced() {
+  // A bool literal is legal now (see testBoolLiteralRoundTrips below) --
+  // this checks the kind that's genuinely still unhandled, a string.
   const model = JSON.parse(fs.readFileSync(REFERENCE_MODEL_PATH, "utf8"));
-  model.state_machine.bodies.falling.step[0].amount = { kind: "literal", value: false };
-  assertThrows(() => roundTrip(model), "not a number",
-    "a bool literal is refused, not silently rendered as 0");
+  model.state_machine.bodies.falling.step[0].amount = { kind: "literal", value: "nope" };
+  assertThrows(() => roundTrip(model), "not a number or bool",
+    "a string literal is refused, not silently rendered as 0");
+}
+
+function testBoolLiteralRoundTrips() {
+  // games/vs2_examples/vyruss_vs2's real BaddieFormation model sets
+  // formation_done/in_attack_run via a literal true/false through the
+  // ordinary per-sprite "value" socket (ordinary set_state, not an
+  // Action's own dropdown/checkbox arg) -- this failed to load
+  // ("literal expression true is not a number") until
+  // vs2beh_expr_literal_bool was added specifically for this case.
+  const model = JSON.parse(fs.readFileSync(REFERENCE_MODEL_PATH, "utf8"));
+  model.state_machine.bodies.falling.step.push({
+    kind: "set_state", state: "y", value: { kind: "literal", value: false },
+  });
+  const result = stripBlockIds(roundTrip(model));
+  assertEqual(
+    result.state_machine.bodies.falling.step[result.state_machine.bodies.falling.step.length - 1],
+    { kind: "set_state", state: "y", value: { kind: "literal", value: false } },
+    "a literal false round-trips as a real bool, not 0/coerced");
+
+  model.state_machine.bodies.falling.step[model.state_machine.bodies.falling.step.length - 1]
+    .value.value = true;
+  const result2 = stripBlockIds(roundTrip(model));
+  assertEqual(
+    result2.state_machine.bodies.falling.step[result2.state_machine.bodies.falling.step.length - 1],
+    { kind: "set_state", state: "y", value: { kind: "literal", value: true } },
+    "a literal true round-trips too");
 }
 
 function testTwoHatsInOneWorkspaceIsRefused() {
@@ -525,8 +553,8 @@ function testToolboxOffersEveryNewBlock() {
   const xml = buildToolboxXml(catalog);
   for (const type of ["vs2beh_state_machine", "vs2beh_state", "vs2beh_hold",
     "vs2beh_goto_state", "vs2beh_set_state", "vs2beh_call_callback", "vs2beh_spawn",
-    "vs2beh_play_sound", "vs2beh_expr_binary_op", "vs2beh_declare_sound",
-    "vs2beh_declare_callback"]) {
+    "vs2beh_play_sound", "vs2beh_expr_binary_op", "vs2beh_expr_literal_bool",
+    "vs2beh_declare_sound", "vs2beh_declare_callback"]) {
     assert(xml.includes(`<block type="${type}">`), `the toolbox offers ${type}`);
   }
   assert(xml.includes('<category name="States"'), "the toolbox has a States category");
@@ -571,7 +599,8 @@ const TESTS = [
   testEmptyWorkspaceIsRefused,
   testCallCallbackWithArgumentsIsRefusedRatherThanSilentlyTruncated,
   testUnbuiltParameterTypeIsRefusedRatherThanRetyped,
-  testANonNumericLiteralIsRefusedRatherThanCoerced,
+  testANonNumberNonBoolLiteralIsRefusedRatherThanCoerced,
+  testBoolLiteralRoundTrips,
   testToolboxOffersEveryNewBlock,
   testRoundTrippedModelsPassTheRealValidator,
 ];

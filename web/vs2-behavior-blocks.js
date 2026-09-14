@@ -633,6 +633,24 @@ const STATIC_BLOCK_JSON = [
     colour: 300,
   },
   {
+    // model.py's "literal" kind allows a bool value too (added in Phase 2
+    // for Damageable's own "blink" flag comparison) -- this palette had
+    // no way to author one until a real file (games/vs2_examples/
+    // vyruss_vs2's own BaddieFormation, whose "formed"/"attack_closer"
+    // states set formation_done/in_attack_run to a literal true/false)
+    // failed to load with "literal expression true is not a number".
+    // A separate block rather than overloading the number one: Blockly
+    // has no "number or boolean" field type, and a checkbox reads far
+    // more honestly as a bool than a text box asking for 0/1 would.
+    type: "vs2beh_expr_literal_bool",
+    message0: "%1",
+    args0: [{ type: "field_checkbox", name: "VALUE", checked: true }],
+    output: "vs2beh_expr",
+    colour: 300,
+    tooltip: "A literal true/false -- model.py's own \"literal\" expression "
+      + "kind allows a bool value alongside number/string/null.",
+  },
+  {
     type: "vs2beh_expr_param",
     message0: "param %1",
     args0: [{ type: "field_input", name: "NAME", text: "speed_y" }],
@@ -762,6 +780,7 @@ export function buildToolboxXml(catalogData) {
   </category>
   <category name="Expressions" colour="300">
     <block type="vs2beh_expr_literal_number"></block>
+    <block type="vs2beh_expr_literal_bool"></block>
     <block type="vs2beh_expr_param"></block>
     <block type="vs2beh_expr_state"></block>
     <block type="vs2beh_expr_binary_op"></block>
@@ -795,6 +814,8 @@ function blockToExpr(block) {
   switch (block.type) {
     case "vs2beh_expr_literal_number":
       return { kind: "literal", value: Number(block.getFieldValue("VALUE")) };
+    case "vs2beh_expr_literal_bool":
+      return { kind: "literal", value: block.getFieldValue("VALUE") === "TRUE" };
     case "vs2beh_expr_param":
       return { kind: "param", name: String(block.getFieldValue("NAME")) };
     case "vs2beh_expr_state":
@@ -1258,18 +1279,25 @@ function connectStack(blocks) {
 
 function exprToBlock(workspace, expr) {
   if (expr.kind === "literal") {
-    // model.py's literal accepts number/string/bool/null; this palette has
-    // only the *number* literal block (a Blockly field_number). Refusing
-    // the others beats coercing them: `field_number` would turn a `false`
-    // into `0` and a `"world"` into `0` on load, and the next save would
-    // write that corruption back to the author's own file. A string or
-    // bool literal in a real model today only ever appears as an Action's
-    // own dropdown/checkbox arg, which never travels through here (see
-    // actionBlockFromDecl, which sets those fields directly).
+    // model.py's literal accepts number/string/bool/null. Two blocks now
+    // cover number and bool (see vs2beh_expr_literal_bool's own comment --
+    // games/vs2_examples/vyruss_vs2's real BaddieFormation model sets
+    // formation_done/in_attack_run to a literal true/false through the
+    // ordinary per-sprite "value" socket, not just an Action's own
+    // dropdown/checkbox arg, so this genuinely needs handling here, not
+    // only in actionArgsFromBlock/actionBlockFromDecl). A string or null
+    // literal in a real model today still only ever appears as an
+    // Action's own field arg (set directly by those two functions), so
+    // still refused here rather than silently coerced.
+    if (typeof expr.value === "boolean") {
+      const block = newRenderedBlock(workspace, "vs2beh_expr_literal_bool");
+      block.setFieldValue(expr.value ? "TRUE" : "FALSE", "VALUE");
+      return block;
+    }
     if (typeof expr.value !== "number") {
       throw new Error(
-        `literal expression ${JSON.stringify(expr.value)} is not a number; `
-        + "this palette has only a number literal block");
+        `literal expression ${JSON.stringify(expr.value)} is not a number `
+        + "or bool; this palette has no block for it");
     }
     const block = newRenderedBlock(workspace, "vs2beh_expr_literal_number");
     block.setFieldValue(String(expr.value), "VALUE");
