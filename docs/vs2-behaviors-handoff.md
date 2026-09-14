@@ -804,14 +804,161 @@ grab), exactly the T15/T16 procedure:
 **T18 is now fully done, including physical-hardware acceptance.** No
 remaining open items for this task.
 
+**PR opened 2026-09-13/14**: [#159](https://github.com/ventilastation/vsdk/pull/159),
+`vs2/wave7-integration` against `design/vs2-behaviors` (not `main` —
+`design/vs2-behaviors` doesn't have Waves 1-5 merged yet either, since
+PR #158 is still open, so the two PRs' diffs necessarily overlap; opening
+against `design/vs2-behaviors` matches this whole effort's established
+lineage instead of creating a third, redundant PR against `main`). Ready
+for review, ordinary PR (not draft).
+
+## New work (2026-09-14): porting `vyruss_vs2`/`vixeous` to the Blockly UI
+
+A new user goal, set via `/goal` after the PR above: "port more complex
+games like vyruss_vs2 and vixeous to the blockly UI representation.
+Create missing blocks as needed." **Read this whole section before
+touching this thread** — it records a real, load-bearing finding that
+changes what "port to Blockly" even means right now, plus concrete,
+tested progress and a dispatched-but-maybe-still-running subagent.
+
+**The load-bearing finding: T17 Phase 2's own UI was never built.**
+`tools/vs2_behavior_gen`'s block-*program* schema (`model.py`) has real,
+tested support for state machines ("state hats"), and per-sprite nodes
+`hold`/`goto_state`/`set_state`/`call_callback`/`spawn`/`play_sound` — all
+built and merged in Phase 2. But **none of it was ever wired into the
+actual Blockly drag-and-drop UI** (`web/vs2-behavior-blocks.js`) — that
+file's own docstring says so plainly ("a pre-existing Phase 1/2 scope gap
+this task does not fill"). Confirmed by grepping the file for any of
+those node-kind strings: zero matches, before this session's work below.
+`games/vs2_examples/vasura_states_demo/code/enemy_states.vs2behavior.json`
+(the one real state-hat program that exists) was hand-authored as plain
+JSON, never dragged together in a browser. So "port to the Blockly UI
+representation" genuinely meant *building the missing UI first*, not
+just authoring more JSON by hand the way Phase 2 itself did.
+
+**Done, tested, committed on `vs2/wave7-integration` (not yet in a PR of
+its own — land it in whatever the next checkpoint is):**
+
+- **`binary_op` expression kind** (`tools/vs2_behavior_gen/model.py`/
+  `generator.py`, commit `2fa22b6`): two sub-expressions combined by
+  `+`/`-`/`*`/`//`/`%`/`min`/`max`, recursively nestable, rendering as
+  plain Python infix or a builtin call on both the readable and fast
+  backends — nothing this needs is missing on MicroPython. Neither
+  `vyruss_vs2` nor `vixeous`'s choreography math is expressible without
+  arithmetic (`distance = max(0, baddie.y - RIM_Y)`,
+  `distance = min(SPEED, self.remaining)`), and the schema had none
+  before this (`vasura_states_demo`'s own `build_enemy_states.py` docstring
+  says so explicitly: "this schema's per-sprite expression vocabulary has
+  no addition operator"). Covered by a real runtime behavioral test
+  (`BinaryOpBehaviorTests`, both backends) that builds and steps a
+  generated Behavior through the exact `min(speed, remaining)` pattern
+  the Vyruss port below needs — not just checking rendered text.
+- **`vyruss_vs2`'s baddie-formation choreography, ported and proven**
+  (commit `9931880`): `games/vs2_examples/vyruss_vs2/code/
+  build_baddie_formation.py` builds a real generated `StateMachine`
+  Behavior (`BaddieFormation`, states `closer1`/`xmove1`/`closer2`/
+  `xmove2`/`away`/`formed`) replicating the *fixed* five-phase part of
+  the original hand-written `add_baddie()`/`update_one_baddie()` queue
+  (`TravelCloser(85), TravelX(±112), TravelCloser(34), TravelX(∓96),
+  TravelAway(45)`). **Proven tick-by-tick behaviorally identical** to the
+  original (`tests/test_vyruss_vs2_baddie_formation.py`, both directions,
+  plus the case where a baddie's sideways travel crosses the 0/256
+  display-width seam). Caught and fixed a real design bug along the way:
+  first assumed `xmove1`/`xmove2` shared one sign per baddie; the
+  original actually flips direction between them (`TravelX(112), ...,
+  TravelX(-96)` for the *same* odd baddie) — the parity test caught this
+  immediately (element-98 divergence), fixed by deriving `xmove2`'s sign
+  as the negation of a single per-sprite `x_dir` flag rather than reusing
+  it directly.
+  - **The sixth phase, `TravelTo` (the final approach to formation
+    position), is deliberately NOT ported** — it's a "move *toward* a
+    destination" primitive with wraparound angular math
+    (`move_toward_angle`/`move_toward_depth`), a genuinely different
+    shape from the fixed-distance walk the other five phases share.
+    Forcing it into the same state machine would misrepresent it, the
+    same "if it doesn't fit, don't force it" call T15/T18 already made
+    repeatedly for this game. Stays hand-written.
+  - **Not yet wired into the live game.** `add_baddie()`/
+    `update_one_baddie()` and `vyruss_vs2_scene.vs2model.json` are
+    untouched — `BaddieFormation` exists and is proven correct in
+    isolation, but nothing in the actual running game attaches it yet.
+    Two real complications surfaced while scoping that integration,
+    left for whoever picks this up next:
+    1. **T15's scene-model schema can't declare a custom, game-local
+       Behavior class.** `tools/vs2_scene_gen/generator.py` hardcodes
+       `from vs2.behaviors import <classes>` for every `"behaviors"`
+       entry in a `.vs2model.json` — it has no way to reference a class
+       living in `games/vs2_examples/vyruss_vs2/code/baddie_formation.py`
+       instead. The sanctioned workaround (already precedented by
+       `vasura_states_demo.py`'s own hand-written `self.enemies.behave(
+       EnemyStates(...))`, which doesn't use a scene model at all): attach
+       it by hand in an `on_build_N()` hook instead of the declarative
+       model — `on_build_5()` runs right after `self.baddies =
+       self.world.sprite_pool(...)` in the generated
+       `vyruss_vs2_scene.py`, so that's the hook to use. Not yet done.
+    2. **`baddie.finished`'s meaning would shift, and downstream logic
+       depends on the old meaning.** Today, `finished` becomes `True`
+       only once the *whole* queue (all six phases, `TravelTo` included)
+       empties — `group_finished()` and `update_attacking()`'s own
+       `baddie.finished and baddie in self.attacking` check both read it
+       as "this baddie has visually arrived at its formation slot."
+       `BaddieFormation`'s own `formed` state sets `finished = True` the
+       moment the *first five* phases end, before `TravelTo` even starts
+       — a real, premature-relative-to-today semantic shift that would
+       make groups advance before baddies visually finish forming up.
+       Fixing this cleanly (a second flag, or moving `TravelTo` itself
+       into the state machine as a `goto_state`-free "keep calling a
+       hand-written step" escape hatch — no such hatch exists yet) is a
+       small but real design question, not attempted here.
+    Also out of scope, correctly: the **attack-run reassignment**
+    (`update_attacking()`'s `baddie.movements = [TravelCloser(distance),
+    TravelAway(distance)]`, where `distance` is computed per-event, not a
+    fixed model param) would need `StateMachine.force_state()` plus
+    *new*, dedicated attack-only states (today's `closer1`/`away` always
+    reset `remaining` from a fixed Behavior-level param on `enter`, not a
+    per-call dynamic value) — a genuinely separate, additional piece of
+    design work from "wire in the already-built entrance choreography."
+
+**In flight, maybe still running — check before redispatching.** A
+background subagent (dispatched from this session, branch
+`vs2/blockly-state-hats-ui`, isolated worktree) is building the actual
+missing Blockly UI: blocks for the state-machine hat, the `hold`/
+`goto_state`/`set_state`/`call_callback`/`spawn`/`play_sound` per-sprite
+nodes, and the new `binary_op` expression, plus
+serialize/deserialize wiring in `web/vs2-behavior-blocks.js` — scoped to
+that one file only (explicitly told not to touch the Python side, which
+is already committed). Told to prove itself by round-tripping the real
+`enemy_states.vs2behavior.json` reference file and to verify live in a
+browser where possible. **Its report needs independent re-verification
+before trusting it** (this session's own established practice all
+along — T17 Phase 1's real bugs were only caught by the orchestrating
+session testing in an actual browser after a subagent's report claimed
+success) — re-check the connection-type discipline (`hold`/`goto_state`
+must not structurally connect into the flat per-sprite zone; the four
+shared kinds should connect in both zones) and the round-trip fidelity
+before merging.
+
 ## Suggested immediate next action
 
-T15-T18, T0, and all three phases of T17 are now fully done, merged into
-`vs2/wave7-integration`, and verified (in software and, for T15/T16/T18/T0,
-on real physical hardware too). **Wave 6 (T13 native `Collide`, T14 flat
-sprite records) is next and fully unblocked** — T0's written verdict
-("both": memory placement and offload are real, confirmed, validated
-levers, see `docs/vs2-behaviors-proposal.md`'s "How to read it") is in.
-Consider opening a PR for `vs2/wave7-integration` (against
-`design/vs2-behaviors` or against PR #158's branch) as a checkpoint before
-starting Wave 6 — this is a clean, fully-verified stopping point.
+T15-T18, T0, and all three phases of T17 are fully done, merged into
+`vs2/wave7-integration`, verified in software and (T15/T16/T18/T0) on
+real hardware, and in [PR #159](https://github.com/ventilastation/vsdk/pull/159)
+against `design/vs2-behaviors`. **Two threads are now open:**
+
+1. **The new Blockly-UI goal** (see the section directly above this one)
+   — check on the dispatched subagent first (`vs2/blockly-state-hats-ui`),
+   review and independently re-verify its work, merge it, then either
+   finish wiring `BaddieFormation` into the live `vyruss_vs2` game (the
+   two complications above are the real remaining work) or start
+   scoping a similarly well-fitted piece of `vixeous`'s own hand-written
+   logic — its own genuine catalog mismatches (angular, not box-overlap,
+   collision checks; procedural polar terrain generation; the boss
+   fight) are already documented in `vixeous.py`'s own module docstring
+   and are **not** solved by anything built so far; treat them with the
+   same "don't force a mismatched shape" judgment, not as a todo list to
+   clear by brute force.
+2. **Wave 6** (T13 native `Collide`, T14 flat sprite records) — still
+   fully unblocked, T0's written verdict is in, still not started.
+
+Neither thread blocks the other; pick based on what the user actually
+asks for next.
