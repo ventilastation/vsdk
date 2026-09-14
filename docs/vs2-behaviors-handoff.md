@@ -983,24 +983,99 @@ above got resolved:
    allowance), and LED captures at three points during the entrance
    sequence show baddies visibly spreading out into formation correctly.
 
+### `vixeous` — a smaller port, plus two more real catalog mismatches found
+
+Also attempted the same for `vixeous`, since the goal names it
+explicitly. The `enemies` pool's own near-identical phase/theta
+oscillation (the most obvious first target — the exact same shape as the
+boss's own motion below) turns out **not to be portable at all, for a
+real structural reason**: `vixeous_scene.vs2model.json` already declares
+`self.enemies.var('phase', ...)`/`.var('theta', ...)`
+(`SpritePool.var()`), and a Behavior's own `state = (...)` tuple cannot
+redeclare a name a pool already owns —
+`apps/micropython/vs2/__init__.py`'s `_prime_pool_state` raises
+`StateConflictError` at attach time, by design, to protect the
+zero-allocation priming guarantee. Fixing this for real needs either a
+new schema capability (read/write a field without owning/priming it) or
+removing the pool's own `.var()` declarations (losing the kinds-table/
+live-tune editing those provide for `phase`/`theta`) — neither attempted;
+documented as a genuine, real gap, not solved.
+
+The **boss** (a lone sprite, no pool, no `.var()`) doesn't hit that
+collision, so it became the actual target: **`BossOrbit`**
+(`games/vs2_examples/vixeous/code/build_boss_orbit.py`) owns the boss's
+`theta`/`phase` oscillation and its bounded approach toward
+`BOSS_STOP_Y`, proven tick-by-tick identical to the original
+(`tests/test_vixeous_boss_orbit.py`, including the display-width-seam
+wrap case) and **wired into the live game** via `on_build_9`
+(`update_entities()` trimmed to just the camera-dependent `x`
+reprojection and frame banking it still needs to do by hand).
+
+**A second real, previously-undiscovered catalog mismatch found while
+scoping `boss.frame`.** `(phase // 8) & 1` is exactly the square wave a
+composed `Animate(first=0, last=1, ticks=8, mode="loop")` action already
+produces — tried first, as the natural, sanctioned tool. It silently
+does not work for a lone-sprite subject: `Animate`'s clock is explicitly
+pool-shaped (only `run()` advances it; `run_one()` — what the generator's
+`apply_to_all` always calls for `subject_kind="sprite"` — deliberately
+never does, per its own docstring), so `frame` freezes at its initial
+value forever, no error. Verified directly with a standalone probe
+before trusting the parity test. `boss.frame` stays hand-written, like
+`boss.x` already does for the unrelated camera-reprojection reason.
+
+Also caught and fixed a real bug in this port's own parity test along
+the way, not in the Behavior itself: setting `theta`/`phase` on the boss
+sprite *before* calling `behave()` gets silently overwritten by
+attach-time state priming (`_prime_sprite_state` zeroes every declared
+state name) — must set them after. A reminder that this priming
+footgun applies to hand-authored test harnesses too, not just to Behavior
+design itself.
+
+**Reflashed and reverified on the physical rotor.** `BossOrbit` ticks
+unconditionally every scene tick from the moment the scene builds,
+including the long stretch while `self.boss` is still hidden (the same
+"a lone-sprite Behavior's `step_one` runs regardless of `visible`"
+gotcha `vyruss_vs2`'s own `player_explosion` already found — harmless
+here, since `maybe_start_boss()` resets `theta`/`phase`/`y` fresh the
+moment the boss actually activates) — confirmed this costs nothing and
+breaks nothing over a real 8-second run: `overruns=0`, `frame_overruns=0`,
+`heap_delta=240` (positive/stable, identical structural census to every
+earlier `vixeous` hardware run this session, `layers=2 sprites=27
+tilemaps=2`). Forcing the boss to actually activate over USB serial (to
+visually confirm the orbit itself on real LEDs, not just the
+always-ticking-while-hidden cost) was attempted via the `vs2beh` live-tune
+protocol but not completed in this session — the CPython/MicroPython-shim
+integration test (`test_boss_activates_and_orbits_via_the_attached_behavior`)
+already covers this exact activation path end to end, so it was judged
+sufficient rather than spending more time debugging the wire protocol's
+reply framing live.
+
 ## Suggested immediate next action
 
-T15-T18, T0, all three phases of T17, the Blockly UI for state hats, and
-`vyruss_vs2`'s `BaddieFormation` port are all fully done, merged into
-`vs2/wave7-integration`, verified in software and on real hardware where
-applicable, and in [PR #159](https://github.com/ventilastation/vsdk/pull/159)
-(not yet updated to describe this session's newest commits — do that
-before assuming the PR description is current). **Two threads remain
-open, neither blocking the other:**
+T15-T18, T0, all three phases of T17, the Blockly UI for state hats,
+`vyruss_vs2`'s `BaddieFormation` port, and `vixeous`'s `BossOrbit` port
+are all fully done, merged into `vs2/wave7-integration`, verified in
+software and (all except `BossOrbit`'s own visual activation, see above)
+on real hardware, and in
+[PR #159](https://github.com/ventilastation/vsdk/pull/159) against
+`design/vs2-behaviors` — its description has been kept current through
+this point (both the Blockly-UI merge and the `vyruss_vs2`/`vixeous`
+ports). **Two threads remain open, neither blocking the other:**
 
-1. **Continue the Blockly-porting goal on `vixeous`.** Its own genuine
-   catalog mismatches (angular, not box-overlap, collision checks;
-   procedural polar terrain generation; the boss fight) are already
-   documented in `vixeous.py`'s own module docstring and are **not**
-   solved by anything built so far — treat them with the same "don't
-   force a mismatched shape" judgment `vyruss_vs2`'s own port used, not
-   as a todo list to clear by brute force. The attack-run
-   `force_state()`/dynamic-distance design question above (`vyruss_vs2`
-   side) is also still open if picked back up.
+1. **Continue the Blockly-porting goal.** Four real, genuine catalog/
+   schema mismatches are now documented from actually trying, not
+   guessed at: `vyruss_vs2`'s `TravelTo` (a "move toward" primitive) and
+   its attack-run's `force_state()`/dynamic-distance need; `vixeous`'s
+   `SpritePool.var()`-vs-Behavior-`state=` collision (blocks the enemies
+   pool entirely) and `Animate`'s lone-sprite incompatibility (blocks
+   frame banking on any standalone sprite, not just the boss — worth
+   remembering if a future task tries `Animate` on `player_explosion` or
+   similar). `vixeous`'s other already-known mismatches (angular, not
+   box-overlap, collision checks; procedural polar terrain generation)
+   remain untouched. Treat all of these with the same "don't force a
+   mismatched shape" judgment already applied throughout, not as a todo
+   list to clear by brute force — some may genuinely need new framework
+   capability (a schema addition, or a real `vs2.behaviors`/`vs2.actions`
+   change) rather than more JSON.
 2. **Wave 6** (T13 native `Collide`, T14 flat sprite records) — still
    fully unblocked, T0's written verdict is in, still not started.
