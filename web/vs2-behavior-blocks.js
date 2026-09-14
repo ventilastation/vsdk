@@ -1,7 +1,8 @@
 /**
- * T17 Phase 1: the Blockly-for-Behaviors palette (tier 5, generated from
- * parameter declarations) plus the two-zone tick skeleton, over the exact
- * vocabulary tools/vs2_behavior_gen/model.py validates.
+ * T17: the Blockly-for-Behaviors palette (tier 5, generated from parameter
+ * declarations) over the exact vocabulary tools/vs2_behavior_gen/model.py
+ * validates -- both of the shapes that schema accepts: Phase 1's two-zone
+ * tick skeleton and Phase 2's state hats (see "State hats" below).
  *
  * Spec: docs/vs2-behaviors-proposal.md, "## The block editor" -- "Only
  * tier 5 is generated from parameter declarations ... a new Action appears
@@ -75,14 +76,82 @@
  * module's own docstring for why (``tools/vs2_behavior_gen/generator.py``
  * emits a trailing ``# block: <id>`` comment on the line(s) each block
  * produced, so a captured traceback resolves back to the exact block --
- * ``linemap.py``). Not every node kind in this schema has a Blockly block
- * yet (state-hat-only kinds -- ``hold``/``goto_state``/``set_state``/
- * ``call_callback``/``spawn``/``play_sound`` -- have no palette entry in
- * this file at all, a pre-existing Phase 1/2 scope gap this task does not
- * fill, see this task's report), so only the kinds this module actually
- * serializes carry a real ``block_id``; the rest simply validate with
- * none, exactly as the model schema's own "optional everywhere" design
- * allows.
+ * ``linemap.py``). Every node kind this palette can build carries one;
+ * expression blocks deliberately do not, because ``model.py``'s
+ * ``_check_expr`` does not accept a ``block_id`` key on an expression at
+ * all (an expression never occupies a line of its own in the generated
+ * source, so there would be nothing for ``linemap.py`` to point at).
+ *
+ * **State hats: the second top-level shape.** ``model.py``'s Phase-2
+ * ``state_machine`` key -- one method per declared state, no flat
+ * ``apply_to_all``/``per_sprite`` zones at all -- now has its own hat
+ * block, ``vs2beh_state_machine``, holding a stack of ``vs2beh_state``
+ * blocks, each with its own ``on enter`` / ``step`` / ``on exit`` body.
+ * A workspace carries *exactly one* top-level hat, either kind, never
+ * both: :func:`serializeWorkspaceToModel` refuses a workspace holding
+ * both rather than silently picking one, because ``validate_model`` would
+ * reject the merged result anyway ("Why apply_to_all/per_sprite are
+ * mutually exclusive with state_machine") and a silent pick is the worse
+ * failure mode.
+ *
+ * **Connection-type discipline across the two shapes.** ``model.py``'s
+ * own vocabulary split is the authority here:
+ * ``PER_SPRITE_KINDS`` (``accumulate``/``if_else``/``if_action``/
+ * ``despawn``/``despawn_hit``/``set_state``/``call_callback``/``spawn``/
+ * ``play_sound``) are legal in *either* shape, while
+ * ``STATE_BODY_EXTRA_KINDS`` (``goto_state``/``hold``) are legal *only*
+ * inside a state's own body -- ``self.hold(...)`` exists only on
+ * :class:`~vs2.behaviors.StateMachine`, and "return the next state's
+ * name" means nothing outside a per-state method. So:
+ *
+ * - every shared statement block declares the two-element check
+ *   ``["vs2beh_sprite_statement", "vs2beh_state_body_statement"]`` on its
+ *   previous/next connections (and on any statement input of its own, so
+ *   a nested ``do``/``then``/``else`` stack stays equally dual-shaped);
+ * - ``vs2beh_hold``/``vs2beh_goto_state`` declare
+ *   ``"vs2beh_state_body_statement"`` *only*, so Blockly itself refuses
+ *   to drop either into ``vs2beh_when_ticks``'s flat "for each sprite"
+ *   zone.
+ *
+ * That last refusal is only structural at the *top* of the flat zone.
+ * Dropping a ``goto_state`` into an ``if_else`` that itself sits in the
+ * flat per-sprite zone still connects, because Blockly's connection
+ * checks are purely local -- an input cannot ask "which hat am I
+ * ultimately under?". This is *exactly* the ``despawn_hit`` situation
+ * documented above, with exactly the same already-shipped safety net:
+ * ``validate_model`` walks the flat ``per_sprite`` list with
+ * ``allowed_kinds=PER_SPRITE_KINDS`` and rejects both kinds by name at
+ * generate time (its own
+ * ``test_goto_state_rejected_outside_a_state_body`` /
+ * ``test_hold_rejected_outside_a_state_body``). Per the proposal's "the
+ * block tier prevents errors; the Python tier reports them", that is a
+ * deliberate division of labour, not an unguarded hole -- and it is
+ * flagged here rather than silently assumed equivalent to full
+ * prevention.
+ *
+ * **``call_callback`` is built zero-arity on purpose.** ``model.py``'s
+ * node carries ``"args"``, a plain list of expressions, but the one real
+ * caller in the tree --
+ * ``games/vs2_examples/vasura_states_demo/code/enemy_states.vs2behavior.json``'s
+ * ``on_death`` hook -- passes ``"args": []``, and nothing in the shipped
+ * catalog passes anything else. So this block has a name field and no arg
+ * sockets, and always serializes ``"args": []``; a model *loaded* with a
+ * non-empty ``args`` list is refused loudly by
+ * :func:`perSpriteNodeToBlock` rather than silently losing the arguments
+ * on the next save. Building a variadic-args mutator UI nobody has proven
+ * a need for is the same over-build this file already declines for the
+ * remaining ``vs2.params`` types (see ``vs2beh_declare_number``'s own
+ * comment) -- when a real caller needs arguments, the sockets get added
+ * then, against a concrete shape.
+ *
+ * **Which ``vs2.params`` types have a declaration block.** ``number``,
+ * ``angle``, ``pool``, ``sound`` and ``callback`` -- Phase 1's own three
+ * plus the two the ``vasura_states_demo`` state-hat reference program
+ * needs (``play_sound`` names a ``Sound`` parameter, ``call_callback`` a
+ * ``Callback`` one, and a model that cannot *declare* those two cannot
+ * round-trip through this editor at all). ``flag``/``choice``/``frames``/
+ * ``image``/``points`` remain unbuilt: same mechanical shape, no proving
+ * case yet.
  */
 
 import { loadBlockly } from "./vs2-event-sheet.js?v=20260913b";
@@ -113,6 +182,54 @@ export function loadCatalog() {
 // module's docstring for why the set is {"Collide"} and not all four.
 // ---------------------------------------------------------------------------
 const CONDITION_FLAVOR_ACTIONS = new Set(["Collide"]);
+
+// ---------------------------------------------------------------------------
+// Connection-type vocabulary, mirroring tools/vs2_behavior_gen/model.py's own
+// PER_SPRITE_KINDS / STATE_BODY_EXTRA_KINDS split -- see this module's
+// docstring, "Connection-type discipline across the two shapes", for why the
+// shared set gets a two-element check array rather than one type each.
+// ---------------------------------------------------------------------------
+
+/** Blockly's own connection check for a statement legal in *either* shape:
+ * the flat `vs2beh_when_ticks` "for each sprite" zone, or a `vs2beh_state`
+ * body. Blockly connects two connections whose check lists intersect, so a
+ * block carrying both names still snaps into an input checking only
+ * "vs2beh_sprite_statement" (the flat hat's own zone) and equally into one
+ * checking only "vs2beh_state_body_statement". Fresh array per use --
+ * Blockly stores the list it is handed, and sharing one array across every
+ * block definition would make a future in-place edit leak everywhere. */
+function dualStatementCheck() {
+  return ["vs2beh_sprite_statement", "vs2beh_state_body_statement"];
+}
+
+/** Statements legal *only* inside a state's own enter/step/exit body:
+ * `hold` and `goto_state`. Naming just this one type is what makes Blockly
+ * physically refuse to drop either at the top of the flat per-sprite zone. */
+const STATE_BODY_ONLY_CHECK = "vs2beh_state_body_statement";
+
+/** The built-in `vs2.Sprite` fields a "state" expression may read and an
+ * `accumulate`/`set_state` node may write *without* the model declaring
+ * them -- an exact mirror of model.py's own `BUILTIN_SPRITE_FIELDS`. They
+ * are excluded from the `state` list this module derives from usage (see
+ * collectStateNames): declaring `y` as a per-sprite state field would make
+ * the generator allocate a *second*, shadowing accumulator byte next to the
+ * real `sprite.y` the author meant. */
+const BUILTIN_SPRITE_FIELDS = new Set(["x", "y", "visible"]);
+
+/** Parameter types whose declaration block is just "name + label" -- the
+ * reference-shaped params (`default` is always null: a pool, a sound set or
+ * a callback is bound at construction time, never typed into the editor).
+ * One entry per type, so the block and its inverse stay a single source of
+ * truth. See this module's docstring for which types are deliberately not
+ * built yet. */
+const REFERENCE_PARAM_BLOCK_TYPES = {
+  pool: "vs2beh_declare_pool",
+  sound: "vs2beh_declare_sound",
+  callback: "vs2beh_declare_callback",
+};
+
+const REFERENCE_PARAM_TYPES_BY_BLOCK = new Map(
+  Object.entries(REFERENCE_PARAM_BLOCK_TYPES).map(([type, blockType]) => [blockType, type]));
 
 function upperFieldName(name) {
   return name.toUpperCase();
@@ -197,10 +314,13 @@ function buildActionBlockJson(actionEntry, flavor) {
   };
 
   if (flavor === "if") {
+    // `if_action` is one of model.py's PER_SPRITE_KINDS, so it -- and its
+    // own nested "do" stack -- is legal in both shapes; see this module's
+    // docstring on the two-element check.
     json.message1 = "found a hit, do %1";
-    json.args1 = [{ type: "input_statement", name: "DO", check: "vs2beh_sprite_statement" }];
-    json.previousStatement = "vs2beh_sprite_statement";
-    json.nextStatement = "vs2beh_sprite_statement";
+    json.args1 = [{ type: "input_statement", name: "DO", check: dualStatementCheck() }];
+    json.previousStatement = dualStatementCheck();
+    json.nextStatement = dualStatementCheck();
   } else {
     json.previousStatement = "vs2beh_uniform_action";
     json.nextStatement = "vs2beh_uniform_action";
@@ -239,10 +359,66 @@ const STATIC_BLOCK_JSON = [
       + "sprite at once, then per-sprite decisions -- see the proposal's "
       + "'The tick skeleton makes the fast shape unavoidable'.",
   },
-  // -- Parameter declarations: one block per type Phase 1's proving case
-  // (Projectile) actually needs. Extending to the remaining vs2.params
-  // types (Flag, Choice, Frames, Sound, Image, Points, Callback) is the
-  // same mechanical shape -- not built here, see this file's own report.
+  // -- The *other* top-level hat: model.py's Phase-2 "state_machine" shape.
+  // A workspace holds one hat or the other, never both (validate_model
+  // rejects a model carrying state_machine alongside a non-empty
+  // apply_to_all/per_sprite, and serializeWorkspaceToModel refuses the
+  // ambiguity outright rather than picking one silently).
+  //
+  // There is no "apply to all" input here on purpose: the generated class
+  // never overrides step()/step_one() (see generator.py), so there is no
+  // uniform prologue phase for such a zone to render into. Offering the
+  // input and rejecting its contents later would be a worse editor than
+  // not offering it at all.
+  {
+    type: "vs2beh_state_machine",
+    message0: "state machine %1 ( %2 ) starting in %3",
+    args0: [
+      { type: "field_input", name: "CLASS_NAME", text: "MyStateMachine" },
+      { type: "field_dropdown", name: "SUBJECT_KIND",
+        options: [["pool", "pool"], ["sprite", "sprite"]] },
+      { type: "field_input", name: "INITIAL", text: "idle" },
+    ],
+    // The very same "vs2beh_param_decl" check the flat hat uses: a
+    // Behavior's declared parameters mean exactly the same thing in either
+    // shape, so the declaration blocks are shared rather than duplicated.
+    message1: "parameters %1",
+    args1: [{ type: "input_statement", name: "PARAMS", check: "vs2beh_param_decl" }],
+    message2: "states %1",
+    args2: [{ type: "input_statement", name: "STATES", check: "vs2beh_state_decl" }],
+    colour: 160,
+    tooltip: "One vs2.behaviors.StateMachine subclass: a stack of named "
+      + "states, each with its own optional 'on enter'/'on exit' hooks and "
+      + "a required 'step' body. 'starting in' names the initial state.",
+  },
+  {
+    type: "vs2beh_state",
+    message0: "in state %1",
+    args0: [{ type: "field_input", name: "NAME", text: "idle" }],
+    // "in state" rather than plain "state" so this reads unambiguously
+    // next to the vs2beh_expr_state block ("state <name>", which *reads a
+    // per-sprite field*, an entirely different thing from a named FSM
+    // state). The three hooks are named for the methods they generate.
+    message1: "on enter %1",
+    args1: [{ type: "input_statement", name: "ENTER", check: STATE_BODY_ONLY_CHECK }],
+    message2: "step %1",
+    args2: [{ type: "input_statement", name: "STEP", check: STATE_BODY_ONLY_CHECK }],
+    message3: "on exit %1",
+    args3: [{ type: "input_statement", name: "EXIT", check: STATE_BODY_ONLY_CHECK }],
+    previousStatement: "vs2beh_state_decl",
+    nextStatement: "vs2beh_state_decl",
+    colour: 200,
+    tooltip: "One declared state. 'step' always generates a method (even "
+      + "empty); 'on enter'/'on exit' generate one only when non-empty -- "
+      + "the same 'optional hooks, skipped when absent' contract "
+      + "vs2.behaviors.StateMachine itself documents.",
+  },
+  // -- Parameter declarations: one block per type this editor's proving
+  // cases actually need -- Phase 1's Projectile (number/angle/pool) plus
+  // the vasura_states_demo state-hat reference program (sound/callback).
+  // Extending to the remaining vs2.params types (Flag, Choice, Frames,
+  // Image, Points) is the same mechanical shape -- not built here, see
+  // this module's docstring.
   {
     type: "vs2beh_declare_number",
     message0: "number %1 default %2 min %3 max %4 step %5 label %6 unit %7",
@@ -286,7 +462,38 @@ const STATIC_BLOCK_JSON = [
     nextStatement: "vs2beh_param_decl",
     colour: 300,
   },
-  // -- Per-sprite decisions --
+  {
+    type: "vs2beh_declare_sound",
+    message0: "sound %1 label %2",
+    args0: [
+      { type: "field_input", name: "NAME", text: "sound" },
+      { type: "field_input", name: "LABEL", text: "" },
+    ],
+    previousStatement: "vs2beh_param_decl",
+    nextStatement: "vs2beh_param_decl",
+    colour: 300,
+    tooltip: "A vs2.params.Sound parameter -- what a 'play sound' block "
+      + "names. Its actual value (one name, or a tuple picked from at "
+      + "random) is bound at construction, never typed here.",
+  },
+  {
+    type: "vs2beh_declare_callback",
+    message0: "callback %1 label %2",
+    args0: [
+      { type: "field_input", name: "NAME", text: "on_death" },
+      { type: "field_input", name: "LABEL", text: "" },
+    ],
+    previousStatement: "vs2beh_param_decl",
+    nextStatement: "vs2beh_param_decl",
+    colour: 300,
+    tooltip: "A vs2.params.Callback parameter -- what a 'call callback' "
+      + "block names. The function itself is bound at construction.",
+  },
+  // -- Per-sprite decisions. Every block below is one of model.py's own
+  // PER_SPRITE_KINDS, legal in the flat per-sprite zone *and* inside a
+  // state body, hence the two-element connection check throughout --
+  // including on each nested statement input, so a "do"/"else" stack
+  // inside a state body keeps accepting state-body-only blocks.
   {
     type: "vs2beh_accumulate",
     message0: "add %1 to state %2",
@@ -295,9 +502,24 @@ const STATIC_BLOCK_JSON = [
       { type: "field_input", name: "STATE", text: "shot_flown" },
     ],
     inputsInline: true,
-    previousStatement: "vs2beh_sprite_statement",
-    nextStatement: "vs2beh_sprite_statement",
+    previousStatement: dualStatementCheck(),
+    nextStatement: dualStatementCheck(),
     colour: 65,
+  },
+  {
+    type: "vs2beh_set_state",
+    message0: "set state %1 to %2",
+    args0: [
+      { type: "field_input", name: "STATE", text: "shot_flown" },
+      { type: "input_value", name: "VALUE", check: "vs2beh_expr" },
+    ],
+    inputsInline: true,
+    previousStatement: dualStatementCheck(),
+    nextStatement: dualStatementCheck(),
+    colour: 65,
+    tooltip: "A plain assignment -- the 'add to state' block's "
+      + "non-accumulating sibling. The name may be one of this Behavior's "
+      + "own declared state fields or a built-in sprite field (x/y/visible).",
   },
   {
     type: "vs2beh_if_else",
@@ -310,30 +532,97 @@ const STATIC_BLOCK_JSON = [
       { type: "input_value", name: "RIGHT", check: "vs2beh_expr" },
     ],
     message1: "do %1",
-    args1: [{ type: "input_statement", name: "THEN", check: "vs2beh_sprite_statement" }],
+    args1: [{ type: "input_statement", name: "THEN", check: dualStatementCheck() }],
     message2: "else %1",
-    args2: [{ type: "input_statement", name: "ELSE", check: "vs2beh_sprite_statement" }],
+    args2: [{ type: "input_statement", name: "ELSE", check: dualStatementCheck() }],
     inputsInline: true,
-    previousStatement: "vs2beh_sprite_statement",
-    nextStatement: "vs2beh_sprite_statement",
+    previousStatement: dualStatementCheck(),
+    nextStatement: dualStatementCheck(),
     colour: 65,
   },
   {
     type: "vs2beh_despawn",
     message0: "despawn this sprite",
-    previousStatement: "vs2beh_sprite_statement",
-    nextStatement: "vs2beh_sprite_statement",
+    previousStatement: dualStatementCheck(),
+    nextStatement: dualStatementCheck(),
     colour: 0,
   },
   {
     type: "vs2beh_despawn_hit",
     message0: "despawn the sprite found",
-    previousStatement: "vs2beh_sprite_statement",
-    nextStatement: "vs2beh_sprite_statement",
+    previousStatement: dualStatementCheck(),
+    nextStatement: dualStatementCheck(),
     colour: 0,
     tooltip: "Only meaningful inside a Collide condition block's own "
       + "'do' stack -- see this file's module docstring on why this is "
       + "checked at generate time, not by Blockly's connection types.",
+  },
+  // -- Effects reaching outside this sprite's own bookkeeping. Same
+  // PER_SPRITE_KINDS membership as the decisions above (legal in either
+  // shape); a separate colour only because "spawn a thing / make a noise /
+  // tell the game" is a different kind of act than "adjust my own state".
+  {
+    type: "vs2beh_spawn",
+    message0: "spawn into pool %1 at x %2 y %3",
+    args0: [
+      { type: "field_input", name: "POOL", text: "explosion" },
+      { type: "input_value", name: "X", check: "vs2beh_expr" },
+      { type: "input_value", name: "Y", check: "vs2beh_expr" },
+    ],
+    inputsInline: true,
+    previousStatement: dualStatementCheck(),
+    nextStatement: dualStatementCheck(),
+    colour: 30,
+    tooltip: "Spawn into a declared pool parameter. Feed x/y the built-in "
+      + "sprite fields (a 'state x' / 'state y' expression) to spawn at "
+      + "this sprite's own position.",
+  },
+  {
+    type: "vs2beh_play_sound",
+    message0: "play sound %1",
+    args0: [{ type: "field_input", name: "NAME", text: "sound" }],
+    previousStatement: dualStatementCheck(),
+    nextStatement: dualStatementCheck(),
+    colour: 30,
+    tooltip: "Play a declared sound parameter.",
+  },
+  {
+    type: "vs2beh_call_callback",
+    message0: "call callback %1",
+    args0: [{ type: "field_input", name: "NAME", text: "on_death" }],
+    previousStatement: dualStatementCheck(),
+    nextStatement: dualStatementCheck(),
+    colour: 30,
+    tooltip: "Invoke a declared callback parameter with no arguments -- "
+      + "see this file's module docstring on why the args list this "
+      + "serializes is deliberately always empty.",
+  },
+  // -- State-body-only statements. The single-type check here is the whole
+  // point: Blockly itself refuses to drop either at the top of the flat
+  // 'for each sprite' zone, matching model.py's STATE_BODY_EXTRA_KINDS.
+  {
+    type: "vs2beh_hold",
+    message0: "hold %1 ticks then go to state %2",
+    args0: [
+      { type: "input_value", name: "TICKS", check: "vs2beh_expr" },
+      { type: "field_input", name: "THEN", text: "falling" },
+    ],
+    inputsInline: true,
+    previousStatement: STATE_BODY_ONLY_CHECK,
+    nextStatement: STATE_BODY_ONLY_CHECK,
+    colour: 200,
+    tooltip: "Stay in this state for the given number of ticks, then "
+      + "enter the named one (self.hold(...), only on a StateMachine).",
+  },
+  {
+    type: "vs2beh_goto_state",
+    message0: "go to state %1",
+    args0: [{ type: "field_input", name: "NAME", text: "exploding" }],
+    previousStatement: STATE_BODY_ONLY_CHECK,
+    nextStatement: STATE_BODY_ONLY_CHECK,
+    colour: 200,
+    tooltip: "Leave this state for the named one (a per-state method's "
+      + "own 'return \"<name>\"').",
   },
   // -- Expressions --
   {
@@ -356,6 +645,30 @@ const STATIC_BLOCK_JSON = [
     args0: [{ type: "field_input", name: "NAME", text: "shot_flown" }],
     output: "vs2beh_expr",
     colour: 300,
+  },
+  {
+    // model.py's own "binary_op" kind. Both sockets and the output all use
+    // the one "vs2beh_expr" type, so this block plugs into every existing
+    // expression socket in the palette *and* nests inside itself -- which
+    // is the whole point: the choreography math this was added for
+    // (vyruss_vs2's `max(0, baddie.y - RIM_Y)`) is a nested binary_op, not
+    // a flat one. min/max read oddly infix; the tooltip says so rather
+    // than splitting the block in two over cosmetics.
+    type: "vs2beh_expr_binary_op",
+    message0: "%1 %2 %3",
+    args0: [
+      { type: "input_value", name: "LEFT", check: "vs2beh_expr" },
+      { type: "field_dropdown", name: "OP",
+        options: [["+", "+"], ["-", "-"], ["*", "*"], ["//", "//"],
+                  ["%", "%"], ["min", "min"], ["max", "max"]] },
+      { type: "input_value", name: "RIGHT", check: "vs2beh_expr" },
+    ],
+    inputsInline: true,
+    output: "vs2beh_expr",
+    colour: 300,
+    tooltip: "Arithmetic on two expressions. '+ - * // %' render as plain "
+      + "infix Python; 'min'/'max' render as a call on the same two "
+      + "operands, so read those as 'min(left, right)'.",
   },
 ];
 
@@ -398,7 +711,16 @@ export async function ensureBlocksDefined() {
   return { Blockly, catalog: catalogData };
 }
 
-/** Toolbox XML, built once the catalog is known. */
+/** Toolbox XML, built once the catalog is known.
+ *
+ * Categories group by *what a block means*, not by which phase added it:
+ * both top-level hats sit together under "Skeleton" (picking one is the
+ * first thing an author does, and seeing them side by side is what makes
+ * the either/or obvious), the four Phase-2 effect blocks sit with their
+ * fellow PER_SPRITE_KINDS under "Decisions" because they are legal in
+ * exactly the same places, and "States" holds only what is specific to the
+ * state-hat shape -- the state declaration and the two
+ * STATE_BODY_EXTRA_KINDS that live nowhere else. */
 export function buildToolboxXml(catalogData) {
   const actionBlocks = [];
   for (const actionEntry of catalogData.actions) {
@@ -411,25 +733,38 @@ export function buildToolboxXml(catalogData) {
 <xml xmlns="https://developers.google.com/blockly/xml">
   <category name="Skeleton" colour="160">
     <block type="vs2beh_when_ticks"></block>
+    <block type="vs2beh_state_machine"></block>
   </category>
   <category name="Parameters" colour="300">
     <block type="vs2beh_declare_number"></block>
     <block type="vs2beh_declare_angle"></block>
     <block type="vs2beh_declare_pool"></block>
+    <block type="vs2beh_declare_sound"></block>
+    <block type="vs2beh_declare_callback"></block>
   </category>
   <category name="Actions" colour="20">
     ${actionBlocks.join("\n    ")}
   </category>
   <category name="Decisions" colour="65">
     <block type="vs2beh_accumulate"></block>
+    <block type="vs2beh_set_state"></block>
     <block type="vs2beh_if_else"></block>
     <block type="vs2beh_despawn"></block>
     <block type="vs2beh_despawn_hit"></block>
+    <block type="vs2beh_spawn"></block>
+    <block type="vs2beh_play_sound"></block>
+    <block type="vs2beh_call_callback"></block>
+  </category>
+  <category name="States" colour="200">
+    <block type="vs2beh_state"></block>
+    <block type="vs2beh_hold"></block>
+    <block type="vs2beh_goto_state"></block>
   </category>
   <category name="Expressions" colour="300">
     <block type="vs2beh_expr_literal_number"></block>
     <block type="vs2beh_expr_param"></block>
     <block type="vs2beh_expr_state"></block>
+    <block type="vs2beh_expr_binary_op"></block>
   </category>
 </xml>`;
 }
@@ -464,6 +799,17 @@ function blockToExpr(block) {
       return { kind: "param", name: String(block.getFieldValue("NAME")) };
     case "vs2beh_expr_state":
       return { kind: "state", name: String(block.getFieldValue("NAME")) };
+    case "vs2beh_expr_binary_op":
+      // No block_id here, unlike every statement node: model.py's
+      // _check_expr rejects an unknown key on a binary_op outright, and an
+      // expression never gets a line of its own in the generated source
+      // for linemap.py to point a traceback at anyway.
+      return {
+        kind: "binary_op",
+        op: String(block.getFieldValue("OP")),
+        left: blockToExpr(block.getInputTargetBlock("LEFT")),
+        right: blockToExpr(block.getInputTargetBlock("RIGHT")),
+      };
     default:
       throw new Error(`not an expression block: ${block.type}`);
   }
@@ -533,10 +879,24 @@ function serializeApplyToAll(firstBlock, allocateBind) {
   return { actions, applyToAll };
 }
 
-/** Walk one per-sprite statement stack recursively. Returns `{nodes,
- * actions}` -- `nodes` the model's own per_sprite node list, `actions`
- * any Collide-condition actions discovered along the way (appended to the
- * model's `actions` list exactly like an apply-to-all Action is). */
+/** Walk one statement stack recursively -- the flat "for each sprite"
+ * zone, or one `vs2beh_state` body's enter/step/exit stack, which are the
+ * same walk over an overlapping vocabulary. Returns `{nodes, actions}` --
+ * `nodes` the model's own node list, `actions` any Collide-condition
+ * actions discovered along the way (appended to the model's `actions` list
+ * exactly like an apply-to-all Action is).
+ *
+ * **No `allowed_kinds` parameter here on purpose.** Whether a `hold` or
+ * `goto_state` is legal *where it was dropped* is not a question this walk
+ * can answer: Blockly has already refused the only placement it can see
+ * locally (the top of the flat per-sprite zone -- see this module's
+ * docstring), and the placement it cannot see (nested inside an `if_else`
+ * that is itself in the flat zone) is precisely what
+ * `model.py`'s `validate_model` re-checks with the right `allowed_kinds`
+ * for the enclosing shape. So this walk emits whatever block it finds and
+ * leaves "is this misplaced" to the Python tier, exactly as this module
+ * already does for `despawn_hit`. Dropping a node silently here would turn
+ * a loud, path-naming ModelError into vanished work. */
 function serializePerSpriteStack(firstBlock, allocateBind) {
   const nodes = [];
   const actions = [];
@@ -546,6 +906,50 @@ function serializePerSpriteStack(firstBlock, allocateBind) {
         kind: "accumulate",
         state: String(block.getFieldValue("STATE")),
         amount: blockToExpr(block.getInputTargetBlock("AMOUNT")),
+        block_id: block.id,
+      });
+    } else if (block.type === "vs2beh_set_state") {
+      nodes.push({
+        kind: "set_state",
+        state: String(block.getFieldValue("STATE")),
+        value: blockToExpr(block.getInputTargetBlock("VALUE")),
+        block_id: block.id,
+      });
+    } else if (block.type === "vs2beh_spawn") {
+      nodes.push({
+        kind: "spawn",
+        pool: String(block.getFieldValue("POOL")),
+        x: blockToExpr(block.getInputTargetBlock("X")),
+        y: blockToExpr(block.getInputTargetBlock("Y")),
+        block_id: block.id,
+      });
+    } else if (block.type === "vs2beh_play_sound") {
+      nodes.push({
+        kind: "play_sound",
+        name: String(block.getFieldValue("NAME")),
+        block_id: block.id,
+      });
+    } else if (block.type === "vs2beh_call_callback") {
+      // Always the empty args list -- this block has no arg sockets; see
+      // this module's docstring on why that is a scope choice and not an
+      // omission.
+      nodes.push({
+        kind: "call_callback",
+        name: String(block.getFieldValue("NAME")),
+        args: [],
+        block_id: block.id,
+      });
+    } else if (block.type === "vs2beh_hold") {
+      nodes.push({
+        kind: "hold",
+        ticks: blockToExpr(block.getInputTargetBlock("TICKS")),
+        then: String(block.getFieldValue("THEN")),
+        block_id: block.id,
+      });
+    } else if (block.type === "vs2beh_goto_state") {
+      nodes.push({
+        kind: "goto_state",
+        name: String(block.getFieldValue("NAME")),
         block_id: block.id,
       });
     } else if (block.type === "vs2beh_if_else") {
@@ -588,15 +992,37 @@ function serializePerSpriteStack(firstBlock, allocateBind) {
   return { nodes, actions };
 }
 
-/** Every state name this per_sprite node tree reads or writes, collected
- * the same way tools/vs2_event_gen/generator.py's `_collect_declared_vars`
- * collects project-variable names from usage -- a state field needs no
- * separate "declare" block, exactly like that precedent. */
+/** Every state name this node tree reads or writes, collected the same way
+ * tools/vs2_event_gen/generator.py's `_collect_declared_vars` collects
+ * project-variable names from usage -- a state field needs no separate
+ * "declare" block, exactly like that precedent. Call it once per statement
+ * stack (a state-hat program has one per state body) into a shared set.
+ *
+ * **The built-in sprite fields are deliberately never collected.**
+ * model.py lets a `state` expression read, and an `accumulate`/`set_state`
+ * node write, `x`/`y`/`visible` *without* the model declaring them -- they
+ * are the real Sprite's own attributes. Adding one to the model's `state`
+ * list would make the generator allocate a second, shadowing per-sprite
+ * field of the same name, so a state body that accumulates straight into
+ * `sprite.y` (exactly what games/vs2_examples/vasura_states_demo's
+ * "falling" state does) would silently stop moving the sprite. */
 function collectStateNames(nodes, into) {
   for (const node of nodes) {
     if (node.kind === "accumulate") {
-      into.add(node.state);
+      addStateName(node.state, into);
       collectExprStateNames(node.amount, into);
+    } else if (node.kind === "set_state") {
+      addStateName(node.state, into);
+      collectExprStateNames(node.value, into);
+    } else if (node.kind === "spawn") {
+      collectExprStateNames(node.x, into);
+      collectExprStateNames(node.y, into);
+    } else if (node.kind === "hold") {
+      collectExprStateNames(node.ticks, into);
+    } else if (node.kind === "call_callback") {
+      for (const arg of node.args) {
+        collectExprStateNames(arg, into);
+      }
     } else if (node.kind === "if_else") {
       collectExprStateNames(node.condition.left, into);
       collectExprStateNames(node.condition.right, into);
@@ -606,12 +1032,26 @@ function collectStateNames(nodes, into) {
       collectStateNames(node.then, into);
       collectStateNames(node.else, into);
     }
+    // "despawn"/"despawn_hit"/"goto_state"/"play_sound" name no state and
+    // hold no expression -- nothing to collect.
+  }
+}
+
+function addStateName(name, into) {
+  if (!BUILTIN_SPRITE_FIELDS.has(name)) {
+    into.add(name);
   }
 }
 
 function collectExprStateNames(expr, into) {
-  if (expr && expr.kind === "state") {
-    into.add(expr.name);
+  if (!expr) {
+    return;
+  }
+  if (expr.kind === "state") {
+    addStateName(expr.name, into);
+  } else if (expr.kind === "binary_op") {
+    collectExprStateNames(expr.left, into);
+    collectExprStateNames(expr.right, into);
   }
 }
 
@@ -633,8 +1073,14 @@ function serializeParams(firstBlock) {
       if (label) entry.label = label;
       if (unit) entry.unit = unit;
       params.push(entry);
-    } else if (block.type === "vs2beh_declare_pool") {
-      const entry = { name: String(block.getFieldValue("NAME")), type: "pool", default: null };
+    } else if (REFERENCE_PARAM_TYPES_BY_BLOCK.has(block.type)) {
+      // pool/sound/callback: identical "name + label, value bound at
+      // construction" shape, one branch rather than three.
+      const entry = {
+        name: String(block.getFieldValue("NAME")),
+        type: REFERENCE_PARAM_TYPES_BY_BLOCK.get(block.type),
+        default: null,
+      };
       const label = block.getFieldValue("LABEL");
       if (label) entry.label = label;
       params.push(entry);
@@ -645,20 +1091,111 @@ function serializeParams(firstBlock) {
   return params;
 }
 
-/** Serialize the single top-level `vs2beh_when_ticks` hat block (there
- * should be exactly one -- this palette models one Behavior per
- * workspace, matching "code/behaviors/chasing.py ... One file per custom
- * behavior" in the proposal's own project layout) into the full model
- * dict tools/vs2_behavior_gen/model.validate_model accepts. */
+/** Walk the `STATES` stack of a `vs2beh_state_machine` hat into
+ * model.py's own `state_machine` object, plus everything the surrounding
+ * model needs from it. Returns `{stateMachine, actions, stateNames}`.
+ *
+ * **`enter`/`exit` are omitted entirely when their stack is empty, but
+ * `step` is always emitted, even as `[]`.** That is not cosmetic:
+ * `validate_model` *requires* a `step` key on every declared state
+ * (matching StateMachine's own "every declared state needs its own
+ * method, even a no-op one"), while generating an `enter_<state>`/
+ * `exit_<state>` method the author never wrote would install a hook the
+ * framework then calls on every transition. The hand-authored reference
+ * program uses exactly this convention. */
+function serializeStateMachine(hatBlock, allocateBind) {
+  const states = [];
+  const bodies = {};
+  const actions = [];
+  const stateNames = new Set();
+
+  for (const stateBlock of collectStack(hatBlock.getInputTargetBlock("STATES"))) {
+    if (stateBlock.type !== "vs2beh_state") {
+      throw new Error(`not a state declaration block: ${stateBlock.type}`);
+    }
+    const name = String(stateBlock.getFieldValue("NAME"));
+    // A duplicate name collapses two bodies into one object key while
+    // leaving two entries in `states` -- deliberately left for
+    // validate_model's own "duplicate state name" check to report, the
+    // same division of labour every other name check in this module
+    // follows. It cannot silently succeed either way.
+    states.push(name);
+    const body = {};
+    for (const [hook, inputName] of [["enter", "ENTER"], ["step", "STEP"], ["exit", "EXIT"]]) {
+      const result = serializePerSpriteStack(
+        stateBlock.getInputTargetBlock(inputName), allocateBind);
+      actions.push(...result.actions);
+      collectStateNames(result.nodes, stateNames);
+      if (hook === "step" || result.nodes.length) {
+        body[hook] = result.nodes;
+      }
+    }
+    bodies[name] = body;
+  }
+
+  return {
+    stateMachine: {
+      states,
+      initial: String(hatBlock.getFieldValue("INITIAL")),
+      bodies,
+    },
+    actions,
+    stateNames,
+  };
+}
+
+/** Serialize the single top-level hat block (there should be exactly one
+ * -- this palette models one Behavior per workspace, matching
+ * "code/behaviors/chasing.py ... One file per custom behavior" in the
+ * proposal's own project layout) into the full model dict
+ * tools/vs2_behavior_gen/model.validate_model accepts.
+ *
+ * Two hat kinds, two shapes: `vs2beh_when_ticks` produces the flat
+ * two-zone model (unchanged since Phase 1), `vs2beh_state_machine`
+ * produces the `state_machine` one. Both at once is refused rather than
+ * resolved by picking a winner -- validate_model would reject the merged
+ * result anyway ("Why apply_to_all/per_sprite are mutually exclusive with
+ * state_machine"), and a silent pick would quietly discard half an
+ * author's workspace. */
 export function serializeWorkspaceToModel(workspace) {
-  const hatBlock = workspace.getTopBlocks(true)
-    .find((block) => block.type === "vs2beh_when_ticks");
+  const topBlocks = workspace.getTopBlocks(true);
+  const flatHat = topBlocks.find((block) => block.type === "vs2beh_when_ticks");
+  const stateHat = topBlocks.find((block) => block.type === "vs2beh_state_machine");
+  if (flatHat && stateHat) {
+    throw new Error(
+      "workspace holds both a 'when ... ticks' and a 'state machine' hat; "
+      + "a behavior is one or the other");
+  }
+  const hatBlock = flatHat || stateHat;
   if (!hatBlock) {
-    throw new Error("no 'when ... ticks' block in the workspace");
+    throw new Error("no 'when ... ticks' or 'state machine' block in the workspace");
   }
   const allocateBind = makeBindAllocator();
 
   const params = serializeParams(hatBlock.getInputTargetBlock("PARAMS"));
+  const common = {
+    version: 1,
+    class_name: String(hatBlock.getFieldValue("CLASS_NAME")),
+    subject_kind: String(hatBlock.getFieldValue("SUBJECT_KIND")),
+    params,
+  };
+
+  if (stateHat) {
+    const result = serializeStateMachine(stateHat, allocateBind);
+    return {
+      ...common,
+      state: [...result.stateNames].sort(),
+      actions: result.actions,
+      // Both zones emitted as empty lists rather than omitted: validate_model
+      // rejects them only when *non-empty* alongside a state_machine, and
+      // the hand-authored reference program spells them out the same way,
+      // which keeps a save of a loaded file diff-clean against it.
+      apply_to_all: [],
+      per_sprite: [],
+      state_machine: result.stateMachine,
+    };
+  }
+
   const applyToAllResult = serializeApplyToAll(
     hatBlock.getInputTargetBlock("APPLY_ALL"), allocateBind);
   const perSpriteResult = serializePerSpriteStack(
@@ -668,10 +1205,7 @@ export function serializeWorkspaceToModel(workspace) {
   collectStateNames(perSpriteResult.nodes, stateNames);
 
   return {
-    version: 1,
-    class_name: String(hatBlock.getFieldValue("CLASS_NAME")),
-    subject_kind: String(hatBlock.getFieldValue("SUBJECT_KIND")),
-    params,
+    ...common,
     state: [...stateNames].sort(),
     actions: [...applyToAllResult.actions, ...perSpriteResult.actions],
     apply_to_all: applyToAllResult.applyToAll,
@@ -685,10 +1219,23 @@ export function serializeWorkspaceToModel(workspace) {
 // trip visually in a live browser (see this task's report).
 // ---------------------------------------------------------------------------
 
+/** Create a block, rendering it if this workspace renders at all.
+ *
+ * A `Blockly.WorkspaceSvg` (what `injectWorkspace` returns in a real page)
+ * hands back a `BlockSvg`, which needs `initSvg()`/`render()` before it is
+ * visible. A headless `new Blockly.Workspace()` -- Blockly's own
+ * DOM-independent data model, which is how
+ * `tests/test_vs2_behavior_blocks_roundtrip.mjs` exercises this module
+ * under plain Node with no jsdom and no browser -- hands back a plain
+ * `Blockly.Block`, on which neither method exists at all. Feature-testing
+ * leaves the browser path byte-for-byte what it was while making the
+ * model half of this file testable without one. */
 function newRenderedBlock(workspace, type, id) {
   const block = workspace.newBlock(type, id);
-  block.initSvg();
-  block.render();
+  if (typeof block.initSvg === "function") {
+    block.initSvg();
+    block.render();
+  }
   return block;
 }
 
@@ -711,6 +1258,19 @@ function connectStack(blocks) {
 
 function exprToBlock(workspace, expr) {
   if (expr.kind === "literal") {
+    // model.py's literal accepts number/string/bool/null; this palette has
+    // only the *number* literal block (a Blockly field_number). Refusing
+    // the others beats coercing them: `field_number` would turn a `false`
+    // into `0` and a `"world"` into `0` on load, and the next save would
+    // write that corruption back to the author's own file. A string or
+    // bool literal in a real model today only ever appears as an Action's
+    // own dropdown/checkbox arg, which never travels through here (see
+    // actionBlockFromDecl, which sets those fields directly).
+    if (typeof expr.value !== "number") {
+      throw new Error(
+        `literal expression ${JSON.stringify(expr.value)} is not a number; `
+        + "this palette has only a number literal block");
+    }
     const block = newRenderedBlock(workspace, "vs2beh_expr_literal_number");
     block.setFieldValue(String(expr.value), "VALUE");
     return block;
@@ -718,6 +1278,13 @@ function exprToBlock(workspace, expr) {
   if (expr.kind === "param") {
     const block = newRenderedBlock(workspace, "vs2beh_expr_param");
     block.setFieldValue(expr.name, "NAME");
+    return block;
+  }
+  if (expr.kind === "binary_op") {
+    const block = newRenderedBlock(workspace, "vs2beh_expr_binary_op");
+    block.setFieldValue(expr.op, "OP");
+    connectValueInput(block, "LEFT", exprToBlock(workspace, expr.left));
+    connectValueInput(block, "RIGHT", exprToBlock(workspace, expr.right));
     return block;
   }
   // kind === "state"
@@ -774,6 +1341,48 @@ function perSpriteNodeToBlock(workspace, node, actionsByBind) {
       connectStack(node.else.map((n) => perSpriteNodeToBlock(workspace, n, actionsByBind))));
     return block;
   }
+  if (node.kind === "set_state") {
+    const block = newRenderedBlock(workspace, "vs2beh_set_state", node.block_id);
+    block.setFieldValue(node.state, "STATE");
+    connectValueInput(block, "VALUE", exprToBlock(workspace, node.value));
+    return block;
+  }
+  if (node.kind === "spawn") {
+    const block = newRenderedBlock(workspace, "vs2beh_spawn", node.block_id);
+    block.setFieldValue(node.pool, "POOL");
+    connectValueInput(block, "X", exprToBlock(workspace, node.x));
+    connectValueInput(block, "Y", exprToBlock(workspace, node.y));
+    return block;
+  }
+  if (node.kind === "play_sound") {
+    const block = newRenderedBlock(workspace, "vs2beh_play_sound", node.block_id);
+    block.setFieldValue(node.name, "NAME");
+    return block;
+  }
+  if (node.kind === "call_callback") {
+    // Refuse loudly rather than dropping arguments the zero-arity block
+    // cannot show: a silent load would turn into a silent *loss* on the
+    // very next save. See this module's docstring on the arity choice.
+    if (node.args && node.args.length) {
+      throw new Error(
+        `call_callback '${node.name}' passes ${node.args.length} argument(s); `
+        + "the 'call callback' block is zero-arity and would lose them");
+    }
+    const block = newRenderedBlock(workspace, "vs2beh_call_callback", node.block_id);
+    block.setFieldValue(node.name, "NAME");
+    return block;
+  }
+  if (node.kind === "hold") {
+    const block = newRenderedBlock(workspace, "vs2beh_hold", node.block_id);
+    connectValueInput(block, "TICKS", exprToBlock(workspace, node.ticks));
+    block.setFieldValue(node.then, "THEN");
+    return block;
+  }
+  if (node.kind === "goto_state") {
+    const block = newRenderedBlock(workspace, "vs2beh_goto_state", node.block_id);
+    block.setFieldValue(node.name, "NAME");
+    return block;
+  }
   if (node.kind === "despawn") {
     return newRenderedBlock(workspace, "vs2beh_despawn", node.block_id);
   }
@@ -789,11 +1398,20 @@ function perSpriteNodeToBlock(workspace, node, actionsByBind) {
 }
 
 function paramDeclToBlock(workspace, param) {
-  if (param.type === "pool") {
-    const block = newRenderedBlock(workspace, "vs2beh_declare_pool");
+  const referenceBlockType = REFERENCE_PARAM_BLOCK_TYPES[param.type];
+  if (referenceBlockType) {
+    const block = newRenderedBlock(workspace, referenceBlockType);
     block.setFieldValue(param.name, "NAME");
     block.setFieldValue(param.label || "", "LABEL");
     return block;
+  }
+  if (param.type !== "number" && param.type !== "angle") {
+    // flag/choice/frames/image/points have no declaration block yet (see
+    // this module's docstring). Refusing here beats quietly rendering one
+    // as a number block, which would silently rewrite the parameter's type
+    // on the next save.
+    throw new Error(
+      `no parameter-declaration block for type '${param.type}' (parameter '${param.name}')`);
   }
   const block = newRenderedBlock(
     workspace, param.type === "angle" ? "vs2beh_declare_angle" : "vs2beh_declare_number");
@@ -807,11 +1425,62 @@ function paramDeclToBlock(workspace, param) {
   return block;
 }
 
+/** Rebuild a `vs2beh_state_machine` hat and its whole state stack from
+ * `model.state_machine`. The inverse of serializeStateMachine(): each
+ * declared state becomes one `vs2beh_state` block in `states` order (not
+ * `bodies` key order -- `states` is the declaration order the author sees
+ * and the only one model.py treats as meaningful), with whichever of
+ * enter/step/exit the body actually carries.
+ *
+ * A single action declaration referenced by several `if_action` nodes --
+ * the reference program's one `Collide` tested from three different state
+ * bodies -- becomes one Collide-condition *block* per reference, because
+ * an `if_action` is rendered as a self-contained "if Collide(...) found a
+ * hit" block with the Action's own fields inline; blocks have nowhere to
+ * share one declaration between them. Re-saving therefore emits N
+ * identically-configured actions where the hand-authored file had one.
+ * The generated code means the same thing (each `if_action` still tests
+ * the same Collide configuration) but constructs N Action objects; noted
+ * here because it is the one place this round trip is not byte-identical
+ * by design rather than by accident. */
+function loadStateMachineIntoWorkspace(workspace, model, actionsByBind) {
+  const stateMachine = model.state_machine;
+  const hatBlock = newRenderedBlock(workspace, "vs2beh_state_machine");
+  hatBlock.moveBy(20, 20);
+  hatBlock.setFieldValue(model.class_name, "CLASS_NAME");
+  hatBlock.setFieldValue(model.subject_kind, "SUBJECT_KIND");
+  hatBlock.setFieldValue(stateMachine.initial, "INITIAL");
+
+  connectStatementInput(hatBlock, "PARAMS",
+    connectStack((model.params || []).map((p) => paramDeclToBlock(workspace, p))));
+
+  const stateBlocks = stateMachine.states.map((name) => {
+    const stateBlock = newRenderedBlock(workspace, "vs2beh_state");
+    stateBlock.setFieldValue(name, "NAME");
+    const body = stateMachine.bodies[name] || {};
+    for (const [hook, inputName] of [["enter", "ENTER"], ["step", "STEP"], ["exit", "EXIT"]]) {
+      connectStatementInput(stateBlock, inputName,
+        connectStack((body[hook] || []).map(
+          (node) => perSpriteNodeToBlock(workspace, node, actionsByBind))));
+    }
+    return stateBlock;
+  });
+  connectStatementInput(hatBlock, "STATES", connectStack(stateBlocks));
+}
+
 /** Clear `workspace` and rebuild it from `model` (the same JSON shape
- * serializeWorkspaceToModel() produces). */
+ * serializeWorkspaceToModel() produces), in whichever of the two shapes
+ * the model is -- `state_machine` truthiness is the single discriminator,
+ * exactly the check model.py and generator.py both make. */
 export function loadModelIntoWorkspace(workspace, model) {
   workspace.clear();
-  const actionsByBind = new Map(model.actions.map((a) => [a.bind, a]));
+  const actionsByBind = new Map((model.actions || []).map((a) => [a.bind, a]));
+
+  if (model.state_machine) {
+    loadStateMachineIntoWorkspace(workspace, model, actionsByBind);
+    return;
+  }
+
   const applyToAllBinds = new Set(model.apply_to_all);
 
   const hatBlock = newRenderedBlock(workspace, "vs2beh_when_ticks");
