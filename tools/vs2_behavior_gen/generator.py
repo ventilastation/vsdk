@@ -184,8 +184,22 @@ def render_expr(expr, hoisted=None):
         if hoisted and expr["name"] in hoisted:
             return hoisted[expr["name"]]
         return "self.%s" % (expr["name"],)
-    # kind == "state"
-    return "sprite.%s" % (expr["name"],)
+    if kind == "state":
+        return "sprite.%s" % (expr["name"],)
+    # kind == "binary_op". Not constant-folded (unlike a "compare"
+    # condition's two literals -- see _try_constant_fold_compare below):
+    # a binary_op tree only ever shows up inside a per-sprite amount/value,
+    # never a condition, so there is no boolean branch decision at
+    # generate time to fold away, only an arithmetic expression that is
+    # just as cheap to evaluate on the board as it would be to fold here.
+    # min/max render as plain Python builtins -- both exist natively on
+    # MicroPython, no runtime helper needed.
+    left = render_expr(expr["left"], hoisted)
+    right = render_expr(expr["right"], hoisted)
+    op = expr["op"]
+    if op in ("min", "max"):
+        return "%s(%s, %s)" % (op, left, right)
+    return "(%s %s %s)" % (left, op, right)
 
 
 def _try_constant_fold_compare(condition):
@@ -492,7 +506,16 @@ def _collect_hoistable_params(per_sprite_nodes):
     "hoist" bullet). Only meaningful for a pool subject's own ``while``
     loop, which is the one place the *generated code itself* contains an
     explicit loop for a hoisted local to sit above -- see
-    :func:`_render_step_pool`, the only caller."""
+    :func:`_render_step_pool`, the only caller.
+
+    Only looks at each node's own top-level expression(s), not inside a
+    nested ``"binary_op"``'s own ``left``/``right`` -- a ``param`` read
+    buried inside arithmetic stays un-hoisted (rendered ``self.<name>``
+    even under the fast backend). A missed optimization, not a
+    correctness gap: :func:`render_expr` renders that form correctly
+    either way, and every param a game actually needs hoisted so far
+    (``Projectile``'s own ``speed_x``/``speed_y``/``range``) is read bare,
+    never wrapped in arithmetic."""
     names = set()
     for node in _iter_nodes(per_sprite_nodes):
         for expr in _iter_exprs_in_node(node):

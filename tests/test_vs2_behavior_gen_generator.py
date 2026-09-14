@@ -364,6 +364,46 @@ def state_machine_model():
 
 
 # ---------------------------------------------------------------------------
+# binary_op expressions (added while porting games/vs2_examples/vyruss_vs2's
+# hand-written choreography math to blocks) -- pure text, CPython only.
+# ---------------------------------------------------------------------------
+
+class ExprRenderingTests(unittest.TestCase):
+    def test_arithmetic_ops_render_as_plain_infix(self):
+        for op, symbol in (("+", "+"), ("-", "-"), ("*", "*"), ("//", "//"), ("%", "%")):
+            expr = {"kind": "binary_op", "op": op,
+                    "left": _param_ref("speed_y"), "right": {"kind": "literal", "value": 3}}
+            self.assertEqual(
+                generator.render_expr(expr), "(self.speed_y %s 3)" % (symbol,))
+
+    def test_min_max_render_as_builtin_calls(self):
+        for op in ("min", "max"):
+            expr = {"kind": "binary_op", "op": op,
+                    "left": {"kind": "literal", "value": 0}, "right": _state_ref("y")}
+            self.assertEqual(generator.render_expr(expr), "%s(0, sprite.y)" % (op,))
+
+    def test_binary_op_nests_arbitrarily_deep(self):
+        expr = {
+            "kind": "binary_op", "op": "max",
+            "left": {"kind": "literal", "value": 0},
+            "right": {"kind": "binary_op", "op": "-",
+                      "left": _state_ref("y"), "right": _param_ref("rim_y")},
+        }
+        self.assertEqual(generator.render_expr(expr), "max(0, (sprite.y - self.rim_y))")
+
+    def test_binary_op_honours_hoisted_params_in_its_operands(self):
+        """A hoisted param nested inside binary_op still renders as the
+        hoisted local, not self.<name> -- render_expr() threads `hoisted`
+        through its own recursive calls, it does not just check the
+        top-level expr."""
+        expr = {"kind": "binary_op", "op": "+",
+                "left": _param_ref("speed_y"), "right": {"kind": "literal", "value": 1}}
+        self.assertEqual(
+            generator.render_expr(expr, hoisted={"speed_y": "_h_speed_y"}),
+            "(_h_speed_y + 1)")
+
+
+# ---------------------------------------------------------------------------
 # T17 Phase 3: block-id trailing comments -- pure text, CPython only.
 # ---------------------------------------------------------------------------
 
@@ -931,6 +971,105 @@ class GeneratedProjectileBehaviorTests(unittest.TestCase):
         gc.collect()
         after = gc.mem_free()
         self.assertGreaterEqual(after, before - 4096)
+
+
+def _travel_by_model():
+    """A small pool-subject Behavior exercising binary_op at runtime: each
+    tick, move ``sprite.y`` by ``min(speed, remaining)`` and subtract that
+    same amount from ``remaining``, despawning once it reaches zero. This
+    is exactly the shape games/vs2_examples/vyruss_vs2's hand-written
+    ``TravelCloser``/``TravelAway`` classes use (``distance = min(SPEED,
+    self.remaining); sprite.y -= distance; self.remaining -= distance``),
+    the real motivating case for adding binary_op -- see this task's
+    report."""
+    moved = {"kind": "binary_op", "op": "min",
+             "left": _param_ref("speed"), "right": _state_ref("remaining")}
+    return {
+        "version": 1,
+        "class_name": "GeneratedTravelBy",
+        "subject_kind": "pool",
+        "params": [
+            _param("speed", "number", 2, min=0, max=32, step=1),
+        ],
+        "state": ["remaining"],
+        "actions": [],
+        "apply_to_all": [],
+        "per_sprite": [
+            {"kind": "accumulate", "state": "y", "amount": moved},
+            {"kind": "accumulate", "state": "remaining",
+             "amount": {"kind": "binary_op", "op": "-",
+                        "left": {"kind": "literal", "value": 0}, "right": moved}},
+            {"kind": "if_else",
+             "condition": {"kind": "compare", "op": "<=",
+                            "left": _state_ref("remaining"), "right": {"kind": "literal", "value": 0}},
+             "then": [{"kind": "despawn"}], "else": []},
+        ],
+    }
+
+
+class BinaryOpBehaviorTests(unittest.TestCase):
+    """Runtime proof that binary_op computes real values correctly --
+    ExprRenderingTests above only checks the rendered *text*. Covers both
+    backends (readable and fast), since the fast backend's own hoisting
+    pass walks the same per-sprite tree independently -- see
+    generator.py's _collect_hoistable_params docstring on why a param
+    nested inside binary_op is deliberately left un-hoisted rather than
+    silently mishandled."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp(prefix="vs2_behavior_gen_binop_test_")
+        reset_runtime()
+        api_guard.reset()
+        self.runtime = configure_runtime("headless")
+        stripes.clear()
+        stripes["ship.png"] = 0
+        self.runtime.platform.sprites.stripes[0] = {
+            "width": 4, "height": 4, "frames": 4, "palette": 0,
+        }
+        api_guard.begin_app("games.test_vs2_behavior_gen", "vs2")
+
+    def tearDown(self):
+        reset_runtime()
+        api_guard.reset()
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _run(self, backend):
+        cls = _load_generated_class(
+            _travel_by_model(), self.tmpdir,
+            basename="generated_travel_by_%s.py" % (backend,), backend=backend)
+
+        class Game(vs2.Scene):
+            idle_timeout = None
+            back_button = False
+
+            def build(self):
+                self.world = self.layer("world", projection=vs2.TUNNEL)
+                self.movers = self.world.sprite_pool("ship.png", count=1)
+                self.movers.behave(cls(speed=2))
+                sprite = self.movers.spawn(0, 0)
+                sprite.remaining = 5
+
+            def update(self):
+                pass
+
+        game = Game()
+        director.push(game)
+        behavior = game.movers.behavior(cls)
+        # remaining=5, speed=2: ticks move 2, 2, 1 (min(2, 1) on the last
+        # tick) -- total y == 5, despawned exactly on the tick remaining
+        # hits zero, never one tick early or late.
+        ys = []
+        for _ in range(3):
+            behavior.step(game.movers)
+            ys.append(game.movers._live[0].y if len(game.movers) else None)
+        self.assertEqual(ys, [2, 4, None])
+        self.assertEqual(len(game.movers), 0)
+
+    def test_readable_backend(self):
+        self._run("readable")
+
+    def test_fast_backend(self):
+        self._run("fast")
 
 
 class GeneratedStateMachineBehaviorTests(unittest.TestCase):

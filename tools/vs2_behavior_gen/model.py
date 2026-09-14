@@ -222,7 +222,15 @@ ACTION_REQUIRED_FIELDS = {
     "Collide": {"targets"},
 }
 
-EXPR_KINDS = ("literal", "param", "state")
+#: ``"binary_op"`` (added when porting games/vs2_examples/vyruss_vs2's
+#: hand-written choreography math -- e.g. ``max(0, baddie.y - RIM_Y)`` --
+#: to blocks): two sub-expressions combined by an arithmetic or min/max
+#: operator, recursively nestable like every other expression kind. Every
+#: op renders as plain Python (``+``/``-``/``*``/``//``/``%`` infix,
+#: ``min``/``max`` as a call) that MicroPython supports natively -- no new
+#: runtime helper needed on either backend.
+EXPR_KINDS = ("literal", "param", "state", "binary_op")
+BINARY_OPS = ("+", "-", "*", "//", "%", "min", "max")
 CONDITION_KINDS = ("compare",)
 COMPARE_OPS = ("==", "!=", "<", ">", "<=", ">=")
 
@@ -371,14 +379,27 @@ def _check_expr(expr, where, param_names, state_names):
                 "%s.name: %r is not a declared parameter (%s)"
                 % (where, name, ", ".join(sorted(param_names)) or "none declared"))
         return
-    # kind == "state"
-    name = expr.get("name")
-    if name not in state_names and name not in BUILTIN_SPRITE_FIELDS:
-        raise ModelError(
-            "%s.name: %r is not a declared state field, and not one of "
-            "the built-in sprite fields %s (%s declared)"
-            % (where, name, BUILTIN_SPRITE_FIELDS,
-               ", ".join(sorted(state_names)) or "none"))
+    if kind == "state":
+        name = expr.get("name")
+        if name not in state_names and name not in BUILTIN_SPRITE_FIELDS:
+            raise ModelError(
+                "%s.name: %r is not a declared state field, and not one of "
+                "the built-in sprite fields %s (%s declared)"
+                % (where, name, BUILTIN_SPRITE_FIELDS,
+                   ", ".join(sorted(state_names)) or "none"))
+        return
+
+    # kind == "binary_op"
+    extra = set(expr.keys()) - {"kind", "op", "left", "right"}
+    if extra:
+        raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
+    op = expr.get("op")
+    if op not in BINARY_OPS:
+        raise ModelError("%s.op: %r is not one of %s" % (where, op, BINARY_OPS))
+    if "left" not in expr or "right" not in expr:
+        raise ModelError("%s: 'binary_op' needs both 'left' and 'right'" % (where,))
+    _check_expr(expr["left"], where + ".left", param_names, state_names)
+    _check_expr(expr["right"], where + ".right", param_names, state_names)
 
 
 def _check_condition(condition, where, param_names, state_names):

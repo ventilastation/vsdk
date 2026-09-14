@@ -33,6 +33,10 @@ def _state_ref(name):
     return {"kind": "state", "name": name}
 
 
+def _binary_op(op, left, right):
+    return {"kind": "binary_op", "op": op, "left": left, "right": right}
+
+
 def _projectile_model(**overrides):
     model = {
         "version": 1,
@@ -431,6 +435,44 @@ class StateHatModelTests(unittest.TestCase):
         model = _projectile_model()
         model["per_sprite"][0]["amount"] = {"kind": "literal", "value": True}
         validate_model(model)
+
+    def test_binary_op_validates(self):
+        model = _projectile_model()
+        model["per_sprite"][0]["amount"] = _binary_op(
+            "-", _param_ref("speed_y"), _literal(1))
+        validate_model(model)
+
+    def test_binary_op_min_max_validate(self):
+        model = _projectile_model()
+        model["per_sprite"][0]["amount"] = _binary_op(
+            "max", _literal(0), _binary_op("-", _state_ref("shot_flown"), _literal(3)))
+        validate_model(model)
+
+    def test_binary_op_nests_inside_a_condition(self):
+        model = _projectile_model()
+        model["per_sprite"][1]["condition"]["right"] = _binary_op(
+            "+", _param_ref("range"), _literal(10))
+        validate_model(model)
+
+    def test_binary_op_unknown_operator_rejected(self):
+        model = _projectile_model()
+        model["per_sprite"][0]["amount"] = _binary_op("^", _literal(1), _literal(2))
+        with self.assertRaises(ModelError):
+            validate_model(model)
+
+    def test_binary_op_missing_right_rejected(self):
+        model = _projectile_model()
+        model["per_sprite"][0]["amount"] = {
+            "kind": "binary_op", "op": "+", "left": _literal(1)}
+        with self.assertRaises(ModelError):
+            validate_model(model)
+
+    def test_binary_op_rejects_a_bad_nested_operand(self):
+        model = _projectile_model()
+        model["per_sprite"][0]["amount"] = _binary_op(
+            "+", _literal(1), _param_ref("not_a_declared_param"))
+        with self.assertRaises(ModelError):
+            validate_model(model)
 
     def test_enter_exit_hook_collision_between_states_rejected(self):
         """A state literally named enter_<other state> would generate the
