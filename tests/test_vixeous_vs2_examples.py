@@ -197,6 +197,53 @@ class VixeousVs2ExamplesTests(unittest.TestCase):
         self.assertEqual(len(scene.explosions), 1)
         self.assertEqual(scene.score, 40)
 
+    def test_boss_activates_and_orbits_via_the_attached_behavior(self):
+        """maybe_start_boss()'s own gate (score>=120, depth>900) is
+        expensive to reach through real gameplay ticks -- set it directly,
+        matching this file's own established pattern of poking scene
+        state rather than simulating minutes of play. Exercises the real
+        live wiring (on_build_9's attach, update_entities()'s remaining
+        hand-written x/frame reprojection), not just BossOrbit in
+        isolation (see tests/test_vixeous_boss_orbit.py for that)."""
+        scene = load_app("vs2_examples.vixeous")
+        from games.vs2_examples.vixeous.code.boss_orbit import BossOrbit
+        from games.vs2_examples.vixeous.code.vixeous import STATE_PLAYING, screen_x
+
+        scene.state = STATE_PLAYING
+        scene.message.hide()
+
+        # BossOrbit ticks from build() onward, even while hidden (see
+        # vixeous.py's own on_build_9 comment) -- confirm that alone
+        # doesn't crash or do anything visible before activation.
+        for _ in range(5):
+            self.step_buttons(0)
+        self.assertFalse(scene.boss.visible)
+
+        scene.score = 120
+        scene.depth = 901
+        scene.maybe_start_boss()
+        self.assertTrue(scene.boss.visible)
+        self.assertTrue(scene.boss_started)
+
+        # BossOrbit itself, attached (not just importable).
+        self.assertIsNotNone(scene.boss.behavior(BossOrbit))
+        thetas = []
+        xs = []
+        for _ in range(10):
+            self.step_buttons(0)
+            thetas.append(scene.boss.theta)
+            xs.append(scene.boss.x)
+        # BossOrbit is really driving theta (not stuck), and
+        # update_entities()'s own hand-written reprojection is really
+        # reading it back out into a moving x -- one tick behind theta
+        # itself (scene_step() runs update() before _run_behaviors(), the
+        # same lag this game's own docstring already documents for
+        # shots/bombs/enemies), so compared shifted by one, not lockstep.
+        self.assertGreater(len(set(thetas)), 1)
+        self.assertGreater(len(set(xs)), 1)
+        self.assertEqual(
+            xs[-1], screen_x(thetas[-2], scene.camera_theta, scene.boss.width))
+
     def test_explosion_transient_lifecycle_end_to_end(self):
         scene = load_app("vs2_examples.vixeous")
         from games.vs2_examples.vixeous.code.vixeous import STATE_PLAYING

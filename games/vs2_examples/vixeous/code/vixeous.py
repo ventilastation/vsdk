@@ -15,6 +15,18 @@ handful of Behavior-catalog mismatches this port ran into (Patrolling's
 bipolar wave doesn't match the enemy phase ramp, Animated.bank rejects a
 Var binding, Projectile despawns unconditionally on any overlap) and why
 each one stayed hand-written instead.
+
+**Updated 2026-09-14**: the boss's own theta/phase orbit motion and its
+bounded approach toward BOSS_STOP_Y is now BossOrbit, a real generated
+Behavior (build_boss_orbit.py), attached in on_build_9. See that module's
+own docstring for two more real, previously-undiscovered Behavior-catalog
+mismatches found while scoping this: the enemies pool's own near-identical
+phase/theta oscillation turns out not to be portable at all (a
+SpritePool.var()/Behavior-state name collision), and boss.frame's own
+banking couldn't move either (Animate's shared clock never advances for a
+lone-sprite subject). update_entities() still drives camera-dependent x
+reprojection and frame banking for everything (enemies/boss alike), plus
+the enemies pool's own phase/theta motion, all hand-written as before.
 """
 
 from urandom import randrange, seed
@@ -24,6 +36,7 @@ import vs2
 from vs2.controls import A, B, DOWN, LEFT, RIGHT, UP, joy1
 
 from games.vs2_examples.vixeous.code import vixeous_scene
+from games.vs2_examples.vixeous.code.boss_orbit import BossOrbit
 
 PLAYER_START_Y = 6
 PLAYER_MIN_Y = 0
@@ -159,6 +172,21 @@ class Vixeous(vixeous_scene.VixeousScene):
         self.invulnerable, self.scroll_tick, self.next_wave, self.next_target_row = 0, 0, 45, 8
         self.boss_started = self.boss_defeated = False
         self.terrain_base_row = self.terrain_area = None
+
+    def on_build_9(self):
+        # Right after self.boss exists, before score_label -- attaches
+        # BossOrbit, a real generated Behavior (games/vs2_examples/
+        # vixeous/code/boss_orbit.py) that this scene's generated build()
+        # has no way to declare itself (tools/vs2_scene_gen hardcodes
+        # "from vs2.behaviors import <classes>" for every model-declared
+        # Behavior, and this one is not a catalog class). Same
+        # attach-in-a-hook escape hatch games/vs2_examples/vasura_states_
+        # demo and vyruss_vs2's own BaddieFormation already use. Ticks
+        # harmlessly while self.boss is still invisible (nothing reads its
+        # theta/phase until maybe_start_boss() resets both fresh anyway) --
+        # see boss_orbit.py's own module docstring for the full design and
+        # what stays hand-written.
+        self.boss.behave(BossOrbit(width=vs2.display.width))
 
     def on_build_10(self):
         # Right after score_label, before message.
@@ -344,7 +372,21 @@ class Vixeous(vixeous_scene.VixeousScene):
         # each still-live sprite's screen x from its own theta (the camera
         # rotates every tick; nothing in the Behavior catalog knows about
         # that reprojection) and drives the parts a Behavior genuinely
-        # cannot: enemy theta motion/frame banking, and the boss.
+        # cannot: enemy theta motion/frame banking (see this module's own
+        # docstring for why the enemies pool itself isn't similarly
+        # ported -- a real SpritePool.var()/Behavior-state collision, not
+        # attempted), and the boss's own frame banking.
+        #
+        # The boss's theta/phase motion and its bounded approach toward
+        # BOSS_STOP_Y are BossOrbit now (attached in on_build_9) -- it
+        # ticks unconditionally every scene tick, including while
+        # self.boss is still hidden, harmlessly: maybe_start_boss() resets
+        # theta/phase/y fresh the moment the boss actually activates, so
+        # whatever it accumulated while hidden is always overwritten
+        # before anything reads it. See boss_orbit.py's own module
+        # docstring for why frame banking couldn't move too (a second,
+        # different Behavior-catalog mismatch: Animate's clock never
+        # advances for a lone-sprite subject).
         for shot in self.shots:
             shot.x = screen_x(shot.theta, self.camera_theta, shot.width)
         for bomb in self.bombs:
@@ -355,13 +397,6 @@ class Vixeous(vixeous_scene.VixeousScene):
             enemy.x = screen_x(enemy.theta, self.camera_theta, enemy.width)
             enemy.frame = enemy.kind * 2 + ((enemy.phase // 8) & 1)
         if self.boss.visible:
-            self.boss.phase = (self.boss.phase + 1) % 192
-            self.boss.theta = (
-                self.boss.theta
-                + (2 if self.boss.phase < 96 else -2)
-            ) % vs2.display.width
-            if self.boss.y > BOSS_STOP_Y:
-                self.boss.y -= 1
             self.boss.x = screen_x(
                 self.boss.theta, self.camera_theta, self.boss.width)
             self.boss.frame = (self.boss.phase // 8) & 1
