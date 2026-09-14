@@ -13,9 +13,11 @@ always were. **Updated 2026-09-14**: the baddie entrance choreography's
 fixed five-phase part (formerly TravelCloser/TravelX/TravelAway, popped
 off a per-baddie queue by hand) is now BaddieFormation, a real generated
 Behavior (build_baddie_formation.py) -- see the "baddies" bullet below
-and that module's own docstring for exactly what moved and what (the
-final TravelTo approach, and the runtime attack-run reassignment) is
-still, deliberately, hand-written.
+and that module's own docstring for exactly what moved. The attack run's
+own runtime reassignment moved too, via StateMachine.force_state() and
+two new per-sprite states -- only the final TravelTo approach (a
+genuinely different "move toward" primitive) is still, deliberately,
+hand-written.
 
 **Behavior-catalog mappings used, and what stayed hand-written -- see this
 task's report for the full writeup:**
@@ -43,23 +45,25 @@ task's report for the full writeup:**
   Cosmetically negligible at 5 frames, but real -- not hidden here.
 - ``baddies``: the original's queue of heterogeneous movement-strategy
   objects (``TravelTo``/``TravelX``/``TravelCloser``/``TravelAway``,
-  popped off ``baddie.movements`` as each finishes) is a fundamentally
+  popped off ``baddie.movements`` as each finishes, plus a runtime
+  reassignment of the same queue for an attack run) is a fundamentally
   different shape than the pre-existing catalog offers -- ``PathFollowing``
   is a *fixed* waypoint path attached once at build time, not a queue.
-  **As of 2026-09-14, the fixed five-phase entrance part (everything
-  except the final ``TravelTo`` approach) is instead ``BaddieFormation``**,
-  a real generated ``StateMachine`` Behavior built from
-  ``tools/vs2_behavior_gen``'s block-representable schema (see
-  ``build_baddie_formation.py``'s own module docstring for the full
-  design, including a real tick-by-tick parity proof against the
-  original) -- attached in :meth:`on_build_5`. ``TravelTo`` itself (a
-  "move *toward* a destination" primitive, not a fixed-distance walk)
-  stays hand-written, as does the attack run's own runtime reassignment
-  (``update_attacking``'s ``baddie.movements = [TravelCloser(...),
-  TravelAway(...)]``) -- neither fits the shape ``BaddieFormation``
-  covers, and forcing either in would not honestly represent the
-  choreography, the same judgment call this bullet always made, now
-  narrower than before.
+  **As of 2026-09-14, both the fixed five-phase entrance part and the
+  attack run are instead ``BaddieFormation``**, a real generated
+  ``StateMachine`` Behavior built from ``tools/vs2_behavior_gen``'s
+  block-representable schema (see ``build_baddie_formation.py``'s own
+  module docstring for the full design, including a real tick-by-tick
+  parity proof against the original for the entrance phases) -- attached
+  in :meth:`on_build_5`; the attack run is entered via
+  ``StateMachine.force_state()`` from :meth:`update_attacking` with a
+  per-attack-event distance, not a fixed param, so it needed two states
+  of its own rather than reusing the entrance ones. Only ``TravelTo``
+  itself stays hand-written -- a "move *toward* a destination" primitive,
+  a genuinely different shape from the fixed-distance walk everything
+  else in this pool now shares; forcing it in too would not honestly
+  represent the choreography, the same judgment call this bullet always
+  made, now narrower still.
 - ``player_explosion`` (a single hidden sprite, not a pool): this looked
   at first like another ``Transient(animate=True, ticks=4)`` candidate
   (``explosion_nave.png`` has 4 frames, same "age-indexed frame, despawn
@@ -173,39 +177,6 @@ class TravelTo:
         return sprite.x == self.dest_x and sprite.y == self.dest_y
 
 
-class TravelBy:
-    """Still used by update_attacking()'s own runtime reassignment for an
-    attack run -- a per-call *dynamic* distance, the reason that phase
-    stays hand-written rather than reusing BaddieFormation's own
-    closer1/away states (which always reset their travel distance from a
-    fixed Behavior-level param on enter, not a value computed per call;
-    see build_baddie_formation.py's own module docstring). TravelX itself
-    (the entrance choreography's own sideways phases) has no remaining
-    caller -- that part is BaddieFormation's xmove1/xmove2 now -- so only
-    this base class plus TravelCloser/TravelAway are kept."""
-
-    def __init__(self, count):
-        self.remaining = abs(count)
-        self.direction = -1 if count < 0 else 1
-
-    def finished(self, _sprite):
-        return self.remaining <= 0
-
-
-class TravelCloser(TravelBy):
-    def step(self, sprite):
-        distance = min(Y_SPEED, self.remaining)
-        sprite.y -= distance
-        self.remaining -= distance
-
-
-class TravelAway(TravelBy):
-    def step(self, sprite):
-        distance = min(Y_SPEED, self.remaining)
-        sprite.y += distance
-        self.remaining -= distance
-
-
 class VyrussVs2(vyruss_vs2_scene.VyrussScene):
     BLINK_RATE = 45
     BLINK_FRAMES = {0: 0, 14: 1, 22: 2, 37: 3}
@@ -240,7 +211,11 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
         # vasura_states_demo.py already uses for its own non-catalog
         # EnemyStates. See build_baddie_formation.py's own module
         # docstring for the full design and what still stays hand-written.
-        self.baddies.behave(BaddieFormation(width=vs2.display.width))
+        # Kept as its own attribute (not just attached and forgotten) --
+        # update_attacking() needs it to call force_state() for the attack
+        # run's own two states.
+        self.baddie_formation = BaddieFormation(width=vs2.display.width)
+        self.baddies.behave(self.baddie_formation)
 
     def on_build_9(self):
         # The last hook: right after game_over, before build() returns.
@@ -337,20 +312,21 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
             baddie.base_frame + (0 if baddie.frame_clock & 8 else 1)
         )
         if baddie.movements:
-            # A hand-written queue is running -- either the final TravelTo
-            # approach queued just below, or an attack run's own
-            # TravelCloser/TravelAway pair (update_attacking()).
+            # A hand-written queue is running -- always just the one-item
+            # TravelTo approach queued just below now that the attack run
+            # is BaddieFormation's own attack_closer/attack_away states
+            # instead (see update_attacking()).
             baddie.finished = False
             movement = baddie.movements[0]
             movement.step(baddie)
             if movement.finished(baddie):
                 baddie.movements.pop(0)
         elif baddie.movements is not None and not baddie.finished:
-            # A hand-written queue (attack run or the final approach) just
-            # drained -- matches the original's own "movements is an empty
-            # list, not None" signal exactly (movements starts None here,
-            # never an empty list, until something actually queues onto
-            # it -- see add_baddie()'s own comment).
+            # TravelTo just drained -- matches the original's own
+            # "movements is an empty list, not None" signal exactly
+            # (movements starts None here, never an empty list, until
+            # something actually queues onto it -- see add_baddie()'s own
+            # comment).
             baddie.finished = True
         elif baddie.movements is None and baddie.formation_done:
             # BaddieFormation's own entrance choreography just reported
@@ -389,7 +365,14 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
     def update_attacking(self):
         for baddie in self.everyone:
             self.update_one_baddie(baddie)
-            if baddie.finished and baddie in self.attacking:
+            # The attack run itself is BaddieFormation's own
+            # attack_closer/attack_away states now (triggered below via
+            # force_state()) -- in_attack_run is that cycle's own
+            # completion signal, not baddie.finished (which keeps meaning
+            # only what it already means elsewhere in this file: the
+            # hand-written TravelTo approach has landed). Membership in
+            # self.attacking already rules out "never started".
+            if not baddie.in_attack_run and baddie in self.attacking:
                 self.attacking.remove(baddie)
                 self.max_attacking += 1
         if not self.everyone:
@@ -398,10 +381,12 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
         if len(self.attacking) < self.max_attacking:
             baddie = choice(self.everyone)
             if baddie not in self.attacking:
-                distance = max(0, baddie.y - RIM_Y)
-                baddie.movements = [
-                    TravelCloser(distance), TravelAway(distance)]
-                baddie.finished = False
+                # attack_distance is attack_closer/attack_away's own
+                # per-sprite equivalent of closer1/away's fixed param --
+                # see build_baddie_formation.py's own _y_attack_phase
+                # docstring for why this needs a per-sprite field instead.
+                baddie.attack_distance = max(0, baddie.y - RIM_Y)
+                self.baddie_formation.force_state(baddie, "attack_closer")
                 self.attacking.append(baddie)
                 self.drop_bomb()
 

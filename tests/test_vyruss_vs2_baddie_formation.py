@@ -232,5 +232,112 @@ class BaddieFormationParityTests(unittest.TestCase):
         self.assertEqual((sprite.x, sprite.y), before)
 
 
+class AttackCycleParityTests(unittest.TestCase):
+    """attack_closer/attack_away -- update_attacking()'s own runtime
+    reassignment, ported alongside the entrance phases. A separate class
+    from BaddieFormationParityTests: these tests force_state() straight
+    into the attack cycle rather than running the entrance choreography
+    first, since the two are independent once a sprite exists."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp(prefix="vyruss_attack_cycle_test_")
+        reset_runtime()
+        api_guard.reset()
+        self.runtime = configure_runtime("headless")
+        stripes.clear()
+        stripes["galaga.png"] = 0
+        self.runtime.platform.sprites.stripes[0] = {
+            "width": 16, "height": 16, "frames": 12, "palette": 0,
+        }
+        api_guard.begin_app("games.test_vyruss_attack_cycle", "vs2")
+
+        model = build_model()
+        path = Path(self.tmpdir) / "baddie_formation_attack.py"
+        generator.write_behavior_file(model, path)
+        spec = importlib.util.spec_from_file_location(
+            "vyruss_attack_cycle_test_module", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.BaddieFormation = module.BaddieFormation
+
+    def tearDown(self):
+        reset_runtime()
+        api_guard.reset()
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _build_attacking_sprite(self, y0, distance):
+        model_cls = self.BaddieFormation
+
+        class Game(vs2.Scene):
+            idle_timeout = None
+            back_button = False
+
+            def build(self):
+                self.world = self.layer("world", projection=vs2.TUNNEL)
+                self.baddies = self.world.sprite_pool("galaga.png", count=1)
+                self.baddies.behave(model_cls(width=vs2.display.width))
+                self.sprite = self.baddies.spawn(0, y0)
+
+            def update(self):
+                pass
+
+        game = Game()
+        director.push(game)
+        behavior = game.baddies.behavior(model_cls)
+        # update_attacking()'s own sequence: set attack_distance, then
+        # force_state -- see vyruss_vs2.py's own update_attacking().
+        game.sprite.attack_distance = distance
+        behavior.force_state(game.sprite, "attack_closer")
+        return game, behavior
+
+    def test_matches_the_original_travelcloser_then_travelaway(self):
+        """The original: baddie.movements = [TravelCloser(distance),
+        TravelAway(distance)] -- symmetric, same distance both ways."""
+        distance = 37
+        y0 = 90
+        game, behavior = self._build_attacking_sprite(y0, distance)
+
+        ref_sprite = _ReferenceSprite(0, y0)
+        ref_movements = [_RefTravelCloser(distance), _RefTravelAway(distance)]
+        expected = []
+        while ref_movements:
+            movement = ref_movements[0]
+            movement.step(ref_sprite)
+            if movement.finished(ref_sprite):
+                ref_movements.pop(0)
+            expected.append(ref_sprite.y)
+
+        actual = []
+        for _ in range(len(expected)):
+            behavior.step(game.baddies)
+            actual.append(game.sprite.y)
+        self.assertEqual(actual, expected)
+        # Symmetric distance: ends exactly where it started.
+        self.assertEqual(game.sprite.y, y0)
+
+    def test_in_attack_run_true_during_the_cycle_false_after(self):
+        game, behavior = self._build_attacking_sprite(90, distance=10)
+        self.assertTrue(game.sprite.in_attack_run)
+        # distance=10 at Y_SPEED=2: 5 ticks closer, 5 ticks away = 10 ticks.
+        for _ in range(9):
+            behavior.step(game.baddies)
+            self.assertTrue(game.sprite.in_attack_run, "cycle ended too early")
+        behavior.step(game.baddies)
+        self.assertFalse(game.sprite.in_attack_run)
+
+    def test_does_not_disturb_formation_done_or_finished_semantics(self):
+        """The attack cycle's own in_attack_run signal is deliberately
+        separate from formation_done -- see build_baddie_formation.py's
+        own module docstring. A baddie already through formation (already
+        formation_done=True) stays that way through an attack cycle."""
+        game, behavior = self._build_attacking_sprite(90, distance=6)
+        game.sprite.formation_done = True
+        for _ in range(6):
+            behavior.step(game.baddies)
+        self.assertTrue(game.sprite.formation_done)
+        self.assertFalse(game.sprite.in_attack_run)
+
+
 if __name__ == "__main__":
     unittest.main()

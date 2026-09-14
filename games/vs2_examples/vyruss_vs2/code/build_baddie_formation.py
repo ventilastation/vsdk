@@ -40,16 +40,25 @@ a *custom*, game-local Behavior class the way it declares catalog ones
 like ``Transient``, since ``tools/vs2_scene_gen/generator.py`` hardcodes
 ``from vs2.behaviors import <classes>``; attaching by hand in a hook is
 the same sanctioned escape hatch ``vasura_states_demo.py`` already uses
-for its own non-catalog ``EnemyStates``). **Still deliberately
-hand-written and unchanged**: the attack-run reassignment
-(``update_attacking()``'s ``baddie.movements = [TravelCloser(distance),
-TravelAway(distance)]``, where ``distance`` is computed per-event) --
-reusing ``closer1``/``away`` for it would need
-``StateMachine.force_state()`` plus new, dedicated attack-only states
-(today's ``enter_closer1``/``enter_away`` always reset ``remaining`` from
-a fixed Behavior-level param, not a per-call dynamic value) -- a
-genuinely separate piece of design work from wiring in the entrance
-choreography, not attempted here.
+for its own non-catalog ``EnemyStates``).
+
+**Updated 2026-09-14: the attack run is now also this Behavior's job**,
+via two new states, ``attack_closer``/``attack_away`` (see
+``_y_attack_phase``'s own docstring for the full reasoning) -- entered
+only through hand-written code's own
+``StateMachine.force_state(baddie, "attack_closer")`` call
+(``update_attacking()``), never reached by a ``goto_state`` from inside
+this state machine. Unlike ``closer1``/``away``, these two read their
+starting distance from a *per-sprite* state field
+(``attack_distance``, set by hand-written code immediately before the
+``force_state()`` call) rather than a fixed Behavior-level param, since
+``update_attacking()``'s own ``distance = max(0, baddie.y - RIM_Y)`` is
+computed fresh per attack event, not a constant. A new per-sprite flag,
+``in_attack_run``, tracks the cycle for hand-written code to poll (see
+below) -- ``attack_closer``'s own ``enter`` sets it ``True``, and
+``formed``'s ``enter`` (the attack cycle's own return-to-rest, alongside
+its original job marking normal formation-entry complete) sets it back
+``False``.
 
 **Per-sprite fields this Behavior reads that hand-written code must set
 before ``attached()``'s Behavior ever ticks a baddie**, the same
@@ -59,7 +68,22 @@ externally-set-then-read seam ``vasura_states_demo``'s own
 baddie, not one per x-phase; see ``_x_phase``'s own docstring for why
 xmove1 and xmove2 derive *opposite* signs from the same flag, mirroring
 the original's ``odd``-branch queue literally writing ``TravelX(112), ...,
-TravelX(-96)`` for one baddie).
+TravelX(-96)`` for one baddie). ``attack_distance`` is the attack run's
+own equivalent -- set by ``update_attacking()`` immediately before each
+``force_state(baddie, "attack_closer")`` call, read only by
+``attack_closer``/``attack_away``'s own ``enter`` hooks.
+
+**``in_attack_run``, hand-written code's own read of the attack cycle.**
+``update_attacking()`` needs to know when a baddie's attack run has
+finished (to drop it from ``self.attacking`` and free up
+``self.max_attacking``) -- the original signalled this by reusing
+``baddie.finished`` (the same flag the entrance queue's own draining set,
+since both were "the hand-written ``movements`` list is empty"). This
+Behavior keeps ``formation_done``/hand-written ``finished`` meaning only
+what they already mean elsewhere in ``vyruss_vs2.py`` (see below) and
+gives the attack cycle its own, unambiguous signal instead: check
+``not baddie.in_attack_run`` once a baddie is already in
+``self.attacking`` (membership itself rules out "never started").
 
 **``formation_done``, deliberately not named ``finished``.** The
 original's ``baddie.finished`` only becomes ``True`` once the *whole*
@@ -142,6 +166,34 @@ def _y_phase(distance_param, speed_param, sign, next_state):
     }
 
 
+def _y_attack_phase(sign, next_state, enter_extra=()):
+    """attack_closer/attack_away: the same fixed-speed bounded-distance walk
+    ``_y_phase`` renders, except the distance comes from a *per-sprite*
+    state field (``attack_distance``, set by hand-written code just before
+    calling ``force_state()``) instead of a fixed Behavior-level param --
+    the real reason the attack run needs its own states rather than
+    reusing ``closer1``/``away``: those two always reset ``remaining``
+    from a param fixed at construction, the same value every single time,
+    which is wrong for a distance computed fresh per attack event
+    (``update_attacking()``'s own ``distance = max(0, baddie.y - RIM_Y)``).
+    ``enter_extra``: additional per-sprite nodes appended to this state's
+    own ``enter`` body, after the ``remaining`` reset (``attack_closer``
+    uses this to flip ``in_attack_run`` on)."""
+    amount = _moved("y_speed")
+    if sign < 0:
+        amount = _binop("-", _literal(0), amount)
+    enter = [{"kind": "set_state", "state": "remaining", "value": _state("attack_distance")}]
+    enter.extend(enter_extra)
+    return {
+        "enter": enter,
+        "step": [
+            {"kind": "accumulate", "state": "y", "amount": amount},
+            _decrement_remaining("y_speed"),
+            _advance_or_stay(next_state),
+        ],
+    }
+
+
 def _x_phase(distance_param, next_state, sign):
     """xmove1/xmove2: move ``sprite.x`` by a fixed total distance at
     ``x_speed``, signed by the per-sprite ``x_dir`` field (times ``sign``)
@@ -194,12 +246,13 @@ def build_model():
             {"name": "width", "type": "number", "default": 256,
              "min": 1, "max": 512, "step": 1, "label": "Display width", "unit": "col"},
         ],
-        "state": ["remaining", "x_dir", "formation_done"],
+        "state": ["remaining", "x_dir", "formation_done", "attack_distance", "in_attack_run"],
         "actions": [],
         "apply_to_all": [],
         "per_sprite": [],
         "state_machine": {
-            "states": ["closer1", "xmove1", "closer2", "xmove2", "away", "formed"],
+            "states": ["closer1", "xmove1", "closer2", "xmove2", "away", "formed",
+                       "attack_closer", "attack_away"],
             "initial": "closer1",
             "bodies": {
                 "closer1": _y_phase("closer1_distance", "y_speed", -1, "xmove1"),
@@ -208,9 +261,28 @@ def build_model():
                 "xmove2": _x_phase("x2_distance", "away", sign=-1),
                 "away": _y_phase("away_distance", "y_speed", 1, "formed"),
                 "formed": {
-                    "enter": [{"kind": "set_state", "state": "formation_done", "value": _literal(True)}],
+                    "enter": [
+                        {"kind": "set_state", "state": "formation_done", "value": _literal(True)},
+                        # Also the attack cycle's own return-to-rest: harmless
+                        # (already False) the first time formation completes,
+                        # and the real "attack cycle over" signal the second
+                        # time, once attack_away lands back here.
+                        {"kind": "set_state", "state": "in_attack_run", "value": _literal(False)},
+                    ],
                     "step": [],
                 },
+                # -- The attack run: entered only via hand-written code's own
+                # StateMachine.force_state(baddie, "attack_closer") call
+                # (update_attacking()), never reached by a goto_state from
+                # inside this state machine itself -- see build_model()'s
+                # own module docstring and _y_attack_phase's docstring for
+                # why this needs its own states rather than reusing
+                # closer1/away.
+                "attack_closer": _y_attack_phase(
+                    sign=-1, next_state="attack_away",
+                    enter_extra=[{"kind": "set_state", "state": "in_attack_run",
+                                  "value": _literal(True)}]),
+                "attack_away": _y_attack_phase(sign=1, next_state="formed"),
             },
         },
     }

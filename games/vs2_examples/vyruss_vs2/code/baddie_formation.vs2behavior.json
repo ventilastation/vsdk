@@ -88,10 +88,180 @@
   "state": [
     "remaining",
     "x_dir",
-    "formation_done"
+    "formation_done",
+    "attack_distance",
+    "in_attack_run"
   ],
   "state_machine": {
     "bodies": {
+      "attack_away": {
+        "enter": [
+          {
+            "kind": "set_state",
+            "state": "remaining",
+            "value": {
+              "kind": "state",
+              "name": "attack_distance"
+            }
+          }
+        ],
+        "step": [
+          {
+            "amount": {
+              "kind": "binary_op",
+              "left": {
+                "kind": "param",
+                "name": "y_speed"
+              },
+              "op": "min",
+              "right": {
+                "kind": "state",
+                "name": "remaining"
+              }
+            },
+            "kind": "accumulate",
+            "state": "y"
+          },
+          {
+            "amount": {
+              "kind": "binary_op",
+              "left": {
+                "kind": "literal",
+                "value": 0
+              },
+              "op": "-",
+              "right": {
+                "kind": "binary_op",
+                "left": {
+                  "kind": "param",
+                  "name": "y_speed"
+                },
+                "op": "min",
+                "right": {
+                  "kind": "state",
+                  "name": "remaining"
+                }
+              }
+            },
+            "kind": "accumulate",
+            "state": "remaining"
+          },
+          {
+            "condition": {
+              "kind": "compare",
+              "left": {
+                "kind": "state",
+                "name": "remaining"
+              },
+              "op": "<=",
+              "right": {
+                "kind": "literal",
+                "value": 0
+              }
+            },
+            "else": [],
+            "kind": "if_else",
+            "then": [
+              {
+                "kind": "goto_state",
+                "name": "formed"
+              }
+            ]
+          }
+        ]
+      },
+      "attack_closer": {
+        "enter": [
+          {
+            "kind": "set_state",
+            "state": "remaining",
+            "value": {
+              "kind": "state",
+              "name": "attack_distance"
+            }
+          },
+          {
+            "kind": "set_state",
+            "state": "in_attack_run",
+            "value": {
+              "kind": "literal",
+              "value": true
+            }
+          }
+        ],
+        "step": [
+          {
+            "amount": {
+              "kind": "binary_op",
+              "left": {
+                "kind": "literal",
+                "value": 0
+              },
+              "op": "-",
+              "right": {
+                "kind": "binary_op",
+                "left": {
+                  "kind": "param",
+                  "name": "y_speed"
+                },
+                "op": "min",
+                "right": {
+                  "kind": "state",
+                  "name": "remaining"
+                }
+              }
+            },
+            "kind": "accumulate",
+            "state": "y"
+          },
+          {
+            "amount": {
+              "kind": "binary_op",
+              "left": {
+                "kind": "literal",
+                "value": 0
+              },
+              "op": "-",
+              "right": {
+                "kind": "binary_op",
+                "left": {
+                  "kind": "param",
+                  "name": "y_speed"
+                },
+                "op": "min",
+                "right": {
+                  "kind": "state",
+                  "name": "remaining"
+                }
+              }
+            },
+            "kind": "accumulate",
+            "state": "remaining"
+          },
+          {
+            "condition": {
+              "kind": "compare",
+              "left": {
+                "kind": "state",
+                "name": "remaining"
+              },
+              "op": "<=",
+              "right": {
+                "kind": "literal",
+                "value": 0
+              }
+            },
+            "else": [],
+            "kind": "if_else",
+            "then": [
+              {
+                "kind": "goto_state",
+                "name": "attack_away"
+              }
+            ]
+          }
+        ]
+      },
       "away": {
         "enter": [
           {
@@ -345,6 +515,14 @@
               "kind": "literal",
               "value": true
             }
+          },
+          {
+            "kind": "set_state",
+            "state": "in_attack_run",
+            "value": {
+              "kind": "literal",
+              "value": false
+            }
           }
         ],
         "step": []
@@ -565,7 +743,9 @@
       "closer2",
       "xmove2",
       "away",
-      "formed"
+      "formed",
+      "attack_closer",
+      "attack_away"
     ]
   },
   "subject_kind": "pool",
