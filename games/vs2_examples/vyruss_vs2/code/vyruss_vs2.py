@@ -19,6 +19,19 @@ two new per-sprite states -- only the final TravelTo approach (a
 genuinely different "move toward" primitive) is still, deliberately,
 hand-written.
 
+**Updated 2026-09-14 (again)**: BaddieFormation is now attached
+declaratively in vyruss_vs2_scene.vs2model.json itself (the "baddies"
+pool's own ``behaviors``, naming a ``module`` outside ``vs2.behaviors``)
+instead of by hand in an ``on_build_5`` override -- tools/vs2_scene_gen's
+generator used to hardcode ``from vs2.behaviors import <classes>``, the
+one real gap that forced every game-local generated Behavior through a
+hook. ``update_attacking()`` reaches it via
+``self.baddies.behavior(BaddieFormation)`` rather than a cached
+attribute. This file no longer overrides ``on_build_5`` at all, and
+``on_build_9`` now only calls ``start_level()`` (``game_over.x`` moved
+into the model too, as a plain ``{"expr": ...}`` field value -- it was
+never actually inexpressible, just never revisited).
+
 **Behavior-catalog mappings used, and what stayed hand-written -- see this
 task's report for the full writeup:**
 
@@ -55,15 +68,19 @@ task's report for the full writeup:**
   block-representable schema (see ``build_baddie_formation.py``'s own
   module docstring for the full design, including a real tick-by-tick
   parity proof against the original for the entrance phases) -- attached
-  in :meth:`on_build_5`; the attack run is entered via
-  ``StateMachine.force_state()`` from :meth:`update_attacking` with a
-  per-attack-event distance, not a fixed param, so it needed two states
-  of its own rather than reusing the entrance ones. Only ``TravelTo``
-  itself stays hand-written -- a "move *toward* a destination" primitive,
-  a genuinely different shape from the fixed-distance walk everything
-  else in this pool now shares; forcing it in too would not honestly
-  represent the choreography, the same judgment call this bullet always
-  made, now narrower still.
+  declaratively in ``vyruss_vs2_scene.vs2model.json`` itself (the
+  ``baddies`` pool's own ``behaviors``, naming a ``module`` outside
+  ``vs2.behaviors``: see below, **Updated 2026-09-14 (again)**). The
+  attack run is entered via ``StateMachine.force_state()`` from
+  :meth:`update_attacking`, looked up fresh each time with
+  ``self.baddies.behavior(BaddieFormation)`` (no attribute of its own
+  needed), with a per-attack-event distance, not a fixed param, so it
+  needed two states of its own rather than reusing the entrance ones.
+  Only ``TravelTo`` itself stays hand-written -- a "move *toward* a
+  destination" primitive, a genuinely different shape from the
+  fixed-distance walk everything else in this pool now shares; forcing
+  it in too would not honestly represent the choreography, the same
+  judgment call this bullet always made, now narrower still.
 - ``player_explosion`` (a single hidden sprite, not a pool): this looked
   at first like another ``Transient(animate=True, ticks=4)`` candidate
   (``explosion_nave.png`` has 4 frames, same "age-indexed frame, despawn
@@ -199,32 +216,12 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
         self.score = 0
         self.lives = 3
 
-    def on_build_5(self):
-        # Right after self.baddies exists, before explosions -- attaches
-        # BaddieFormation, a real generated Behavior (games/vs2_examples/
-        # vyruss_vs2/code/baddie_formation.py) that T15's scene-model
-        # schema has no way to declare itself: tools/vs2_scene_gen's own
-        # generator hardcodes "from vs2.behaviors import <classes>" for
-        # every model-declared Behavior, and this one is not a catalog
-        # class. Attaching by hand here is the same sanctioned escape
-        # hatch games/vs2_examples/vasura_states_demo/code/
-        # vasura_states_demo.py already uses for its own non-catalog
-        # EnemyStates. See build_baddie_formation.py's own module
-        # docstring for the full design and what still stays hand-written.
-        # Kept as its own attribute (not just attached and forgotten) --
-        # update_attacking() needs it to call force_state() for the attack
-        # run's own two states.
-        self.baddie_formation = BaddieFormation(width=vs2.display.width)
-        self.baddies.behave(self.baddie_formation)
-
     def on_build_9(self):
         # The last hook: right after game_over, before build() returns.
-        # game_over.x depends on the display width, which the model's flat
-        # value grammar cannot express -- the same reason vixeous's port
-        # centers its own message/score_label here instead of in the
-        # model. start_level() -- unchanged from the original -- takes it
-        # from here exactly as the original build()'s own last line did.
-        self.game_over.x = vs2.display.width - 32
+        # start_level() is genuine per-entry game-start logic (not scene
+        # structure), so it has no declarative equivalent and stays
+        # hand-written here -- unchanged from the original build()'s own
+        # last line.
         self.start_level()
 
     # -- game logic (unchanged from the original except where noted in
@@ -290,7 +287,8 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
         # The fixed five-phase entrance choreography (equivalent to the
         # original's own TravelCloser(85), TravelX(±112), TravelCloser(34),
         # TravelX(∓96), TravelAway(45)) now runs inside the BaddieFormation
-        # Behavior attached in on_build_5 -- x_dir is the one input it
+        # Behavior attached declaratively in vyruss_vs2_scene.vs2model.json
+        # -- x_dir is the one input it
         # needs from spawn time (see build_baddie_formation.py's own
         # docstring for why xmove1/xmove2 derive opposite signs from this
         # single flag). final_x/final_y are kept on the sprite (the
@@ -386,7 +384,7 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
                 # see build_baddie_formation.py's own _y_attack_phase
                 # docstring for why this needs a per-sprite field instead.
                 baddie.attack_distance = max(0, baddie.y - RIM_Y)
-                self.baddie_formation.force_state(baddie, "attack_closer")
+                self.baddies.behavior(BaddieFormation).force_state(baddie, "attack_closer")
                 self.attacking.append(baddie)
                 self.drop_bomb()
 

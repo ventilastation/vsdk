@@ -74,13 +74,16 @@ specific to the block schema, and belongs on the same list as
 wave, ``Animated.bank`` rejecting a ``Var`` binding, Projectile's
 unconditional despawn).
 
-**Not yet wired into the live game.** This builds and would need its own
-tick-by-tick parity test (mirroring
-``tests/test_vyruss_vs2_baddie_formation.py``'s approach) plus attaching
-in an ``on_build_N`` hook and trimming the corresponding lines out of
-``update_entities()`` -- a smaller version of the same integration
-``vyruss_vs2``'s own ``BaddieFormation`` needed, left for a follow-up
-pass rather than rushed alongside discovering the design.
+**Wired into the live game** declaratively, in
+``vixeous_scene.vs2model.json`` itself (the ``boss`` sprite's own
+``behaviors``, naming a ``module`` outside ``vs2.behaviors`` --
+``tools/vs2_scene_gen``'s generator groups imports per-module, so a
+scene model can name any module instead of only the built-in catalog,
+closing the gap that used to force this through a hand-written
+``on_build_N`` hook). Proven tick-by-tick first against a self-contained
+reference (mirroring ``tests/test_vyruss_vs2_baddie_formation.py``'s
+approach) in ``tests/test_vixeous_boss_orbit.py``, then re-verified live
+via the attached instance in ``tests/test_vixeous_vs2_examples.py``.
 """
 
 import json

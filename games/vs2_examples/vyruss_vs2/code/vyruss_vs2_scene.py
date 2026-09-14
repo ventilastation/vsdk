@@ -1,5 +1,6 @@
-# vyruss_vs2_scene.py  -- generated, do not edit. body-sha: 1d9f39db
+# vyruss_vs2_scene.py  -- generated, do not edit. body-sha: ac42a947
 import vs2
+from games.vs2_examples.vyruss_vs2.code.baddie_formation import BaddieFormation
 from vs2.behaviors import DespawnBeyond, Moving, Transient
 
 
@@ -22,6 +23,7 @@ class VyrussScene(vs2.Scene):
         self.bombs.behave(DespawnBeyond(y_min=-1))
         self.on_build_4()
         self.baddies = self.world.sprite_pool('galaga.png', 50)
+        self.baddies.behave(BaddieFormation(width=vs2.display.width))
         self.on_build_5()
         self.explosions = self.world.sprite_pool('explosion.png', 8, on_empty=vs2.RECYCLE)
         self.explosions.behave(Transient(animate=True, ticks=5))
@@ -30,7 +32,7 @@ class VyrussScene(vs2.Scene):
         self.on_build_7()
         self.scoreboard = self.hud.label('numerals.png', columns=9, x=110, flip_x=True, flip_y=True)
         self.on_build_8()
-        self.game_over = self.hud.sprite('gameover.png', visible=False)
+        self.game_over = self.hud.sprite('gameover.png', x=vs2.display.width - 32, visible=False)
         self.on_build_9()
 
     def on_build_0(self):
@@ -63,4 +65,4 @@ class VyrussScene(vs2.Scene):
     def on_build_9(self):
         pass
 
-# scene-model: eNqdlMFu2zAMht+FZ3dItqVYfVyaYYdsh3YdMAyBQVuMq1WWBEl2YgR+91FuktpDPQQ9ipR+fvxN+gCFQu8zjRVBCj9bV3t/X5AmSEBhS85D+vsAGILj/LZWyheOSHNaONxhrmh0wyrUFDgrKyyjpMdQO23eWV1y9ElqEYPWyRBLNNJLloB0i8pTAntIZwm0kL5fLLpNAkeus6p15g8VQRrN0S8P6/X98m61+g5dcibYGafEf/C4pwGeUjcTaAxxNR/osk/9y5wesZHmaExvH2e/mUb2MhYdVhw5sBKRyFjmuosyp5u35C3u9GdqjRajB21WIRswv/7Yxd4LU+vAxxdYIfmpe9XLzBqjhjbkpsr9m3CvPlzOK3Xv0gD30xtxUQhJEfios5i9CJWosMSLdGhvlfE8H9O9/3CovSQdRs2g5mr84dPgah7EIIsnji8mWjuXmYZKwOiMKhvYUrhbLX8t16sh6fMoZmcleEWd97Khi1an2wykH+vJBfCFcZQbdKK3WtUVO5XeJLBV0mb7U/v9qT2dTly6rshxtTGRwpxiu3F058/bOxvAlLzCmWlGWxdjMXThX6FX3Pyz/V8fbiEGWaa3L513fwEa/Jt2
+# scene-model: eNqdlN9v2jAQx/+Vys8BAR3VmsdSqj2wPbTrpGlC1iU5wKt/yXYCUZX/fedQIFTNhPoW39nf+9w3Z7+yXIL3XINClrJftSu9f8pRI0uYhBqdZ+mfVwYhOMqvSil97hA1pQsHW8gknu2wEjQGygoF6yjpIZROm6HVa4q+CF3EoHUixBKV8IIkWLoC6TFhO5aOElazdDKdNsuEvXEdVa0zfzEPwmiKPjwvFk+zx/n8B2uSI8HWOFn8B4966uBJeduDRhCDcUeXfGpPZriBSpg3Y1r7KPvdVKKVseBAUeSVlBALTjI3TZQ57LxHb2Gr77A2ujg7UHMFZMD45ksTe89NqQMtT7CFoKPuQy+5NUZ2bciMyvyncAfXl/MK3brUwf36SVwoCoH9wHdt/sE4Be3fT5gyRRknh61pRvyw8hOOO1BWxkU7x5xiw9wUONyr81Xn+KmNrSjCJn7gzkaUeCqi06gM97mm2+B0dOpwDRLWcFGDJC6Np9r9Pf50oL1AHc7wQFM1msg0uJJuSBD5C8WnPZ4fy/RDJcxojsoG+tfscT77PVvMu6T7O8KPSuwDdXowKrzoTjfLjvSm7L2ZPjcOMwMu7siNLBU5ld4mbCWF5btD++2qPqwOXLpU6KjaOZGEDGO78U6N98/KqAMT54ab6uw5iLEYuvy56h+bq8HV9YSM3dddvnu8vj3fsxikYq3J6bj5B7Iq3oE=

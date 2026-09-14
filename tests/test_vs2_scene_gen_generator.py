@@ -77,6 +77,49 @@ class ByteIdenticalRegenerationTests(GeneratorFixture):
         self.assertEqual(path.read_bytes(), first_bytes)
 
 
+class BehaviorModuleImportTests(unittest.TestCase):
+    """A behavior's optional ``module`` (tools/vs2_scene_gen/model.py) lets
+    a scene declare a game-local generated Behavior -- the reason
+    on_build_N hooks were needed to attach one by hand."""
+
+    def test_a_behavior_with_no_module_still_imports_from_vs2_behaviors(self):
+        body = generator.render_body(_small_model())
+        self.assertIn("from vs2.behaviors import Moving", body)
+
+    def test_a_behavior_with_a_module_imports_from_it_instead(self):
+        model = _small_model()
+        model["layers"][0]["drawables"][1]["behaviors"].append(
+            {"class": "BossOrbit", "module": "games.mygame.code.boss_orbit",
+             "params": {"width": {"expr": "vs2.display.width"}}})
+        body = generator.render_body(model)
+        self.assertIn("from vs2.behaviors import Moving", body)
+        self.assertIn("from games.mygame.code.boss_orbit import BossOrbit", body)
+        self.assertIn("BossOrbit(width=vs2.display.width)", body)
+
+    def test_two_classes_from_the_same_non_default_module_share_one_import_line(self):
+        model = _small_model()
+        drawable = model["layers"][0]["drawables"][1]
+        drawable["behaviors"] = [
+            {"class": "Alpha", "module": "games.mygame.code.stuff"},
+            {"class": "Beta", "module": "games.mygame.code.stuff"},
+        ]
+        body = generator.render_body(model)
+        self.assertIn("from games.mygame.code.stuff import Alpha, Beta", body)
+        self.assertNotIn("from vs2.behaviors import", body)
+
+    def test_import_lines_are_sorted_by_module_name(self):
+        model = _small_model()
+        drawable = model["layers"][0]["drawables"][1]
+        drawable["behaviors"] = [
+            {"class": "Zeta", "module": "games.mygame.code.zeta"},
+            {"class": "Alpha"},  # defaults to vs2.behaviors
+        ]
+        body = generator.render_body(model)
+        lines = [line for line in body.splitlines() if line.startswith("from ")]
+        self.assertEqual(
+            lines, ["from games.mygame.code.zeta import Zeta", "from vs2.behaviors import Alpha"])
+
+
 class HandEditDetectionTests(GeneratorFixture):
     def test_editing_the_body_is_detected_and_the_file_is_left_alone(self):
         model = _small_model()

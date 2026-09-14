@@ -18,15 +18,23 @@ each one stayed hand-written instead.
 
 **Updated 2026-09-14**: the boss's own theta/phase orbit motion and its
 bounded approach toward BOSS_STOP_Y is now BossOrbit, a real generated
-Behavior (build_boss_orbit.py), attached in on_build_9. See that module's
-own docstring for two more real, previously-undiscovered Behavior-catalog
-mismatches found while scoping this: the enemies pool's own near-identical
-phase/theta oscillation turns out not to be portable at all (a
-SpritePool.var()/Behavior-state name collision), and boss.frame's own
-banking couldn't move either (Animate's shared clock never advances for a
-lone-sprite subject). update_entities() still drives camera-dependent x
-reprojection and frame banking for everything (enemies/boss alike), plus
-the enemies pool's own phase/theta motion, all hand-written as before.
+Behavior (build_boss_orbit.py). See that module's own docstring for two
+more real, previously-undiscovered Behavior-catalog mismatches found
+while scoping this: the enemies pool's own near-identical phase/theta
+oscillation turns out not to be portable at all (a SpritePool.var()/
+Behavior-state name collision), and boss.frame's own banking couldn't
+move either (Animate's shared clock never advances for a lone-sprite
+subject). update_entities() still drives camera-dependent x reprojection
+and frame banking for everything (enemies/boss alike), plus the enemies
+pool's own phase/theta motion, all hand-written as before.
+
+**Updated 2026-09-14 (again)**: BossOrbit is now attached declaratively
+in vixeous_scene.vs2model.json itself (the "boss" drawable's own
+``behaviors``, naming a ``module`` outside ``vs2.behaviors``) instead of
+by hand in an ``on_build_9`` override -- tools/vs2_scene_gen's generator
+used to hardcode ``from vs2.behaviors import <classes>``, the one real
+gap that forced every game-local generated Behavior through a hook. This
+file no longer overrides any ``on_build_N`` hook at all.
 """
 
 from urandom import randrange, seed
@@ -36,7 +44,6 @@ import vs2
 from vs2.controls import A, B, DOWN, LEFT, RIGHT, UP, joy1
 
 from games.vs2_examples.vixeous.code import vixeous_scene
-from games.vs2_examples.vixeous.code.boss_orbit import BossOrbit
 
 PLAYER_START_Y = 6
 PLAYER_MIN_Y = 0
@@ -172,21 +179,6 @@ class Vixeous(vixeous_scene.VixeousScene):
         self.invulnerable, self.scroll_tick, self.next_wave, self.next_target_row = 0, 0, 45, 8
         self.boss_started = self.boss_defeated = False
         self.terrain_base_row = self.terrain_area = None
-
-    def on_build_9(self):
-        # Right after self.boss exists, before score_label -- attaches
-        # BossOrbit, a real generated Behavior (games/vs2_examples/
-        # vixeous/code/boss_orbit.py) that this scene's generated build()
-        # has no way to declare itself (tools/vs2_scene_gen hardcodes
-        # "from vs2.behaviors import <classes>" for every model-declared
-        # Behavior, and this one is not a catalog class). Same
-        # attach-in-a-hook escape hatch games/vs2_examples/vasura_states_
-        # demo and vyruss_vs2's own BaddieFormation already use. Ticks
-        # harmlessly while self.boss is still invisible (nothing reads its
-        # theta/phase until maybe_start_boss() resets both fresh anyway) --
-        # see boss_orbit.py's own module docstring for the full design and
-        # what stays hand-written.
-        self.boss.behave(BossOrbit(width=vs2.display.width))
 
     def on_build_10(self):
         # Right after score_label, before message.
@@ -378,7 +370,8 @@ class Vixeous(vixeous_scene.VixeousScene):
         # attempted), and the boss's own frame banking.
         #
         # The boss's theta/phase motion and its bounded approach toward
-        # BOSS_STOP_Y are BossOrbit now (attached in on_build_9) -- it
+        # BOSS_STOP_Y are BossOrbit now (attached declaratively in
+        # vixeous_scene.vs2model.json) -- it
         # ticks unconditionally every scene tick, including while
         # self.boss is still hidden, harmlessly: maybe_start_boss() resets
         # theta/phase/y fresh the moment the boss actually activates, so

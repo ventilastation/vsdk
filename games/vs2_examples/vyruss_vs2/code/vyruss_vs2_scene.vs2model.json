@@ -50,7 +50,12 @@
           "kind": "sprite_pool",
           "attr": "baddies",
           "image": "galaga.png",
-          "count": 50
+          "count": 50,
+          "behaviors": [
+            {"class": "BaddieFormation",
+             "module": "games.vs2_examples.vyruss_vs2.code.baddie_formation",
+             "params": {"width": {"expr": "vs2.display.width"}}}
+          ]
         },
         {
           "kind": "sprite_pool",
@@ -89,7 +94,8 @@
           "attr": "game_over",
           "image": "gameover.png",
           "y": 0,
-          "visible": false
+          "visible": false,
+          "x": {"expr": "vs2.display.width - 32"}
         }
       ]
     }

@@ -17,13 +17,24 @@ one)::
            "behaviors": [
              {"class": "Moving", "params": {"speed_y": -1}},
              {"class": "Transient", "name": "burn",
-              "params": {"ticks": 18, "on_end": {"handler": "enemy_died"}}}
+              "params": {"ticks": 18, "on_end": {"handler": "enemy_died"}}},
+             {"class": "BossOrbit", "module": "games.mygame.code.boss_orbit",
+              "params": {"width": {"expr": "vs2.display.width"}}}
            ]}
         ]}
       ],
       "families": [{"attr": "hostiles", "members": ["enemies"]}],
       "scene_behaviors": []
     }
+
+A behavior's ``module`` is optional and defaults to ``vs2.behaviors`` (the
+built-in catalog) -- give it explicitly to attach a game-local generated
+Behavior (e.g. one built by ``tools/vs2_behavior_gen``) without a
+hand-written ``on_build_N`` hook; the generator groups the resulting
+imports by module. A companion (hand-written) file that still needs to
+reach such a behavior later does not need it stashed on an attribute --
+every subject already exposes ``.behavior(NameOrClass)`` to look one up
+by its declared ``name`` or its class.
 
 This deliberately mirrors what
 ``apps/micropython/ventilastation/behavior_control.py``'s ``_build_registry``
@@ -128,6 +139,9 @@ def _check_params(params, where, known_attrs):
         _check_value(value, "%s.%s" % (where, key), known_attrs)
 
 
+_MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
+
+
 def _check_behavior(behavior, where, known_attrs):
     if not isinstance(behavior, dict):
         raise ModelError("%s: must be an object" % (where,))
@@ -137,8 +151,11 @@ def _check_behavior(behavior, where, known_attrs):
     name = behavior.get("name")
     if name is not None and (not isinstance(name, str) or not name):
         raise ModelError("%s.name: must be a non-empty string or null" % (where,))
+    module = behavior.get("module")
+    if module is not None and (not isinstance(module, str) or not _MODULE_RE.match(module)):
+        raise ModelError("%s.module: %r is not a valid dotted module path" % (where, module))
     _check_params(behavior.get("params", {}), where + ".params", known_attrs)
-    extra = set(behavior.keys()) - {"class", "name", "params"}
+    extra = set(behavior.keys()) - {"class", "name", "params", "module"}
     if extra:
         raise ModelError("%s: unknown key(s) %r" % (where, sorted(extra)))
 

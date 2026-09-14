@@ -75,6 +75,14 @@ class ValidModelTests(unittest.TestCase):
         model["layers"][0]["drawables"][1]["frame"] = {"expr": "vs2.display.width"}
         self.assertIsNone(validate_model(model))
 
+    def test_accepts_a_behavior_with_a_dotted_module(self):
+        model = _valid_model()
+        model["layers"][0]["drawables"][1]["behaviors"] = [
+            {"class": "BossOrbit", "module": "games.mygame.code.boss_orbit",
+             "params": {"width": {"expr": "vs2.display.width"}}}
+        ]
+        self.assertIsNone(validate_model(model))
+
 
 class RejectModelTests(unittest.TestCase):
     def assert_rejects(self, model, path_fragment):
@@ -151,6 +159,11 @@ class RejectModelTests(unittest.TestCase):
         model = _valid_model()
         model["scene_behaviors"] = [{"params": {}}]
         self.assert_rejects(model, "scene_behaviors[0].class")
+
+    def test_behavior_module_must_be_a_dotted_path_not_arbitrary_text(self):
+        model = _valid_model()
+        model["scene_behaviors"] = [{"class": "Foo", "module": "not a module!"}]
+        self.assert_rejects(model, "scene_behaviors[0].module")
 
     def test_tilemap_requires_positive_columns_and_rows(self):
         model = _valid_model()

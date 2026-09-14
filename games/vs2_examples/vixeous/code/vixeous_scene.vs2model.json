@@ -93,7 +93,11 @@
           "kind": "sprite",
           "attr": "boss",
           "image": "boss.png",
-          "visible": false
+          "visible": false,
+          "behaviors": [
+            {"class": "BossOrbit", "module": "games.vs2_examples.vixeous.code.boss_orbit",
+             "params": {"width": {"expr": "vs2.display.width"}}}
+          ]
         }
       ]
     },

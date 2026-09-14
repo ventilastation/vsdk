@@ -246,13 +246,18 @@ def _render_build_body(model, imports):
     return lines, hook_count
 
 
-def _collect_behavior_classes(model, classes):
+_DEFAULT_BEHAVIOR_MODULE = "vs2.behaviors"
+
+
+def _collect_behavior_classes(model, classes_by_module):
     for behavior in model.get("scene_behaviors", []):
-        classes.add(behavior["class"])
+        module = behavior.get("module", _DEFAULT_BEHAVIOR_MODULE)
+        classes_by_module.setdefault(module, set()).add(behavior["class"])
     for layer in model["layers"]:
         for drawable in layer.get("drawables", []):
             for behavior in drawable.get("behaviors", []):
-                classes.add(behavior["class"])
+                module = behavior.get("module", _DEFAULT_BEHAVIOR_MODULE)
+                classes_by_module.setdefault(module, set()).add(behavior["class"])
 
 
 def render_body(model):
@@ -260,16 +265,21 @@ def render_body(model):
     trailing blob line (see :mod:`checksum`'s file-shape docstring).
     Deterministic: the same model always renders the same body, byte for
     byte (behavior-class imports and ``kinds()`` rows are emitted in
-    sorted order for exactly this reason)."""
+    sorted order for exactly this reason). Behaviors default to
+    ``vs2.behaviors`` (the built-in catalog) but may name a different
+    ``module`` -- e.g. a game-local generated Behavior -- and each module
+    used gets its own ``from <module> import <classes>`` line, sorted by
+    module name."""
     imports = set()
-    behavior_classes = set()
-    _collect_behavior_classes(model, behavior_classes)
+    classes_by_module = {}
+    _collect_behavior_classes(model, classes_by_module)
 
     build_lines, hook_count = _render_build_body(model, imports)
 
     lines = ["import vs2"]
-    if behavior_classes:
-        lines.append("from vs2.behaviors import %s" % (", ".join(sorted(behavior_classes)),))
+    for module in sorted(classes_by_module):
+        lines.append(
+            "from %s import %s" % (module, ", ".join(sorted(classes_by_module[module]))))
     if "Var" in imports:
         lines.append("from vs2.params import Var")
     lines.append("")

@@ -1,5 +1,6 @@
-# vixeous_scene.py  -- generated, do not edit. body-sha: e9b4b506
+# vixeous_scene.py  -- generated, do not edit. body-sha: 0f75e522
 import vs2
+from games.vs2_examples.vixeous.code.boss_orbit import BossOrbit
 from vs2.behaviors import DespawnBeyond, Moving, Transient
 
 
@@ -40,6 +41,7 @@ class VixeousScene(vs2.Scene):
         self.targets.var('kind', 0, min=0, max=3)
         self.on_build_8()
         self.boss = self.world.sprite('boss.png', visible=False)
+        self.boss.behave(BossOrbit(width=vs2.display.width))
         self.on_build_9()
         self.score_label = self.hud.label('digits.png', columns=9, y=1, flip_x=True, flip_y=True)
         self.on_build_10()
@@ -82,4 +84,4 @@ class VixeousScene(vs2.Scene):
     def on_build_11(self):
         pass
 
-# scene-model: eNq1VcmO2zAM/Red3WKc2TI+zgL00F66AUUxMBibidmRJUGS7RgD/3tpw07kJimKFHMy9PhIPlIU/SoyCc6lCkoUifhOW9SV+5KhQhEJCS1aJ5KfrwK8t0xotJU5W3ILDawkzowerQVSbM60rErFxmUkqIQN7q3vjdow44VU3oMksQTDgNUN8+8iURM2aYG0KbxI4sVyRBrKfSGSxfVNF+0yWvSUyV7qlGVE5lmcseRRBI5mKC3wcwWZo06RaEUS5nSF9o7hFRZQkx77M7SRrZ90TUMUAxZKRl45EGKecpRl14eZmI/oDDTqHlut8plDm5aw5dpv77ruuW9mpbgVV6FYlnBMbWq0lgzWMMrKcQ2VZO+LSIx37Av0ILrnoKSVLlfnlXQVKrx8O4W4NVI70uq0zK8WlCNkIaFSUCyJrzHxtsKI5y17YTxehrqv97p3ef6mXasUS+O5fPH56eHHw8enMwpSWBKe1/R38b8PEj/H5CIs9iYoljW0/3lJ0dw4DO6Cv0PeHXmIfpQbL24P2KYAh3N6fEAqzLyhHuwGh4d5eKuj7Q1KvTxR6vx1ORdsmv54YtPU5IiXqkjWIB3OghTVybXrMm0xlbBCGa5eXqVrSSbdTrM/nNrpNMnJaUN/tmaKxeQ40FCic73T3nlE3OnNGS/62TNW/8LM87ti84dvj6IHa/63DEjc/QbyaydX
+# scene-model: eNq1VdmOmzAU/Rc/UzRktgyPs0h9aFWpm1RVI2TgBtwxtmUbCIr4914zkJgmVFWqeULc9Zy7eUcyTo1JBK2AxOQ724KszZcMBJCAcNqBNiT+uSPUWo0GrdQ8R02uaUtTDjOlBa0pE6jOJK8rgcp1QFhFCzhoQyUKtHhhIndCxqGiCgVatmh/F5CGQZuUwIrSkjharUdJy3Jbknh1fdMH+4waLMu4gzplGSXzLEZpZoF4jmqg5vmZkqmTTgHpSOznNKW0BsUplLRhcqzPUEbUfpQNG6IoqmmFkh0GAsgTjLLuXZjJ8hGMoq24h06KfObQJRXdIvfbu75/dsWsBZbiygeLEE6hTZSUHIUNHWHlsKE1R++LgIw9tiVYSvpnj1Iqq/Q8Slc+wsu3QwhbxaVhUizD/KqpMAwQiI+UCoSEbYytriHAecteUB6tfdzXB9z7PH/DLkUClbJIn3x+evjx8OHpDEICKgbnFf1d9O+DhOsYX/hkbzyyiKH7zyYFc+UwuCv8Dnn3xkP0k7bR6vbIWpXUwNw8OjIq1bygluoChsU87uqoewOqlwtU59tllvt8j8pPOmVuaiuZ19zFKDCUCRuzSmBLK8Xdz+tlDjOZQ+giJnL0OrR7PJE7N8UuMQYIc2bcrQtfdf0wCVNZXJiFm9cww1KHZUO5gRmdsl58AEwmNSScpsD9RwCP+oYzlWynLRz+uulvgpOzgv3ZpCkWGkceBiyPcU4H51Film94tHLclZa/ILO44ah+/+2ROGGDr9wgifrfh+FYow==

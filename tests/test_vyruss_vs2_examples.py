@@ -19,8 +19,9 @@ laser/bomb Moving+DespawnBeyond, and the explosions pool's
 Transient(animate=True, ticks=5) lifecycle end to end. The baddie
 entrance choreography's fixed five-phase part now runs inside a real
 generated Behavior (BaddieFormation, games/vs2_examples/vyruss_vs2/code/
-build_baddie_formation.py) attached in vyruss_vs2.py's on_build_5 --
-proven tick-by-tick against the original in its own dedicated test,
+build_baddie_formation.py) attached declaratively in
+vyruss_vs2_scene.vs2model.json -- proven tick-by-tick against the
+original in its own dedicated test,
 tests/test_vyruss_vs2_baddie_formation.py, not here. The final TravelTo
 approach and the attack run's own runtime reassignment
 (update_attacking()) stay hand-written -- see vyruss_vs2.py's own module
@@ -163,7 +164,8 @@ class VyrussVs2ExamplesTests(unittest.TestCase):
         self.assertGreater(len(set(positions)), 80)
         self.assertGreaterEqual(min(y for _x, y in positions), 35)
         # The entrance choreography now runs inside the attached
-        # BaddieFormation Behavior (see vyruss_vs2.py's on_build_5, and
+        # BaddieFormation Behavior (declared in
+        # vyruss_vs2_scene.vs2model.json; see
         # games/vs2_examples/vyruss_vs2/code/build_baddie_formation.py) --
         # 150 ticks is real progress through its states but not the full
         # ~153-tick sequence, so check it has actually advanced past the

@@ -33,14 +33,16 @@ mirrors ``vyruss_vs2.py``'s own module docstring's precedent for why
 mismatched shape into the catalog would not honestly represent the
 choreography.
 
-**Wired into the live game** via ``vyruss_vs2.py``'s ``on_build_5()``
-hook (right after ``self.baddies`` exists in the generated
-``vyruss_vs2_scene.py`` -- T15's scene-model schema has no way to declare
-a *custom*, game-local Behavior class the way it declares catalog ones
-like ``Transient``, since ``tools/vs2_scene_gen/generator.py`` hardcodes
-``from vs2.behaviors import <classes>``; attaching by hand in a hook is
-the same sanctioned escape hatch ``vasura_states_demo.py`` already uses
-for its own non-catalog ``EnemyStates``).
+**Wired into the live game** declaratively, in
+``vyruss_vs2_scene.vs2model.json`` itself (the ``baddies`` pool's own
+``behaviors``, naming a ``module`` outside ``vs2.behaviors``) --
+``tools/vs2_scene_gen/generator.py`` used to hardcode
+``from vs2.behaviors import <classes>``, forcing every game-local
+Behavior through a hand-written ``on_build_N`` hook (the same escape
+hatch ``vasura_states_demo.py`` still uses for its own non-catalog
+``EnemyStates``); it now groups imports per-module instead, so a scene
+model can name any module. ``update_attacking()`` reaches this Behavior
+via ``self.baddies.behavior(BaddieFormation)``, not a cached attribute.
 
 **Updated 2026-09-14: the attack run is now also this Behavior's job**,
 via two new states, ``attack_closer``/``attack_away`` (see

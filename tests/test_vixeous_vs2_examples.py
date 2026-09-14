@@ -202,8 +202,9 @@ class VixeousVs2ExamplesTests(unittest.TestCase):
         expensive to reach through real gameplay ticks -- set it directly,
         matching this file's own established pattern of poking scene
         state rather than simulating minutes of play. Exercises the real
-        live wiring (on_build_9's attach, update_entities()'s remaining
-        hand-written x/frame reprojection), not just BossOrbit in
+        live wiring (the scene model's declarative attach,
+        update_entities()'s remaining hand-written x/frame
+        reprojection), not just BossOrbit in
         isolation (see tests/test_vixeous_boss_orbit.py for that)."""
         scene = load_app("vs2_examples.vixeous")
         from games.vs2_examples.vixeous.code.boss_orbit import BossOrbit
@@ -213,8 +214,9 @@ class VixeousVs2ExamplesTests(unittest.TestCase):
         scene.message.hide()
 
         # BossOrbit ticks from build() onward, even while hidden (see
-        # vixeous.py's own on_build_9 comment) -- confirm that alone
-        # doesn't crash or do anything visible before activation.
+        # vixeous_scene.vs2model.json's boss.behaviors entry) -- confirm
+        # that alone doesn't crash or do anything visible before
+        # activation.
         for _ in range(5):
             self.step_buttons(0)
         self.assertFalse(scene.boss.visible)
