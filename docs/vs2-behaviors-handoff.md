@@ -1050,31 +1050,85 @@ already covers this exact activation path end to end, so it was judged
 sufficient rather than spending more time debugging the wire protocol's
 reply framing live.
 
+### `vyruss_vs2`'s attack-run reassignment — also ported, closing that gap
+
+The one deferral flagged when `BaddieFormation` first landed. Two new
+states, `attack_closer`/`attack_away`, entered only via hand-written
+`update_attacking()`'s own `StateMachine.force_state(baddie,
+"attack_closer")` call — unlike `closer1`/`away`, they read their
+starting distance from a *per-sprite* field (`attack_distance`, set
+immediately before the `force_state()` call) rather than a fixed
+Behavior-level param, since `update_attacking()`'s own `distance = max(0,
+baddie.y - RIM_Y)` is genuinely computed fresh per attack event. A new
+per-sprite flag, `in_attack_run`, gives hand-written code its own
+unambiguous "cycle finished" signal — `formation_done`/`baddie.finished`
+keep meaning exactly what they already meant elsewhere in the file,
+deliberately not reused for a second purpose the way the original's
+single `movements`-empty check was.
+
+`TravelBy`/`TravelCloser`/`TravelAway` are now genuinely dead code
+(nothing left calls them) and were removed from `vyruss_vs2.py` — only
+`TravelTo` (the final formation approach, a "move toward" primitive)
+remains hand-written, the last piece of the original six-part
+choreography that doesn't fit a fixed-distance-walk state machine.
+Proven tick-by-tick identical to the original's own
+`TravelCloser(distance)`/`TravelAway(distance)` pair
+(`AttackCycleParityTests`), and the full existing
+`test_vyruss_vs2_examples.py` suite (including
+`test_group_reaches_attacking_and_a_baddie_attacks`, which exercises this
+exact path end to end) passes unchanged.
+
+**Reflashed and reverified on the physical rotor — with a real scare
+worth recording, resolved as a false alarm.** A 20-second live run's
+`heap_delta` kept getting *more* negative every 5 seconds
+(-90688, -219072, -342400) and the scene unexpectedly returned to the
+launcher partway through — looked exactly like a leak-then-crash at
+first glance. It wasn't: the run had **zero player input** (no joystick
+driving it), so bombs kept hitting the stationary player repeatedly
+(confirmed via the wire protocol's own audio cues — repeated
+`sound .../explosion3`, the real `explode_player()` line), burning
+through all 3 lives and hitting a completely ordinary `game_over()` →
+`self.pop()` — confirmed for certain by watching for the `vy-gameover`
+music cue (present) and any `traceback` wire frame (absent) over a fresh
+25-second run. The heap trend was just the ordinary cost of an unusually
+death-heavy playthrough (far more `explode_player()`/`respawn_player()`/
+audio/sprite churn than a normal run gets), not a leak. **Lesson for
+whoever runs the next unattended hardware check on a game with real
+lose conditions: drive some input (or expect an early, legitimate
+game-over) rather than reading a mid-run heap dip as a crash signal by
+itself** — check for the actual traceback frame or an unexpected scene
+shape before concluding anything broke. `overruns=0`/`frame_overruns=0`
+held throughout both runs.
+
 ## Suggested immediate next action
 
 T15-T18, T0, all three phases of T17, the Blockly UI for state hats,
-`vyruss_vs2`'s `BaddieFormation` port, and `vixeous`'s `BossOrbit` port
-are all fully done, merged into `vs2/wave7-integration`, verified in
-software and (all except `BossOrbit`'s own visual activation, see above)
-on real hardware, and in
+`vyruss_vs2`'s `BaddieFormation` port (now covering the *entire* original
+six-part choreography except `TravelTo` itself, entrance and attack run
+both), and `vixeous`'s `BossOrbit` port are all fully done, merged into
+`vs2/wave7-integration`, verified in software and (all except
+`BossOrbit`'s own visual activation, see above) on real hardware, and in
 [PR #159](https://github.com/ventilastation/vsdk/pull/159) against
-`design/vs2-behaviors` — its description has been kept current through
-this point (both the Blockly-UI merge and the `vyruss_vs2`/`vixeous`
-ports). **Two threads remain open, neither blocking the other:**
+`design/vs2-behaviors` — **its description needs one more update** to
+mention the attack-run port before assuming it's current (everything
+through `BossOrbit` is already reflected there). **Two threads remain
+open, neither blocking the other:**
 
-1. **Continue the Blockly-porting goal.** Four real, genuine catalog/
-   schema mismatches are now documented from actually trying, not
-   guessed at: `vyruss_vs2`'s `TravelTo` (a "move toward" primitive) and
-   its attack-run's `force_state()`/dynamic-distance need; `vixeous`'s
-   `SpritePool.var()`-vs-Behavior-`state=` collision (blocks the enemies
-   pool entirely) and `Animate`'s lone-sprite incompatibility (blocks
-   frame banking on any standalone sprite, not just the boss — worth
-   remembering if a future task tries `Animate` on `player_explosion` or
-   similar). `vixeous`'s other already-known mismatches (angular, not
-   box-overlap, collision checks; procedural polar terrain generation)
-   remain untouched. Treat all of these with the same "don't force a
-   mismatched shape" judgment already applied throughout, not as a todo
-   list to clear by brute force — some may genuinely need new framework
+1. **Continue the Blockly-porting goal.** `vyruss_vs2` now has exactly
+   one deliberately-hand-written piece left (`TravelTo`, a "move toward"
+   primitive with wraparound angular math) — there may be nothing more
+   worth porting there without inventing a new "move toward" Action, a
+   real but separate design question. `vixeous` has more real headroom:
+   three genuine catalog/schema mismatches are documented from actually
+   trying, not guessed at (`SpritePool.var()`-vs-Behavior-`state=`
+   collision, blocking the `enemies` pool's own phase/theta oscillation
+   entirely; `Animate`'s lone-sprite incompatibility, blocking frame
+   banking on any standalone sprite; and the pre-existing angular, not
+   box-overlap, collision checks / procedural polar terrain generation /
+   general boss-fight logic, none of which anything built so far
+   addresses). Treat all of these with the same "don't force a mismatched
+   shape" judgment already applied throughout, not as a todo list to
+   clear by brute force — some may genuinely need new framework
    capability (a schema addition, or a real `vs2.behaviors`/`vs2.actions`
    change) rather than more JSON.
 2. **Wave 6** (T13 native `Collide`, T14 flat sprite records) — still
