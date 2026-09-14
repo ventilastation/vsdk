@@ -1,13 +1,16 @@
-"""Tick-by-tick parity: games/vs2_examples/vyruss_vs2's newly generated
+"""Tick-by-tick parity: games/vs2_examples/vyruss_vs2's generated
 ``BaddieFormation`` Behavior (games/vs2_examples/vyruss_vs2/code/
-build_baddie_formation.py) against the original hand-written
-``TravelCloser``/``TravelX``/``TravelAway`` queue it ports the first five
-phases of -- see build_baddie_formation.py's own module docstring for
-exactly what is and is not ported (the sixth phase, ``TravelTo``, stays
-hand-written; not attempted here).
+build_baddie_formation.py) against ``_RefTravelCloser``/``_RefTravelX``/
+``_RefTravelAway`` below -- a verbatim, self-contained copy of the
+original hand-written queue those classes replaced in vyruss_vs2.py
+itself (see build_baddie_formation.py's own module docstring for exactly
+what is and is not ported; the sixth phase, ``TravelTo``, stays
+hand-written in vyruss_vs2.py, not attempted here or by BaddieFormation).
+Kept here rather than imported from production code specifically so this
+regression test still has an independent oracle once vyruss_vs2.py no
+longer calls them for anything.
 
-Not yet wired into the live game (see that same docstring) -- this proves
-the generated Behavior in isolation, run standalone against a real
+Runs the generated Behavior standalone against a real
 vs2.Scene/SpritePool, the same harness shape
 tests/test_vs2_behavior_gen_generator.py's own
 GeneratedProjectileBehaviorTests uses.
@@ -51,20 +54,54 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 
 from tools.vs2_behavior_gen import generator  # noqa: E402
 from games.vs2_examples.vyruss_vs2.code.build_baddie_formation import build_model  # noqa: E402
-from games.vs2_examples.vyruss_vs2.code.vyruss_vs2 import (  # noqa: E402
-    TravelAway, TravelCloser, TravelX, X_SPEED, Y_SPEED,
-)
+from games.vs2_examples.vyruss_vs2.code.vyruss_vs2 import X_SPEED, Y_SPEED  # noqa: E402
 
 
 class _ReferenceSprite:
-    """Just enough of a real vs2.Sprite for TravelCloser/TravelX/TravelAway's
-    own step()/finished() (they only ever touch .x/.y) -- exercising the
-    real, unmodified original classes against a plain stand-in, exactly the
-    way the model behind BaddieFormation was designed to match them."""
+    """Just enough of a real vs2.Sprite for _RefTravelCloser/_RefTravelX/
+    _RefTravelAway's own step()/finished() (they only ever touch .x/.y)."""
 
     def __init__(self, x, y):
         self.x = x
         self.y = y
+
+
+# -- The original TravelBy/TravelX/TravelCloser/TravelAway classes, kept
+# here verbatim as this test's own reference oracle, now that
+# BaddieFormation has replaced their use in vyruss_vs2.py itself (see that
+# module's own build_baddie_formation.py docstring). Not imported from
+# production code on purpose: once nothing in the live game calls them,
+# leaving them there would be dead code, and this test needs an
+# independent, unmodified copy of the *original* behaviour to compare
+# against regardless of what vyruss_vs2.py itself does from here on.
+class _RefTravelBy:
+    def __init__(self, count):
+        self.remaining = abs(count)
+        self.direction = -1 if count < 0 else 1
+
+    def finished(self, _sprite):
+        return self.remaining <= 0
+
+
+class _RefTravelX(_RefTravelBy):
+    def step(self, sprite):
+        distance = min(X_SPEED, self.remaining)
+        sprite.x = (sprite.x + distance * self.direction) % vs2.display.width
+        self.remaining -= distance
+
+
+class _RefTravelCloser(_RefTravelBy):
+    def step(self, sprite):
+        distance = min(Y_SPEED, self.remaining)
+        sprite.y -= distance
+        self.remaining -= distance
+
+
+class _RefTravelAway(_RefTravelBy):
+    def step(self, sprite):
+        distance = min(Y_SPEED, self.remaining)
+        sprite.y += distance
+        self.remaining -= distance
 
 
 def _original_trajectory(x0, y0, odd):
@@ -74,9 +111,11 @@ def _original_trajectory(x0, y0, odd):
     the tick after the fifth phase finishes, mirroring "formed"."""
     sprite = _ReferenceSprite(x0, y0)
     if odd:
-        movements = [TravelCloser(85), TravelX(112), TravelCloser(34), TravelX(-96), TravelAway(45)]
+        movements = [_RefTravelCloser(85), _RefTravelX(112), _RefTravelCloser(34),
+                     _RefTravelX(-96), _RefTravelAway(45)]
     else:
-        movements = [TravelCloser(85), TravelX(-112), TravelCloser(34), TravelX(96), TravelAway(45)]
+        movements = [_RefTravelCloser(85), _RefTravelX(-112), _RefTravelCloser(34),
+                     _RefTravelX(96), _RefTravelAway(45)]
     trajectory = []
     while movements:
         movement = movements[0]
@@ -150,7 +189,7 @@ class BaddieFormationParityTests(unittest.TestCase):
             behavior.step(game.baddies)
             sprite = game.baddies._live[0]
             trajectory.append((sprite.x, sprite.y))
-            if sprite.finished:
+            if sprite.formation_done:
                 break
         else:
             self.fail("BaddieFormation never reached 'formed' within 500 ticks")
@@ -180,13 +219,13 @@ class BaddieFormationParityTests(unittest.TestCase):
         self._assert_matches_original(248 + 16, 154, odd=True)
         self._assert_matches_original(248 - 16, 154, odd=False)
 
-    def test_finishes_with_finished_true_and_no_further_movement(self):
+    def test_finishes_with_formation_done_true_and_no_further_movement(self):
         expected = _original_trajectory(136, 154, odd=True)
         game, behavior = self._build_game(136, 154, odd=True)
         for _ in range(len(expected)):
             behavior.step(game.baddies)
         sprite = game.baddies._live[0]
-        self.assertTrue(sprite.finished)
+        self.assertTrue(sprite.formation_done)
         # One more step from "formed" must not move the sprite again.
         before = (sprite.x, sprite.y)
         behavior.step(game.baddies)

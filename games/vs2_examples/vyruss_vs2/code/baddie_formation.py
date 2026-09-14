@@ -1,4 +1,4 @@
-# baddie_formation.py  -- generated, do not edit. body-sha: a98942cf
+# baddie_formation.py  -- generated, do not edit. body-sha: a82bf038
 from vs2.behaviors import StateMachine
 from vs2.params import Number
 
@@ -13,7 +13,7 @@ class BaddieFormation(StateMachine):
     away_distance = Number(45, min=1, max=255, step=1, label='Phase 5 (away)', unit='led')
     width = Number(256, min=1, max=512, step=1, label='Display width', unit='col')
 
-    state = ('remaining', 'x_dir', 'finished')
+    state = ('remaining', 'x_dir', 'formation_done')
 
     states = ('closer1', 'xmove1', 'closer2', 'xmove2', 'away', 'formed')
     initial = 'closer1'
@@ -64,9 +64,9 @@ class BaddieFormation(StateMachine):
             return 'formed'
 
     def enter_formed(self, sprite):
-        sprite.finished = True
+        sprite.formation_done = True
 
     def formed(self, sprite):
         pass
 
-# behavior-blocks: eNrtWMGO2jAQ/RVkqRJtU3UTltUWtZeq6rnHVhWKTDKAu44dxc5uIsS/dxxsEkJgoZRVqRAHImdm3jx73oxhQWikmRSKjH6OPULTlJehliHlfLUScapUKGgCZEQ+0zhm8FVmCTVOxCMpzWhinBckhinNuSajgUc4nQAGIN97KgWI0TChBRn5d/jABBndeMSGLEJnoTSkaOIRXabmjciTCWT4IhcMo5JI8veaRQ9k6TXAghrsx7Ng5cFgHOIOsPthjfZtThX0/F4/4lJB9trBBsOhxfXXuCsTP4yZ0lREcFgCm9i+H7TBg15fsRieaKn2whdHIeM+byIPbtvAgyNYByex/nDXxr49lHRwEunbraMe9voUUfeCGoOT+AbDBuEvTKWclr0nFuu5gx2aOmjBOoODWKKoU8hQCRnTsBI55ls9kgwSygQTM/QpkIjxneKCmmOizjBMaDRnAh0WZCKxISjzZKibbxAaIU1DeGAiRlAFOlwBrIE2cB4pz6tY1r5qKWTHli6XY0cTEWgic6EbvhMmaFaGMkV/DlO9O6xrBUuPoPWo2lGPZGw2bzq5vK1TnfYS/awNjaI8yfkmwbI61mPy43gaGeX1hty41N51JPaCRJ9h2jBFxpEUMatmQx07kgnmBNuZ7ga1uX781JFqx0ahPXBli9masWlYraEY5iCaBTmTOOBa2FOcaWaTxvjxXL8+RzlvjYI/r+hLrZirNi5LG0UiH8Hf1EZwPm0EV21ctXFR2gicNuwUOVQa65vVtjK2ktVZDk05GDgrzDMosdg5oPbELzri7qm3Pa/am7w+2LfHlXQ7TnWjdbHenCSP4mR5OM9XHX4tsNX93rj8G72huPaGA3qDm5S2OdhWcQ61Bv+FWv9aIXfL/qr7q+5fRPfVPyGV6DEWJqEZ5fUvP0fX/GnaWLOzvL5frxuGtwq4vl2YXqLyyS+IdOiOScqKA2Sq2i5/+RulpxfB
+# behavior-blocks: eNrtWFFv2jAQ/ivI0qRuy7QmlKqLtpdp2vMeN00oMslRvDp2FDttIsR/3znYJIRAYYxqTIgHIufuvvvO950Nc0JjzaRQJPw59gjNMl5FWkaU8+VKzKlSkaApkJB8pknC4KvMU2qciEcymtPUOM9JAlNacE3CoUc4nQAGIN8HKgNI0DClJQn9W3xggoTXHrEhy8hZKA0ZmnhEV5l5I4p0Ajm+KATDqCSW/L1m8QNZeC2woAH78SxYtTcYh6QH7G7UoH2bUQUDf3AVc6kgf+1gg9HI4vor3KWJHyVMaSpi2C+BdWzfD7rgweBKsQSeaKV2wpcHIWOd15GHN13g4QGsg6NYf7jtYt/sSzo4ivTNxlaPBlcUUXeCGoOj+AajFuEvTGWcVoMnluiZgx2ZPujAOoO9WKKoM8hRCTnTsBQ55ls/khxSygQT9+hTIhHjO3VyjxIpgDjzKKXxjOFCOCcTiWNBmSdTAPMNQiOwGQsPTCQIrUBHS5gV3BraI+VFHcva14OFbCnsYjF2ZBGBprIQuuU7YYLmVSQz9Ocw1dvDuoGw8Ahah3VdPZKz+1nbyeVtnZq0F+hnbWgcF2nB1wlW9eYekh/HPckpbwpy7VJ715PYCxJ9hmnLFBnHUiSsPiGa2LFMMSfYzHQ7qM3146eeVHsKhfbAlW1pa8amUb2GkpiBaDfkvcRjroNtWt0UaYwfz03tU7TzxoHw5x19rh1z0cZ5aaNM5SP469oITqeN4KKNizbOShuB04Y9RfaVRud+tamPjZR1XkBbFAbUyvMEeiy3HlM74pc9cXd03Y5X3VKvtvftYY3djVPfbl2sN0eJpDxaJM7zVY9fB2x51zcu/8aEKC8TYo8J4c5LOyLswDiFWoP/Qq1/rZH7ZX/R/UX3L6L7+v+QWvQYC5PQjPLm95+ja/5Aba3Zs7y5Za8GhrcMuLpjmFmiiskviHXktknKmgPkqi6Xv/gN8vcc1Q==

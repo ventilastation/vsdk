@@ -13,7 +13,7 @@ the ``binary_op`` expression kind added alongside this task (arithmetic and
 ``min``/``max``, needed here for ``distance = min(speed, remaining)`` and
 the signed x-step ``direction * distance``, neither expressible before).
 
-**What this ports, and what it deliberately does not (yet).** The original
+**What this ports, and what it deliberately does not.** The original
 queues six heterogeneous movement objects per baddie:
 ``TravelCloser(85), TravelX(±112), TravelCloser(34), TravelX(∓96),
 TravelAway(45), TravelTo(final_x, final_y)``. The first five are a *fixed*
@@ -25,25 +25,31 @@ different primitive -- "move *toward* a destination" with wraparound
 angular math (``move_toward_angle``/``move_toward_depth`` in
 ``vyruss_vs2.py``), not a fixed-distance walk -- and is not attempted
 here; a baddie reaching the end of ``away`` enters a terminal ``formed``
-state (matching the original's own ``baddie.finished = True`` the moment
-its queue empties) and hand-written code keeps doing the final
-approach-to-formation-position move exactly as it does today. This
+state and hand-written code (``vyruss_vs2.py``'s ``update_one_baddie()``)
+keeps doing the final approach-to-formation-position move exactly as it
+did before this port, gated on the ``formation_done`` flag below. This
 mirrors ``vyruss_vs2.py``'s own module docstring's precedent for why
 ``player_explosion``/collision resolution stay hand-written: forcing a
 mismatched shape into the catalog would not honestly represent the
 choreography.
 
-**Not yet wired into the live game.** This builds and proves the
-Behavior in isolation (see
-``tests/test_vyruss_vs2_baddie_formation.py``'s tick-by-tick parity
-check against the original ``TravelCloser``/``TravelX``/``TravelAway``
-classes) but does not yet replace ``add_baddie()``/
-``update_one_baddie()``'s own hand-written dispatch, or get declared on
-the real ``baddies`` pool in ``vyruss_vs2_scene.vs2model.json`` -- that
-integration (plus the runtime ``force_state()`` hookup the attack-run
-reassignment needs, and hardware reverification) is the natural next
-step, deliberately left for a follow-up pass rather than rushed
-alongside proving the Behavior itself is correct.
+**Wired into the live game** via ``vyruss_vs2.py``'s ``on_build_5()``
+hook (right after ``self.baddies`` exists in the generated
+``vyruss_vs2_scene.py`` -- T15's scene-model schema has no way to declare
+a *custom*, game-local Behavior class the way it declares catalog ones
+like ``Transient``, since ``tools/vs2_scene_gen/generator.py`` hardcodes
+``from vs2.behaviors import <classes>``; attaching by hand in a hook is
+the same sanctioned escape hatch ``vasura_states_demo.py`` already uses
+for its own non-catalog ``EnemyStates``). **Still deliberately
+hand-written and unchanged**: the attack-run reassignment
+(``update_attacking()``'s ``baddie.movements = [TravelCloser(distance),
+TravelAway(distance)]``, where ``distance`` is computed per-event) --
+reusing ``closer1``/``away`` for it would need
+``StateMachine.force_state()`` plus new, dedicated attack-only states
+(today's ``enter_closer1``/``enter_away`` always reset ``remaining`` from
+a fixed Behavior-level param, not a per-call dynamic value) -- a
+genuinely separate piece of design work from wiring in the entrance
+choreography, not attempted here.
 
 **Per-sprite fields this Behavior reads that hand-written code must set
 before ``attached()``'s Behavior ever ticks a baddie**, the same
@@ -53,10 +59,20 @@ externally-set-then-read seam ``vasura_states_demo``'s own
 baddie, not one per x-phase; see ``_x_phase``'s own docstring for why
 xmove1 and xmove2 derive *opposite* signs from the same flag, mirroring
 the original's ``odd``-branch queue literally writing ``TravelX(112), ...,
-TravelX(-96)`` for one baddie). ``finished`` starts implicitly falsy
-(never explicitly initialized by this Behavior) and is set ``True`` only
-on entering ``formed`` -- matching the original's own
-``baddie.finished = False`` default at spawn.
+TravelX(-96)`` for one baddie).
+
+**``formation_done``, deliberately not named ``finished``.** The
+original's ``baddie.finished`` only becomes ``True`` once the *whole*
+six-phase queue empties, ``TravelTo`` included -- ``group_finished()``
+and ``update_attacking()`` both read it as "this baddie has visually
+arrived at its formation slot." This Behavior only ever runs the first
+five phases, so its own completion signal needs a different name:
+``formation_done`` becomes ``True`` on entering ``formed`` (this
+Behavior's own terminal state), and ``vyruss_vs2.py``'s
+``update_one_baddie()`` sets the *real* ``baddie.finished`` itself, only
+once its own hand-written ``TravelTo``-equivalent step also reaches
+``(final_x, final_y)`` -- preserving the original's exact semantics for
+every reader of ``baddie.finished`` elsewhere in the file.
 """
 
 import json
@@ -178,7 +194,7 @@ def build_model():
             {"name": "width", "type": "number", "default": 256,
              "min": 1, "max": 512, "step": 1, "label": "Display width", "unit": "col"},
         ],
-        "state": ["remaining", "x_dir", "finished"],
+        "state": ["remaining", "x_dir", "formation_done"],
         "actions": [],
         "apply_to_all": [],
         "per_sprite": [],
@@ -192,7 +208,7 @@ def build_model():
                 "xmove2": _x_phase("x2_distance", "away", sign=-1),
                 "away": _y_phase("away_distance", "y_speed", 1, "formed"),
                 "formed": {
-                    "enter": [{"kind": "set_state", "state": "finished", "value": _literal(True)}],
+                    "enter": [{"kind": "set_state", "state": "formation_done", "value": _literal(True)}],
                     "step": [],
                 },
             },

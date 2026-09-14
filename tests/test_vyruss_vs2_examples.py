@@ -17,10 +17,16 @@ module (a different slug, "vs2_examples.vyruss_vs2") and, in particular,
 the seams the generator/behavior-catalog port actually introduced:
 laser/bomb Moving+DespawnBeyond, and the explosions pool's
 Transient(animate=True, ticks=5) lifecycle end to end. The baddie
-entrance/attack choreography (TravelTo/TravelX/TravelCloser/TravelAway)
-stayed entirely hand-written -- see vyruss_vs2.py's own module docstring
-for why -- so it is covered here as ordinary game logic, the same way
-tests/test_vyruss_vs2.py already covers it for the original.
+entrance choreography's fixed five-phase part now runs inside a real
+generated Behavior (BaddieFormation, games/vs2_examples/vyruss_vs2/code/
+build_baddie_formation.py) attached in vyruss_vs2.py's on_build_5 --
+proven tick-by-tick against the original in its own dedicated test,
+tests/test_vyruss_vs2_baddie_formation.py, not here. The final TravelTo
+approach and the attack run's own runtime reassignment
+(update_attacking()) stay hand-written -- see vyruss_vs2.py's own module
+docstring for why -- so those two are covered here as ordinary game
+logic, the same way tests/test_vyruss_vs2.py already covers the whole
+thing for the original.
 """
 
 import os
@@ -156,7 +162,17 @@ class VyrussVs2ExamplesTests(unittest.TestCase):
 
         self.assertGreater(len(set(positions)), 80)
         self.assertGreaterEqual(min(y for _x, y in positions), 35)
-        self.assertLess(len(baddie.movements), 6)
+        # The entrance choreography now runs inside the attached
+        # BaddieFormation Behavior (see vyruss_vs2.py's on_build_5, and
+        # games/vs2_examples/vyruss_vs2/code/build_baddie_formation.py) --
+        # 150 ticks is real progress through its states but not the full
+        # ~153-tick sequence, so check it has actually advanced past the
+        # first state rather than checking baddie.movements (which stays
+        # None the whole time BaddieFormation is still running -- see
+        # add_baddie()'s own comment).
+        from games.vs2_examples.vyruss_vs2.code.baddie_formation import BaddieFormation
+        behavior = scene.baddies.behavior(BaddieFormation)
+        self.assertNotEqual(behavior.state_name(baddie), "closer1")
 
     def test_group_reaches_attacking_and_a_baddie_attacks(self):
         from games.vs2_examples.vyruss_vs2.code.vyruss_vs2 import ATTACKING

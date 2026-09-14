@@ -88,7 +88,7 @@
   "state": [
     "remaining",
     "x_dir",
-    "finished"
+    "formation_done"
   ],
   "state_machine": {
     "bodies": {
@@ -340,7 +340,7 @@
         "enter": [
           {
             "kind": "set_state",
-            "state": "finished",
+            "state": "formation_done",
             "value": {
               "kind": "literal",
               "value": true

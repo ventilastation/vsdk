@@ -6,10 +6,16 @@ games/vs2_examples/vixeous/code/vixeous.py already proved: the declarative
 object graph (layers, sprite pools, sprites, Behaviors) that the original
 build() constructed by hand now lives in vyruss_vs2_scene.vs2model.json
 and is generated into vyruss_vs2_scene.py by tools/vs2_scene_gen.
-Everything with control flow -- input, the entrance/attack choreography,
-collision, scoring, level progression, the player's explode/respawn/
-game-over sequence -- stays hand-written here, exactly as the original
-update() and its helpers always were.
+Everything with control flow -- input, collision, scoring, level
+progression, the player's explode/respawn/game-over sequence -- stays
+hand-written here, exactly as the original update() and its helpers
+always were. **Updated 2026-09-14**: the baddie entrance choreography's
+fixed five-phase part (formerly TravelCloser/TravelX/TravelAway, popped
+off a per-baddie queue by hand) is now BaddieFormation, a real generated
+Behavior (build_baddie_formation.py) -- see the "baddies" bullet below
+and that module's own docstring for exactly what moved and what (the
+final TravelTo approach, and the runtime attack-run reassignment) is
+still, deliberately, hand-written.
 
 **Behavior-catalog mappings used, and what stayed hand-written -- see this
 task's report for the full writeup:**
@@ -37,15 +43,23 @@ task's report for the full writeup:**
   Cosmetically negligible at 5 frames, but real -- not hidden here.
 - ``baddies``: the original's queue of heterogeneous movement-strategy
   objects (``TravelTo``/``TravelX``/``TravelCloser``/``TravelAway``,
-  popped off ``baddie.movements`` as each finishes, and reassigned midway
-  through the game for an attack run) is a fundamentally different shape
-  than anything in the catalog. ``PathFollowing`` is a *fixed* waypoint
-  path attached once at build time; this is a *queue of differently-typed*
-  movements, replaced at runtime by game logic (``update_attacking``'s own
-  ``baddie.movements = [TravelCloser(...), TravelAway(...)]``). Forcing
-  ``PathFollowing`` onto it would not honestly represent the choreography,
-  so it stays exactly as hand-written as the original -- see the module-
-  level ``TravelTo``/``TravelBy`` classes below, unchanged.
+  popped off ``baddie.movements`` as each finishes) is a fundamentally
+  different shape than the pre-existing catalog offers -- ``PathFollowing``
+  is a *fixed* waypoint path attached once at build time, not a queue.
+  **As of 2026-09-14, the fixed five-phase entrance part (everything
+  except the final ``TravelTo`` approach) is instead ``BaddieFormation``**,
+  a real generated ``StateMachine`` Behavior built from
+  ``tools/vs2_behavior_gen``'s block-representable schema (see
+  ``build_baddie_formation.py``'s own module docstring for the full
+  design, including a real tick-by-tick parity proof against the
+  original) -- attached in :meth:`on_build_5`. ``TravelTo`` itself (a
+  "move *toward* a destination" primitive, not a fixed-distance walk)
+  stays hand-written, as does the attack run's own runtime reassignment
+  (``update_attacking``'s ``baddie.movements = [TravelCloser(...),
+  TravelAway(...)]``) -- neither fits the shape ``BaddieFormation``
+  covers, and forcing either in would not honestly represent the
+  choreography, the same judgment call this bullet always made, now
+  narrower than before.
 - ``player_explosion`` (a single hidden sprite, not a pool): this looked
   at first like another ``Transient(animate=True, ticks=4)`` candidate
   (``explosion_nave.png`` has 4 frames, same "age-indexed frame, despawn
@@ -77,6 +91,7 @@ import vs2
 from vs2.controls import A, DOWN, LEFT, RIGHT, UP, joy1
 
 from games.vs2_examples.vyruss_vs2.code import vyruss_vs2_scene
+from games.vs2_examples.vyruss_vs2.code.baddie_formation import BaddieFormation
 
 LEVELS = (
     (2, "saturno.png", 3),
@@ -141,6 +156,11 @@ def move_toward_depth(current, destination, speed):
 
 
 class TravelTo:
+    """The one phase of the original baddie-formation choreography that
+    stays hand-written -- see build_baddie_formation.py's own module
+    docstring for why (a "move *toward* a destination" primitive, not a
+    fixed-distance walk like the five phases BaddieFormation now owns)."""
+
     def __init__(self, x, y):
         self.dest_x = x
         self.dest_y = y
@@ -154,21 +174,22 @@ class TravelTo:
 
 
 class TravelBy:
+    """Still used by update_attacking()'s own runtime reassignment for an
+    attack run -- a per-call *dynamic* distance, the reason that phase
+    stays hand-written rather than reusing BaddieFormation's own
+    closer1/away states (which always reset their travel distance from a
+    fixed Behavior-level param on enter, not a value computed per call;
+    see build_baddie_formation.py's own module docstring). TravelX itself
+    (the entrance choreography's own sideways phases) has no remaining
+    caller -- that part is BaddieFormation's xmove1/xmove2 now -- so only
+    this base class plus TravelCloser/TravelAway are kept."""
+
     def __init__(self, count):
         self.remaining = abs(count)
         self.direction = -1 if count < 0 else 1
 
     def finished(self, _sprite):
         return self.remaining <= 0
-
-
-class TravelX(TravelBy):
-    def step(self, sprite):
-        distance = min(X_SPEED, self.remaining)
-        sprite.x = (
-            sprite.x + distance * self.direction
-        ) % vs2.display.width
-        self.remaining -= distance
 
 
 class TravelCloser(TravelBy):
@@ -206,6 +227,20 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
         self.level = 0
         self.score = 0
         self.lives = 3
+
+    def on_build_5(self):
+        # Right after self.baddies exists, before explosions -- attaches
+        # BaddieFormation, a real generated Behavior (games/vs2_examples/
+        # vyruss_vs2/code/baddie_formation.py) that T15's scene-model
+        # schema has no way to declare itself: tools/vs2_scene_gen's own
+        # generator hardcodes "from vs2.behaviors import <classes>" for
+        # every model-declared Behavior, and this one is not a catalog
+        # class. Attaching by hand here is the same sanctioned escape
+        # hatch games/vs2_examples/vasura_states_demo/code/
+        # vasura_states_demo.py already uses for its own non-catalog
+        # EnemyStates. See build_baddie_formation.py's own module
+        # docstring for the full design and what still stays hand-written.
+        self.baddies.behave(BaddieFormation(width=vs2.display.width))
 
     def on_build_9(self):
         # The last hook: right after game_over, before build() returns.
@@ -277,18 +312,20 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
         baddie.frame_clock = 0
         baddie.dead = False
         baddie.finished = False
-        if odd:
-            baddie.movements = [
-                TravelCloser(85), TravelX(112),
-                TravelCloser(34), TravelX(-96),
-                TravelAway(45), TravelTo(final_x, final_y),
-            ]
-        else:
-            baddie.movements = [
-                TravelCloser(85), TravelX(-112),
-                TravelCloser(34), TravelX(96),
-                TravelAway(45), TravelTo(final_x, final_y),
-            ]
+        # The fixed five-phase entrance choreography (equivalent to the
+        # original's own TravelCloser(85), TravelX(±112), TravelCloser(34),
+        # TravelX(∓96), TravelAway(45)) now runs inside the BaddieFormation
+        # Behavior attached in on_build_5 -- x_dir is the one input it
+        # needs from spawn time (see build_baddie_formation.py's own
+        # docstring for why xmove1/xmove2 derive opposite signs from this
+        # single flag). final_x/final_y are kept on the sprite (the
+        # original only ever needed them as TravelTo's own constructor
+        # args) so update_one_baddie() can queue the hand-written final
+        # approach once the Behavior reports formation_done.
+        baddie.x_dir = 1 if odd else -1
+        baddie.final_x = final_x
+        baddie.final_y = final_y
+        baddie.movements = None
         self.groups[-1].append(baddie)
         self.everyone.append(baddie)
 
@@ -300,13 +337,31 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
             baddie.base_frame + (0 if baddie.frame_clock & 8 else 1)
         )
         if baddie.movements:
+            # A hand-written queue is running -- either the final TravelTo
+            # approach queued just below, or an attack run's own
+            # TravelCloser/TravelAway pair (update_attacking()).
             baddie.finished = False
             movement = baddie.movements[0]
             movement.step(baddie)
             if movement.finished(baddie):
                 baddie.movements.pop(0)
-        elif not baddie.finished:
+        elif baddie.movements is not None and not baddie.finished:
+            # A hand-written queue (attack run or the final approach) just
+            # drained -- matches the original's own "movements is an empty
+            # list, not None" signal exactly (movements starts None here,
+            # never an empty list, until something actually queues onto
+            # it -- see add_baddie()'s own comment).
             baddie.finished = True
+        elif baddie.movements is None and baddie.formation_done:
+            # BaddieFormation's own entrance choreography just reported
+            # done (one tick behind this method seeing it: Scene.scene_step
+            # runs update() before _run_behaviors(), the same "checks the
+            # position as of the start of this tick" lag vixeous.py's own
+            # docstring already documents for Moving/DespawnBeyond -- real,
+            # minor, not a bug). Queue the one phase that stays
+            # hand-written, exactly the original's own TravelTo(final_x,
+            # final_y) queue tail.
+            baddie.movements = [TravelTo(baddie.final_x, baddie.final_y)]
 
     def group_finished(self):
         group = self.groups[-1]
