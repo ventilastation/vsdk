@@ -145,6 +145,14 @@ ICONS = [
         glow_rgb=(110, 140, 255), text_top=(225, 232, 255), text_bottom=(120, 145, 230),
         outline_rgb=(14, 18, 36), accent_rgb=(110, 140, 255),
     )),
+    # VS2 Examples: the scene-editor/behavior-catalog proving-case ports
+    # (vixeous, vyruss_vs2, ...) -- a violet "lab" badge, distinct from
+    # any jam badge since this group is tooling proving cases, not a jam.
+    ("vs2_examples.png", dict(
+        text="VS2 EX", card_fill=(14, 10, 28, 210), card_outline=(90, 60, 170, 255),
+        glow_rgb=(150, 110, 255), text_top=(225, 210, 255), text_bottom=(130, 90, 220),
+        outline_rgb=(20, 14, 40), accent_rgb=(150, 110, 255),
+    )),
 ]
 
 

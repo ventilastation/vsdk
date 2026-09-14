@@ -1,0 +1,10 @@
+palettegroups:
+  world:
+    - strip: ship.png
+      frames: 4
+    - strip: bullet.png
+      frames: 1
+    - strip: enemy.png
+      frames: 2
+    - strip: explosion.png
+      frames: 4

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ventilastation Emulator</title>
   <link rel="icon" type="image/png" href="./logo.png">
-  <link rel="stylesheet" href="./styles.css?v=20260720a">
+  <link rel="stylesheet" href="./styles.css?v=20260913a">
 </head>
 <body>
   <main class="app-shell">
@@ -84,6 +84,9 @@
         <div class="stage-primary-actions">
           <button type="button" class="stage-control-button" id="toggle-editor-button" aria-pressed="false">Editor</button>
           <button type="button" class="stage-control-button" id="toggle-inspector-button" aria-expanded="false">Options</button>
+          <button type="button" class="stage-control-button" id="toggle-vs2beh-button" aria-expanded="false">VS2 Tuner</button>
+          <button type="button" class="stage-control-button" id="toggle-vs2events-button" aria-expanded="false">Event Sheet</button>
+          <button type="button" class="stage-control-button" id="toggle-vs2behblocks-button" aria-expanded="false">Behavior Blocks</button>
           <button type="button" class="stage-control-button" id="remote-connect-button">Connect board</button>
           <button type="button" class="stage-control-button" id="remote-control-button" hidden>Request control</button>
           <button type="button" class="stage-control-button" id="remote-reset-button" hidden>Reset board</button>
@@ -234,14 +237,87 @@
           <textarea id="copy-diagnostics" rows="18" readonly></textarea>
         </div>
     </section>
+
+    <section class="vs2beh-panel" id="vs2beh-panel" aria-label="VS2 behaviors inspector" hidden>
+      <div class="vs2beh-panel-toolbar">
+        <h2>VS2 Behaviors</h2>
+        <button type="button" class="stage-control-button" id="vs2beh-connect-button">Connect serial</button>
+        <button type="button" class="stage-control-button" id="vs2beh-refresh-button">Refresh</button>
+        <span class="vs2beh-status" id="vs2beh-status" aria-live="polite">Not connected</span>
+      </div>
+      <div class="vs2beh-tree" id="vs2beh-tree"></div>
+    </section>
+
+    <section class="vs2events-panel" id="vs2events-panel" aria-label="VS2 event sheet editor" hidden>
+      <div class="vs2events-panel-toolbar">
+        <h2>Event Sheet (T16)</h2>
+        <label class="vs2events-field">Class <input type="text" id="vs2events-class-name" value="SceneEvents"></label>
+        <label class="vs2events-field">Path <input type="text" id="vs2events-path" placeholder="games/.../code/foo_scene.vs2events.json"></label>
+        <button type="button" class="stage-control-button" id="vs2events-load-button">Load</button>
+        <button type="button" class="stage-control-button" id="vs2events-save-button">Save</button>
+        <span class="vs2events-status" id="vs2events-status" aria-live="polite">Not loaded</span>
+      </div>
+      <div class="vs2events-workspace" id="vs2events-workspace"></div>
+    </section>
+
+    <section class="vs2behblocks-panel" id="vs2behblocks-panel" aria-label="VS2 behavior blocks editor" hidden>
+      <div class="vs2behblocks-panel-toolbar">
+        <h2>Behavior Blocks (T17)</h2>
+        <label class="vs2behblocks-field">Path <input type="text" id="vs2behblocks-path" placeholder="games/.../code/behaviors/projectile.vs2behavior.json"></label>
+        <button type="button" class="stage-control-button" id="vs2behblocks-load-button">Load</button>
+        <button type="button" class="stage-control-button" id="vs2behblocks-save-button">Save</button>
+        <span class="vs2behblocks-status" id="vs2behblocks-status" aria-live="polite">Not loaded</span>
+      </div>
+      <div class="vs2behblocks-workspace" id="vs2behblocks-workspace"></div>
+    </section>
   </main>
 
-  <script type="module" src="./micropython-bridge.js?v=20260714b"></script>
+  <script type="module" src="./micropython-bridge.js?v=20260913a"></script>
   <script type="module" src="./wasm-adapter.js?v=20260714b"></script>
   <script src="./led-render-core.js?v=20260729a"></script>
   <script src="./rom-builder-core.js?v=20260622c"></script>
   <script src="./rom-builder-browser.js?v=20260622c"></script>
-  <script type="module" src="./app.js?v=20260729a"></script>
+  <script type="module" src="./app.js?v=20260913b"></script>
   <script type="module" src="./monaco-ide.js?v=20260715a"></script>
+  <script type="module" src="./vs2-behavior-panel.js?v=20260913a"></script>
+  <script type="module">
+    import { createVS2BehaviorPanel } from "./vs2-behavior-panel.js?v=20260913a";
+
+    createVS2BehaviorPanel({
+      container: document.querySelector("#vs2beh-tree"),
+      panelElement: document.querySelector("#vs2beh-panel"),
+      toggleButton: document.querySelector("#toggle-vs2beh-button"),
+      connectButton: document.querySelector("#vs2beh-connect-button"),
+      refreshButton: document.querySelector("#vs2beh-refresh-button"),
+      statusElement: document.querySelector("#vs2beh-status"),
+    });
+  </script>
+  <script type="module">
+    import { createVS2EventSheetPanel } from "./vs2-event-sheet.js?v=20260913b";
+
+    createVS2EventSheetPanel({
+      container: document.querySelector("#vs2events-workspace"),
+      panelElement: document.querySelector("#vs2events-panel"),
+      toggleButton: document.querySelector("#toggle-vs2events-button"),
+      classNameInput: document.querySelector("#vs2events-class-name"),
+      pathInput: document.querySelector("#vs2events-path"),
+      saveButton: document.querySelector("#vs2events-save-button"),
+      loadButton: document.querySelector("#vs2events-load-button"),
+      statusElement: document.querySelector("#vs2events-status"),
+    });
+  </script>
+  <script type="module">
+    import { createVS2BehaviorBlocksPanel } from "./vs2-behavior-blocks.js?v=20260914b";
+
+    createVS2BehaviorBlocksPanel({
+      container: document.querySelector("#vs2behblocks-workspace"),
+      panelElement: document.querySelector("#vs2behblocks-panel"),
+      toggleButton: document.querySelector("#toggle-vs2behblocks-button"),
+      pathInput: document.querySelector("#vs2behblocks-path"),
+      saveButton: document.querySelector("#vs2behblocks-save-button"),
+      loadButton: document.querySelector("#vs2behblocks-load-button"),
+      statusElement: document.querySelector("#vs2behblocks-status"),
+    });
+  </script>
 </body>
 </html>

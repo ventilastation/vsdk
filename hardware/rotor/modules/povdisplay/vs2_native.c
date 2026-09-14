@@ -4,6 +4,8 @@
 #include "py/obj.h"
 #include "py/runtime.h"
 
+#include "esp_timer.h"
+
 #include "gpu.h"
 
 #define VS2_FLAG_VISIBLE 0x01
@@ -133,6 +135,44 @@ static mp_obj_t vs2_set_active(mp_obj_t active) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(vs2_set_active_obj, vs2_set_active);
 
+// T0 gate experiment only (docs/vs2-behaviors-implementation.md,
+// "Flattened-record probe"): a throwaway, self-contained benchmark, not
+// stable board API. vs2_sprite_records[] above holds borrowed pointers into
+// individually heap-allocated Python Sprite objects, not a contiguous
+// array -- there is nothing real to "flatten" yet, so this times its own
+// static array shaped like the eventual pool layout instead, to get a real
+// number for what a flattened layout could cost.
+static mp_obj_t vs2_flattened_probe(mp_obj_t count_obj, mp_obj_t passes_obj) {
+    mp_int_t count = mp_obj_get_int(count_obj);
+    mp_int_t passes = mp_obj_get_int(passes_obj);
+    if (count <= 0 || count > VS2_MAX_SPRITES || passes <= 0) {
+        mp_raise_ValueError(MP_ERROR_TEXT("count/passes out of range"));
+    }
+    static vs2_sprite_t probe_records[VS2_MAX_SPRITES];
+    for (mp_int_t i = 0; i < count; i++) {
+        probe_records[i].x = (int32_t)((i * 37) % 256) << 8;
+        probe_records[i].y = (int32_t)((i * 13) % 240) << 8;
+    }
+    // Same 8.8 fixed-point units as the real x/y fields; arbitrary nonzero
+    // deltas so the loop body isn't foldable into a compile-time constant.
+    const int32_t dx = 1 << 8;
+    const int32_t dy = -(1 << 8);
+    int64_t started = esp_timer_get_time();
+    for (mp_int_t pass = 0; pass < passes; pass++) {
+        for (mp_int_t i = 0; i < count; i++) {
+            probe_records[i].x += dx;
+            probe_records[i].y += dy;
+        }
+    }
+    int64_t elapsed = esp_timer_get_time() - started;
+    // Defeat dead-code elimination of the loop above without adding any
+    // real cost to what is being measured.
+    volatile int32_t sink = probe_records[0].x ^ probe_records[count - 1].y;
+    (void)sink;
+    return mp_obj_new_int((mp_int_t)(elapsed / passes));
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_flattened_probe_obj, vs2_flattened_probe);
+
 static void vs2_layer_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     vs2_layer_obj_t *self = MP_OBJ_TO_PTR(self_in);
     mp_printf(print, "<vs2.Layer slot=%d mode=%d>", self->slot, self->layer.mode);
@@ -153,6 +193,14 @@ static mp_obj_t vs2_layer_make_new(const mp_obj_type_t *type, size_t n_args, siz
     self->layer.id = 0;
     self->layer.mode = args[ARG_mode].u_int;
     self->layer.flags = args[ARG_visible].u_bool ? VS2_FLAG_VISIBLE : 0;
+    self->layer.camera_x = 0;
+    self->layer.camera_y = 0;
+    // A real default from construction on, matching the mode this layer
+    // opens with (vs2_deepspace is also VS1_TUNNEL's byte-for-byte C twin --
+    // see vs2/projection.py) -- so render_vs2() never reads a half-built
+    // table, even before vs2/__init__.py's Layer.__init__ makes its own
+    // set_curve() call right after this object exists.
+    memcpy(self->layer.curve, vs2_deepspace, VS2_CURVE_LENGTH);
     self->slot = alloc_layer_slot(&self->layer);
     self->layer.id = self->slot;
     return MP_OBJ_FROM_PTR(self);
@@ -176,9 +224,53 @@ static mp_obj_t vs2_layer_set_visible(mp_obj_t self_in, mp_obj_t visible_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(vs2_layer_set_visible_obj, vs2_layer_set_visible);
 
+// 8.8 fixed point, the same convention as Sprite.set_x_fixed/set_y_fixed --
+// x and y arrive here as vs2/__init__.py's raw Layer.camera_x/camera_y
+// floats (see the Layer property setters), not pre-scaled, so this does the
+// *256 conversion itself via mp_obj_get_float() (accepts either an int or a
+// float MicroPython object, unlike mp_obj_get_int()).
+static int32_t vs2_fixed_from_number(mp_obj_t value_in) {
+    double scaled = mp_obj_get_float(value_in) * 256.0;
+    if (scaled < (double)INT32_MIN) {
+        return INT32_MIN;
+    }
+    if (scaled > (double)INT32_MAX) {
+        return INT32_MAX;
+    }
+    return (int32_t)scaled;
+}
+
+static mp_obj_t vs2_layer_set_camera(mp_obj_t self_in, mp_obj_t x_in, mp_obj_t y_in) {
+    vs2_layer_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    self->layer.camera_x = vs2_fixed_from_number(x_in);
+    self->layer.camera_y = vs2_fixed_from_number(y_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_3(vs2_layer_set_camera_obj, vs2_layer_set_camera);
+
+static mp_obj_t vs2_layer_set_curve(mp_obj_t self_in, mp_obj_t curve_in) {
+    vs2_layer_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_buffer_info_t bufinfo;
+    // mp_get_buffer_raise (rather than memoryview_data(), the borrowed-
+    // pointer helper other setters here use for long-lived data like
+    // tilemap frames) both validates the buffer protocol on whatever the
+    // caller passed -- bytes, bytearray or memoryview, all legal per
+    // vs2/projection.py's curve family -- and reports its length, which we
+    // need to enforce the 256-byte contract before copying.
+    mp_get_buffer_raise(curve_in, &bufinfo, MP_BUFFER_READ);
+    if (bufinfo.len != VS2_CURVE_LENGTH) {
+        mp_raise_ValueError(MP_ERROR_TEXT("a projection curve must be exactly 256 bytes"));
+    }
+    memcpy(self->layer.curve, bufinfo.buf, VS2_CURVE_LENGTH);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(vs2_layer_set_curve_obj, vs2_layer_set_curve);
+
 static const mp_rom_map_elem_t vs2_layer_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_set_mode), MP_ROM_PTR(&vs2_layer_set_mode_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_visible), MP_ROM_PTR(&vs2_layer_set_visible_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_camera), MP_ROM_PTR(&vs2_layer_set_camera_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_curve), MP_ROM_PTR(&vs2_layer_set_curve_obj) },
 };
 static MP_DEFINE_CONST_DICT(vs2_layer_locals_dict, vs2_layer_locals_dict_table);
 
@@ -507,6 +599,7 @@ static const mp_rom_map_elem_t vs2_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_reset_scene), MP_ROM_PTR(&vs2_reset_scene_obj) },
     { MP_ROM_QSTR(MP_QSTR_reset_sprites), MP_ROM_PTR(&vs2_reset_scene_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_active), MP_ROM_PTR(&vs2_set_active_obj) },
+    { MP_ROM_QSTR(MP_QSTR_flattened_probe), MP_ROM_PTR(&vs2_flattened_probe_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_draw_order), MP_ROM_PTR(&vs2_set_draw_order_obj) },
 };
 

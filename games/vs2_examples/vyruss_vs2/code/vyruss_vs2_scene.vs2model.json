@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "class_name": "VyrussScene",
+  "layers": [
+    {
+      "attr": "fullscreen",
+      "name": "planet",
+      "projection": "FULLSCREEN",
+      "drawables": [
+        {
+          "kind": "sprite",
+          "attr": "planet",
+          "image": "saturno.png",
+          "x": 0,
+          "y": 255,
+          "visible": false
+        }
+      ]
+    },
+    {
+      "attr": "world",
+      "drawables": [
+        {
+          "kind": "sprite",
+          "attr": "player",
+          "image": "ll9.png",
+          "y": -1
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "laser",
+          "image": "disparo.png",
+          "count": 1,
+          "behaviors": [
+            {"class": "Moving", "params": {"speed_y": 6}},
+            {"class": "DespawnBeyond", "params": {"y_max": 164}}
+          ]
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "bombs",
+          "image": "disparo.png",
+          "count": 8,
+          "behaviors": [
+            {"class": "Moving", "params": {"speed_y": -3}},
+            {"class": "DespawnBeyond", "params": {"y_min": -1}}
+          ]
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "baddies",
+          "image": "galaga.png",
+          "count": 50,
+          "behaviors": [
+            {"class": "BaddieFormation",
+             "module": "games.vs2_examples.vyruss_vs2.code.baddie_formation",
+             "params": {"width": {"expr": "vs2.display.width"}}}
+          ]
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "explosions",
+          "image": "explosion.png",
+          "count": 8,
+          "on_empty": "RECYCLE",
+          "behaviors": [
+            {"class": "Transient", "params": {"animate": true, "ticks": 5}}
+          ]
+        },
+        {
+          "kind": "sprite",
+          "attr": "player_explosion",
+          "image": "explosion_nave.png",
+          "visible": false
+        }
+      ]
+    },
+    {
+      "attr": "hud",
+      "projection": "HUD",
+      "drawables": [
+        {
+          "kind": "label",
+          "attr": "scoreboard",
+          "image": "numerals.png",
+          "columns": 9,
+          "x": 110,
+          "y": 0,
+          "flip_x": true,
+          "flip_y": true
+        },
+        {
+          "kind": "sprite",
+          "attr": "game_over",
+          "image": "gameover.png",
+          "y": 0,
+          "visible": false,
+          "x": {"expr": "vs2.display.width - 32"}
+        }
+      ]
+    }
+  ]
+}

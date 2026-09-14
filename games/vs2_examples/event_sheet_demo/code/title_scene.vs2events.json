@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "class_name": "TitleSceneEvents",
+  "events": [
+    {
+      "kind": "on_start",
+      "conditions": [],
+      "actions": [
+        {
+          "kind": "set_label_text",
+          "label_attr": "title_label",
+          "text": {"kind": "literal", "value": "PRESS A"}
+        }
+      ]
+    }
+  ]
+}

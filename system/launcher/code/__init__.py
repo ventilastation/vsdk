@@ -41,6 +41,7 @@ GROUP_PREFIX = "group:"
 # end of the menu, labelled from its folder name (see _build_groups_and_tiles).
 FOLDER_GROUP_ORDER = {
     "alecu": 30,
+    "vs2_examples": 32,
     "other": 35,
     "vsjam-may25": 40,
     "vsjam-oct25": 50,
@@ -49,6 +50,7 @@ FOLDER_GROUP_ORDER = {
 GROUP_LABELS = {
     "emulators": "Emulators",
     "alecu": "Alecu",
+    "vs2_examples": "VS2 Examples",
     "other": "Other",
     "vsjam-may25": "VS Jam May 25",
     "vsjam-oct25": "VS Jam Oct 25",
@@ -61,6 +63,7 @@ GROUP_LABELS = {
 # a tile -- just as a plain label, like before this existed.
 GROUP_ICONS = {
     "alecu": "alecu.png",
+    "vs2_examples": "vs2_examples.png",
     "other": "other.png",
     "vsjam-may25": "vsjam_may25.png",
     "vsjam-oct25": "vsjam_oct25.png",
