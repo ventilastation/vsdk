@@ -257,26 +257,71 @@ overlay_close_label = pyglet.text.Label(
     color=(255, 242, 242, 255),
 )
 
-_HELP_TEXT = """Player 1
-  Arrows or WASD — move
-  Space — A/action     O — B     P — X     Y — Y
-  Page Up — Start      Page Down — Back
+# (kind, text) segments for the help panel. "heading" and "key" segments get
+# bold/larger styling (see _build_help_layout below); "text" is plain body
+# copy. Kept as data rather than a hand-styled string so the character
+# offsets each style run needs can be computed automatically.
+_HELP_SEGMENTS = [
+    ("heading", "Player 1"), ("text", "\n"),
+    ("text", "  "), ("key", "Arrows"), ("text", " or "), ("key", "WASD"), ("text", " — move\n"),
+    ("text", "  "), ("key", "Space"), ("text", " — A/action     "), ("key", "O"), ("text", " — B     "),
+    ("key", "P"), ("text", " — X     "), ("key", "Y"), ("text", " — Y\n"),
+    ("text", "  "), ("key", "Page Up"), ("text", " — Start      "), ("key", "Page Down"), ("text", " — Back\n"),
+    ("text", "\n"),
+    ("heading", "Player 2"), ("text", "\n"),
+    ("text", "  "), ("key", "H J K L"), ("text", " — left/down/up/right\n"),
+    ("text", "  "), ("key", "Z"), ("text", " — A     "), ("key", "X"), ("text", " — B     "),
+    ("key", "C"), ("text", " — X     "), ("key", "V"), ("text", " — Y\n"),
+    ("text", "  "), ("key", "Home"), ("text", " — Start         "), ("key", "End"), ("text", " — Back\n"),
+    ("text", "\n"),
+    ("heading", "Gamepads"), ("text", "\n"),
+    ("text", "  One pad: left stick/D-pad is Player 1; right stick and shoulders are Player 2.\n"),
+    ("text", "  Two pads: the second pad controls Player 2.\n"),
+    ("text", "\n"),
+    ("heading", "Emulator"), ("text", "\n"),
+    ("text", "  "), ("key", "F1"), ("text", " — keyboard help   "), ("key", "F4"), ("text", " — settings\n"),
+    ("text", "  "), ("key", "F2"), ("text", " — CPU/GPU renderer   "), ("key", "F3"), ("text", " — renderer comparison\n"),
+    ("text", "  "), ("key", "F5"), ("text", " — toggle POV hall-pulse filter (board)\n"),
+    ("text", "  "), ("key", "Ctrl/⌘-U"), ("text", " — send an OTA upgrade   "), ("key", "Q"), ("text", " — quit\n"),
+    ("text", "  "), ("key", "Esc"), ("text", " — close this panel, or send the extra game button"),
+]
 
-Player 2
-  H J K L — left/down/up/right
-  Z — A     X — B     C — X     V — Y
-  Home — Start         End — Back
+_HELP_BODY_COLOR = (210, 220, 234, 255)
+_HELP_HEADING_COLOR = (233, 239, 250, 255)
+_HELP_KEY_COLOR = (140, 190, 255, 255)
 
-Gamepads
-  One pad: left stick/D-pad is Player 1; right stick and shoulders are Player 2.
-  Two pads: the second pad controls Player 2.
 
-Emulator
-  F1 — keyboard help   F4 — settings
-  F2 — CPU/GPU renderer   F3 — renderer comparison
-  F5 — toggle POV hall-pulse filter (board)
-  Ctrl/⌘-U — send an OTA upgrade   Q — quit
-  Esc — close this panel, or send the extra game button"""
+def _build_help_layout(width):
+    """A rich-text layout for the help panel: bigger bold headings (Player 1,
+    Player 2, Gamepads, Emulator) and bold key names, built from
+    _HELP_SEGMENTS so the style-run offsets don't have to be hand-counted."""
+    document = pyglet.text.document.FormattedDocument()
+    parts = []
+    runs = []
+    offset = 0
+    for kind, text in _HELP_SEGMENTS:
+        parts.append(text)
+        if kind in ("heading", "key"):
+            runs.append((offset, offset + len(text), kind))
+        offset += len(text)
+    document.text = "".join(parts)
+    document.set_style(0, len(document.text),
+                        dict(font_name="Arial", font_size=12, color=_HELP_BODY_COLOR))
+    for start, end, kind in runs:
+        if kind == "heading":
+            document.set_style(start, end,
+                                dict(bold=True, font_size=14, color=_HELP_HEADING_COLOR))
+        else:
+            document.set_style(start, end, dict(bold=True, color=_HELP_KEY_COLOR))
+    return pyglet.text.layout.TextLayout(
+        document, width=width, anchor_y="top", multiline=True)
+
+
+# Built once (the content never changes) against the panel's usual body
+# width, so its true rendered content_height can size the help overlay
+# instead of a guessed constant -- see _overlay_bounds.
+help_body_layout = _build_help_layout(536)
+_HELP_DESIRED_HEIGHT = 42 + 16 + help_body_layout.content_height + 24
 
 
 def _point_in_circle(x, y, center_x, center_y, radius):
@@ -313,9 +358,9 @@ def _overlay_bounds(kind):
     max_width = max(280, window.width - 40)
     max_height = max(220, window.height - 40)
     if kind == OVERLAY_HELP:
-        desired_height = 390
+        desired_height = _HELP_DESIRED_HEIGHT
     elif kind == OVERLAY_LED_USAGE:
-        desired_height = 230
+        desired_height = _LED_USAGE_DESIRED_HEIGHT
     else:
         desired_height = 300 + _CAL_DARK_GROWTH
     width = min(580, max_width)
@@ -337,6 +382,8 @@ def _layout_overlay(kind):
     overlay_title_label.position = (left + 18, bottom + height - 12, 0)
     overlay_body_label.position = (left + 22, bottom + height - 58, 0)
     overlay_body_label.width = width - 44
+    help_body_layout.x, help_body_layout.y = left + 22, bottom + height - 58
+    help_body_layout.width = width - 44
     return left, bottom, width, height
 
 
@@ -374,7 +421,6 @@ def _draw_overlay():
     overlay_close_button.draw()
     if active_overlay == OVERLAY_HELP:
         overlay_title_label.text = "Keyboard shortcuts"
-        overlay_body_label.text = _HELP_TEXT
     elif active_overlay == OVERLAY_LED_USAGE:
         overlay_title_label.text = "LED usage"
         overlay_body_label.text = (
@@ -388,7 +434,10 @@ def _draw_overlay():
         overlay_body_label.text = "Rotation, board reset and upgrade, colour calibration, and POV timing tools."
         _layout_settings_controls(left, bottom, width, height)
     overlay_title_label.draw()
-    overlay_body_label.draw()
+    if active_overlay == OVERLAY_HELP:
+        help_body_layout.draw()
+    else:
+        overlay_body_label.draw()
     overlay_close_label.draw()
     if active_overlay == OVERLAY_SETTINGS:
         draw_workbench_controls()
@@ -1044,9 +1093,15 @@ class _Knob:
     as the value increases."""
 
     RADIUS = 22
+    OUTER_RADIUS = RADIUS + 6  # track/fill ring, also the hit-test and layout radius
     DRAG_PIXELS_FOR_FULL_RANGE = 200.0
     SCROLL_ACCEL_WINDOW = 0.25  # seconds; ticks closer together than this keep building speed
-    SCROLL_MAX_STREAK = 19
+    # A sustained scroll burst should cross the *whole range* in about this
+    # many max-speed ticks, regardless of the range's size -- so a small
+    # range (global, 0-31) and a large one (intensity, 0-255) accelerate at
+    # the same felt pace instead of the large range crawling and the small
+    # one blowing past its whole range in a couple of ticks.
+    SCROLL_TICKS_ACROSS_RANGE = 18
     _ANGLE_MIN = 225.0
     _ANGLE_SPAN = 270.0
 
@@ -1063,24 +1118,26 @@ class _Knob:
         self._drag_start_y = 0.0
         self._drag_start_value = value
         self._last_scroll_time = 0.0
+        self._last_scroll_direction = 0
         self._scroll_streak = 0
 
         self.body = shapes.Circle(0, 0, self.RADIUS, color=(58, 64, 76), batch=led_usage_batch)
-        self.track = shapes.Arc(0, 0, self.RADIUS + 6, angle=self._ANGLE_SPAN,
+        self.track = shapes.Arc(0, 0, self.OUTER_RADIUS, angle=self._ANGLE_SPAN,
                                  start_angle=-45.0, thickness=3,
                                  color=(80, 86, 98), batch=led_usage_batch)
-        self.fill = shapes.Arc(0, 0, self.RADIUS + 6, angle=0.0,
+        self.fill = shapes.Arc(0, 0, self.OUTER_RADIUS, angle=0.0,
                                 start_angle=self._ANGLE_MIN, thickness=3,
                                 color=(120, 175, 255), batch=led_usage_batch)
         self.pointer = shapes.Line(0, 0, 0, 0, thickness=2,
                                     color=(235, 240, 255), batch=led_usage_batch)
-        self.name_label = pyglet.text.Label(
-            name, font_name="Arial", font_size=9, anchor_x="center", anchor_y="center",
-            color=(170, 182, 200, 255), batch=led_usage_batch)
-        self.value_label = pyglet.text.Label(
-            str(value), font_name="Arial", font_size=11, weight="bold",
-            anchor_x="center", anchor_y="center",
-            color=(235, 240, 255, 255), batch=led_usage_batch)
+        # One label below the knob ("COUNT: 40") rather than separate name +
+        # on-face value labels: the on-face value used to sit right where the
+        # pointer needle sweeps, so at some angles the needle crossed out the
+        # digits.
+        self.label = pyglet.text.Label(
+            "", font_name="Arial", font_size=10, weight="bold",
+            anchor_x="center", anchor_y="top",
+            color=(210, 218, 232, 255), batch=led_usage_batch)
 
     def _fraction(self):
         span = self.maximum - self.minimum
@@ -1095,7 +1152,7 @@ class _Knob:
         self.pointer.y2 = self.y + self.RADIUS * math.sin(angle_rad)
         self.fill.angle = -self._ANGLE_SPAN * fraction
         self.body.color = (78, 108, 145) if (self.hovered or self._dragging) else (58, 64, 76)
-        self.value_label.text = str(self.value)
+        self.label.text = "%s: %d" % (self.name, self.value)
 
     def layout(self, x, y):
         self.x, self.y = x, y
@@ -1103,12 +1160,11 @@ class _Knob:
         self.track.position = (x, y)
         self.fill.position = (x, y)
         self.fill.start_angle = self._ANGLE_MIN
-        self.name_label.x, self.name_label.y = x, y - self.RADIUS - 14
-        self.value_label.x, self.value_label.y = x, y
+        self.label.x, self.label.y = x, y - self.OUTER_RADIUS - 8
         self._sync_visuals()
 
     def hit(self, x, y):
-        return (x - self.x) ** 2 + (y - self.y) ** 2 <= (self.RADIUS + 6) ** 2
+        return (x - self.x) ** 2 + (y - self.y) ** 2 <= self.OUTER_RADIUS ** 2
 
     def set_hovered(self, hovered):
         if hovered != self.hovered:
@@ -1141,14 +1197,24 @@ class _Knob:
         self._sync_visuals()
 
     def scroll(self, direction):
-        """``direction`` is +1 or -1 for one wheel notch."""
+        """``direction`` is +1 or -1 for one wheel notch.
+
+        Builds speed only while notches keep arriving close together *and*
+        in the same direction -- rocking the wheel back and forth for a
+        small fine adjustment never accelerates, it always steps by 1.
+        """
         now = time.time()
-        if now - self._last_scroll_time <= self.SCROLL_ACCEL_WINDOW:
-            self._scroll_streak = min(self._scroll_streak + 1, self.SCROLL_MAX_STREAK)
+        same_direction = direction == self._last_scroll_direction
+        if same_direction and (now - self._last_scroll_time) <= self.SCROLL_ACCEL_WINDOW:
+            self._scroll_streak += 1
         else:
             self._scroll_streak = 0
         self._last_scroll_time = now
-        self._set_value(self.value + direction * (self._scroll_streak + 1))
+        self._last_scroll_direction = direction
+        span = self.maximum - self.minimum
+        max_step = max(1, round(span / self.SCROLL_TICKS_ACROSS_RANGE))
+        step = min(self._scroll_streak + 1, max_step)
+        self._set_value(self.value + direction * step)
 
 
 # Session-local panel state (never sent to the device beyond fully-resolved
@@ -1203,10 +1269,29 @@ led_usage_pin_labels = [
     for index in range(3)
 ]
 led_usage_status_label = pyglet.text.Label(
-    "", font_name="Arial", font_size=10, color=(150, 180, 210, 255), batch=led_usage_batch)
+    "", font_name="Arial", font_size=10, anchor_y="top",
+    color=(150, 180, 210, 255), batch=led_usage_batch)
 
 _led_usage_pin_x = [0, 0, 0]
 _led_usage_pin_y = 0
+
+# Vertical gaps between stacked elements in the panel, tuned against actual
+# screenshots (see tools/led_usage_panel_screenshots.py) rather than guessed.
+_LED_USAGE_GAP_AFTER_BODY = 14
+_LED_USAGE_GAP_AFTER_STATUS = 18
+_LED_USAGE_GAP_KNOB_TO_LABEL = 6
+_LED_USAGE_GAP_LABEL_TO_PINS = 12
+_LED_USAGE_BOTTOM_MARGIN = 18
+# Overlay height: header + gap + body + gap + status + gap + knob + gap +
+# label + gap + pins + margin, using the same measured component sizes the
+# layout function itself queries live (see the comment there). Recomputed
+# by hand from a real run rather than guessed; tools/led_usage_panel_screenshots.py
+# regenerates a screenshot to check it after any layout change.
+_LED_USAGE_DESIRED_HEIGHT = (
+    42 + 8 + 60 + _LED_USAGE_GAP_AFTER_BODY + 16 + _LED_USAGE_GAP_AFTER_STATUS
+    + 2 * _Knob.OUTER_RADIUS + _LED_USAGE_GAP_KNOB_TO_LABEL + 18
+    + _LED_USAGE_GAP_LABEL_TO_PINS + _LED_USAGE_PIN_H + _LED_USAGE_BOTTOM_MARGIN
+)
 
 
 def _toggle_led_usage_pin(index):
@@ -1222,23 +1307,40 @@ def _toggle_led_usage_pin(index):
 
 def _layout_led_usage_controls(left, bottom, width, height):
     global _led_usage_pin_y
-    content_x = left + 60
-    knob_y = bottom + height - 130
-    spacing = (width - 120) / 2
-    for index, knob in enumerate(LED_USAGE_KNOBS):
-        knob.layout(content_x + index * spacing, knob_y)
+    top = bottom + height
+    content_x = left + 30
+    content_right = left + width - 30
 
-    _led_usage_pin_y = bottom + 40
-    pin_spacing = 40
-    pin_start_x = left + 22
+    # Stack everything from the (already-positioned, already-texted)
+    # description down, using each element's own measured content_height so
+    # a longer status string or a reflowed description line never overlaps
+    # the row below it.
+    body_bottom = top - 58 - overlay_body_label.content_height
+    status_top = body_bottom - _LED_USAGE_GAP_AFTER_BODY
+    led_usage_status_label.x = content_x
+    led_usage_status_label.y = status_top
+    status_bottom = status_top - led_usage_status_label.content_height
+
+    knob_y = status_bottom - _LED_USAGE_GAP_AFTER_STATUS - _Knob.OUTER_RADIUS
+    spacing = (content_right - content_x - 2 * _Knob.OUTER_RADIUS) / 2
+    knob_x = [content_x + _Knob.OUTER_RADIUS + index * spacing for index in range(3)]
+    for knob, x in zip(LED_USAGE_KNOBS, knob_x):
+        knob.layout(x, knob_y)
+
+    label_bottom = (knob_y - _Knob.OUTER_RADIUS - _LED_USAGE_GAP_KNOB_TO_LABEL
+                     - led_usage_intensity_knob.label.content_height)
+    _led_usage_pin_y = label_bottom - _LED_USAGE_GAP_LABEL_TO_PINS - _LED_USAGE_PIN_H
+    pin_gap = 6
+    pin_total_width = 3 * _LED_USAGE_PIN_W + 2 * pin_gap
+    # Centered directly under the intensity knob (the middle one) -- pin
+    # state only ever affects what the intensity knob drives.
+    pin_start_x = knob_x[1] - pin_total_width / 2
     for index in range(3):
-        button_x = pin_start_x + index * pin_spacing
+        button_x = pin_start_x + index * (_LED_USAGE_PIN_W + pin_gap)
         _led_usage_pin_x[index] = button_x
         led_usage_pin_buttons[index].position = (button_x, _led_usage_pin_y)
         led_usage_pin_labels[index].x = button_x + _LED_USAGE_PIN_W / 2
         led_usage_pin_labels[index].y = _led_usage_pin_y + _LED_USAGE_PIN_H / 2
-    led_usage_status_label.x = pin_start_x + 3 * pin_spacing + 12
-    led_usage_status_label.y = _led_usage_pin_y + _LED_USAGE_PIN_H / 2
 
 
 def _sync_led_usage_status():
