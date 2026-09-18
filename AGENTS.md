@@ -47,6 +47,9 @@ index.
   this per target (docs/internals/building.md).
 - Scene lifecycle errors must surface: the director reports tracebacks
   over comms; don't swallow exceptions when changing scene handling.
+- Close the browser pane/tab when you're done verifying something in it —
+  a left-open web emulator tab keeps its WASM runtime ticking and burns a
+  lot of CPU for no reason.
 
 ## Workflow
 
