@@ -339,6 +339,15 @@ class BrowserHostApp {
 
     frame.sprites = decodedSprites || [];
     frame.tilemaps = decodedVs2Scene ? decodedVs2Scene.tilemaps : [];
+    // decodeVs2SceneBuffer's own drawables (creation order, bottom to top --
+    // see led-render-core.js) must ride along on frame itself:
+    // computeLedFramePixels only ever looks at frame.drawables, never
+    // frame.vs2Scene.drawables. Without this, it silently falls back to its
+    // legacy two-pass path (sprites reverse-sorted by slot) for every frame,
+    // v3-ordered payloads included -- putting slot 0 (whichever sprite was
+    // created first, e.g. a scene's own backdrop) last in that fallback
+    // order, so it overwrites everything drawn after it instead of before.
+    frame.drawables = decodedVs2Scene ? decodedVs2Scene.drawables : null;
     frame.vs2Scene = decodedVs2Scene;
     frame.sceneKind = vs2SceneBytes ? "vs2" : legacySceneBytes ? "legacy" : null;
     frame.sceneBytes = vs2SceneBytes || legacySceneBytes;

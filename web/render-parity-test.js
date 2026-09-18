@@ -46,25 +46,31 @@ function blankFrame(overrides = {}) {
   };
 }
 
-function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
+// drawRefs, when given, are [kind, slot] pairs (kind 0 = sprite, 1 =
+// tilemap) in creation order -- the same shape export_scene_payload()
+// appends for a real VS2_VERSION_ORDERED (3) payload. Passing it is what
+// distinguishes an "ordered" test payload from a plain v1/v2 one.
+function makeVs2ScenePayload({ layers, sprites, tilemaps = [], drawRefs = null }) {
   const headerSize = 16;
   const layerSize = 8;
   const spriteSize = 24;
   const tilemapSize = tilemaps.length ? 32 : 0;
   const framesBytes = tilemaps.reduce((total, tilemap) => total + tilemap.frames.length, 0);
+  const drawRefsBytes = drawRefs ? drawRefs.length * 2 : 0;
   const payload = new Uint8Array(
     headerSize
     + layers.length * layerSize
     + sprites.length * spriteSize
     + tilemaps.length * 32
     + framesBytes
+    + drawRefsBytes
   );
   const view = new DataView(payload.buffer);
   payload[0] = "V".charCodeAt(0);
   payload[1] = "S".charCodeAt(0);
   payload[2] = "2".charCodeAt(0);
   payload[3] = 0;
-  payload[4] = tilemaps.length ? 2 : 1;
+  payload[4] = drawRefs ? 3 : tilemaps.length ? 2 : 1;
   payload[5] = layers.length;
   payload[6] = sprites.length;
   payload[7] = tilemaps.length;
@@ -113,6 +119,14 @@ function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
     offset += 32;
     payload.set(Uint8Array.from(tilemap.frames), framesOffset);
     framesOffset += tilemap.frames.length;
+  }
+  if (drawRefs) {
+    let drawOffset = framesOffset;
+    for (const [kind, slot] of drawRefs) {
+      payload[drawOffset] = kind;
+      payload[drawOffset + 1] = slot;
+      drawOffset += 2;
+    }
   }
   return payload;
 }
@@ -612,6 +626,65 @@ function runTests() {
     const shortPixels = computeLedFramePixelsFromRgb(new Uint8Array(9));
     assert.equal(shortPixels.length, COLUMNS * PIXELS * 4);
     assert.deepEqual(getLedColor(shortPixels, 100, 0), [0, 0, 0, 255]);
+  }
+
+  // VS2_VERSION_ORDERED (3): a scene's draw order is its creation order
+  // (bottom to top), carried on the wire as an explicit [kind, slot]
+  // table -- see export_scene_payload() in vs2/__init__.py and
+  // decodeVs2SceneBuffer's own VS2_VERSION_ORDERED branch. A later
+  // drawable must overwrite an earlier one wherever they overlap,
+  // regardless of which slot either sprite happens to occupy.
+  {
+    const palette = createPalette({ 1: [10, 10, 10], 2: [200, 0, 0] });
+    const assets = new Map([
+      // backdrop: a FULLSCREEN sprite covering the entire depth range.
+      [1, makeAsset({ width: 1, height: 54, data: new Array(54).fill(1) })],
+      // cover: a small TUNNEL sprite positioned inside the backdrop's span.
+      [2, makeAsset({ width: 1, height: 4, data: new Array(4).fill(2) })],
+    ]);
+    const scene = {
+      layers: [{ mode: 0 }, { mode: 1 }],
+      sprites: [
+        // Creation order: backdrop first (slot 0), cover second (slot 1)
+        // -- exactly HighlightsMenu.build()'s own backdrop-then-world-icon
+        // order in system/launcher/code/__init__.py.
+        { layer: 0, image_strip: 1, mode: 0, x: 0, y: 0 },
+        { layer: 1, image_strip: 2, mode: 1, x: 0, y: 100 },
+      ],
+      // A slot-DESCENDING draw order would process the cover (slot 1)
+      // before the backdrop (slot 0), so the fixture only proves anything
+      // if it differs from creation order -- which is exactly the shape
+      // computeLedFramePixels's own legacy (no-drawables) fallback produces.
+      drawRefs: [[0, 0], [0, 1]],
+    };
+    const decoded = decodeVs2SceneBuffer(makeVs2ScenePayload(scene));
+    assert.equal(decoded.version, 3);
+
+    // The correct way app.js's processFrameEvents must build `frame`:
+    // decoded.drawables rides along, not just .sprites/.tilemaps.
+    const orderedFrame = blankFrame({
+      sprites: decoded.sprites,
+      tilemaps: decoded.tilemaps,
+      drawables: decoded.drawables,
+    });
+    const orderedPixels = computeLedFramePixels(orderedFrame, assets, palette);
+    assert.deepEqual(
+      getLedColor(orderedPixels, 0, 9), [200, 0, 0, 255],
+      "the later-created cover sprite must win over the backdrop it overlaps"
+    );
+
+    // The regression itself: a frame missing .drawables (what app.js
+    // produced before this was wired up) silently falls back to sorting
+    // sprites by slot descending, which draws slot 0 (the backdrop, here
+    // the first-created sprite) LAST -- so it wins instead of losing.
+    // This must NOT match the correct rendering above.
+    const noDrawablesFrame = blankFrame({ sprites: decoded.sprites, tilemaps: decoded.tilemaps });
+    const fallbackPixels = computeLedFramePixels(noDrawablesFrame, assets, palette);
+    assert.deepEqual(
+      getLedColor(fallbackPixels, 0, 9), [10, 10, 10, 255],
+      "sanity check: the no-drawables fallback really does put the backdrop on top " +
+      "(pins down why frame.drawables must be set, not just documents that it is)"
+    );
   }
 
   console.log("render parity tests passed");
