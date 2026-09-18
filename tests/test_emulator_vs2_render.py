@@ -55,6 +55,8 @@ def make_vs2_scene(layers, sprites, tilemaps=()):
         payload[offset] = index
         payload[offset + 1] = layer.get("mode", 1)
         payload[offset + 2] = 0 if layer.get("visible") is False else 1
+        payload[offset + 3] = layer.get("camera_x", 0) & 0xff
+        payload[offset + 4] = layer.get("camera_y", 0) & 0xff
         offset += layer_size
 
     for sprite in sprites:
@@ -164,6 +166,49 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(pixels_column_20[2], 20)
         self.assertEqual(pixels_column_20[1], 10)
         self.assertEqual(pixels_column_21[2], 40)
+
+    def test_vs2_layer_camera_x_wraps_across_column_zero(self):
+        povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
+        no_camera = make_vs2_scene(
+            [{"mode": 2}],
+            [{"layer": 0, "image": 8, "mode": 2, "flags": 1, "x": 0, "y": 0}],
+        )
+        povrender.set_vs2_scene(no_camera)
+        self.assertEqual(povrender.render(0)[53], 30, "no camera: sprite paints column 0")
+        self.assertEqual(povrender.render(1)[53], 10, "no camera: sprite paints column 1")
+        self.assertEqual(povrender.render(2), [0] * povrender.led_count, "no camera: column 2 is dark")
+
+        # camera_x=254 is -2 in the wrapped byte, shifting the sprite's
+        # visible window backward across column 0 onto columns 254-255.
+        with_camera = make_vs2_scene(
+            [{"mode": 2, "camera_x": 254}],
+            [{"layer": 0, "image": 8, "mode": 2, "flags": 1, "x": 0, "y": 0}],
+        )
+        povrender.set_vs2_scene(with_camera)
+        self.assertEqual(povrender.render(254)[53], 30, "camera x=-2 wraps sprite onto column 254")
+        self.assertEqual(povrender.render(255)[53], 10, "camera x=-2 wraps sprite onto column 255")
+        self.assertEqual(povrender.render(0), [0] * povrender.led_count, "camera x=-2 leaves column 0 dark")
+
+    def test_vs2_layer_camera_y_shifts_row_range(self):
+        povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
+        no_camera = make_vs2_scene(
+            [{"mode": 2}],
+            [{"layer": 0, "image": 8, "mode": 2, "flags": 1, "x": 0, "y": 0}],
+        )
+        povrender.set_vs2_scene(no_camera)
+        baseline = povrender.render(0)
+        self.assertEqual(baseline[53], 30, "no camera: sprite paints row 0")
+        self.assertEqual(baseline[52], 40, "no camera: sprite paints row 1")
+
+        with_camera = make_vs2_scene(
+            [{"mode": 2, "camera_y": 5}],
+            [{"layer": 0, "image": 8, "mode": 2, "flags": 1, "x": 0, "y": 0}],
+        )
+        povrender.set_vs2_scene(with_camera)
+        shifted = povrender.render(0)
+        self.assertEqual(shifted[48], 30, "camera y=+5 shifts the sprite onto row 5")
+        self.assertEqual(shifted[47], 40, "camera y=+5 shifts the sprite onto row 6")
+        self.assertEqual(shifted[53], 0, "camera y=+5 leaves the original row dark")
 
     def test_vs2_unlayered_modes_survive_decode(self):
         decoded = povrender.decode_vs2_scene(make_vs2_scene([], [

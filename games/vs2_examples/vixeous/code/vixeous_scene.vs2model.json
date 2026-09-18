@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "class_name": "VixeousScene",
+  "layers": [
+    {
+      "attr": "world",
+      "drawables": [
+        {
+          "kind": "tilemap",
+          "attr": "terrain",
+          "image": "terrain.png",
+          "columns": 8,
+          "rows": 9,
+          "view_width": 256,
+          "view_height": 128
+        },
+        {
+          "kind": "sprite",
+          "attr": "reticle",
+          "image": "reticle.png"
+        },
+        {
+          "kind": "sprite",
+          "attr": "player",
+          "image": "ship.png",
+          "y": 6
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "shots",
+          "image": "shots.png",
+          "count": 4,
+          "vars": [
+            {"name": "theta", "default": 0}
+          ],
+          "behaviors": [
+            {"class": "Moving", "params": {"speed_y": 8}},
+            {"class": "DespawnBeyond", "params": {"y_max": 179}}
+          ]
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "bombs",
+          "image": "shots.png",
+          "count": 3,
+          "vars": [
+            {"name": "theta", "default": 0}
+          ],
+          "behaviors": [
+            {"class": "Moving", "params": {"speed_y": 4}}
+          ]
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "explosions",
+          "image": "explosion.png",
+          "count": 5,
+          "on_empty": "RECYCLE",
+          "vars": [
+            {"name": "theta", "default": 0}
+          ],
+          "behaviors": [
+            {"class": "Transient", "params": {"animate": true, "ticks": 18}}
+          ]
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "enemies",
+          "image": "enemy.png",
+          "count": 6,
+          "vars": [
+            {"name": "theta", "default": 0},
+            {"name": "kind", "default": 0, "min": 0, "max": 2},
+            {"name": "phase", "default": 0, "min": 0, "max": 127},
+            {"name": "hp", "default": 1, "min": 0}
+          ],
+          "behaviors": [
+            {"class": "Moving", "params": {"speed_y": -1}},
+            {"class": "DespawnBeyond", "params": {"y_min": 0}}
+          ]
+        },
+        {
+          "kind": "sprite_pool",
+          "attr": "targets",
+          "image": "targets.png",
+          "count": 5,
+          "vars": [
+            {"name": "theta", "default": 0},
+            {"name": "kind", "default": 0, "min": 0, "max": 3}
+          ]
+        },
+        {
+          "kind": "sprite",
+          "attr": "boss",
+          "image": "boss.png",
+          "visible": false,
+          "behaviors": [
+            {"class": "BossOrbit", "module": "games.vs2_examples.vixeous.code.boss_orbit",
+             "params": {"width": {"expr": "vs2.display.width"}}}
+          ]
+        }
+      ]
+    },
+    {
+      "attr": "hud",
+      "projection": "HUD",
+      "drawables": [
+        {
+          "kind": "label",
+          "attr": "score_label",
+          "image": "digits.png",
+          "columns": 9,
+          "y": 1,
+          "flip_x": true,
+          "flip_y": true
+        },
+        {
+          "kind": "sprite",
+          "attr": "message",
+          "image": "messages.png",
+          "y": 12
+        }
+      ]
+    }
+  ]
+}

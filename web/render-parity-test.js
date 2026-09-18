@@ -46,25 +46,31 @@ function blankFrame(overrides = {}) {
   };
 }
 
-function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
+// drawRefs, when given, are [kind, slot] pairs (kind 0 = sprite, 1 =
+// tilemap) in creation order -- the same shape export_scene_payload()
+// appends for a real VS2_VERSION_ORDERED (3) payload. Passing it is what
+// distinguishes an "ordered" test payload from a plain v1/v2 one.
+function makeVs2ScenePayload({ layers, sprites, tilemaps = [], drawRefs = null }) {
   const headerSize = 16;
   const layerSize = 8;
   const spriteSize = 24;
   const tilemapSize = tilemaps.length ? 32 : 0;
   const framesBytes = tilemaps.reduce((total, tilemap) => total + tilemap.frames.length, 0);
+  const drawRefsBytes = drawRefs ? drawRefs.length * 2 : 0;
   const payload = new Uint8Array(
     headerSize
     + layers.length * layerSize
     + sprites.length * spriteSize
     + tilemaps.length * 32
     + framesBytes
+    + drawRefsBytes
   );
   const view = new DataView(payload.buffer);
   payload[0] = "V".charCodeAt(0);
   payload[1] = "S".charCodeAt(0);
   payload[2] = "2".charCodeAt(0);
   payload[3] = 0;
-  payload[4] = tilemaps.length ? 2 : 1;
+  payload[4] = drawRefs ? 3 : tilemaps.length ? 2 : 1;
   payload[5] = layers.length;
   payload[6] = sprites.length;
   payload[7] = tilemaps.length;
@@ -79,6 +85,8 @@ function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
     payload[offset] = index;
     payload[offset + 1] = layer.mode;
     payload[offset + 2] = layer.visible === false ? 0 : 1;
+    payload[offset + 3] = (layer.camera_x || 0) & 0xff;
+    payload[offset + 4] = (layer.camera_y || 0) & 0xff;
     offset += layerSize;
   }
   for (const sprite of sprites) {
@@ -111,6 +119,14 @@ function makeVs2ScenePayload({ layers, sprites, tilemaps = [] }) {
     offset += 32;
     payload.set(Uint8Array.from(tilemap.frames), framesOffset);
     framesOffset += tilemap.frames.length;
+  }
+  if (drawRefs) {
+    let drawOffset = framesOffset;
+    for (const [kind, slot] of drawRefs) {
+      payload[drawOffset] = kind;
+      payload[drawOffset + 1] = slot;
+      drawOffset += 2;
+    }
   }
   return payload;
 }
@@ -360,6 +376,89 @@ function runTests() {
     assert.deepEqual(getLedColor(pixels, 21, 2), [40, 0, 0, 255], "VS2 flip_x should mirror source columns");
   }
 
+  // Layer camera X folds into the same modular column arithmetic sprite x
+  // already uses, so it wraps at column 0 exactly like a sprite position
+  // does (see decodeVs2SceneBuffer's camera fold-in and the matching
+  // comment in led-render-core.js).
+  {
+    const palette = createPalette({
+      1: [10, 0, 0],
+      2: [20, 0, 0],
+      3: [30, 0, 0],
+      4: [40, 0, 0],
+    });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })],
+    ]);
+
+    const baselineDecoded = decodeVs2SceneBuffer(makeVs2ScenePayload({
+      layers: [{ mode: 2 }],
+      sprites: [{ layer: 0, image_strip: 8, frame: 0, mode: 2, flags: 1, x: 0, y: 0 }],
+    }));
+    const baselinePixels = computeLedFramePixels(blankFrame({ sprites: baselineDecoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(baselinePixels, 0, 53), [30, 0, 0, 255], "camera x=0 baseline column 0");
+    assert.deepEqual(getLedColor(baselinePixels, 1, 53), [10, 0, 0, 255], "camera x=0 baseline column 1");
+    assert.deepEqual(getLedColor(baselinePixels, 2, 53), [0, 0, 0, 255], "camera x=0 baseline column 2 is dark");
+
+    // camera_x=254 is -2 in the wrapped byte, shifting the sprite's visible
+    // window backward across column 0 onto columns 254-255.
+    const cameraDecoded = decodeVs2SceneBuffer(makeVs2ScenePayload({
+      layers: [{ mode: 2, camera_x: 254 }],
+      sprites: [{ layer: 0, image_strip: 8, frame: 0, mode: 2, flags: 1, x: 0, y: 0 }],
+    }));
+    const cameraPixels = computeLedFramePixels(blankFrame({ sprites: cameraDecoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(cameraPixels, 254, 53), [30, 0, 0, 255], "camera x=-2 wraps sprite onto column 254");
+    assert.deepEqual(getLedColor(cameraPixels, 255, 53), [10, 0, 0, 255], "camera x=-2 wraps sprite onto column 255");
+    assert.deepEqual(getLedColor(cameraPixels, 0, 53), [0, 0, 0, 255], "camera x=-2 leaves column 0 dark");
+  }
+
+  // Layer camera Y folds into the row range a drawable occupies, the same
+  // way camera X folds into the column range.
+  {
+    const palette = createPalette({
+      1: [10, 0, 0],
+      2: [20, 0, 0],
+      3: [30, 0, 0],
+      4: [40, 0, 0],
+    });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 2, 3, 4] })],
+    ]);
+    const decoded = decodeVs2SceneBuffer(makeVs2ScenePayload({
+      layers: [{ mode: 2, camera_y: 5 }],
+      sprites: [{ layer: 0, image_strip: 8, frame: 0, mode: 2, flags: 1, x: 0, y: 0 }],
+    }));
+    const pixels = computeLedFramePixels(blankFrame({ sprites: decoded.sprites }), assets, palette);
+    assert.deepEqual(getLedColor(pixels, 0, 48), [30, 0, 0, 255], "camera y=+5 shifts sprite onto row 5");
+    assert.deepEqual(getLedColor(pixels, 0, 47), [40, 0, 0, 255], "camera y=+5 shifts sprite onto row 6");
+    assert.deepEqual(getLedColor(pixels, 0, 53), [0, 0, 0, 255], "camera y=+5 leaves the original row dark");
+  }
+
+  // Acceptance: a layer with no camera and the default curve must render
+  // byte-identical to a drawable with no layer at all.
+  {
+    const palette = createPalette({ 1: [5, 6, 7] });
+    const assets = new Map([
+      [8, makeAsset({ width: 2, height: 2, data: [1, 0, 0, 0] })],
+    ]);
+    const noLayerPixels = computeLedFramePixels(blankFrame({
+      sprites: decodeVs2SceneBuffer(makeVs2ScenePayload({
+        layers: [],
+        sprites: [{ layer: 255, image_strip: 8, frame: 0, mode: 1, flags: 1, x: 12, y: 30 }],
+      })).sprites,
+    }), assets, palette);
+    const withLayerPixels = computeLedFramePixels(blankFrame({
+      sprites: decodeVs2SceneBuffer(makeVs2ScenePayload({
+        layers: [{ mode: 1 }],
+        sprites: [{ layer: 0, image_strip: 8, frame: 0, mode: 1, flags: 1, x: 12, y: 30 }],
+      })).sprites,
+    }), assets, palette);
+    assert.deepEqual(
+      Array.from(withLayerPixels), Array.from(noLayerPixels),
+      "no camera, default curve renders byte-identical with or without a layer"
+    );
+  }
+
   {
     const payload = makeVs2ScenePayload({
       layers: [],
@@ -527,6 +626,65 @@ function runTests() {
     const shortPixels = computeLedFramePixelsFromRgb(new Uint8Array(9));
     assert.equal(shortPixels.length, COLUMNS * PIXELS * 4);
     assert.deepEqual(getLedColor(shortPixels, 100, 0), [0, 0, 0, 255]);
+  }
+
+  // VS2_VERSION_ORDERED (3): a scene's draw order is its creation order
+  // (bottom to top), carried on the wire as an explicit [kind, slot]
+  // table -- see export_scene_payload() in vs2/__init__.py and
+  // decodeVs2SceneBuffer's own VS2_VERSION_ORDERED branch. A later
+  // drawable must overwrite an earlier one wherever they overlap,
+  // regardless of which slot either sprite happens to occupy.
+  {
+    const palette = createPalette({ 1: [10, 10, 10], 2: [200, 0, 0] });
+    const assets = new Map([
+      // backdrop: a FULLSCREEN sprite covering the entire depth range.
+      [1, makeAsset({ width: 1, height: 54, data: new Array(54).fill(1) })],
+      // cover: a small TUNNEL sprite positioned inside the backdrop's span.
+      [2, makeAsset({ width: 1, height: 4, data: new Array(4).fill(2) })],
+    ]);
+    const scene = {
+      layers: [{ mode: 0 }, { mode: 1 }],
+      sprites: [
+        // Creation order: backdrop first (slot 0), cover second (slot 1)
+        // -- exactly HighlightsMenu.build()'s own backdrop-then-world-icon
+        // order in system/launcher/code/__init__.py.
+        { layer: 0, image_strip: 1, mode: 0, x: 0, y: 0 },
+        { layer: 1, image_strip: 2, mode: 1, x: 0, y: 100 },
+      ],
+      // A slot-DESCENDING draw order would process the cover (slot 1)
+      // before the backdrop (slot 0), so the fixture only proves anything
+      // if it differs from creation order -- which is exactly the shape
+      // computeLedFramePixels's own legacy (no-drawables) fallback produces.
+      drawRefs: [[0, 0], [0, 1]],
+    };
+    const decoded = decodeVs2SceneBuffer(makeVs2ScenePayload(scene));
+    assert.equal(decoded.version, 3);
+
+    // The correct way app.js's processFrameEvents must build `frame`:
+    // decoded.drawables rides along, not just .sprites/.tilemaps.
+    const orderedFrame = blankFrame({
+      sprites: decoded.sprites,
+      tilemaps: decoded.tilemaps,
+      drawables: decoded.drawables,
+    });
+    const orderedPixels = computeLedFramePixels(orderedFrame, assets, palette);
+    assert.deepEqual(
+      getLedColor(orderedPixels, 0, 9), [200, 0, 0, 255],
+      "the later-created cover sprite must win over the backdrop it overlaps"
+    );
+
+    // The regression itself: a frame missing .drawables (what app.js
+    // produced before this was wired up) silently falls back to sorting
+    // sprites by slot descending, which draws slot 0 (the backdrop, here
+    // the first-created sprite) LAST -- so it wins instead of losing.
+    // This must NOT match the correct rendering above.
+    const noDrawablesFrame = blankFrame({ sprites: decoded.sprites, tilemaps: decoded.tilemaps });
+    const fallbackPixels = computeLedFramePixels(noDrawablesFrame, assets, palette);
+    assert.deepEqual(
+      getLedColor(fallbackPixels, 0, 9), [10, 10, 10, 255],
+      "sanity check: the no-drawables fallback really does put the backdrop on top " +
+      "(pins down why frame.drawables must be set, not just documents that it is)"
+    );
   }
 
   console.log("render parity tests passed");

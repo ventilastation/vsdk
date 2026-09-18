@@ -55,6 +55,23 @@ bool vs2_wire_decode_scene(const uint8_t* data, size_t len, vs2_wire_scene_t* ou
         layer->id = rd_u8(p);
         layer->mode = rd_u8(p + 1);
         layer->flags = rd_u8(p + 2);
+        /* Reserved bytes 3/4 (see export_scene_payload() in vs2/__init__.py):
+         * camera X/Y as whole LED-column/row units (X wraps at COLUMNS=256,
+         * so a plain uint8_t already carries the wrap; Y is clamped 0..255,
+         * the same domain as vs2_sprite_t.y). Scale into vs2_layer_t's Q8
+         * fixed-point camera fields, the same convention vs2_native.c's
+         * set_camera() uses for a live layer. Byte 5 is a curve index -- 0
+         * means "this layer's mode default curve", the only case the wire
+         * format can reconstruct: a custom curve's 256 bytes never travel
+         * over the wire (export_scene_payload() only ever sends the small
+         * index), so every layer here gets the shared vs2_deepspace table
+         * regardless of index. That keeps the no-camera/default-curve case
+         * byte-identical, at the cost of a custom per-layer curve not (yet)
+         * reaching this desktop-native renderer -- see the render-parity
+         * report for T6. */
+        layer->camera_x = layer_size > 3 ? (int32_t)rd_u8(p + 3) * 256 : 0;
+        layer->camera_y = layer_size > 4 ? (int32_t)rd_u8(p + 4) * 256 : 0;
+        memcpy(layer->curve, vs2_deepspace, VS2_CURVE_LENGTH);
         out->layer_ptrs[i] = layer;
         offset += layer_size;
     }

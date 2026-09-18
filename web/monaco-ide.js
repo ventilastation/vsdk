@@ -13,6 +13,11 @@ import {
 } from "./workspace-rom-builder.js";
 
 const MONACO_BASE_URL = "./vendor/monaco/vs";
+//: The game the editor (and, via `ventilastation:editor-game-selected`,
+//: the Event Sheet / Behavior Blocks panels) opens by default -- vyruss_vs2
+//: is the most complete VS2 Behaviors proving case in vs2_examples/. Falls
+//: back to the first game found (see pickDefaultGameKey) if it's missing.
+const DEFAULT_GAME_KEY = "vs2_examples/vyruss_vs2";
 const WORKSPACE_ROOT_CANDIDATES = ["."];
 const WORKSPACE_READY_RETRY_COUNT = 20;
 const WORKSPACE_READY_RETRY_DELAY_MS = 150;
@@ -594,7 +599,7 @@ class WorkspaceIde {
       this.currentGameKey = null;
     }
     if (!this.currentGameKey) {
-      this.currentGameKey = this.pickDefaultGameKey();
+      this.setCurrentGameKey(this.pickDefaultGameKey());
     }
     this.renderGamesList();
     this.renderFileList();
@@ -653,7 +658,29 @@ class WorkspaceIde {
 
   pickDefaultGameKey() {
     const games = this.getGameEntries();
-    return games[0]?.key || null;
+    if (!games.length) {
+      return null;
+    }
+    if (games.some((entry) => entry.key === DEFAULT_GAME_KEY)) {
+      return DEFAULT_GAME_KEY;
+    }
+    return games[0].key;
+  }
+
+  /** Assigns `currentGameKey` and, only when it actually changes to a real
+   * game, broadcasts it on `window` -- the Event Sheet and Behavior Blocks
+   * panels (separate modules, no direct reference to this class) listen
+   * for this to auto-load whichever game is now selected. */
+  setCurrentGameKey(gameKey) {
+    if (this.currentGameKey === gameKey) {
+      return;
+    }
+    this.currentGameKey = gameKey;
+    if (gameKey) {
+      window.dispatchEvent(new CustomEvent("ventilastation:editor-game-selected", {
+        detail: { gameKey },
+      }));
+    }
   }
 
   findMainFileForGame(gameKey) {
@@ -714,7 +741,7 @@ class WorkspaceIde {
   async openFile(path, { collapseFilesDrawer = false } = {}) {
     const gameKey = getGameKeyFromPath(path);
     if (gameKey) {
-      this.currentGameKey = gameKey;
+      this.setCurrentGameKey(gameKey);
     }
     const type = fileTypeForPath(path);
     if (type === "sprite") {
@@ -1131,7 +1158,7 @@ class WorkspaceIde {
   async openMainFileForGame(gameKey, { collapseDrawer = false } = {}) {
     const mainPath = this.findMainFileForGame(gameKey);
     if (!mainPath) {
-      this.currentGameKey = gameKey;
+      this.setCurrentGameKey(gameKey);
       this.renderGamesList();
       this.renderFileList();
       this.renderCreateState();
