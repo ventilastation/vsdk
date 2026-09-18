@@ -422,6 +422,60 @@ function blankFrame(overrides = {}) {
 }
 
 {
+  // A hidden tilemap's own cell data still occupies real wire bytes, so
+  // framesEnd (where the v3 draw-refs table starts) must account for it
+  // regardless of visibility -- see packSceneVs2Bytes's own comment.
+  // Reproduces the launcher root menu's real shape: a visible sprite, a
+  // *hidden* tilemap whose frame data is the last thing on the wire before
+  // the draw-refs table (every one of HighlightsMenu's 12 pool-slot labels
+  // is hidden the instant an entry shows an icon sprite instead -- see
+  // system/launcher/code/__init__.py's _show_entry()). Getting framesEnd
+  // wrong here misreads the draw-refs table from stale in-bounds bytes,
+  // which (being interpreted as a malformed payload) empties the whole
+  // scene rather than merely mispositioning something.
+  const payload = makeVs2ScenePayload({
+    layers: [],
+    sprites: [
+      { layer: 255, image_strip: 1, frame: 0, mode: 2, flags: 1, x: 4, y: 53 },
+    ],
+    tilemaps: [
+      {
+        image_strip: 2, frames: [0], columns: 1, rows: 1,
+        tile_width: 1, tile_height: 1, viewport: [0, 0, 1, 1],
+        mode: 2, x: 0, y: 0, flags: 1, // visible, first on the wire
+      },
+      {
+        image_strip: 2, frames: [0, 1, 2, 3, 4, 5], columns: 2, rows: 3,
+        tile_width: 1, tile_height: 1, viewport: [0, 0, 1, 1],
+        mode: 2, x: 0, y: 0, flags: 0, // hidden, and its own frame data is last
+      },
+    ],
+    // Every structurally-declared drawable gets a draw-ref entry regardless
+    // of its *current* visibility (drawables is build()-order, fixed;
+    // visibility is a separate, dynamic per-tick property) -- so this needs
+    // one entry per sprite+tilemap (drawCount = spriteCount + tilemapCount),
+    // not one per currently-visible thing.
+    drawOrder: [[1, 1], [1, 0], [0, 0]],
+  });
+  const decoded = decodeVs2SceneBuffer(payload);
+  const assets = new Map([
+    [1, makeAsset({ width: 1, height: 1, data: [1] })],
+    [2, makeAsset({ width: 1, height: 1, frames: 6, data: [2, 2, 2, 2, 2, 2] })],
+  ]);
+  const sceneData = core.packSceneVs2(payload);
+  assert.equal(
+    sceneData.drawableCount, decoded.drawables.length,
+    "a hidden tilemap's trailing frame data must not corrupt the draw-refs read",
+  );
+  compareScene("vs2 v3 hidden tilemap's frame data extends past the visible ones", {
+    assets,
+    paletteBytes: PALETTE,
+    frame: blankFrame({ sprites: decoded.sprites, tilemaps: decoded.tilemaps, drawables: decoded.drawables }),
+    sceneData,
+  });
+}
+
+{
   // Full-density stress: 100 legacy sprites over the whole ring.
   const sprites = [];
   for (let slot = 0; slot < 100; slot += 1) {

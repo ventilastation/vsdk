@@ -432,9 +432,6 @@
       offset += tilemapSize;
       const flags = bytes[recordOffset + 2];
       const layer = layers[bytes[recordOffset]] || null;
-      if (!(flags & 1) || (layer && !layer.visible)) {
-        continue;
-      }
       const columns = view.getUint16(recordOffset + 4, true);
       const rows = view.getUint16(recordOffset + 6, true);
       const cellsLength = columns * rows;
@@ -442,7 +439,20 @@
       if (framesOffset + cellsLength > bytes.length) {
         continue;
       }
+      // A hidden tilemap's own cell data still occupies real bytes on the
+      // wire -- framesEnd (where the version-3 draw-refs table starts) must
+      // account for every tilemap's span regardless of visibility, exactly
+      // like led-render-core.js's decodeVs2SceneBuffer does (this used to
+      // run after the visibility check below, undershooting framesEnd
+      // whenever a later tilemap was hidden -- e.g. every one of the
+      // launcher root menu's 12 pool-slot labels, all hidden the moment an
+      // entry shows an icon sprite instead -- which then misread the
+      // draw-refs table from stale in-bounds bytes and, reading back as a
+      // malformed payload, emptied the whole scene).
       framesEnd = Math.max(framesEnd, framesOffset + cellsLength);
+      if (!(flags & 1) || (layer && !layer.visible)) {
+        continue;
+      }
       const mode = layer ? layer.mode : bytes[recordOffset + 3];
       if (canonicalMode(mode) === MODE_PLANET) {
         continue; // FULLSCREEN tilemaps are unsupported in every renderer.

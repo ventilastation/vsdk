@@ -47,6 +47,52 @@ def make_vs2_fixture():
     return bytes(payload)
 
 
+def make_hidden_tilemap_fixture():
+    """A v3 payload shaped like the launcher root menu's real bug: one
+    visible sprite, a visible tilemap, and a *hidden* tilemap whose own
+    frame/cell data is the last thing on the wire before the draw-refs
+    table (system/launcher/code/__init__.py's HighlightsMenu hides all 12
+    of its pool-slot labels the instant an entry shows an icon sprite
+    instead -- see _show_entry()). Every structurally-declared drawable
+    gets its own draw-ref entry regardless of current visibility (drawables
+    is build()-order, fixed; visibility is a separate, dynamic property),
+    so drawCount = sprite_count + tilemap_count here is 1 + 2 = 3."""
+    header_size, layer_size, sprite_size, tilemap_size = 16, 8, 24, 32
+    visible_frames = bytes((0,))
+    hidden_frames = bytes((0, 1, 2, 3, 4, 5))
+    draw_refs = bytes((1, 1, 1, 0, 0, 0))  # [kind, slot] x3, reversed-probe order
+    payload = bytearray(
+        header_size + sprite_size + 2 * tilemap_size
+        + len(visible_frames) + len(hidden_frames) + len(draw_refs)
+    )
+    payload[:4] = b"VS2\0"
+    payload[4:8] = bytes((3, 0, 1, 2))  # version 3, 0 layers, 1 sprite, 2 tilemaps
+    struct.pack_into("<HHHH", payload, 8, header_size, layer_size, sprite_size, tilemap_size)
+    offset = header_size
+    payload[offset:offset + 5] = bytes((255, 1, 0, 2, 1))  # sprite: layer 255, strip 1, mode 2
+    struct.pack_into("<ii", payload, offset + 10, 4 * 256, 53 * 256)
+    offset += sprite_size
+    frames_offset = offset + 2 * tilemap_size
+    # Visible tilemap (slot 0): 1x1, frame data first.
+    struct.pack_into(
+        "<BBBBHHHHHHHHiiI", payload, offset,
+        255, 2, 1, 2, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, frames_offset,
+    )
+    payload[frames_offset:frames_offset + len(visible_frames)] = visible_frames
+    offset += tilemap_size
+    frames_offset += len(visible_frames)
+    # Hidden tilemap (slot 1): 2x3, frame data last -- flags bit 0 clear.
+    struct.pack_into(
+        "<BBBBHHHHHHHHiiI", payload, offset,
+        255, 2, 0, 2, 2, 3, 1, 1, 0, 0, 1, 1, 0, 0, frames_offset,
+    )
+    payload[frames_offset:frames_offset + len(hidden_frames)] = hidden_frames
+    offset += tilemap_size
+    frames_offset += len(hidden_frames)
+    payload[frames_offset:frames_offset + len(draw_refs)] = draw_refs
+    return bytes(payload)
+
+
 def pack_for_json(value):
     if hasattr(value, "tolist"):
         return value.tolist()
@@ -127,6 +173,20 @@ console.log(JSON.stringify({
             "deepspace": pack_for_json(scene_shader.pack_deepspace()),
         }
         self.assertEqual(actual, expected)
+
+    def test_hidden_tilemaps_frame_data_does_not_corrupt_the_draw_refs_read(self):
+        # frames_end (where the v3 draw-refs table starts) must account for
+        # every tilemap's own cell-data span on the wire regardless of its
+        # *current* visibility -- getting it wrong misreads the draw-refs
+        # table from stale in-bounds bytes, which (parsing back as a
+        # malformed payload) empties the whole scene rather than merely
+        # mispositioning something. See make_hidden_tilemap_fixture's own
+        # docstring for the real scene this reproduces.
+        packed = scene_shader.pack_scene_vs2_bytes(make_hidden_tilemap_fixture())
+        self.assertEqual(
+            packed["drawable_count"], 2,
+            "expected the sprite and the one visible tilemap, not an emptied scene",
+        )
 
     def test_desktop_loads_the_canonical_glsl_source(self):
         vertex = scene_shader.scene_vertex_source()

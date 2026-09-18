@@ -204,14 +204,20 @@ def pack_scene_vs2_bytes(scene_bytes):
         offset += tilemap_size
         flags = data[record + 2]
         layer = layers.get(data[record])
-        if not flags & 1 or (layer is not None and not layer[1]):
-            continue
         columns, rows = unpack_from("<HH", data, record + 4)
         cells_length = columns * rows
         frames_offset = unpack_from("<I", data, record + 28)[0]
         if frames_offset + cells_length > len(data):
             continue
+        # A hidden tilemap's own cell data still occupies real bytes on the
+        # wire -- frames_end (where the version-3 draw-refs table starts)
+        # must account for every tilemap's span regardless of visibility
+        # (this used to run after the visibility check below, undershooting
+        # frames_end whenever a later tilemap was hidden and misreading the
+        # draw-refs table from stale in-bounds bytes as a result).
         frames_end = max(frames_end, frames_offset + cells_length)
+        if not flags & 1 or (layer is not None and not layer[1]):
+            continue
         mode = layer[0] if layer is not None else data[record + 3]
         if canonical_mode(mode) == MODE_PLANET:
             continue
