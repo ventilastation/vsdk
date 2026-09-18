@@ -1580,23 +1580,75 @@ export function createVS2BehaviorBlocksPanel({
     return workspace;
   };
 
+  const getApi = () => window.VentilastationWebEmulator || null;
+
+  /** Reads `path` back, falling back to fetching it as a plain static file
+   * (and seeding the sandboxed workspace FS with it) when the sandboxed
+   * API doesn't know it -- .vs2behavior.json sidecar files are deliberately
+   * not part of web-runtime-bundle's manifest (tools/generate_web_
+   * runtime_bundle.py only globs *.py/meta.json/roms/assets), so a fresh
+   * session's virtual FS has never heard of one until this reads it. */
+  const readModelText = async (api, path) => {
+    try {
+      const file = await api.readProjectFile(path, "utf8");
+      return file.content ?? file;
+    } catch (_notFoundError) {
+      const response = await fetch(path);
+      if (!response.ok) {
+        throw new Error(`${path}: HTTP ${response.status}`);
+      }
+      const text = await response.text();
+      await api.writeProjectFile(path, text, "utf8");
+      return text;
+    }
+  };
+
+  /** Loads `path` into the workspace -- the shared body behind both the
+   * Load button and auto-loading the currently selected game (see the
+   * `ventilastation:editor-game-selected` listener below). Assumes
+   * `ensureWorkspace()` has already run once if the panel itself isn't
+   * visible yet (auto-load only calls this once it has). */
+  const loadPath = async (path) => {
+    const api = getApi();
+    if (!api) {
+      setStatus("Workspace file API unavailable");
+      return;
+    }
+    try {
+      const ws = await ensureWorkspace();
+      const text = await readModelText(api, path);
+      const model = JSON.parse(text);
+      loadModelIntoWorkspace(ws, model);
+      setStatus(`Loaded ${path}`);
+    } catch (err) {
+      setStatus(`Load failed: ${err.message}`);
+    }
+  };
+
   if (toggleButton && toggleTarget) {
     toggleButton.addEventListener("click", async () => {
       const nextHidden = !toggleTarget.hidden;
       toggleTarget.hidden = nextHidden;
       toggleButton.setAttribute("aria-expanded", nextHidden ? "false" : "true");
       if (!nextHidden) {
+        const isFirstOpen = !workspace;
         try {
           await ensureWorkspace();
-          setStatus("Ready");
+          const path = pathInput?.value?.trim();
+          if (isFirstOpen && path) {
+            // pathInput was already synced to the selected game by the
+            // ventilastation:editor-game-selected listener below, before
+            // there was a workspace to load it into -- load it now.
+            await loadPath(path);
+          } else {
+            setStatus("Ready");
+          }
         } catch (err) {
           setStatus(`Failed to load: ${err.message}`);
         }
       }
     });
   }
-
-  const getApi = () => window.VentilastationWebEmulator || null;
 
   if (saveButton) {
     saveButton.addEventListener("click", async () => {
@@ -1622,28 +1674,83 @@ export function createVS2BehaviorBlocksPanel({
   }
 
   if (loadButton) {
-    loadButton.addEventListener("click", async () => {
-      const api = getApi();
-      if (!api) {
-        setStatus("Workspace file API unavailable");
+    loadButton.addEventListener("click", () => {
+      const path = pathInput?.value?.trim();
+      if (!path) {
+        setStatus("Enter a .vs2behavior.json path first");
         return;
       }
-      try {
-        const ws = await ensureWorkspace();
-        const path = pathInput?.value?.trim();
-        if (!path) {
-          setStatus("Enter a .vs2behavior.json path first");
-          return;
-        }
-        const file = await api.readProjectFile(path, "utf8");
-        const model = JSON.parse(file.content ?? file);
-        loadModelIntoWorkspace(ws, model);
-        setStatus(`Loaded ${path}`);
-      } catch (err) {
-        setStatus(`Load failed: ${err.message}`);
-      }
+      void loadPath(path);
     });
   }
+
+  /** Finds a game's first file ending in `suffix` (alphabetically, if it
+   * has more than one). Tries the sandboxed workspace listing first
+   * (covers `suffix`s that are manifest-backed); falls back to the dev
+   * server's own directory listing of `<gameKey>/code/` (every
+   * .vs2behavior.json in this codebase lives directly there) since
+   * sidecar model files aren't in the manifest -- see readModelText's
+   * docstring above. Returns null if nothing matches either way (a game
+   * with no such file, e.g. event_sheet_demo has no behavior file). */
+  const findGameFilePath = async (api, gameKey, suffix) => {
+    try {
+      const entries = await api.listProjectFiles(`games/${gameKey}`);
+      const matches = entries.filter((entry) => entry.endsWith(suffix)).sort((left, right) => left.localeCompare(right));
+      if (matches.length) {
+        return `games/${matches[0]}`;
+      }
+    } catch (_error) {
+      // Fall through to the directory-listing fallback below.
+    }
+    const dirPath = `games/${gameKey}/code/`;
+    try {
+      const response = await fetch(dirPath);
+      if (!response.ok) {
+        return null;
+      }
+      const html = await response.text();
+      const hrefs = Array.from(new DOMParser().parseFromString(html, "text/html").querySelectorAll("a[href]"))
+        .map((anchor) => anchor.getAttribute("href") || "");
+      const matches = hrefs
+        .map((href) => href.split("/").pop())
+        .filter((name) => name && name.endsWith(suffix))
+        .sort((left, right) => left.localeCompare(right));
+      return matches.length ? `${dirPath}${matches[0]}` : null;
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  // Auto-load whichever game the editor (a separate module -- see
+  // monaco-ide.js's setCurrentGameKey) has selected: find that game's
+  // first .vs2behavior.json (see findGameFilePath), sync pathInput to it,
+  // and load it if the workspace already exists (panel previously opened)
+  // so an open panel refreshes immediately on a game switch. If the
+  // workspace doesn't exist yet, the toggle-open handler above loads this
+  // same pathInput value the first time the panel opens.
+  window.addEventListener("ventilastation:editor-game-selected", (event) => {
+    const gameKey = event.detail?.gameKey;
+    if (!gameKey) {
+      return;
+    }
+    void (async () => {
+      const api = getApi();
+      if (!api) {
+        return;
+      }
+      const path = await findGameFilePath(api, gameKey, ".vs2behavior.json");
+      if (pathInput) {
+        pathInput.value = path || "";
+      }
+      if (path) {
+        if (workspace) {
+          await loadPath(path);
+        }
+      } else {
+        setStatus(`No .vs2behavior.json file found for ${gameKey}`);
+      }
+    })();
+  });
 
   return {
     ensureWorkspace,
