@@ -20,6 +20,7 @@ import socket
 import threading
 from base_control import BaseControlState
 from povcal_state import PovCalibrationState
+from led_usage_state import LedUsageState
 from povperf_controls import start_capture, stop_capture
 from povrender import set_palettes, set_image_strip, set_spritedata
 from povrender import clear_vs2_scene, set_vs2_scene
@@ -315,6 +316,7 @@ workbench_conn = None
 last_time_seen = 0
 base_control = BaseControlState()
 povcal_state = PovCalibrationState()
+led_usage_state = LedUsageState()
 
 def waitconnect(conn, label):
     """Retry conn.setup() until it succeeds. Announces the failure once per
@@ -374,6 +376,18 @@ def dispatch_command(conn, command, args):
         message = "board error #%s: %s" % (generation, code)
         povcal_state.reject(message)
         print("comms: POV colour calibration", message)
+
+    elif command == b"ledusage_state":
+        if len(args) != 6:
+            print("comms: malformed ledusage_state", args)
+            return
+        active, count, r, g, b, global_brightness = (int(arg) for arg in args)
+        led_usage_state.apply(bool(active), count, r, g, b, global_brightness)
+
+    elif command == b"ledusage_error":
+        message = b" ".join(args).decode() if args else "unknown"
+        led_usage_state.reject(message)
+        print("comms: LED usage error:", message)
 
     elif command == b"sprites":
         clear_voom_frame()
@@ -638,6 +652,11 @@ def send_command(cmd: str):
 def send_povcal(command: str):
     """Send one calibration command to the connected board/base transport."""
     send_command("povcal " + command)
+
+
+def send_led_usage(command: str):
+    """Send one LED-usage diagnostic command to the connected board."""
+    send_command("ledusage " + command)
 
 
 def start_povperf_capture(encoder: str):

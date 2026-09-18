@@ -18,6 +18,7 @@
 #include "gpu.h"
 #include "color_pipeline.h"
 #include "hall_filter.h"
+#include "led_usage.h"
 #include "ventilagon/ventilagon.h"
 
 // Wiring is provided by the NVS-backed MicroPython board configuration at init.
@@ -613,6 +614,27 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_set_color_test_pattern_obj
 
 // ------------------------------
 
+// Raw diagnostic LED override for power/current characterization -- see
+// led_usage.h. Bypasses color_pipeline's calibration LUT entirely, unlike
+// set_color_test_pattern above, so the wire bytes are byte-exact.
+static mp_obj_t povdisplay_set_led_usage(size_t n_args, const mp_obj_t *args) {
+    bool active = mp_obj_is_true(args[0]);
+    int count = mp_obj_get_int(args[1]);
+    int red = mp_obj_get_int(args[2]);
+    int green = mp_obj_get_int(args[3]);
+    int blue = mp_obj_get_int(args[4]);
+    int global_brightness = mp_obj_get_int(args[5]);
+    if (count < 0 || red < 0 || red > 255 || green < 0 || green > 255
+        || blue < 0 || blue > 255 || global_brightness < 0
+        || !led_usage_set(active, count, red, green, blue, global_brightness)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("invalid LED usage parameters"));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(povdisplay_set_led_usage_obj, 6, 6, povdisplay_set_led_usage);
+
+// ------------------------------
+
 static mp_obj_t povdisplay_set_color_pipeline_enabled(mp_obj_t enabled) {
     if (!color_pipeline_set_enabled(mp_obj_is_true(enabled))) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("POV colour profile unavailable"));
@@ -774,6 +796,7 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_starfield_enabled), (mp_obj_t)&povdisplay_set_starfield_enabled_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_profile), (mp_obj_t)&povdisplay_set_color_profile_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_test_pattern), (mp_obj_t)&povdisplay_set_color_test_pattern_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_led_usage), (mp_obj_t)&povdisplay_set_led_usage_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_color_pipeline_enabled), (mp_obj_t)&povdisplay_set_color_pipeline_enabled_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_performance_profiling), (mp_obj_t)&povdisplay_set_performance_profiling_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_reset_performance_stats), (mp_obj_t)&povdisplay_reset_performance_stats_obj },

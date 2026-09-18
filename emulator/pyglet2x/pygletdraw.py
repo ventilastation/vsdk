@@ -218,17 +218,23 @@ def _update_scene_renderer_label():
 # never changes a game input or a workbench setting by accident.
 OVERLAY_HELP = "help"
 OVERLAY_SETTINGS = "settings"
+OVERLAY_LED_USAGE = "led_usage"
 active_overlay = None
 
 _toolbar_radius = 15
 toolbar_settings_button = shapes.Circle(0, 0, _toolbar_radius, color=(50, 68, 88))
 toolbar_help_button = shapes.Circle(0, 0, _toolbar_radius, color=(50, 68, 88))
+toolbar_led_usage_button = shapes.Circle(0, 0, _toolbar_radius, color=(50, 68, 88))
 toolbar_settings_label = pyglet.text.Label(
     "⚙", font_name="Arial", font_size=18, anchor_x="center", anchor_y="center",
     color=(238, 244, 255, 255),
 )
 toolbar_help_label = pyglet.text.Label(
     "?", font_name="Arial", font_size=17, weight="bold", anchor_x="center", anchor_y="center",
+    color=(238, 244, 255, 255),
+)
+toolbar_led_usage_label = pyglet.text.Label(
+    "⚡", font_name="Arial", font_size=15, anchor_x="center", anchor_y="center",
     color=(238, 244, 255, 255),
 )
 
@@ -281,26 +287,37 @@ def _layout_toolbar():
     y = window.height - 24
     help_x = window.width - 24
     settings_x = help_x - 38
+    led_usage_x = settings_x - 38
     toolbar_help_button.position = (help_x, y)
     toolbar_settings_button.position = (settings_x, y)
+    toolbar_led_usage_button.position = (led_usage_x, y)
     toolbar_help_label.position = (help_x, y - 1, 0)
     toolbar_settings_label.position = (settings_x, y - 1, 0)
+    toolbar_led_usage_label.position = (led_usage_x, y - 1, 0)
     toolbar_help_button.color = (78, 108, 145) if active_overlay == OVERLAY_HELP else (50, 68, 88)
     toolbar_settings_button.color = (78, 108, 145) if active_overlay == OVERLAY_SETTINGS else (50, 68, 88)
+    toolbar_led_usage_button.color = (78, 108, 145) if active_overlay == OVERLAY_LED_USAGE else (50, 68, 88)
 
 
 def _draw_toolbar():
     _layout_toolbar()
     toolbar_settings_button.draw()
     toolbar_help_button.draw()
+    toolbar_led_usage_button.draw()
     toolbar_settings_label.draw()
     toolbar_help_label.draw()
+    toolbar_led_usage_label.draw()
 
 
 def _overlay_bounds(kind):
     max_width = max(280, window.width - 40)
     max_height = max(220, window.height - 40)
-    desired_height = 390 if kind == OVERLAY_HELP else 300 + _CAL_DARK_GROWTH
+    if kind == OVERLAY_HELP:
+        desired_height = 390
+    elif kind == OVERLAY_LED_USAGE:
+        desired_height = 230
+    else:
+        desired_height = 300 + _CAL_DARK_GROWTH
     width = min(580, max_width)
     height = min(desired_height, max_height)
     return ((window.width - width) / 2, (window.height - height) / 2, width, height)
@@ -333,6 +350,11 @@ def toggle_settings_overlay():
     active_overlay = None if active_overlay == OVERLAY_SETTINGS else OVERLAY_SETTINGS
 
 
+def toggle_led_usage_overlay():
+    global active_overlay
+    active_overlay = None if active_overlay == OVERLAY_LED_USAGE else OVERLAY_LED_USAGE
+
+
 def dismiss_overlay():
     """Close the modal panel and report whether there was one to close."""
     global active_overlay
@@ -353,6 +375,14 @@ def _draw_overlay():
     if active_overlay == OVERLAY_HELP:
         overlay_title_label.text = "Keyboard shortcuts"
         overlay_body_label.text = _HELP_TEXT
+    elif active_overlay == OVERLAY_LED_USAGE:
+        overlay_title_label.text = "LED usage"
+        overlay_body_label.text = (
+            "Diagnostic LED pattern for measuring current draw. Drag a knob "
+            "vertically, or scroll over it (accelerates the longer you scroll). "
+            "Pin a channel to make it track the intensity knob live; unpinned "
+            "channels hold their last value.")
+        _layout_led_usage_controls(left, bottom, width, height)
     else:
         overlay_title_label.text = "Settings & workbench"
         overlay_body_label.text = "Rotation, board reset and upgrade, colour calibration, and POV timing tools."
@@ -362,6 +392,8 @@ def _draw_overlay():
     overlay_close_label.draw()
     if active_overlay == OVERLAY_SETTINGS:
         draw_workbench_controls()
+    elif active_overlay == OVERLAY_LED_USAGE:
+        draw_led_usage_controls()
 
 
 def _ensure_scene_compositor():
@@ -866,6 +898,9 @@ def on_mouse_press(x, y, button, modifiers):
     if _point_in_circle(x, y, *toolbar_settings_button.position, _toolbar_radius):
         toggle_settings_overlay()
         return pyglet.event.EVENT_HANDLED
+    if _point_in_circle(x, y, *toolbar_led_usage_button.position, _toolbar_radius):
+        toggle_led_usage_overlay()
+        return pyglet.event.EVENT_HANDLED
     if active_overlay is None:
         return pyglet.event.EVENT_HANDLED
 
@@ -876,6 +911,20 @@ def on_mouse_press(x, y, button, modifiers):
         return pyglet.event.EVENT_HANDLED
     if not _point_in_rect(x, y, left, bottom, width, height):
         dismiss_overlay()
+        return pyglet.event.EVENT_HANDLED
+    if active_overlay == OVERLAY_LED_USAGE:
+        _layout_led_usage_controls(left, bottom, width, height)
+        for knob in LED_USAGE_KNOBS:
+            if knob.hit(x, y):
+                knob.begin_drag(y)
+                _led_usage_dragging_knob[0] = knob
+                break
+        else:
+            for index, button_x in enumerate(_led_usage_pin_x):
+                if _point_in_rect(x, y, button_x, _led_usage_pin_y,
+                                  _LED_USAGE_PIN_W, _LED_USAGE_PIN_H):
+                    _toggle_led_usage_pin(index)
+                    break
         return pyglet.event.EVENT_HANDLED
     if active_overlay != OVERLAY_SETTINGS:
         return pyglet.event.EVENT_HANDLED
@@ -923,6 +972,11 @@ def on_mouse_press(x, y, button, modifiers):
 
 @window.event
 def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
+    if active_overlay == OVERLAY_LED_USAGE:
+        knob = _led_usage_dragging_knob[0]
+        if knob is not None:
+            knob.drag_to(y)
+        return pyglet.event.EVENT_HANDLED
     if active_overlay != OVERLAY_SETTINGS:
         return pyglet.event.EVENT_HANDLED
     if _dragging_slider:
@@ -937,15 +991,263 @@ def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
 
 
 @window.event
+def on_mouse_motion(x, y, dx, dy):
+    if active_overlay != OVERLAY_LED_USAGE:
+        return
+    for knob in LED_USAGE_KNOBS:
+        knob.set_hovered(knob.hit(x, y))
+
+
+@window.event
+def on_mouse_scroll(x, y, scroll_x, scroll_y):
+    if active_overlay != OVERLAY_LED_USAGE or scroll_y == 0:
+        return
+    for knob in LED_USAGE_KNOBS:
+        if knob.hit(x, y):
+            knob.scroll(1 if scroll_y > 0 else -1)
+            return pyglet.event.EVENT_HANDLED
+
+
+@window.event
 def on_mouse_release(x, y, button, modifiers):
     global _dragging_slider, _cal_dragging
     _dragging_slider = False
     _cal_dragging = None
+    if _led_usage_dragging_knob[0] is not None:
+        _led_usage_dragging_knob[0].end_drag()
+        _led_usage_dragging_knob[0] = None
 
 
 def draw_workbench_controls():
     _sync_calibration_controls()
     controls_batch.draw()
+
+
+#################################################################
+# LED Usage companion panel: a diagnostic tool for the system/led_usage
+# app (see apps/micropython/ventilastation/led_usage.py) that holds a
+# static LED pattern for measuring real current draw. Uses rotary-knob
+# controls rather than the linear sliders above -- drag vertically, or
+# scroll the wheel while hovering (with acceleration: a sustained scroll
+# burst crosses the whole range in a couple of seconds, an isolated tick
+# nudges by 1 for fine adjustment). Own batch, separate from
+# controls_batch, so this panel and the settings/workbench one never draw
+# on top of each other.
+#################################################################
+led_usage_batch = pyglet.graphics.Batch()
+
+
+class _Knob:
+    """One rotary-encoder-style control. A 270-degree track with a 90-degree
+    gap at the bottom -- value=minimum points to the bottom-left end of the
+    track, value=maximum to the bottom-right end, sweeping through the top
+    as the value increases."""
+
+    RADIUS = 22
+    DRAG_PIXELS_FOR_FULL_RANGE = 200.0
+    SCROLL_ACCEL_WINDOW = 0.25  # seconds; ticks closer together than this keep building speed
+    SCROLL_MAX_STREAK = 19
+    _ANGLE_MIN = 225.0
+    _ANGLE_SPAN = 270.0
+
+    def __init__(self, name, minimum, maximum, value, on_change):
+        self.name = name
+        self.minimum = minimum
+        self.maximum = maximum
+        self.value = value
+        self.on_change = on_change
+        self.x = 0.0
+        self.y = 0.0
+        self.hovered = False
+        self._dragging = False
+        self._drag_start_y = 0.0
+        self._drag_start_value = value
+        self._last_scroll_time = 0.0
+        self._scroll_streak = 0
+
+        self.body = shapes.Circle(0, 0, self.RADIUS, color=(58, 64, 76), batch=led_usage_batch)
+        self.track = shapes.Arc(0, 0, self.RADIUS + 6, angle=self._ANGLE_SPAN,
+                                 start_angle=-45.0, thickness=3,
+                                 color=(80, 86, 98), batch=led_usage_batch)
+        self.fill = shapes.Arc(0, 0, self.RADIUS + 6, angle=0.0,
+                                start_angle=self._ANGLE_MIN, thickness=3,
+                                color=(120, 175, 255), batch=led_usage_batch)
+        self.pointer = shapes.Line(0, 0, 0, 0, thickness=2,
+                                    color=(235, 240, 255), batch=led_usage_batch)
+        self.name_label = pyglet.text.Label(
+            name, font_name="Arial", font_size=9, anchor_x="center", anchor_y="center",
+            color=(170, 182, 200, 255), batch=led_usage_batch)
+        self.value_label = pyglet.text.Label(
+            str(value), font_name="Arial", font_size=11, weight="bold",
+            anchor_x="center", anchor_y="center",
+            color=(235, 240, 255, 255), batch=led_usage_batch)
+
+    def _fraction(self):
+        span = self.maximum - self.minimum
+        return 0.0 if span <= 0 else (self.value - self.minimum) / span
+
+    def _sync_visuals(self):
+        fraction = self._fraction()
+        angle_deg = self._ANGLE_MIN - self._ANGLE_SPAN * fraction
+        angle_rad = math.radians(angle_deg)
+        self.pointer.x, self.pointer.y = self.x, self.y
+        self.pointer.x2 = self.x + self.RADIUS * math.cos(angle_rad)
+        self.pointer.y2 = self.y + self.RADIUS * math.sin(angle_rad)
+        self.fill.angle = -self._ANGLE_SPAN * fraction
+        self.body.color = (78, 108, 145) if (self.hovered or self._dragging) else (58, 64, 76)
+        self.value_label.text = str(self.value)
+
+    def layout(self, x, y):
+        self.x, self.y = x, y
+        self.body.position = (x, y)
+        self.track.position = (x, y)
+        self.fill.position = (x, y)
+        self.fill.start_angle = self._ANGLE_MIN
+        self.name_label.x, self.name_label.y = x, y - self.RADIUS - 14
+        self.value_label.x, self.value_label.y = x, y
+        self._sync_visuals()
+
+    def hit(self, x, y):
+        return (x - self.x) ** 2 + (y - self.y) ** 2 <= (self.RADIUS + 6) ** 2
+
+    def set_hovered(self, hovered):
+        if hovered != self.hovered:
+            self.hovered = hovered
+            self._sync_visuals()
+
+    def _set_value(self, value):
+        value = max(self.minimum, min(self.maximum, round(value)))
+        changed = value != self.value
+        self.value = value
+        self._sync_visuals()
+        if changed:
+            self.on_change(value)
+
+    def begin_drag(self, y):
+        self._dragging = True
+        self._drag_start_y = y
+        self._drag_start_value = self.value
+        self._sync_visuals()
+
+    def drag_to(self, y):
+        if not self._dragging:
+            return
+        span = self.maximum - self.minimum
+        delta = (y - self._drag_start_y) / self.DRAG_PIXELS_FOR_FULL_RANGE * span
+        self._set_value(self._drag_start_value + delta)
+
+    def end_drag(self):
+        self._dragging = False
+        self._sync_visuals()
+
+    def scroll(self, direction):
+        """``direction`` is +1 or -1 for one wheel notch."""
+        now = time.time()
+        if now - self._last_scroll_time <= self.SCROLL_ACCEL_WINDOW:
+            self._scroll_streak = min(self._scroll_streak + 1, self.SCROLL_MAX_STREAK)
+        else:
+            self._scroll_streak = 0
+        self._last_scroll_time = now
+        self._set_value(self.value + direction * (self._scroll_streak + 1))
+
+
+# Session-local panel state (never sent to the device beyond fully-resolved
+# values -- "pin" is purely a UI concept for what the intensity knob drives).
+led_usage_pin = [True, True, True]  # R, G, B -- pinned = live (tracks intensity)
+led_usage_channel_value = [0, 0, 0]  # last resolved R, G, B
+
+
+def _led_usage_send():
+    comms.send_led_usage("set %d %d %d %d %d" % (
+        led_usage_count_knob.value,
+        led_usage_channel_value[0], led_usage_channel_value[1], led_usage_channel_value[2],
+        led_usage_global_knob.value))
+
+
+def _led_usage_count_changed(_value):
+    _led_usage_send()
+
+
+def _led_usage_intensity_changed(value):
+    for index in range(3):
+        if led_usage_pin[index]:
+            led_usage_channel_value[index] = value
+    _led_usage_send()
+
+
+def _led_usage_global_changed(_value):
+    _led_usage_send()
+
+
+led_usage_count_knob = _Knob("COUNT", 0, 107, 0, _led_usage_count_changed)
+led_usage_intensity_knob = _Knob("INTENSITY", 0, 255, 0, _led_usage_intensity_changed)
+led_usage_global_knob = _Knob("GLOBAL", 0, 31, 16, _led_usage_global_changed)
+LED_USAGE_KNOBS = (led_usage_count_knob, led_usage_intensity_knob, led_usage_global_knob)
+
+_led_usage_dragging_knob = [None]
+
+_LED_USAGE_PIN_LETTERS = ("R", "G", "B")
+_LED_USAGE_PIN_W, _LED_USAGE_PIN_H = 28, 22
+_LED_USAGE_PIN_COLORS_LIVE = ((200, 70, 70), (70, 170, 90), (70, 110, 200))
+_LED_USAGE_PIN_COLORS_FROZEN = ((70, 50, 50), (50, 68, 55), (50, 58, 72))
+
+led_usage_pin_buttons = [
+    shapes.Rectangle(0, 0, _LED_USAGE_PIN_W, _LED_USAGE_PIN_H,
+                      color=_LED_USAGE_PIN_COLORS_LIVE[index], batch=led_usage_batch)
+    for index in range(3)
+]
+led_usage_pin_labels = [
+    pyglet.text.Label(_LED_USAGE_PIN_LETTERS[index], font_name="Arial", font_size=10,
+                       weight="bold", anchor_x="center", anchor_y="center",
+                       color=(245, 248, 255, 255), batch=led_usage_batch)
+    for index in range(3)
+]
+led_usage_status_label = pyglet.text.Label(
+    "", font_name="Arial", font_size=10, color=(150, 180, 210, 255), batch=led_usage_batch)
+
+_led_usage_pin_x = [0, 0, 0]
+_led_usage_pin_y = 0
+
+
+def _toggle_led_usage_pin(index):
+    led_usage_pin[index] = not led_usage_pin[index]
+    led_usage_pin_buttons[index].color = (
+        _LED_USAGE_PIN_COLORS_LIVE[index] if led_usage_pin[index]
+        else _LED_USAGE_PIN_COLORS_FROZEN[index])
+    if led_usage_pin[index]:
+        # Newly pinned -- snap live to the current intensity value straight away.
+        led_usage_channel_value[index] = led_usage_intensity_knob.value
+    _led_usage_send()
+
+
+def _layout_led_usage_controls(left, bottom, width, height):
+    global _led_usage_pin_y
+    content_x = left + 60
+    knob_y = bottom + height - 130
+    spacing = (width - 120) / 2
+    for index, knob in enumerate(LED_USAGE_KNOBS):
+        knob.layout(content_x + index * spacing, knob_y)
+
+    _led_usage_pin_y = bottom + 40
+    pin_spacing = 40
+    pin_start_x = left + 22
+    for index in range(3):
+        button_x = pin_start_x + index * pin_spacing
+        _led_usage_pin_x[index] = button_x
+        led_usage_pin_buttons[index].position = (button_x, _led_usage_pin_y)
+        led_usage_pin_labels[index].x = button_x + _LED_USAGE_PIN_W / 2
+        led_usage_pin_labels[index].y = _led_usage_pin_y + _LED_USAGE_PIN_H / 2
+    led_usage_status_label.x = pin_start_x + 3 * pin_spacing + 12
+    led_usage_status_label.y = _led_usage_pin_y + _LED_USAGE_PIN_H / 2
+
+
+def _sync_led_usage_status():
+    led_usage_status_label.text = comms.led_usage_state.status_text()
+
+
+def draw_led_usage_controls():
+    _sync_led_usage_status()
+    led_usage_batch.draw()
 
 
 # Base state preview: a compact Super Ventilagon-inspired dial + button

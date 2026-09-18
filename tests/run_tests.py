@@ -153,6 +153,7 @@ NATIVE_TESTS = [
         [
             "hardware/rotor/modules/povdisplay/gpu.c",
             "hardware/rotor/modules/povdisplay/color_pipeline.c",
+            "hardware/rotor/modules/povdisplay/led_usage.c",
             "tests/native/test_render_vs2.c",
         ],
     ),
@@ -168,6 +169,13 @@ NATIVE_TESTS = [
         [
             "hardware/rotor/modules/povdisplay/hall_filter.c",
             "tests/native/test_hall_filter.c",
+        ],
+    ),
+    (
+        "tests/native/test_led_usage.c",
+        [
+            "hardware/rotor/modules/povdisplay/led_usage.c",
+            "tests/native/test_led_usage.c",
         ],
     ),
 ]

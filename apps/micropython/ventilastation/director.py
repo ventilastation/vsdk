@@ -209,6 +209,9 @@ class Director:
         elif cmd == "povcal":
             from ventilastation import color_calibration
             color_calibration.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
+        elif cmd == "ledusage":
+            from ventilastation import led_usage
+            led_usage.handle_command(parts[1:], self.platform.comms.send, self.platform.display)
         elif cmd == "povperf":
             from ventilastation import pov_profiling
             scene = self.scene_stack[-1] if self.scene_stack else None

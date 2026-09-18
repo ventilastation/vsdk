@@ -145,6 +145,14 @@ ICONS = [
         glow_rgb=(110, 140, 255), text_top=(225, 232, 255), text_bottom=(120, 145, 230),
         outline_rgb=(14, 18, 36), accent_rgb=(110, 140, 255),
     )),
+    # LED Usage: a hardware/power diagnostic, not a game -- an amber
+    # "electric" badge distinct from every group's own colour so it reads
+    # as a utility tool at a glance in the secret system menu.
+    ("led_usage.png", dict(
+        text="LEDS", card_fill=(24, 18, 4, 210), card_outline=(180, 130, 20, 255),
+        glow_rgb=(255, 195, 40), text_top=(255, 240, 190), text_bottom=(220, 150, 20),
+        outline_rgb=(40, 26, 4), accent_rgb=(255, 195, 40),
+    )),
 ]
 
 

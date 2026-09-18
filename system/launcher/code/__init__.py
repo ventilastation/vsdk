@@ -95,6 +95,7 @@ SYS_MENU_OPTIONS = [
     ("tutorial", "menu.png", 10, "Tutorial"),
     ("tutorial_vs2", "menu.png", 10, "Tutorial VS2"),
     ("settings", "menu.png", 8, "Settings"),
+    ("led_usage", "led_usage.png", 0, "LED Usage"),
     (GROUP_PREFIX + "emulators", "emulators_group.png", 0, "Emulators"),
     ("alecu.vyruss", game_menu_strip("alecu.vyruss"), 0, "Vyruss"),
     ("alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0, "Ventilagon"),

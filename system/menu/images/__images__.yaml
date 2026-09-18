@@ -25,6 +25,7 @@ palettegroups:
     - strip: tech_demos.png
     - strip: emulators_group.png
     - strip: more_apps.png
+    - strip: led_usage.png
   palette2:
     # Glyphs for the current-selection text label (system/launcher).  Kept
     # in its own palette group so the label doesn't dilute palette1's

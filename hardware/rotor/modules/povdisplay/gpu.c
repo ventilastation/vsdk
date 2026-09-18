@@ -3,6 +3,7 @@
 #include <esp_system.h>
 #include "gpu.h"
 #include "color_pipeline.h"
+#include "led_usage.h"
 
 // static const char* TAG = "GPU";
 // #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
@@ -491,6 +492,20 @@ void render(int column, uint32_t* led_buffer) {
   uint32_t colorbuf[PIXELS];
 
   column = column % COLUMNS;
+
+  if (led_usage_is_active()) {
+    // Diagnostic override (see led_usage.h): skip the scene entirely and
+    // hold a static, byte-exact pattern across every column so someone can
+    // measure real current draw. The two halves of the physical strip are
+    // served by different columns downstream (see povdisplay.c's
+    // dma_pixels0/dma_pixels1), so vary only by which half this column
+    // belongs to.
+    bool second_half = column >= COLUMNS / 2;
+    for (int n = 0; n < PIXELS; n++) {
+      led_buffer[n] = led_usage_encode(second_half, n);
+    }
+    return;
+  }
   for (int y=0; y<PIXELS; y++) {
     colorbuf[y] = 0x000000ff;
   }

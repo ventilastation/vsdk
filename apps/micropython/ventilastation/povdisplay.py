@@ -29,6 +29,10 @@ def set_color_test_pattern(pattern, level=255):
     return _display().set_color_test_pattern(pattern, level)
 
 
+def set_led_usage(active, count, red, green, blue, global_brightness):
+    return _display().set_led_usage(active, count, red, green, blue, global_brightness)
+
+
 def set_color_pipeline_enabled(enabled):
     return _display().set_color_pipeline_enabled(enabled)
 
