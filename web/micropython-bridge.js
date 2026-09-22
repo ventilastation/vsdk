@@ -202,7 +202,7 @@ class WorkerBridge {
   }
 }
 
-const WORKER_SCRIPT_VERSION = "worker-debug-20260922-heap-12m";
+const WORKER_SCRIPT_VERSION = "worker-debug-20260922-yband-prefilter";
 
 export async function createVentilastationWasmBridge(options = {}) {
   const workerUrl = options.workerUrl || new URL(`./wasm-worker.js?v=${WORKER_SCRIPT_VERSION}`, import.meta.url).href;

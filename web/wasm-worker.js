@@ -5,8 +5,8 @@ const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T204800Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: `./vendor/micropython/micropython.wasm?v=${MICROPYTHON_WASM_VERSION}`,
-  runtimeBundleUrl: "./runtime-bundle.json?v=20260913a",
-  runtimeManifestUrl: "./runtime-manifest.json?v=20260913a",
+  runtimeBundleUrl: "./runtime-bundle.json?v=20260922-yband-prefilter",
+  runtimeManifestUrl: "./runtime-manifest.json?v=20260922-yband-prefilter",
   fsRoot: "/games",
   pystack: 32 * 1024,
   // The WASM module's total linear memory is fixed at build time with no
