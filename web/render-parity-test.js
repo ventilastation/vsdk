@@ -297,8 +297,7 @@ function runTests() {
     assert.equal(decoded.layers.length, 2);
     assert.equal(decoded.sprites.length, 1);
     assert.equal(decoded.sprites[0].x, 42.5);
-    assert.equal(decoded.sprites[0].vs2.x, 42.5);
-    assert.equal(decoded.sprites[0].vs2.flip_x, true);
+    assert.equal(decoded.sprites[0].flip_x, true);
 
     const palette = createPalette({ 1: [1, 2, 3] });
     const assets = new Map([
@@ -513,8 +512,8 @@ function runTests() {
     const { decoded, pixels } = renderTilemapScene({
       layers: [], sprites: [], tilemaps: [defaultTilemap({ flags: 1 | 2 | 4 })],
     });
-    assert.equal(decoded.tilemaps[0].vs2.flip_x, true);
-    assert.equal(decoded.tilemaps[0].vs2.flip_y, true);
+    assert.equal(decoded.tilemaps[0].flip_x, true);
+    assert.equal(decoded.tilemaps[0].flip_y, true);
     assert.deepEqual(getLedColor(pixels, 10, 13), [0, 0, 0, 255], "flipped tilemap top-left");
     assert.deepEqual(getLedColor(pixels, 10, 9), [30, 0, 0, 255], "tilemap flip_y");
     assert.deepEqual(getLedColor(pixels, 14, 13), [40, 0, 0, 255], "tilemap flip_x");
