@@ -145,14 +145,17 @@
         image_strip: strip,
         frame,
         perspective: mode,
-        vs2: {
-          layer: layerId,
-          x,
-          y,
-          flags,
-          flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
-          flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
-        },
+        // `vs2: true` is a cheap discriminator (see getSourceColumn,
+        // spritePixelY, drawSpriteColumn below) distinguishing this
+        // decoder's sprites from the legacy sprite decoder's, matching the
+        // desktop decode_vs2_scene shape's flat flip_x/flip_y -- this used
+        // to be a whole second per-sprite object (`vs2: {layer, x, y,
+        // flags, flip_x, flip_y}`), doubling this hot per-frame decode
+        // path's allocations for fields (layer/x/y/flags) nothing ever
+        // read back out.
+        vs2: true,
+        flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
+        flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
       };
       sprites.push(sprite);
       spriteBySlot[slot] = sprite;
@@ -209,14 +212,9 @@
         tile_height: tileHeight,
         viewport,
         perspective: mode,
-        vs2: {
-          layer: layerId,
-          x,
-          y,
-          flags,
-          flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
-          flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
-        },
+        vs2: true,
+        flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
+        flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
       };
       tilemaps.push(tilemap);
       tilemapBySlot[slot] = tilemap;
@@ -262,14 +260,14 @@
     if (spriteColumn === -1) {
       return -1;
     }
-    if (sprite?.vs2?.flip_x) {
+    if (sprite?.flip_x) {
       return spriteWidth - 1 - spriteColumn;
     }
     return spriteColumn;
   }
 
   function getSourceRow(sprite, sourceRow, spriteHeight) {
-    if (sprite?.vs2?.flip_y) {
+    if (sprite?.flip_y) {
       return spriteHeight - 1 - sourceRow;
     }
     return sourceRow;
@@ -376,8 +374,8 @@
     if (delta >= viewportW) {
       return;
     }
-    const flipX = Boolean(tilemap?.vs2 ? tilemap.vs2.flip_x : tilemap.flip_x);
-    const flipY = Boolean(tilemap?.vs2 ? tilemap.vs2.flip_y : tilemap.flip_y);
+    const flipX = Boolean(tilemap.flip_x);
+    const flipY = Boolean(tilemap.flip_y);
     const sourceDelta = flipX ? viewportW - 1 - delta : delta;
     const sx = viewportX + sourceDelta;
     const tileCol = Math.floor(sx / tileWidth);
@@ -439,7 +437,7 @@
     for (let led = 0; led < zleds; led += 1) {
       let sourceRow = Math.floor((led * PIXELS) / zleds);
       if (sourceRow >= height) break;
-      if (!sprite?.vs2?.flip_y) sourceRow = height - 1 - sourceRow;
+      if (!sprite?.flip_y) sourceRow = height - 1 - sourceRow;
       const colorIndex = asset.data[base + sourceRow];
       if (colorIndex !== TRANSPARENT_INDEX) {
         setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);

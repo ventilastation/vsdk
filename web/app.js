@@ -42,7 +42,7 @@ import {
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { ChipAudioHost } from "./chip-audio-host.js?v=20260727b";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260918a";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20260922b";
 import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722e";
 import { resolveTracebackBlocksFromProject } from "./vs2-debug-linemap.js?v=20260913b";
 
