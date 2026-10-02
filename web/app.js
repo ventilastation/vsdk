@@ -42,7 +42,7 @@ import {
 
 import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { ChipAudioHost } from "./chip-audio-host.js?v=20260727b";
-import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20261003a";
+import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20261004a";
 import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722e";
 
 
@@ -85,6 +85,9 @@ class BrowserHostApp {
     this.paletteVersion = 0;
     this.paletteUploadVersion = 0;
     this.paletteLoadedBytes = 0;
+    // Whether the scene asked for the background stars ("starfield 0|1"
+    // events from vs2.Scene); on until a scene says otherwise.
+    this.starfieldEnabled = true;
     this.lastFrame = null;
     this.lastFrameShape = null;
     this.lastMemorySnapshot = null;
@@ -294,6 +297,10 @@ class BrowserHostApp {
       }
       if (event.command === "base") {
         this.applyBaseControl(event.args || []);
+        continue;
+      }
+      if (event.command === "starfield") {
+        this.starfieldEnabled = event.args?.[0] !== "0";
         continue;
       }
       if (event.command === "palette" && event.data instanceof Uint8Array) {
@@ -661,6 +668,7 @@ class BrowserHostApp {
     this.palette = null;
     this.paletteVersion = 0;
     this.paletteLoadedBytes = 0;
+    this.starfieldEnabled = true;
     if (this.pollRequestId !== null) {
       window.cancelAnimationFrame(this.pollRequestId);
       this.pollRequestId = null;
@@ -1910,6 +1918,7 @@ class BrowserHostApp {
     } else if (!Array.isArray(frame.sprites)) {
       frame.sprites = [];
     }
+    frame.starfield = this.starfieldEnabled !== false;
     this.renderBasePreview();
     if (
       frame.palette instanceof Uint8Array &&
@@ -2146,6 +2155,7 @@ class BrowserHostApp {
       paletteVersion: this.paletteUploadVersion,
       frameNumber: frame.frame || 0,
       columnOffset: frame.column_offset || 0,
+      starfield: frame.starfield !== false,
     };
   }
 
@@ -2200,7 +2210,7 @@ class BrowserHostApp {
         strips: shaderCore.packStrips(this.assetIndex),
         palette: shaderCore.packPalette(this.palette),
         sceneData: packedScene,
-        stars: shaderCore.packStars(shaderCore.computeStarPositions(sceneInput.frameNumber)),
+        stars: shaderCore.packStars(shaderCore.computeStarPositions(sceneInput.frameNumber, sceneInput.starfield)),
         deepspace: shaderCore.packDeepspace(),
         columnOffset: sceneInput.columnOffset,
       });

@@ -473,7 +473,8 @@ class Scene(_Scene):
     back_button = True
 
     #: When true, the drifting starfield is drawn behind this scene. Applied on
-    #: entry and restored on exit.
+    #: entry; a scene that leaves it false has no stars, whatever came before.
+    #: (Scenes written for the older sprite API always have them.)
     starfield = False
 
     #: Name of the asset pack to load, defaulting to the current app's own.
@@ -668,9 +669,6 @@ class Scene(_Scene):
             self._payload_drawables = ()
             self._payload_frames_size = 0
             self._phase = "closed"
-            setter = getattr(get_platform().display, "set_starfield", None)
-            if setter is not None:
-                setter(False)
             if backend is not None:
                 backend.set_active(False)
                 backend.reset_scene()

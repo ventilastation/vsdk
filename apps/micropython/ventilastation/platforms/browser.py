@@ -169,6 +169,8 @@ class BrowserDisplay(NullDisplay):
         self.assets = {}
         self.dirty_asset_slots = set()
         self.vs2_scene_data = None
+        self.starfield_enabled = True
+        self._starfield_dirty = True
         self._vs2_scene_line = None
         self._vs2_scene_line_length = -1
         self._worker_post_command_ptr = None
@@ -221,6 +223,17 @@ class BrowserDisplay(NullDisplay):
         if self.worker_host is None:
             return False
         return _post_worker_command(self.worker_host, line, data)
+
+    def set_starfield(self, enabled):
+        """Turn the background stars on or off (the scene's ``starfield``
+        flag). The browser draws them, so the state is posted to it."""
+        enabled = bool(enabled)
+        if enabled != self.starfield_enabled:
+            self.starfield_enabled = enabled
+            self._starfield_dirty = True
+
+    def _starfield_line(self):
+        return b"starfield 1" if self.starfield_enabled else b"starfield 0"
 
     def _post_vs2_scene(self):
         data = self.vs2_scene_data
@@ -395,6 +408,9 @@ class BrowserDisplay(NullDisplay):
         if self.worker_host is None:
             return
         full = bool(self.worker_host.consume_full_frame_request())
+        if full or self._starfield_dirty:
+            self._post_command(self._starfield_line())
+            self._starfield_dirty = False
         if (full or self.palette_dirty) and self.palette:
             self._post_command("palette %d %d" % (len(self.palette), self.palette_version), self.palette)
         if full:
@@ -474,6 +490,12 @@ class BrowserDisplay(NullDisplay):
         exported["assets"] = [self.assets[slot] for slot in asset_slots if slot in self.assets]
         after_assets_at = ticks_us()
         exported["events"] = self.comms.drain_events()
+        if full or self._starfield_dirty:
+            exported["events"].append({
+                "command": "starfield",
+                "args": ["1" if self.starfield_enabled else "0"],
+            })
+            self._starfield_dirty = False
         if self.vs2_scene_data is not None:
             exported["events"].append({
                 "command": "vs2_scene",

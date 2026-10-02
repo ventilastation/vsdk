@@ -121,6 +121,9 @@ class ScoreBoard:
 
 
 class Vixeous(vs2.Scene):
+    # A space shooter: keep the stars.
+    starfield = True
+
     def __init__(self):
         vs2.Scene.__init__(self)
         seed(utime.ticks_ms())

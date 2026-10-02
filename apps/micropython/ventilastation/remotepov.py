@@ -7,6 +7,7 @@ sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
 stripes = {}
 _palette = None
 vs2_scene_data = None
+_starfield = True
 
 def init(num_pixels, *hw_config):
     pass
@@ -40,6 +41,12 @@ def set_imagestrip(n, stripmap):
     stripes[n] = stripmap
     comms.send(b"imagestrip %s %d" % (n, len(stripmap)), stripmap)
 
+def set_starfield(enabled):
+    """Tell the desktop host whether to draw the background stars."""
+    global _starfield
+    _starfield = bool(enabled)
+    comms.send(b"starfield 1" if _starfield else b"starfield 0")
+
 def prepare_frame(scene):
     global vs2_scene_data
     if getattr(scene, "_vs_declared_api", None) != "vs2":
@@ -56,6 +63,7 @@ def _resend_all():
     for n, stripmap in stripes.items():
         comms.send(b"imagestrip %s %d" % (n, len(stripmap)), stripmap)
         print("remotepov: imagestrip %s sent (%d bytes)" % (n, len(stripmap)))
+    comms.send(b"starfield 1" if _starfield else b"starfield 0")
     print("remotepov: resend_all done")
 
 def update():

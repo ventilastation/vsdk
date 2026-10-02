@@ -239,6 +239,9 @@ class ListMenu(vs2.Scene):
     separate hand-rolled text renderer.
     """
 
+    # The menus keep the drifting stars behind the icons.
+    starfield = True
+
     asset_pack = "menu"
     back_button = False
     enable_back = True

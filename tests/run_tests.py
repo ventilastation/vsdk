@@ -98,6 +98,7 @@ NODE_TESTS = [
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",
     "tests/test_rom_builder_core.mjs",
+    "tests/test_starfield_flag.mjs",
 ]
 
 

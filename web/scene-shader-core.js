@@ -534,7 +534,10 @@
     }));
   })();
 
-  function computeStarPositions(frameNumber) {
+  function computeStarPositions(frameNumber, enabled = true) {
+    if (enabled === false) {
+      return [];
+    }
     const ticks = Math.max(0, Number(frameNumber || 0));
     return webStarfield.map((star) => {
       const wrappedY = positiveMod(star.y0 - ticks, ROWS);

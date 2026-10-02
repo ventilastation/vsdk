@@ -655,6 +655,74 @@ class Vs2ApiTests(unittest.TestCase):
             self.assertIsNone(getattr(bare, "_vs_api_slug", None))
             self.assertIsNone(getattr(bare, "_vs_declared_api", None))
 
+    def starfield_calls(self):
+        """Record every set_starfield call the headless display receives."""
+        calls = []
+        display = self.runtime_director.platform.display
+        original = display.set_starfield
+
+        def record(enabled):
+            calls.append(bool(enabled))
+            original(enabled)
+
+        display.set_starfield = record
+        return calls
+
+    def test_a_v2_scene_gets_stars_only_when_it_asks_for_them(self):
+        vs2 = self.vs2
+        display = self.runtime_director.platform.display
+
+        class Dark(vs2.Scene):
+            def build(self):
+                self.layer("world")
+
+        class Starry(Dark):
+            starfield = True
+
+        with mock.patch.object(director, "load_rom"):
+            self.enter(Dark())
+            self.assertFalse(display.starfield_enabled)
+            director.pop()
+            self.enter(Starry())
+            self.assertTrue(display.starfield_enabled)
+
+    def test_a_legacy_scene_always_gets_stars(self):
+        vs2 = self.vs2
+        display = self.runtime_director.platform.display
+
+        class Dark(vs2.Scene):
+            def build(self):
+                self.layer("world")
+
+        class Legacy(LegacyScene):
+            def step(self):
+                pass
+
+        with mock.patch.object(director, "load_rom"):
+            self.enter(Dark())
+            self.assertFalse(display.starfield_enabled)
+            # The launcher pushing a legacy game on top of a scene with the
+            # stars off is the common case.
+            director.push(Legacy())
+            self.assertTrue(display.starfield_enabled)
+
+    def test_stars_stay_on_between_two_scenes_that_both_want_them(self):
+        vs2 = self.vs2
+
+        class Starry(vs2.Scene):
+            starfield = True
+
+            def build(self):
+                self.layer("world")
+
+        with mock.patch.object(director, "load_rom"):
+            first = self.enter(Starry())
+            calls = self.starfield_calls()
+            first.switch(Starry())
+            first._commit_transition()
+        self.assertTrue(calls)
+        self.assertNotIn(False, calls)
+
     def test_idle_default_pops_and_back_button_can_be_claimed(self):
         vs2 = self.vs2
         idle_calls = []

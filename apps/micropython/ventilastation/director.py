@@ -288,6 +288,13 @@ class Director:
             getattr(scene, "_vs_declared_api", None),
         )
         scene._vs_entered = False
+        if getattr(scene, "starfield", None) is None:
+            # Not a V2 scene: the older sprite API has no starfield flag and
+            # always shows the stars. Switching them on here, whatever the
+            # previous scene chose, covers every way of entering one.
+            set_starfield = getattr(self.platform.display, "set_starfield", None)
+            if set_starfield is not None:
+                set_starfield(True)
         try:
             scene.on_enter()
         except Exception as error:

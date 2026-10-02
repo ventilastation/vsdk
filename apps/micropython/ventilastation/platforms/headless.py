@@ -34,6 +34,7 @@ class NullDisplay:
         self.column_offset = 0
         self.palette = b""
         self.stripes = {}
+        self.starfield_enabled = True
 
     def init(self, num_pixels, *hw_config):
         self.num_pixels = num_pixels
@@ -41,6 +42,9 @@ class NullDisplay:
 
     def set_gamma_mode(self, _mode):
         return None
+
+    def set_starfield(self, enabled):
+        self.starfield_enabled = bool(enabled)
 
     def set_column_offset(self, offset):
         self.column_offset = offset % 256
