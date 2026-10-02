@@ -135,16 +135,29 @@ handling it needs.
 **Game over, with a sound.** Copy `boom.mp3` from
 `games/demos/tutorial_game/sounds/` into your game's `sounds/` folder. When an
 enemy touches the ship, play it and switch to a new scene, handing the score over
-through its constructor. {py:meth}`~vs2.Sprite.first_overlap` accepts a pool, so
-one call checks every live enemy:
+through its constructor. {py:meth}`~vs2.Sprite.overlaps` tests two sprites, and
+`move_enemies()` is already looping over every live enemy, so it can make the
+check and report a hit by returning `True`:
 
 ```python
 def update(self):
     # ... as before, up to the enemies ...
-    self.move_enemies()
-    if self.ship.first_overlap(self.enemies):
+    if self.move_enemies():
         vs2.audio.sound("boom")
         return self.switch(GameOver(self.score))
+
+def move_enemies(self):
+    """Advance the enemies. Returns True if one touched the ship."""
+    for enemy in self.enemies:
+        enemy.y -= ENEMY_SPEED
+        enemy.frame = (self.ticks // 6) % enemy.image.frames
+        if enemy.overlaps(self.ship):
+            return True
+        if enemy.y < -enemy.image.height:
+            self.enemies.despawn(enemy)      # flew past the ship
+            self.score += POINTS
+            self.show_score()
+    return False
 ```
 
 **A title and a game-over screen.** Both are small scenes. The text is a

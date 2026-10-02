@@ -20,7 +20,7 @@ time:
 |---|---|---|
 | [1. Your first game](first-game.md) | the folder, `build()` and `update()` | a ship you can steer |
 | [2. The circular display](display.md) | X, Y, projections, draw order | a ship that flies all the way round |
-| [3. Sprites](sprites.md) | frames, collisions | an animated ship |
+| [3. Sprites](sprites.md) | frames, collisions | a ship that leans into its turns |
 | [4. Sprite pools](pools.md) | `spawn()` and `despawn()` | enemies coming down the tunnel |
 | [5. Tilemaps and text](tilemaps-and-text.md) | tilemaps, labels, flips | a scrolling trench wall and a score |
 | [6. Scenes, input and sound](scenes-and-input.md) | scenes, timers, audio | a game-over screen, a title screen, sound |

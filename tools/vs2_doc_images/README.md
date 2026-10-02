@@ -37,11 +37,13 @@ This table comes from `node capture.mjs --list`.
 
 Notes on specific images:
 
-- **`sprites-frames.png`** shows the three frames of the game's `ship.png`. The
-  sprites are spaced 26 columns apart (each is 18 wide) so none overlap, with frame 0 in the middle; retake it
-  and check that after changing the spacing or the art. The ship art is drawn by
-  `make_ship_art.py` (needs Pillow), which writes
-  `games/demos/tutorial_game/images/ship.png`.
+- **`sprites-frames.png`** shows the three frames of the game's `ship.png`, with
+  frame 0 in the middle and a 6 column gap between neighbours; the sprite width is
+  read from the sprite, so a change to the art keeps the spacing. The ship art is
+  drawn by `make_ship_art.py` (needs Pillow), which writes
+  `games/demos/tutorial_game/images/ship.png`. Retake it and look at the result
+  after changing the art: the outer two ships are also tilted by their place on the
+  disc.
 - **`game-play.png`** is the real game after pressing A on the title, and the
   enemies appear at random places. Run `node capture.mjs game` again until the
   picture shows several enemies at different depths and the ship still alive (the

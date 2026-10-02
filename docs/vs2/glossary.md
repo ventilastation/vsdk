@@ -81,10 +81,6 @@ Frame
   One image inside a {term}`strip`, counted from 0. Setting a sprite's frame
   never changes whether it is {term}`visible`.
 
-Glyph
-  The image frame that stands for one character. A *glyph table* maps
-  characters to frames. See [Tilemaps and text](tutorial/tilemaps-and-text.md).
-
 Garbage collection
   How MicroPython frees memory that nothing refers to any more. On the
   {term}`console` it runs only when a scene starts or ends, so garbage made every
@@ -92,6 +88,10 @@ Garbage collection
   emulator collects automatically and pauses instead. VS2 avoids both by
   creating everything in {term}`build` and reusing it with {term}`pools <pool>`.
   See [Why VS2 works this way](design-notes.md).
+
+Glyph
+  The image frame that stands for one character. A *glyph table* maps
+  characters to frames. See [Tilemaps and text](tutorial/tilemaps-and-text.md).
 
 Idle timeout
   Seconds without input from either controller before

@@ -190,7 +190,7 @@ Give Trench Run a trench to fly down, and a score.
 A trench run is a good excuse for a dark game, so pick a setting where dark
 is natural. Trench Run takes place in a **derelict space station**: you fly
 down a maintenance trench between plates of dead, near-black hull, dodging the
-station's drones. The station
+station's enemies. The station
 has no power to spare, so the only colour is in the few things that are still
 lit:
 
@@ -267,6 +267,7 @@ def build(self):
     self.score_label = self.hud.label("numerals.png", columns=5, x=246, y=1)
 
     self.score = 0
+    self.ticks = 0                      # as in chapter 4
     self.show_score()
 
 def draw_trench(self):

@@ -38,7 +38,7 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 # name: (frame width, height, frames, glyphs), as in the game's __images__.yaml
 STRIPS = {
     "ship.png": (18, 18, 3, None),
-    "enemy.png": (16, 16, 6, None),
+    "enemy.png": (14, 11, 6, None),
     "trench.png": (16, 16, 8, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
     "steel8x8.png": (8, 8, 256, None),
@@ -130,6 +130,42 @@ class TutorialGameTests(unittest.TestCase):
         self.step(0)
         self.assertEqual(game.ship.frame, LEVEL)
 
+    def test_the_turned_frames_point_their_nose_the_way_the_ship_travels(self):
+        # The renderer draws a sprite's image mirrored in X, so moving left
+        # (x - 1) moves the ship toward its image's right edge: the left-turn
+        # frame must have its nose on the image's right, and the right-turn
+        # frame on its left. (See tools/vs2_doc_images/make_ship_art.py.)
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+        from games.demos.tutorial_game.code.tutorial_game import (
+            LEVEL, TURN_LEFT, TURN_RIGHT)
+
+        strip = Image.open(os.path.join(
+            ROOT, "games", "demos", "tutorial_game", "images", "ship.png")).convert("RGBA")
+        width = strip.width // 3
+
+        def nose_offset(frame):
+            """How far right of the image's centre the topmost pixels are."""
+            pixels = strip.crop((frame * width, 0, (frame + 1) * width, strip.height))
+            top = next(y for y in range(pixels.height)
+                       if any(pixels.getpixel((x, y))[3] for x in range(width)))
+            xs = [x for x in range(width) if pixels.getpixel((x, top))[3]]
+            return sum(xs) / len(xs) - (width - 1) / 2
+
+        self.assertAlmostEqual(nose_offset(LEVEL), 0, delta=1)
+        self.assertGreater(nose_offset(TURN_LEFT), 1)
+        self.assertLess(nose_offset(TURN_RIGHT), -1)
+
+    def test_both_directions_held_cancel_out(self):
+        from games.demos.tutorial_game.code.tutorial_game import LEVEL
+
+        game = self.start_game()
+        self.step(director.JOY_LEFT | director.JOY_RIGHT)
+        self.assertEqual(game.ship.x, 128)
+        self.assertEqual(game.ship.frame, LEVEL)
+
     def test_the_trench_wall_scrolls_and_wraps_seamlessly(self):
         game = self.start_game()
         pattern_height = 6 * game.ground.tile_height
@@ -173,7 +209,7 @@ class TutorialGameTests(unittest.TestCase):
     def test_dodging_keeps_the_game_going(self):
         game = self.start_game()
         game.enemies.spawn(x=game.ship.x, y=40)
-        # Steer away from the drone's angle while it comes down the tunnel.
+        # Steer away from the enemy's angle while it comes down the tunnel.
         for _ in range(120):
             self.step(director.JOY_LEFT)
         self.assertIs(director.scene_stack[-1], game)

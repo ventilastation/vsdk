@@ -1,7 +1,7 @@
 """The small game that the VS2 tutorial builds, chapter by chapter.
 
-Trench Run: fly the ship around the rim and dodge the drones that come down the
-tunnel at you. Every drone that gets past scores; one that touches the ship ends
+Trench Run: fly the ship around the rim and dodge the enemies that come down the
+tunnel at you. Every enemy that gets past scores; one that touches the ship ends
 the game. The best score is kept between runs. See docs/vs2/tutorial/.
 """
 
@@ -78,11 +78,12 @@ class Game(vs2.Scene):
     def update(self):
         self.ticks += 1
 
-        if joy1.held(LEFT):
-            self.ship.x = (self.ship.x - 1) % vs2.display.width
+        # -1 for left, +1 for right, 0 for neither (or both held: they cancel).
+        steer = joy1.held(RIGHT) - joy1.held(LEFT)
+        self.ship.x = (self.ship.x + steer) % vs2.display.width
+        if steer < 0:
             self.ship.frame = TURN_LEFT
-        elif joy1.held(RIGHT):
-            self.ship.x = (self.ship.x + 1) % vs2.display.width
+        elif steer > 0:
             self.ship.frame = TURN_RIGHT
         else:
             self.ship.frame = LEVEL
@@ -92,19 +93,22 @@ class Game(vs2.Scene):
         pattern_height = PATTERN_ROWS * self.ground.tile_height
         self.ground.view_y = (self.ticks // 2) % pattern_height
 
-        self.move_enemies()
-        if self.ship.first_overlap(self.enemies):
+        if self.move_enemies():
             vs2.audio.sound("boom")
             return self.switch(GameOver(self.score))
 
     def move_enemies(self):
+        """Advance the enemies. Returns True if one touched the ship."""
         for enemy in self.enemies:
             enemy.y -= ENEMY_SPEED
             enemy.frame = (self.ticks // 6) % enemy.image.frames
+            if enemy.overlaps(self.ship):
+                return True
             if enemy.y < -enemy.image.height:
                 self.enemies.despawn(enemy)      # flew past the ship
                 self.score += POINTS
                 self.show_score()
+        return False
 
     def spawn_delay(self):
         """Milliseconds until the next enemy: one less for every point, so the

@@ -27,12 +27,13 @@ showing frames 0 to 2 of `ship.png`, set side by side at the bottom of the disc
 with a gap between them (frame 0, the level ship, is in the middle):
 
 ```{figure} ../images/sprites-frames.png
-:alt: Three ships along the bottom of the disc, labelled with their frame numbers: frame 0 level in the middle, frame 1 turned to the left and frame 2 turned to the right
+:alt: Three ships along the bottom of the disc, labelled with their frame numbers: frame 0, pointing straight up, in the middle, and frames 1 and 2 leaning to either side of it
 :width: 60%
 :align: center
 
-One strip, three poses of the same ship. The outer two lean a little more
-because they sit further round the curve of the disc.
+One strip, three poses of the same ship. The outer two are also tilted by where
+they sit on the disc, which is a circle: chapter 1 shows the three frames as they
+are drawn in the strip.
 ```
 
 `frame` and `visible` are **independent axes**. Setting a frame never reveals a
@@ -99,19 +100,29 @@ ship is steering, so choose it from the buttons:
 LEVEL, TURN_LEFT, TURN_RIGHT = range(3)      # the frames of ship.png
 
 def update(self):
-    if joy1.held(LEFT):
-        self.ship.x = (self.ship.x - 1) % vs2.display.width
+    # -1 for left, +1 for right, 0 for neither (or both held: they cancel).
+    steer = joy1.held(RIGHT) - joy1.held(LEFT)
+    self.ship.x = (self.ship.x + steer) % vs2.display.width
+    if steer < 0:
         self.ship.frame = TURN_LEFT
-    elif joy1.held(RIGHT):
-        self.ship.x = (self.ship.x + 1) % vs2.display.width
+    elif steer > 0:
         self.ship.frame = TURN_RIGHT
     else:
         self.ship.frame = LEVEL
 ```
 
-The names for the frames make the code say what it means, and they are the same
+`held()` is true or false, so subtracting two of them gives the direction in one
+line, and pressing both directions at once cancels out as it did in chapter 2. The
+names for the frames make the code say what it means, and they are the same
 three numbers the strip is laid out in. Setting a frame is a single write, so
 doing it every tick costs nothing.
+
+:::{note}
+The renderer draws a sprite's image mirrored in X, because `x` counts the way the
+disc turns. Moving left (`x - 1`) moves the ship toward the *right* edge of its own
+image, so the frame for a left turn is the one whose nose points to the image's
+right. If your own art leans the wrong way, swap the two frames.
+:::
 
 ## The file so far
 

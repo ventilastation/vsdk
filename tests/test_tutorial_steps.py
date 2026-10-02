@@ -104,6 +104,9 @@ class TutorialStepTests(unittest.TestCase):
         self.assertEqual(game.ship.frame, 2)
         self.step(0)
         self.assertEqual(game.ship.frame, 0)
+        before = game.ship.x
+        self.step(director.JOY_LEFT | director.JOY_RIGHT)       # they cancel out
+        self.assertEqual((game.ship.x, game.ship.frame), (before, 0))
 
     def test_step4_enemies_fly_down_the_tunnel_and_are_retired(self):
         game = self.start("step4_pools.py")

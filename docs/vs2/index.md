@@ -20,6 +20,7 @@ class MyGame(vs2.Scene):
         self.ship = self.world.sprite("ship.png", x=128, y=0)
         self.score = self.hud.label("numerals.png", columns=5, x=246, y=1)
         self.points = 0
+        self.score.set_number(self.points, width=5, pad="0")
 
     def update(self):
         if joy1.held(LEFT):

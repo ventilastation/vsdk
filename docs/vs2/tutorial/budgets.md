@@ -65,7 +65,7 @@ it is safe to call every tick (the reasons are in
 sprite.x += 0.5
 sprite.frame = 3
 pool.spawn(x, y)
-pool.despawn(shot)
+pool.despawn(enemy)
 tilemap.view_y = depth % tilemap.tile_height
 tilemap[col, row] = WINDOWS
 label.set_number(score, width=5)

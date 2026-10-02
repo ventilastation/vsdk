@@ -19,11 +19,12 @@ class Game(vs2.Scene):
     def update(self):
         self.ticks += 1
 
-        if joy1.held(LEFT):
-            self.ship.x = (self.ship.x - 1) % vs2.display.width
+        # -1 for left, +1 for right, 0 for neither (or both held: they cancel).
+        steer = joy1.held(RIGHT) - joy1.held(LEFT)
+        self.ship.x = (self.ship.x + steer) % vs2.display.width
+        if steer < 0:
             self.ship.frame = TURN_LEFT
-        elif joy1.held(RIGHT):
-            self.ship.x = (self.ship.x + 1) % vs2.display.width
+        elif steer > 0:
             self.ship.frame = TURN_RIGHT
         else:
             self.ship.frame = LEVEL
