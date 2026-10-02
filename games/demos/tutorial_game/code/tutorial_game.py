@@ -10,6 +10,7 @@ from urandom import randrange
 import vs2
 from vs2.controls import *
 
+LEVEL, TURN_LEFT, TURN_RIGHT = range(3)      # the frames of ship.png
 ENEMY_SPEED = 0.5    # depth units per tick, toward the ship
 ENEMY_START = 160    # depth at which enemies appear
 SPAWN_MS = 900       # time between enemies
@@ -77,9 +78,12 @@ class Game(vs2.Scene):
 
         if joy1.held(LEFT):
             self.ship.x = (self.ship.x - 1) % vs2.display.width
-        if joy1.held(RIGHT):
+            self.ship.frame = TURN_LEFT
+        elif joy1.held(RIGHT):
             self.ship.x = (self.ship.x + 1) % vs2.display.width
-        self.ship.frame = (self.ticks // 4) % self.ship.image.frames
+            self.ship.frame = TURN_RIGHT
+        else:
+            self.ship.frame = LEVEL
 
         # Scroll the wall toward the ship. After one whole pattern the picture
         # is the same again, so the view can wrap without rewriting any cells.

@@ -21,17 +21,17 @@ def update(self):
     self.ship.flip_x = self.moving_left
 ```
 
-A sprite shows one {term}`frame` of its strip at a time. The game's enemy is a
-drone that spins, and each of its six frames turns its arms a little further.
-Here are four sprites showing frames 0 to 3 of `enemy.png`, set side by side at
-the bottom of the disc with a gap between them:
+A sprite shows one {term}`frame` of its strip at a time. The game's ship has
+three: one flying level and one turned to each side. Here are three sprites
+showing frames 0 to 2 of `ship.png`, set side by side at the bottom of the disc
+with a gap between them (frame 0, the level ship, is in the middle):
 
 ```{figure} ../images/sprites-frames.png
-:alt: Four drones along the bottom of the disc, each with its four arms turned a little further than the one before
+:alt: Three ships along the bottom of the disc, labelled with their frame numbers: frame 0 level in the middle, frame 1 turned to the left and frame 2 turned to the right
 :width: 60%
 :align: center
 
-`frame = 0, 1, 2, 3`: one strip, four turns of the same drone. The outer two lean
+One strip, three poses of the same ship. The outer two lean a little more
 because they sit further round the curve of the disc.
 ```
 
@@ -46,7 +46,7 @@ enemy.show()                 # now visible, same frame
 An out-of-range frame raises at the assignment rather than rendering garbage:
 
 ```text
-FrameError: ship.png has 4 frames; frame must be 0..3
+FrameError: ship.png has 3 frames; frame must be 0..2
 ```
 
 ## Frame counts and sizes
@@ -92,26 +92,26 @@ at column 254. Y does not wrap, because the disc has an inside and an outside.
 
 ## In the game
 
-Let the ship's engine glow flicker by cycling through its four frames. `update()`
-runs once per rotation, so count the calls and change frame every few of them
-instead of on every one:
+Make the ship lean into its turns. A frame can show *state*, here which way the
+ship is steering, so choose it from the buttons:
 
 ```python
-def build(self):
-    self.world = self.layer("world", projection=vs2.TUNNEL)
-    self.ship = self.world.sprite("ship.png", x=128, y=0)
-    self.ticks = 0                              # counts update() calls
+LEVEL, TURN_LEFT, TURN_RIGHT = range(3)      # the frames of ship.png
 
 def update(self):
-    self.ticks += 1
-    # ... steering, as before ...
-    self.ship.frame = (self.ticks // 4) % self.ship.image.frames
+    if joy1.held(LEFT):
+        self.ship.x = (self.ship.x - 1) % vs2.display.width
+        self.ship.frame = TURN_LEFT
+    elif joy1.held(RIGHT):
+        self.ship.x = (self.ship.x + 1) % vs2.display.width
+        self.ship.frame = TURN_RIGHT
+    else:
+        self.ship.frame = LEVEL
 ```
 
-`self.ticks // 4` stays the same for four ticks in a row, so the frame changes
-four times more slowly than `update()` runs. `self.ship.image.frames` supplies
-the number of frames, so the line keeps working if you give the ship more frames
-later.
+The names for the frames make the code say what it means, and they are the same
+three numbers the strip is laid out in. Setting a frame is a single write, so
+doing it every tick costs nothing.
 
 Next: [sprite pools](pools.md), for everything you need many of. To share one
 image handle between several sprites, see [going further](../going-further.md).

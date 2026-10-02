@@ -37,11 +37,11 @@ This table comes from `node capture.mjs --list`.
 
 Notes on specific images:
 
-- **`sprites-frames.png`** shows frames 0 to 3 of the game's `enemy.png`. The
-  sprites are spaced 22 columns apart (each is 16 wide) so none overlap; retake it
-  and check that after changing the spacing or the art. The drone art is drawn by
-  `make_enemy_art.py` (needs Pillow), which writes
-  `games/demos/tutorial_game/images/enemy.png`.
+- **`sprites-frames.png`** shows the three frames of the game's `ship.png`. The
+  sprites are spaced 26 columns apart (each is 18 wide) so none overlap, with frame 0 in the middle; retake it
+  and check that after changing the spacing or the art. The ship art is drawn by
+  `make_ship_art.py` (needs Pillow), which writes
+  `games/demos/tutorial_game/images/ship.png`.
 - **`game-play.png`** is the real game after pressing A on the title, and the
   enemies appear at random places. Run `node capture.mjs game` again until the
   picture shows several enemies at different depths and the ship still alive (the

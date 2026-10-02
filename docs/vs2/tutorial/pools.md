@@ -122,13 +122,15 @@ def build(self):
     self.enemies = self.world.sprite_pool("enemy.png", count=16)
     for i in range(5):
         self.enemies.spawn(x=i * 51, y=ENEMY_START)
+    self.ticks = 0                              # counts update() calls
 ```
 
 Then `update()` moves them:
 
 ```python
 def update(self):
-    # ... steering and the ship's animation, as before ...
+    self.ticks += 1
+    # ... steering, as before ...
     self.move_enemies()
 
 def move_enemies(self):
@@ -140,7 +142,11 @@ def move_enemies(self):
 ```
 
 Enemies move *toward* the ship by counting `y` **down**, because the ship is at
-the rim. Each enemy is the spinning drone from chapter 3, and `enemy.frame` turns it. For
+the rim. `update()` runs once per rotation, so to animate at a pace you can see,
+count the calls and change frame every few of them instead of on every one:
+`self.ticks // 6` stays the same for six ticks in a row, so the enemy changes frame
+six times more slowly than `update()` runs. `enemy.image.frames` supplies the
+number of frames, so the line keeps working if you add one to the PNG. Each enemy cycles through the six frames of `enemy.png`. For
 now an enemy that reaches the ship simply flies through it; chapter 6 makes that
 end the game, and chapter 5 scores the ones you avoid.
 

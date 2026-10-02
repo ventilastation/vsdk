@@ -267,7 +267,6 @@ def build(self):
     self.score_label = self.hud.label("numerals.png", columns=5, x=246, y=1)
 
     self.score = 0
-    self.ticks = 0
     self.show_score()
 
 def draw_trench(self):
@@ -279,7 +278,7 @@ def show_score(self):
     self.score_label.set_number(self.score, width=5, pad="0")
 ```
 
-Scroll the wall toward the ship in `update()`, right after the ship's animation:
+Scroll the wall toward the ship in `update()`, right after the steering:
 
 ```python
     # Scroll the wall toward the ship. After one whole pattern the picture

@@ -30,7 +30,7 @@ const CHROMIUM = process.env.CHROMIUM
   || (fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
 
 const ART = {
-  "ship.png": ["demos/tutorial_game/images/ship.png", 4],
+  "ship.png": ["demos/tutorial_game/images/ship.png", 3],
   "enemy.png": ["demos/tutorial_game/images/enemy.png", 6],
   "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
   "trench.png": ["demos/tutorial_game/images/trench.png", 8],
@@ -106,11 +106,13 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, { shot: "game-over.png" }],
   },
   frames: {
-    art: ["enemy.png"],
+    art: ["ship.png"],
     steps: [{ wait: 800 }, {
       shot: "sprites-frames.png",
       labels: [
-        { x: 440, y: 560, text: "frame = 0, 1, 2, 3  (left to right)" },
+        { x: 232, y: 640, text: "frame = 1" },
+        { x: 440, y: 665, text: "frame = 0" },
+        { x: 650, y: 640, text: "frame = 2" },
       ],
     }],
   },

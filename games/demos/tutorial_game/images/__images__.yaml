@@ -1,7 +1,7 @@
 palettegroups:
   main:
     - strip: ship.png
-      frames: 4
+      frames: 3
     - strip: enemy.png
       frames: 6
     - strip: trench.png

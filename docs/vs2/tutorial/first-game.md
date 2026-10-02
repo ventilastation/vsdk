@@ -41,7 +41,7 @@ they become sprite strips:
 palettegroups:
   main:
     - strip: ship.png
-      frames: 4
+      frames: 3
     - strip: enemy.png
       frames: 6
     - strip: trench.png
@@ -59,15 +59,15 @@ chapter only uses `ship.png`; the other strips appear in the chapters that follo
 and the `glyphs:` line is explained in chapter 5. Every strip needs a `frames:`
 entry, because the file does not say how many images a PNG holds.
 
-A {term}`strip` is a horizontal filmstrip of equally sized frames — a 4-frame
-animation is one PNG four times as wide as one frame:
+A {term}`strip` is a horizontal filmstrip of equally sized frames — a 3-frame
+strip is one PNG three times as wide as one frame:
 
 ```{figure} ../images/strip-ship.png
-:alt: The ship.png strip: four 18 by 13 pixel frames side by side
+:alt: The ship.png strip: three 18 by 18 pixel frames side by side, a level ship and the ship turned to each side
 :width: 85%
 :align: center
 
-`ship.png` is 72 pixels wide and holds four frames, so its entry says `frames: 4`.
+`ship.png` is 54 pixels wide and holds three frames, so its entry says `frames: 3`.
 ```
 
 A {term}`palette group` is a set of images that share 256 colours; put images

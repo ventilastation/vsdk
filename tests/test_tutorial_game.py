@@ -37,7 +37,7 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 
 # name: (frame width, height, frames, glyphs), as in the game's __images__.yaml
 STRIPS = {
-    "ship.png": (18, 13, 4, None),
+    "ship.png": (18, 18, 3, None),
     "enemy.png": (16, 16, 6, None),
     "trench.png": (16, 16, 8, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
@@ -116,6 +116,19 @@ class TutorialGameTests(unittest.TestCase):
         game.ship.x = 0
         self.step(director.JOY_LEFT)
         self.assertEqual(game.ship.x, 255)
+
+    def test_the_ship_leans_into_a_turn(self):
+        from games.demos.tutorial_game.code.tutorial_game import (
+            LEVEL, TURN_LEFT, TURN_RIGHT)
+
+        game = self.start_game()
+        self.assertEqual(game.ship.frame, LEVEL)
+        self.step(director.JOY_LEFT)
+        self.assertEqual(game.ship.frame, TURN_LEFT)
+        self.step(director.JOY_RIGHT)
+        self.assertEqual(game.ship.frame, TURN_RIGHT)
+        self.step(0)
+        self.assertEqual(game.ship.frame, LEVEL)
 
     def test_the_trench_wall_scrolls_and_wraps_seamlessly(self):
         game = self.start_game()
