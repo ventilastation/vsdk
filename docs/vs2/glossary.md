@@ -85,6 +85,13 @@ Glyph
   The image frame that stands for one character. A *glyph table* maps
   characters to frames. See [Tilemaps and text](tutorial/tilemaps-and-text.md).
 
+Garbage collection
+  How MicroPython frees memory that nothing refers to any more. The
+  {term}`console` has little memory and a slow CPU, so a collection stops the game
+  while it runs, long enough to show as a stutter. VS2 avoids it by creating
+  everything in {term}`build` and reusing it with {term}`pools <pool>`. See
+  [Why VS2 works this way](design-notes.md).
+
 Idle timeout
   Seconds without input from either controller before
   {py:meth}`~vs2.Scene.on_idle` fires. The default pops the scene.
@@ -112,6 +119,10 @@ LED
 Level
   An input test that is true while a button is down:
   {py:meth}`~vs2.controls.joy1.held`. Compare {term}`edge`.
+
+MicroPython
+  A compact implementation of Python 3 for microcontrollers. Games are written in
+  it and run on the {term}`console`'s ESP32-S3, with limited memory and CPU.
 
 Palette group
   A set of images in `__images__.yaml` that share one 256-colour palette. Put

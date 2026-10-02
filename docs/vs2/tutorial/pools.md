@@ -2,7 +2,16 @@
 
 Bullets, enemies and explosions come and go. You cannot create them on the fly —
 the scene is {term}`sealed` — so you reserve a {term}`pool` of them up front and
-cycle through it:
+cycle through it.
+
+The reason is the hardware. Every new object takes memory from MicroPython's
+heap, and when a sprite is thrown away, its memory stays in use until the
+{term}`garbage collector <garbage collection>` finds it. The ESP32-S3 has a
+modest CPU and little memory, so a collection is slow, and it stops your game
+while it runs. A game that makes a sprite for every shot would be producing
+garbage all the time and would hit those pauses in the middle of play. A pool
+makes the sprites once, in `build()`, and then lends them out and takes them
+back, so shooting allocates nothing:
 
 ```python
 def build(self):

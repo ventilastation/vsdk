@@ -45,6 +45,30 @@ scenes-and-input
 budgets
 ```
 
+## What your code runs on
+
+Your game is written in {term}`MicroPython`, a compact version of Python 3 made for
+microcontrollers, and on the {term}`console` it runs on an ESP32-S3: two cores at
+240 MHz and about 8 MB of RAM, which also holds your images and sounds. That is
+a small, slow computer next to a laptop. One core runs your game; the other
+does nothing but drive the LEDs on a hard deadline.
+
+Two habits follow from that, and the rest of the tutorial keeps coming back to
+them:
+
+- **Keep `update()` short.** It runs once per {term}`rotation`, and the LEDs
+  are not going to wait for it.
+- **Do not create objects while the game runs.** Python frees memory
+  automatically with a {term}`garbage collector <garbage collection>`, and on
+  this board a collection stops your game while it sweeps the heap. The more
+  garbage you make, the more often it happens, and a pause in the middle of a
+  frame is a visible stutter on the disc. So the API has you create everything
+  once, in `build()`, and only move things afterwards.
+
+The emulator runs the same code on a much faster machine, so a game that is
+smooth there can still stutter on the disc. Chapter 7 says what to watch for.
+[Why VS2 works this way](../design-notes.md) has the details.
+
 ## What you are writing for
 
 The Ventilastation display is a bar of 54 {term}`LEDs <LED>` on a spinning arm.

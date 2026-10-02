@@ -10,12 +10,26 @@ times per rotation, "what colour is each LED at this angle?" and answers by
 walking your scene. A column has to be ready before the arm reaches it, so the
 answer must be cheap.
 
+## The hardware is small
+
+Games are written in MicroPython, which runs on the console's ESP32-S3: two cores
+at 240 MHz, with about 8 MB of external RAM shared between the interpreter's heap,
+the image strips and the audio. One core runs MicroPython and your game; the
+other runs the renderer and the LED output, which is timing-critical. The
+renderer reads the sprite and tilemap records that Python created directly, in
+place, rather than being handed copies.
+
+MicroPython frees memory with a garbage collector that stops the interpreter while
+it walks the heap. The work grows with the amount of live data and the amount of
+garbage, and it can land in the middle of a frame. On a laptop nobody would notice.
+On the disc a late frame is a visible stutter.
+
 ## The display graph is fixed
 
 Everything a scene draws is created once, in `build()`. After that, moving
 something is a write into a record the renderer already holds. Nothing is
-allocated while the game runs, so no garbage collection pause can land on a
-visible frame.
+allocated while the game runs, so there is almost no garbage for the collector to
+find, and its pauses stay rare and short.
 
 That one idea explains several rules:
 
