@@ -108,8 +108,8 @@ def on_idle(self):
 
 ## In the game
 
-Trench Run needs three finishing touches: a way to lose, enemies that arrive on
-a timer, and screens before and after the game.
+Trench Run needs a few finishing touches: a way to lose, enemies that arrive on
+a timer, screens before and after the game, and a best score that is kept.
 
 **A timer for the enemies.** Replace the five enemies from chapter 4 with one
 that re-arms itself. Start it at the end of `build()`:
@@ -128,7 +128,9 @@ def spawn_enemy(self):
     self.call_later(SPAWN_MS, self.spawn_enemy)
 ```
 
-Timers die with the scene, so when the game ends nothing is left spawning.
+Timers die with the scene, so when the game ends nothing is left spawning. If the
+pool is full, `spawn()` returns `None` and this skips that enemy, which is all the
+handling it needs.
 
 **Game over, with a sound.** Copy `boom.mp3` from
 `games/demos/tutorial_game/sounds/` into your game's `sounds/` folder. When an
@@ -193,28 +195,103 @@ def main():
 
 `__init__` runs once, so `GameOver` keeps the score it was given, while
 `build()` creates its drawables. `main()` now returns the title, so the game
-starts there:
+starts there. The title and game-over screens are labels at the bottom of the
+disc, all at low Y, near the rim, where text is crisp; text placed near the centre
+gets squeezed, as chapter 7 shows.
+
+**Getting busier.** The game never changes pace, so a good player can last
+indefinitely. Make the interval between enemies shrink as the score rises, by
+asking a method for the delay instead of using the constant:
+
+```python
+MIN_SPAWN_MS = 350   # the shortest the interval gets
+
+def spawn_delay(self):
+    """One millisecond less for every point, down to MIN_SPAWN_MS."""
+    return max(MIN_SPAWN_MS, SPAWN_MS - self.score)
+
+def spawn_enemy(self):
+    self.enemies.spawn(x=randrange(vs2.display.width), y=ENEMY_START)
+    self.call_later(self.spawn_delay(), self.spawn_enemy)
+```
+
+Use `self.spawn_delay()` in `build()` too, for the first call. A timer can be
+re-armed with any delay, so this is all it takes to change the pace while the
+game runs. Enemies cannot pile up beyond the 16 in the pool, which is the natural
+ceiling on how hard it gets.
+
+**Remembering the best score.** `vs2.saves` keeps named values between
+runs, in a small file for your game. Load the record when a screen is built, show
+it, and save it only when it is beaten: flash writes are slow, so never save every
+tick. `GameOver` does it once, when the game ends, and says so when the record
+falls; the title shows what is saved:
+
+```python
+BEST = "best"        # the name the best score is saved under
+
+
+class Title(vs2.Scene):
+    def build(self):
+        hud = self.layer("hud", projection=vs2.HUD)
+        centred_label(hud, "TRENCH RUN", y=1)
+        best = vs2.saves.load(BEST, 0)               # 0 until something is saved
+        if best:
+            centred_label(hud, "BEST %05d" % best, y=11)
+        centred_label(hud, "PRESS A", y=20)
+
+    # ... update() as before ...
+
+
+class GameOver(vs2.Scene):
+    def __init__(self, score):
+        vs2.Scene.__init__(self)
+        self.score = score
+        self.best = vs2.saves.load(BEST, 0)
+        self.new_best = score > self.best
+        if self.new_best:
+            self.best = score
+            vs2.saves.save(BEST, score)
+
+    def build(self):
+        hud = self.layer("hud", projection=vs2.HUD)
+        centred_label(hud, "NEW BEST!" if self.new_best else "GAME OVER", y=1)
+        score = hud.label("numerals.png", columns=5, x=246, y=11)
+        score.set_number(self.score, width=5, pad="0")
+        centred_label(hud, "PRESS A", y=20)
+
+    # ... update() as before ...
+```
+
+Try it: play, lose, quit the emulator and run it again, and the title shows the
+score you left. (The web emulator keeps saved data only until the page is
+reloaded.)
 
 ```{figure} ../images/game-title.png
 :alt: The title screen: TRENCH RUN in coloured letters, with PRESS A below it, on the bottom of the disc
 :width: 60%
 :align: center
 
-The title screen. Both lines are labels at the bottom of the disc.
+The title screen, before any score has been saved.
 ```
 
-and the game-over screen, with the score handed over by the scene that ended
-the game:
-
 ```{figure} ../images/game-over.png
-:alt: The game-over screen: GAME OVER in coloured letters along the rim, a score of 00130 above it, and PRESS A nearer the centre
+:alt: The game-over screen: GAME OVER along the rim, the score 00130 above it, and PRESS A nearer the centre
 :width: 60%
 :align: center
 
-The game-over screen, here after 13 enemies dodged (130 points).
+The game-over screen, here after 13 enemies dodged (130 points) short of a saved
+best of 250. Beating it would replace GAME OVER with NEW BEST!.
 ```
 
-All the text sits at low Y, near the rim, where it is crisp. Text placed near the
-centre gets squeezed, as chapter 7 shows.
+## The whole game
+
+This is the finished file, exactly as it is in
+`games/demos/tutorial_game/code/tutorial_game.py`. The complete file at the end
+of each earlier chapter is in `docs/vs2/tutorial/steps/`, so you can compare
+yours with a working one at every stage.
+
+```{literalinclude} ../../../games/demos/tutorial_game/code/tutorial_game.py
+:language: python
+```
 
 Next: [budgets and real hardware](budgets.md).

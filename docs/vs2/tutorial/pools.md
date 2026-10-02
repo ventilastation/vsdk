@@ -155,4 +155,13 @@ you add one to the PNG.
 For now an enemy that reaches the ship simply flies through it; chapter 6 makes
 that end the game, and chapter 5 scores the ones you avoid.
 
+## The file so far
+
+Everything from this chapter in one file, as it stands after chapter 4. If yours misbehaves, compare it
+with this one. It is `docs/vs2/tutorial/steps/step4_pools.py` in the repository.
+
+```{literalinclude} steps/step4_pools.py
+:language: python
+```
+
 Next: [tilemaps and text](tilemaps-and-text.md).

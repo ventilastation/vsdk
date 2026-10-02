@@ -180,6 +180,61 @@ class TutorialGameTests(unittest.TestCase):
         self.assertEqual(len(game.enemies), 0)
         self.assertEqual(game.score, 10)
 
+    def test_the_spawn_interval_shrinks_as_the_score_rises(self):
+        from games.demos.tutorial_game.code.tutorial_game import (
+            MIN_SPAWN_MS, SPAWN_MS)
+
+        game = self.start_game()
+        self.assertEqual(game.spawn_delay(), SPAWN_MS)
+        game.score = 100
+        self.assertEqual(game.spawn_delay(), SPAWN_MS - 100)
+        game.score = 10 ** 6
+        self.assertEqual(game.spawn_delay(), MIN_SPAWN_MS)
+
+    def crash(self, game, score):
+        game.score = score
+        game.enemies.spawn(x=game.ship.x, y=game.ship.y + 2)
+        self.step(0)
+        return director.scene_stack[-1]
+
+    def label_texts(self, scene):
+        return [drawable.text for layer in scene.layers for drawable in layer._drawables
+                if getattr(drawable, "text", None)]
+
+    def test_the_best_score_is_saved_shown_and_survives_a_restart(self):
+        import vs2
+        from games.demos.tutorial_game.code.tutorial_game import BEST, Title
+
+        title = load_app("demos.tutorial_game")
+        self.assertIsNone(vs2.saves.load(BEST))
+        self.assertFalse(any("BEST" in text for text in self.label_texts(title)))
+
+        over = self.crash(self.start_game(title), 30)
+        self.assertTrue(over.new_best)
+        self.assertEqual(vs2.saves.load(BEST), 30)
+        self.assertIn("NEW BEST!", self.label_texts(over))
+        self.assertIn("00030", self.label_texts(over))
+
+        # A lower score leaves the record, and the file, alone.
+        writes = []
+        storage = director.platform.storage
+        original = storage.write_json
+        storage.write_json = lambda name, data: (writes.append(name), original(name, data))
+        self.press(director.BUTTON_A)
+        over = self.crash(director.scene_stack[-1], 10)
+        self.assertFalse(over.new_best)
+        self.assertEqual(vs2.saves.load(BEST), 30)
+        self.assertEqual(writes, [])
+        self.assertIn("GAME OVER", self.label_texts(over))
+        self.assertIn("00010", self.label_texts(over))
+        self.assertEqual(over.best, 30)
+
+        # A fresh start of the game, as after a power cycle, shows the record.
+        director.scene_stack.clear()
+        title = load_app("demos.tutorial_game")
+        self.assertIsInstance(title, Title)
+        self.assertIn("BEST 00030", self.label_texts(title))
+
     def test_the_spawn_timer_rearms_itself(self):
         game = self.start_game(keep_timer=True)
         self.assertEqual(len(game.pending_calls), 1)   # build() armed it

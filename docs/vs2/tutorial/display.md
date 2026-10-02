@@ -183,4 +183,13 @@ def update(self):
 The ship stays at `y = 0`, on the rim, for the whole game. Everything else will
 come at it from deeper in the tunnel.
 
+## The file so far
+
+Everything from this chapter in one file, as it stands after chapter 2. If yours misbehaves, compare it
+with this one. It is `docs/vs2/tutorial/steps/step2_display.py` in the repository.
+
+```{literalinclude} steps/step2_display.py
+:language: python
+```
+
 Next: [sprites](sprites.md).

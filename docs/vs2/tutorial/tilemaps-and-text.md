@@ -324,4 +324,13 @@ at `x = 246`, the bottom of the disc, so it reads upright without any flips:
 Trench Run so far.
 ```
 
+## The file so far
+
+Everything from this chapter in one file, as it stands after chapter 5. If yours misbehaves, compare it
+with this one. It is `docs/vs2/tutorial/steps/step5_tilemaps.py` in the repository.
+
+```{literalinclude} steps/step5_tilemaps.py
+:language: python
+```
+
 Next: [scenes, input and sound](scenes-and-input.md).

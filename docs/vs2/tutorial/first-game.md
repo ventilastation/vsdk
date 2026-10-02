@@ -200,6 +200,15 @@ Players leave with the back button (`Y` or `BACK`), or after 30 seconds without
 input. Both return to the launcher on their own, so your game needs no exit
 code.
 
+## The file so far
+
+Everything from this chapter in one file, the game as it stands after chapter 1. If yours misbehaves, compare it
+with this one. It is `docs/vs2/tutorial/steps/step1_first_game.py` in the repository.
+
+```{literalinclude} steps/step1_first_game.py
+:language: python
+```
+
 This ship is where Trench Run starts. Over the next chapters it gets a tunnel to
 fly down, enemies to dodge, a score and a game-over screen. Next: [the circular display](display.md),
 and why `x` behaves differently from `y`.

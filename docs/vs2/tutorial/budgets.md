@@ -117,12 +117,8 @@ Add up Trench Run's budget. The numbers are in `vs2.limits`:
 | Image strips | 5 (ship, enemy, trench, numerals, steel8x8) | 100 |
 
 Everything is created in `build()`, so the whole table is checked the first time
-the scene is entered. Here is the complete game, exactly as it is in
-`games/demos/tutorial_game/code/tutorial_game.py`:
-
-```{literalinclude} ../../../games/demos/tutorial_game/code/tutorial_game.py
-:language: python
-```
+the scene is entered. The complete game is at the end of
+[chapter 6](scenes-and-input.md#the-whole-game).
 
 Run it in the emulator, then run it on the real Ventilastation. The trench, the
 score and the title should all look the way they did on screen, but only the

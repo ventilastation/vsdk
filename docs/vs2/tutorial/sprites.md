@@ -113,5 +113,14 @@ The names for the frames make the code say what it means, and they are the same
 three numbers the strip is laid out in. Setting a frame is a single write, so
 doing it every tick costs nothing.
 
+## The file so far
+
+Everything from this chapter in one file, as it stands after chapter 3. If yours misbehaves, compare it
+with this one. It is `docs/vs2/tutorial/steps/step3_sprites.py` in the repository.
+
+```{literalinclude} steps/step3_sprites.py
+:language: python
+```
+
 Next: [sprite pools](pools.md), for everything you need many of. To share one
 image handle between several sprites, see [going further](../going-further.md).
