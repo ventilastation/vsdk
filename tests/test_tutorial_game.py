@@ -43,7 +43,7 @@ STRIPS = {
     "explosion.png": (20, 20, 6, None),
     "terrain.png": (16, 16, 6, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
-    "rainbow437.png": (9, 16, 256, None),
+    "steel8x8.png": (8, 8, 256, None),
 }
 
 

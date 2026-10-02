@@ -125,8 +125,8 @@ class Game(vs2.Scene):
 
 def centred_label(layer, text, y):
     """A label for ``text``, centred on the bottom of the disc, where it reads
-    upright. rainbow437.png is a full CP437 font, 9 columns per character."""
-    label = layer.label("rainbow437.png", columns=len(text), x=0, y=y, text=text)
+    upright. steel8x8.png is a full CP437 font, 8 columns per character."""
+    label = layer.label("steel8x8.png", columns=len(text), x=0, y=y, text=text)
     label.x = -(len(text) * label.image.width) // 2
     return label
 

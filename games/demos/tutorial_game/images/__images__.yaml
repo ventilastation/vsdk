@@ -14,5 +14,5 @@ palettegroups:
       frames: 12
       glyphs: "0123456789 *"
   text:
-    - strip: rainbow437.png
+    - strip: steel8x8.png
       frames: 256
