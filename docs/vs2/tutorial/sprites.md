@@ -1,7 +1,6 @@
 # 3. Sprites
 
-A sprite is one image on a layer. The layer creates it, which is what makes it
-impossible to have a sprite that nothing draws:
+A {term}`sprite` is one image on a {term}`layer`. The layer creates it:
 
 ```python
 def build(self):
@@ -12,7 +11,7 @@ def build(self):
 ## Moving and animating
 
 Every attribute writes straight into the renderer's record, so these are cheap
-enough to do on every drawable, every tick:
+enough to do on every sprite, every {term}`tick`:
 
 ```python
 def update(self):
@@ -36,17 +35,12 @@ An out-of-range frame raises at the assignment rather than rendering garbage:
 FrameError: ship.png has 4 frames; frame must be 0..3
 ```
 
-## Frame counts come from the ROM
+## Frame counts and sizes
 
-Don't hard-code them. {py:attr}`Image.frames <vs2.Image.frames>` is parsed from
-the ROM, so it is right even after you add a frame to the PNG:
-
-```python
-self.ship.frame = (self.ship.frame + 1) % self.ship.image.frames
-```
-
-Same for size — {py:attr}`~vs2.Sprite.width` and {py:attr}`~vs2.Sprite.height`
-are read from image metadata and cost no renderer call:
+Don't hard-code the number of frames. {py:attr}`Image.frames <vs2.Image.frames>`
+is read from the {term}`ROM`, so it stays right when you add a frame to the PNG.
+The same goes for size: {py:attr}`~vs2.Sprite.width` and
+{py:attr}`~vs2.Sprite.height` come from the image:
 
 ```python
 self.ship.x = target.x - self.ship.width // 2      # centre on the target
@@ -59,24 +53,6 @@ is kept if it is still in range, and reset to 0 if not:
 
 ```python
 self.ship.image = "ship_damaged.png"
-```
-
-## Resolving an image once
-
-If several drawables share one image, resolve it once with
-{py:meth}`Scene.image <vs2.Scene.image>` and pass the handle around:
-
-```python
-def build(self):
-    enemy = self.image("enemy.png")
-    self.small = self.world.sprite_pool(enemy, count=12)
-    self.boss  = self.world.sprite(enemy, frame=4)
-```
-
-A typo is caught at `build()`:
-
-```text
-AssetNotFoundError: image 'enemyy.png' is not in myname.mygame
 ```
 
 ## Collisions
@@ -100,4 +76,5 @@ X wrapping is handled: a sprite straddling column 0 collides correctly with one
 at column 254. Y does not wrap, because the disc has an inside and an outside.
 :::
 
-Next: [sprite pools](pools.md), for everything you need many of.
+Next: [sprite pools](pools.md), for everything you need many of. To share one
+image handle between several sprites, see [going further](../going-further.md).

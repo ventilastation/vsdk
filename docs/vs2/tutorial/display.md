@@ -1,7 +1,8 @@
 # 2. The circular display
 
-The display is a disc. A spinning bar of LEDs sweeps a full circle, and the
-renderer is asked for one column of 54 LEDs at each of 256 angles.
+The {term}`display` is a disc. A spinning bar of {term}`LEDs <LED>` sweeps a
+full circle, and the renderer is asked for one {term}`column` of 54 LEDs at each
+of 256 angles.
 
 ## X is an angle
 
@@ -19,11 +20,13 @@ simply straddles the seam, and collisions handle that too.
 
 ## Y is a distance inward from the rim
 
-**y = 0 is the outer rim**, and Y grows as you move toward the centre. That is
-the opposite of the screen convention, and it is the thing most likely to trip
-you up.
+**y = 0 is the outer {term}`rim`**, and Y grows as you move toward the centre.
+That is the opposite of the screen convention, and it is the thing most likely
+to trip you up.
 
-What Y means — and how far it goes — depends on the layer's projection:
+What Y means — and how far it goes — depends on the layer's {term}`projection`,
+which you choose when you create the layer. A layer's projection is not
+something a sprite can change.
 
 :::{list-table}
 :header-rows: 1
@@ -31,26 +34,36 @@ What Y means — and how far it goes — depends on the layer's projection:
 
 * - Projection
   - Y
-* - {py:data}`vs2.HUD`
-  - A direct LED index. `y = 0` is the outermost LED, `y = 53` is the centre.
-    A sprite `h` tall stays fully on screen up to `y = 54 - h`.
 * - {py:data}`vs2.TUNNEL`
-  - Depth, running **0 to 255**. `y = 0` is the outermost ring. Increasing Y
-    shrinks objects and moves them toward the centre, reached at `y = 255`.
+  - {term}`Depth`, running **0 to 255**. `y = 0` is the outermost ring.
+    Increasing Y shrinks objects and moves them toward the centre, reached at
+    `y = 255`. The usual choice for a game world.
+* - {py:data}`vs2.HUD`
+  - A direct {term}`LED` index, no perspective. `y = 0` is the outermost LED,
+    `y = 53` is the centre. A sprite `h` tall stays fully on screen up to
+    `y = 54 - h`. The usual choice for scores, messages and overlays.
 * - {py:data}`vs2.FULLSCREEN`
-  - Always centred. It uses the same radial curve as `TUNNEL`: `y = 0`
-    expands across all 54 LEDs, and increasing Y contracts it toward the
-    centre, down to one LED at `y = 255`. X rotates it.
+  - One centred image, for backdrops and planets. It uses the same curve as
+    `TUNNEL`: `y = 0` fills all 54 LEDs, and increasing Y contracts it toward
+    one LED at `y = 255`. X rotates it. Sprites only — a tilemap or label on a
+    `FULLSCREEN` layer raises during `build()`.
 :::
 
-So a tunnel object at the player's end of the world sits at `y = 0`, and things
-move *away* by counting up:
+```python
+def build(self):
+    self.sky   = self.layer("sky",   projection=vs2.FULLSCREEN)
+    self.world = self.layer("world", projection=vs2.TUNNEL)
+    self.hud   = self.layer("hud",   projection=vs2.HUD)
+```
+
+On a tunnel, an object at the player's end of the world sits at `y = 0`, and
+things move *away* by counting up:
 
 ```python
 self.player.y = 0                   # at the rim, where the player lives
 laser.y += 6                        # flying off down the tunnel
 if laser.y > 164:
-    self.laser.despawn(laser)       # far enough away to retire
+    self.lasers.despawn(laser)      # far enough away to retire
 ```
 
 :::{warning}
@@ -59,10 +72,8 @@ layer, but a `TUNNEL` layer's Y runs to 255. Do not use it as a general "off
 the screen" test — pick a depth threshold that suits your game.
 :::
 
-Both axes accept fractional values. The renderer stores signed 8.8 fixed point,
-so `ship.x += 0.25` moves a quarter of a column and accumulates properly across
-frames — no need to keep your own float and round it. Out-of-range values clip
-rather than wrapping or crashing.
+Both axes accept fractional values (`ship.x += 0.25` moves a quarter of a
+column), and out-of-range values clip rather than wrapping or crashing.
 
 ## Read the geometry, don't hard-code it
 
@@ -76,42 +87,12 @@ hud_label.y = 1                      # near the rim, where text is legible
 same generated target definition the renderer, the emulator and the tests all
 use. Writing `% 256` works today but silently breaks on any future display.
 
-## Projections
-
-A layer's `projection` decides how Y becomes an LED. It is layer state, not
-sprite state, so attaching a drawable can never silently change how it is drawn.
-
-:::{list-table}
-:header-rows: 1
-:widths: 20 80
-
-* - Projection
-  - What Y means
-* - {py:data}`vs2.TUNNEL`
-  - Depth. Things shrink and converge toward the centre as Y grows, which reads
-    as flying down a tunnel. The usual choice for a game world.
-* - {py:data}`vs2.HUD`
-  - A direct LED index, no perspective. y=0 is the outermost LED. The usual
-    choice for scores, messages and overlays.
-* - {py:data}`vs2.FULLSCREEN`
-  - One centred image, for backdrops and planets. At `y = 0` it fills the
-    disc; increasing Y contracts it with the tunnel depth curve. Sprites only
-    — a tilemap or label on a `FULLSCREEN` layer raises during `build()`.
-:::
-
-```python
-def build(self):
-    self.sky   = self.layer("sky",   projection=vs2.FULLSCREEN)
-    self.world = self.layer("world", projection=vs2.TUNNEL)
-    self.hud   = self.layer("hud",   projection=vs2.HUD)
-```
-
 ## Draw order
 
 Two rules, and they compose:
 
-1. **Layers paint in creation order**, bottom to top. `sky` above is painted
-   first and `hud` last, so the HUD is on top of everything.
+1. **Layers paint in creation order**, bottom to top. In the example above,
+   `sky` is painted first and `hud` last, so the HUD is on top of everything.
 2. **Within a layer, drawables paint in creation order**, each over the ones
    before it — sprites, tilemaps and labels alike.
 

@@ -1,8 +1,9 @@
 # 7. Budgets and real hardware
 
-The console has on the order of 8 MB of RAM shared between MicroPython's heap,
-image strips, audio and the interpreter, and a hard deadline every column. The
-budgets exist so you find out at `build()` rather than mid-game.
+The {term}`console` has on the order of 8 MB of RAM shared between MicroPython's
+heap, image strips, audio and the interpreter, and a hard deadline every
+{term}`column`. The {term}`budgets <budget>` exist so you find out at `build()`
+rather than mid-game.
 
 | Resource | Budget | Notes |
 |---|---|---|
@@ -53,16 +54,12 @@ that shows up in the census. Sixteen individually created sprites do not.
 **Cell data, not sprites.** Anything on a grid — terrain, a starfield, a
 tile-based background — is one tilemap record however many cells it has.
 
-## The rule that makes it hold
+## Keep `update()` free of allocation
 
-Nothing in the running game may allocate. That is why the scene is sealed after
-`build()`, why pools exist, why `view_x`/`view_y` are scalars rather than a
-viewport tuple, and why {py:meth}`~vs2.Label.set_number` exists instead of
-`"%05d" %`.
-
-A per-frame tuple, dict or formatted string is not "a little garbage" here: over
-a session it is the difference between a stable heap and a GC pause landing on a
-visible frame. These all allocate nothing:
+Creating a tuple, dict or formatted string every tick adds up to garbage the
+console has to collect mid-game. Everything in this list is allocation-free, so
+it is safe to call every tick (the reasons are in
+[why VS2 works this way](../design-notes.md)):
 
 ```python
 sprite.x += 0.5
@@ -77,7 +74,7 @@ joy1.held(LEFT)
 
 ## Moving to the console
 
-The emulator and the hardware run the same renderer semantics, so a game that
+The {term}`emulator` and the {term}`console` run the same renderer semantics, so a game that
 looks right in the emulator generally looks right on the disc. Two things only
 the real thing tells you:
 
@@ -97,7 +94,9 @@ code, ROM, icon and sounds — to share a game as a single file.
 
 ## Where to look next
 
-- The [API reference](../reference/index.md) for the full surface.
+- The [API reference](../reference/index.md) for the full surface, and the
+  [glossary](../glossary.md) for any term you have forgotten.
+- [Going further](../going-further.md) for features this tutorial skipped.
 - Real games in the tree: `games/alecu/mapdemo` is the smallest complete VS2
   game, `games/demos/input_demo` shows every control, and
   `games/alecu/vixeous` uses pools, a scrolling terrain map and labels together.

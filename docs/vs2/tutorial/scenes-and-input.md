@@ -13,13 +13,12 @@ if joy1.just_released(B):      ...   # edge: came up this tick
 if joy2.just_pressed(START):   ...
 ```
 
-`held` is a level and `just_*` are edges — true for exactly one tick. Movement
-usually wants levels; fire, confirm and menu-stepping want edges. All are plain
-bitfield tests, so calling them several times per tick is free.
+`held` is a {term}`level` and `just_*` are {term}`edges <edge>` — true for
+exactly one {term}`tick`. Movement usually wants levels; fire, confirm and
+menu-stepping want edges. Calling them several times per tick is free.
 
 Buttons are `LEFT` `RIGHT` `UP` `DOWN`, `A` `B` `X` `Y`, `START` and `BACK`.
-`from vs2.controls import *` imports exactly those plus `joy1` and `joy2` —
-`__all__` is explicit, so the star import is well defined.
+`from vs2.controls import *` imports exactly those plus `joy1` and `joy2`.
 
 ## Sound
 
@@ -32,13 +31,13 @@ vs2.audio.stop_music()
 Names resolve against your game's `sounds/` folder. A name with a `/` is already
 qualified, which is how you borrow: `vs2.audio.sound("alecu.vyruss/shoot1")`.
 
-Music follows the **app**, not the scene: a track keeps playing across scene
-changes inside your game and stops when the game returns to the launcher. If you
-want it to stop sooner, say so with `stop_music()`.
+Music keeps playing across scene changes inside your game and stops when the
+game returns to the launcher. To stop it sooner, call `stop_music()`.
 
 ## Moving between scenes
 
-A game is usually several scenes — a title, the game, a game-over:
+A game is usually several {term}`scenes <scene>` — a title, the game, a
+game-over. These calls are {term}`transitions <transition>`:
 
 ```python
 self.push(PauseMenu())        # suspend this scene, run another on top
@@ -49,13 +48,12 @@ self.switch(GameOver(score))  # replace this scene outright
 All three return `None`, so `return self.pop()` reads as "handle this input,
 then stop".
 
-Transitions are **queued and committed at the end of the tick**. Once one is
-queued no further game callbacks run that tick, so a timer coming due on the
-same tick as a game-over can never poke a scene that has already decided to
-leave. Queue two in one tick and you get an error naming the scene.
+A transition is queued and takes effect at the end of the tick, and queueing
+two in one tick raises an error. The details are in the
+[scene reference](../reference/scene.md#transitions).
 
 State that should survive a scene being re-entered goes in `__init__`, which
-runs once. Drawables must be rebuilt in `build()`, which runs on every entry:
+runs once. Drawables must be created in `build()`, which runs on every entry:
 
 ```python
 class Game(vs2.Scene):
@@ -70,6 +68,8 @@ class Game(vs2.Scene):
 
 ## Timers
 
+A {term}`timer` runs a function after a delay, in milliseconds:
+
 ```python
 self.call_later(1500, self.respawn)
 self.call_later(500, self.spawn_wave, wave, boss=True)
@@ -77,17 +77,14 @@ self.call_later(500, self.spawn_wave, wave, boss=True)
 
 Extra arguments are stored with the timer and passed to the callback.
 
-Timers live only as long as the scene is showing: pending callbacks are
-discarded the moment it is popped or suspended under a `push`, and a scene shown
-again starts from a fresh `build()` with no timers. That is deliberate — timers
-touch drawables, and the drawables are gone.
-
-Scheduling is meant to be occasional: menus, respawn delays, wave timers. Do not
-call it every tick.
+Pending timers are discarded when the scene is popped or suspended under a
+`push`, because the drawables they would touch are gone. Use timers for
+occasional events — menus, respawn delays, wave timers — not every tick.
 
 ## Back button and idle timeout
 
-Every scene handles both by default. Set these class attributes to change that:
+Every scene handles both by default. Set these class attributes to change
+that:
 
 ```python
 class MyGame(vs2.Scene):
@@ -107,15 +104,6 @@ for something better:
 ```python
 def on_idle(self):
     self.push(AttractSlideshow())
-```
-
-For anything more exotic, `vs2.controls.idle_ms` is readable directly.
-
-## Scene-scoped effects
-
-```python
-class MyGame(vs2.Scene):
-    starfield = True       # applied on entry, restored on exit
 ```
 
 Next: [budgets and real hardware](budgets.md).

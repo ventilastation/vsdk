@@ -46,17 +46,18 @@ palettegroups:
       frames: 1
 ```
 
-A **strip** is a horizontal filmstrip of equally sized frames — a 4-frame
-animation is one PNG four times as wide as one frame. A **palette group** is a
-set of images that share 256 colours; put images that look alike in one group.
+A {term}`strip` is a horizontal filmstrip of equally sized frames — a 4-frame
+animation is one PNG four times as wide as one frame. A {term}`palette group`
+is a set of images that share 256 colours; put images that look alike in one
+group.
 
 The emulator recompiles changed PNGs into a ROM every time it starts, so you
 just edit and rerun.
 
 ## The code
 
-`code/mygame.py` needs a {py:class}`~vs2.Scene` subclass and a `main()` that
-returns an instance:
+`code/mygame.py` needs a {term}`scene` — a {py:class}`~vs2.Scene` subclass — and
+a `main()` that returns an instance:
 
 ```python
 import vs2
@@ -84,20 +85,19 @@ on the menu.
 
 ## What those two methods mean
 
-{py:meth}`~vs2.Scene.build` runs once each time the scene is entered and creates
+{term}`Build <build>` runs once each time the scene is entered and creates
 everything the scene will ever draw. {py:meth}`~vs2.Scene.update` runs once per
-rotation and moves what already exists.
+{term}`rotation` and moves what already exists.
 
-The split is enforced, not just conventional. When `build()` returns, the scene
-is **sealed**: try to create a sprite from `update()` and you get
+The split is enforced. When `build()` returns, the scene is {term}`sealed`: try
+to create a sprite from `update()` and you get
 
 ```text
 SceneSealedError: sprite() is only allowed while MyGame.build() runs
 ```
 
-That is the point. Running out of sprites becomes an error the first time you
-enter the scene — reproducible, at a known line — instead of a crash ten minutes
-into play when a boss spawns one too many.
+So running out of sprites becomes an error the first time you enter the scene,
+not a surprise in the middle of play.
 
 ## Leaving the game
 
