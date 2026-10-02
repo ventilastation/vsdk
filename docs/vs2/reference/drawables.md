@@ -12,27 +12,13 @@ Scene
          └─ Label        (a Tilemap with text helpers)
 ```
 
-Two rules follow from that shape:
-
-- **Layers create their own drawables.** There is no free-standing
-  `Sprite(...)`; {py:meth}`~vs2.Layer.sprite` and friends allocate and attach in
-  one step, so a drawable nothing owns cannot exist.
-- **Projection is layer state.** Drawables neither take nor store a projection,
-  so attaching one can never silently change how it is drawn.
+Layers create their own drawables — there is no free-standing `Sprite(...)` —
+and the projection belongs to the layer, not to its drawables.
 
 All drawables share `x`, `y`, `visible`, `show()` and `hide()`. Coordinates are
-signed and fractional.
-
-X is an angle: 0 at the bottom, 64 left, 128 top, 192 right, wrapping at
-{py:data}`vs2.display.width` (256).
-
-Y is measured **inward from the rim**, so `y = 0` is the outermost LED. Its
-range depends on the layer's projection — `0..53` on a {py:data}`vs2.HUD`
-layer, where it is a direct LED index, and `0..255` on a {py:data}`vs2.TUNNEL`
-layer, where it is depth and the centre is 255. {py:data}`vs2.FULLSCREEN`
-uses that same `0..255` depth curve as radial extent: 0 fills the disc and
-larger values contract toward the centre. Out-of-range values clip.
-See [the circular display](../tutorial/display.md) for the full picture.
+signed and fractional. X is an angle that wraps at {py:data}`vs2.display.width`
+(256), and Y is measured inward from the rim. What Y means depends on the
+layer's projection; see [the circular display](../tutorial/display.md).
 
 ## Layer
 

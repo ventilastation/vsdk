@@ -11,18 +11,10 @@ Display geometry and palette animation.
 .. autoattribute:: vs2.display.height
 ```
 
-On the rotor target `width` is 256 and `height` is 54, but read them rather than
-hard-coding: both come from the same generated target definition the renderer
-uses, so a future display variant gets them right for free.
-
-`height` is the LED count, which is the Y range of a {py:data}`vs2.HUD` layer.
-A {py:data}`vs2.TUNNEL` layer's Y is depth and runs to 255 — see
+On the {term}`rotor` `width` is 256 and `height` is 54, but read them rather
+than hard-coding. `height` is the LED count, which is the Y range of a
+{py:data}`vs2.HUD` layer only; see
 [the circular display](../tutorial/display.md).
-
-```python
-x = (x + 1) % vs2.display.width      # wrap the angle
-hud_label.y = 1                      # near the rim, where text is legible
-```
 
 ### Palette animation
 
@@ -60,9 +52,8 @@ fields. Both have the same three methods; they are documented here on `joy1`.
 .. automethod:: vs2.controls.joy1.just_released
 ```
 
-`held` is a level — the button is down right now. `just_pressed` and
-`just_released` are edges, true for the single tick the transition happened on.
-Movement usually reads levels; fire, confirm and menu-stepping read edges.
+`held` is a {term}`level`; `just_pressed` and `just_released` are
+{term}`edges <edge>`.
 
 ### Buttons
 
@@ -122,9 +113,8 @@ vs2.audio.sound("shoot")                  # this game's shoot.mp3
 vs2.audio.sound("alecu.vyruss/shoot1")    # another game's
 ```
 
-Music follows the app, not the scene: a track keeps playing across `push`,
-`pop` and `switch` within the same game, and stops when the game returns to the
-launcher.
+Music follows the app, not the scene: it keeps playing across `push`, `pop`
+and `switch`, and stops when the game returns to the launcher.
 
 ## vs2.base
 
@@ -165,12 +155,6 @@ The per-target resource budgets, readable at runtime.
 .. autoattribute:: vs2.limits.image_strips
 ```
 
-| Resource | Budget on the rotor |
-|---|---|
-| `layers` | 8 |
-| `sprites` | 100 |
-| `tilemaps` | 16 (a label counts as one) |
-| `image_strips` | 100 |
-
+The values on the rotor are in the [budget table](../tutorial/budgets.md).
 Exceeding one raises {py:exc}`vs2.ResourceLimitError` during `build()`, the
 first time the scene is entered.

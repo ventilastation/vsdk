@@ -34,8 +34,9 @@ object. Drawable handles cannot: rebuild them in `build()`.
 
 ## Transitions
 
-All three queue and commit at the end of the tick, and all three return `None`,
-so `return self.pop()` reads as "handle this input, then stop":
+All three are {term}`transitions <transition>`. They queue and commit at the end
+of the tick, and all three return `None`, so `return self.pop()` reads as
+"handle this input, then stop":
 
 ```python
 self.push(PauseMenu())        # suspend this scene, run another on top
