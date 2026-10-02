@@ -35,7 +35,8 @@ const ART = {
   "messages.png": ["alecu/vixeous/images/messages.png", 3],
   "terrain.png": ["alecu/mapdemo/images/terrain.png", 6],
 };
-const FULLSCREEN_ART = { "tierra.png": ["alecu/vyruss_vs2/images/tierra.png", 25] };
+// Local art (under tools/vs2_doc_images/art) is written as "local:<file>".
+const FULLSCREEN_ART = { "clouds.png": ["local:clouds.png", 54] };
 
 // name -> { art: [...], shots: [[step, ...], ...] }
 // steps: {wait: ms} {down: key} {up: key} {press: key} {shot: file, labels: [...]}
@@ -66,20 +67,31 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, {
       shot: "display-projections.png",
       labels: [
-        { x: 640, y: 150, text: "TUNNEL layer\ny = 0, 40, 80, 120, 170, 220", color: "#8fb4ff" },
+        { x: 700, y: 150, text: "TUNNEL layer\ny = 0, 40, 80, 120, 170, 220", color: "#8fb4ff" },
         { x: 640, y: 740, text: "HUD layer\ny = 0, 14, 28, 40", color: "#ffd166" },
       ],
     }],
   },
-  fullscreen: {
-    art: ["ship.png", "numerals.png"],
-    fullscreen: ["tierra.png"],
+  layers: {
+    art: ["ship.png", "enemy.png", "numerals.png"],
+    fullscreen: ["clouds.png"],
     steps: [{ wait: 800 }, {
       shot: "display-layers.png",
       labels: [
-        { x: 440, y: 678, text: "sky\nFULLSCREEN", color: "#8fb4ff" },
-        { x: 440, y: 130, text: "world\nTUNNEL", color: "#7ee0a1" },
-        { x: 440, y: 770, text: "hud\nHUD", color: "#ffd166" },
+        { x: 24, y: 735, left: true, size: 22, text: "hud (HUD): the score", color: "#ffd166" },
+        { x: 24, y: 765, left: true, size: 22, text: "clouds (FULLSCREEN): drawn over the world", color: "#8fb4ff" },
+        { x: 24, y: 795, left: true, size: 22, text: "world (TUNNEL): the ship and enemies", color: "#7ee0a1" },
+      ],
+    }],
+  },
+  flips: {
+    art: ["numerals.png"],
+    steps: [{ wait: 800 }, {
+      shot: "labels-flips.png",
+      labels: [
+        { x: 24, y: 690, left: true, size: 24, text: "top, y = 1, no flips: upside-down", color: "#ff8f8f" },
+        { x: 24, y: 725, left: true, size: 24, text: "top, y = 14, flip_x and flip_y: upright", color: "#7ee0a1" },
+        { x: 24, y: 760, left: true, size: 24, text: "bottom, y = 1, no flips: upright", color: "#7ee0a1" },
       ],
     }],
   },
@@ -88,7 +100,7 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, {
       shot: "sprites-frames.png",
       labels: [
-        { x: 440, y: 220, text: "frame = 0, 1, 2, 3  (left to right)" },
+        { x: 440, y: 330, text: "frame = 0, 1, 2, 3  (left to right)" },
       ],
     }],
   },
@@ -111,8 +123,8 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, {
       shot: "labels.png",
       labels: [
-        { x: 440, y: 270, text: "x = 118, flip_x and flip_y" },
-        { x: 440, y: 790, text: "x = 246, no flips" },
+        { x: 24, y: 690, left: true, size: 24, text: "top: x = 118, y = 14, flip_x and flip_y", color: "#7ee0a1" },
+        { x: 24, y: 725, left: true, size: 24, text: "bottom: x = 246, y = 1, no flips", color: "#7ee0a1" },
       ],
     }],
   },
@@ -140,7 +152,8 @@ const wanted = (name) => only.length === 0 || only.includes(name);
 
 fs.mkdirSync(OUT, { recursive: true });
 
-const gamesPath = (rel) => path.join(REPO, "games", rel);
+const gamesPath = (rel) =>
+  rel.startsWith("local:") ? path.join(HERE, "art", rel.slice(6)) : path.join(REPO, "games", rel);
 const b64 = (file) => fs.readFileSync(file).toString("base64");
 
 function exampleFiles(name, ex) {
@@ -167,7 +180,7 @@ function exampleFiles(name, ex) {
   for (const art of ex.fullscreen || []) {
     const [src, radius] = FULLSCREEN_ART[art];
     files.push({ path: `${root}/images/${art}`, enc: "base64", content: b64(gamesPath(src)) });
-    yaml += `  sky:\n    - fullscreen: ${art}\n      radius: ${radius}\n`;
+    yaml += `  clouds:\n    - fullscreen: ${art}\n      radius: ${radius}\n`;
   }
   files.push({ path: `${root}/images/__images__.yaml`, enc: "utf8", content: yaml });
   return { files, imagesRoot: `${root}/images`, slug: `docs.${name}` };
@@ -204,12 +217,15 @@ async function canvasPng(page) {
   return Buffer.from(data.split(",")[1], "base64");
 }
 
-// Draws text labels (canvas pixel coordinates, centred on x/y) over a screenshot.
+// Draws text labels (canvas pixel coordinates, centred on x/y, or starting at x
+// with `left`) over a screenshot. Keep them clear of the drawing and of each other.
 async function annotate(browser, png, labels) {
   const page = await browser.newPage({ viewport: { width: 880, height: 880 } });
   const items = labels.map((l) =>
-    `<div style="position:absolute;left:${l.x}px;top:${l.y}px;transform:translate(-50%,-50%);` +
-    `color:${l.color || "#e6edf3"};white-space:pre;text-align:center;font:600 26px/1.25 system-ui,sans-serif;` +
+    `<div style="position:absolute;left:${l.x}px;top:${l.y}px;` +
+    `transform:translate(${l.left ? "0" : "-50%"},-50%);` +
+    `color:${l.color || "#e6edf3"};white-space:pre;text-align:${l.left ? "left" : "center"};` +
+    `font:600 ${l.size || 26}px/1.3 system-ui,sans-serif;` +
     `text-shadow:0 0 6px #000,0 0 3px #000">${l.text}</div>`).join("");
   await page.setContent(
     `<body style="margin:0;position:relative;width:880px;height:880px;overflow:hidden">` +

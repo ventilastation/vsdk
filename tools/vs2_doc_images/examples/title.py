@@ -5,7 +5,7 @@ from vs2.controls import *
 class Title(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
-        self.banner = hud.sprite("messages.png", x=96, y=12)
+        self.banner = hud.sprite("messages.png", x=224, y=8)
 
     def update(self):
         if joy1.just_pressed(A):

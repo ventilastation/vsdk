@@ -22,8 +22,8 @@
     <circle cx="580" cy="360" r="6" fill="#f5b800"/><text x="596" y="370">x = 192</text>
   </g>
   <text x="360" y="682" fill="#8aa0b5" font-size="18" text-anchor="middle">x wraps: 256 is the same place as 0</text>
-  <path d="M 320 626 A 270 270 0 0 1 112 500" fill="none" stroke="#f5b800" stroke-width="4" marker-end="url(#arrow)"/>
-  <text x="96" y="600" fill="#f5b800" font-size="19" font-weight="600" text-anchor="middle">x grows</text>
+  <path d="M 285 622 A 270 270 0 0 1 112 500" fill="none" stroke="#f5b800" stroke-width="4" marker-end="url(#arrow)"/>
+  <text x="70" y="612" fill="#f5b800" font-size="19" font-weight="600" text-anchor="middle">x grows</text>
   <path d="M 516 516 L 408 408" stroke="#4f8cff" stroke-width="4" marker-end="url(#arrowb)"/>
   <circle cx="516" cy="516" r="6" fill="#4f8cff"/>
   <text x="536" y="562" fill="#8fb4ff" font-size="24" font-weight="600">y = 0</text>

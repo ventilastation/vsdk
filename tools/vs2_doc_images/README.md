@@ -28,7 +28,8 @@ emulator URL and the output directory.
   text labels drawn over them (`labels` in `capture.mjs`).
 - `diagrams/*.svg` are rendered to PNG with the same browser. `{{art:...}}`
   in an SVG is replaced with a PNG from `games/` as a data URI.
-- The art comes from the games under `games/alecu/` (`ART` in `capture.mjs`).
+- The art comes from the games under `games/alecu/` (`ART` in `capture.mjs`),
+  except `art/clouds.png`, which `make_clouds.py` draws for the layers example.
 
 The examples pass `glyphs=` to `label()` because the browser ROM builder does
 not read `glyphs:` from `__images__.yaml`.

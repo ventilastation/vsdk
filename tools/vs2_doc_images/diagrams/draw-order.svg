@@ -5,18 +5,18 @@
     <polygon points="120,340 420,340 480,400 180,400" fill="#16314f" stroke="#4f8cff" stroke-width="2"/>
     <polygon points="120,250 420,250 480,310 180,310" fill="#14382a" stroke="#3ecf8e" stroke-width="2"/>
     <polygon points="120,160 420,160 480,220 180,220" fill="#3a2a14" stroke="#f5b800" stroke-width="2"/>
-    <text x="300" y="376" fill="#cfe0ff" text-anchor="middle">sky  (1st)</text>
-    <text x="300" y="286" fill="#c9f5e0" text-anchor="middle">world  (2nd)</text>
+    <text x="300" y="376" fill="#cfe0ff" text-anchor="middle">world  (1st)</text>
+    <text x="300" y="286" fill="#c9f5e0" text-anchor="middle">clouds  (2nd)</text>
     <text x="300" y="196" fill="#ffe8b0" text-anchor="middle">hud  (3rd)</text>
   </g>
   <g fill="#e6edf3" font-size="20">
     <text x="540" y="372">painted first, underneath</text>
-    <text x="540" y="282">painted over the sky</text>
+    <text x="540" y="282">painted over the world</text>
     <text x="540" y="192">painted last, on top</text>
   </g>
   <g fill="#8aa0b5" font-size="17">
-    <text x="540" y="400">layer = self.layer("sky", ...)</text>
-    <text x="540" y="310">layer = self.layer("world", ...)</text>
+    <text x="540" y="400">layer = self.layer("world", ...)</text>
+    <text x="540" y="310">layer = self.layer("clouds", ...)</text>
     <text x="540" y="220">layer = self.layer("hud", ...)</text>
   </g>
   <text x="120" y="100" fill="#e6edf3" font-size="24" font-weight="600">Layers paint in the order you create them</text>
