@@ -35,6 +35,7 @@ const ART = {
   "enemy.png": ["alecu/vixeous/images/enemy.png", 6],
   "explosion.png": ["alecu/vixeous/images/explosion.png", 6],
   "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
+  "mario_runs.png": ["pycamp-mar25/vugo/images/mario_runs.png", 6],
   "trench.png": ["demos/tutorial_game/images/trench.png", 8],
   "steel8x8.png": ["vsjam-may25/vasura_espacial/images/steel8x8.png", 256],
 };
@@ -111,11 +112,11 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, { shot: "game-over.png" }],
   },
   frames: {
-    art: ["ship.png"],
+    art: ["mario_runs.png"],
     steps: [{ wait: 800 }, {
       shot: "sprites-frames.png",
       labels: [
-        { x: 440, y: 330, text: "frame = 0, 1, 2, 3  (left to right)" },
+        { x: 440, y: 560, text: "frame = 0, 1, 2, 3  (left to right)" },
       ],
     }],
   },

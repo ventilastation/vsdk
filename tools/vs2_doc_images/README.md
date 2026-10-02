@@ -37,6 +37,10 @@ This table comes from `node capture.mjs --list`.
 
 Notes on specific images:
 
+- **`sprites-frames.png`** uses `mario_runs.png` from the `vugo` game, not the
+  tutorial game's art, because a walking character's frames differ visibly. The
+  sprites are spaced 24 columns apart (each is 20 wide) so none overlap; retake it
+  and check that after changing the spacing or the art.
 - **`game-play.png`** is a real game being played with scripted key presses, and
   the enemies appear at random places. Run `node capture.mjs game` again until the
   picture shows enemies at several depths, a shot in flight and a score above
