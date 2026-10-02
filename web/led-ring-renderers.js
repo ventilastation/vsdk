@@ -9,6 +9,11 @@ import {
 } from "./app-support.js?v=20260717b";
 import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260729a";
 
+// The LED ring spans +/-103.2 world units; this many units fit across the
+// canvas, so the outermost LEDs just touch the circular edge the stylesheet
+// clips the canvas to (see #frame-canvas-gl in styles.css).
+const LED_VIEW_SPAN = 207;
+
 const VIDEO_PLANE_GUARD = 2;
 const VIDEO_PLANE_STRIDE = PIXELS + VIDEO_PLANE_GUARD;
 // Keep the visible video width equal to its 16-pixel H.264 macroblock surface.
@@ -280,7 +285,7 @@ class LedRingWebGLRenderer {
     if (!this.gl) {
       return;
     }
-    this.gl.clearColor(0.02, 0.03, 0.05, 1.0);
+    this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
   }
 
@@ -335,7 +340,7 @@ class LedRingWebGLRenderer {
     gl.uniform1f(this.uniforms.videoPacked, videoPacked ? 1 : 0);
     gl.uniform2f(this.uniforms.resolution, width, height);
     gl.uniform2f(this.uniforms.center, width * 0.5, height * 0.5);
-    gl.uniform1f(this.uniforms.scale, Math.min(width, height) / 200);
+    gl.uniform1f(this.uniforms.scale, Math.min(width, height) / LED_VIEW_SPAN);
     gl.drawArrays(gl.TRIANGLES, 0, this.geometry.vertexCount);
   }
 
@@ -367,7 +372,7 @@ class LedRingWebGLRenderer {
     gl.enable(gl.BLEND);
     gl.uniform2f(this.uniforms.resolution, width, height);
     gl.uniform2f(this.uniforms.center, width * 0.5, height * 0.5);
-    gl.uniform1f(this.uniforms.scale, Math.min(width, height) / 200);
+    gl.uniform1f(this.uniforms.scale, Math.min(width, height) / LED_VIEW_SPAN);
     gl.drawArrays(gl.TRIANGLES, 0, this.geometry.vertexCount);
     const finishedAt = performance.now();
     this.lastProfile = {
@@ -599,10 +604,10 @@ class LedRingCanvasRenderer {
     const startedAt = performance.now();
     const { width, height } = this.resize();
     const afterResizeAt = performance.now();
-    const scale = Math.min(width, height) / 200;
+    const scale = Math.min(width, height) / LED_VIEW_SPAN;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "#05070b";
+    ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, width, height);
 
     let drawnLedCount = 0;

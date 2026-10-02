@@ -1405,14 +1405,24 @@ textarea {
   height: min(calc(100vh - 120px), calc(100vw - 460px), 920px);
 }
 
-#frame-canvas-gl,
-#frame-canvas-2d {
-  width: 100%;
-  height: 100%;
+/* The stage is a dark panel like the rest of the UI, and the display is a black
+   disc inset in it, so the edge of the fan shows up (in screenshots too). */
+.stage-display {
+  background: var(--panel);
   border-radius: 28px;
   box-shadow:
     0 24px 80px rgba(0, 0, 0, 0.38),
     inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+#frame-canvas-gl,
+#frame-canvas-2d {
+  inset: 4%;
+  width: 92%;
+  height: 92%;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 0 0 1px var(--panel-border);
 }
 
 .stage-fullscreen-toggle {
