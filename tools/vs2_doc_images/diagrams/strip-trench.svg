@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 290" width="760" height="290" font-family="system-ui,sans-serif">
+  <rect width="760" height="290" fill="#0b0f14"/>
+  <text x="40" y="44" fill="#e6edf3" font-size="24" font-weight="600">trench.png: a tileset is a strip too</text>
+  <!-- 128x16 px image scaled x4: eight 64 px tiles -->
+  <rect x="123" y="75" width="514" height="66" fill="#3a4556"/>
+  <image x="124" y="76" width="512" height="64" href="{{art:demos/tutorial_game/images/trench.png}}" style="image-rendering:pixelated"/>
+  <g stroke="#f5b800" stroke-width="2" stroke-dasharray="6 5">
+    <line x1="124" y1="66" x2="124" y2="150"/><line x1="188" y1="66" x2="188" y2="150"/>
+    <line x1="252" y1="66" x2="252" y2="150"/><line x1="316" y1="66" x2="316" y2="150"/>
+    <line x1="380" y1="66" x2="380" y2="150"/><line x1="444" y1="66" x2="444" y2="150"/>
+    <line x1="508" y1="66" x2="508" y2="150"/><line x1="572" y1="66" x2="572" y2="150"/>
+    <line x1="636" y1="66" x2="636" y2="150"/>
+  </g>
+  <g fill="#e6edf3" font-size="22" font-weight="700" text-anchor="middle">
+    <text x="156" y="180">0</text><text x="220" y="180">1</text><text x="284" y="180">2</text>
+    <text x="348" y="180">3</text><text x="412" y="180">4</text><text x="476" y="180">5</text>
+    <text x="540" y="180">6</text><text x="604" y="180">7</text>
+  </g>
+  <g fill="#aebccb" font-size="14" text-anchor="middle">
+    <text x="156" y="202">PLATE</text><text x="220" y="202">SEAM</text><text x="284" y="202">PIPE</text>
+    <text x="348" y="202">WINDOWS</text><text x="412" y="202">VENT</text><text x="476" y="202">HAZARD</text>
+    <text x="540" y="202">LIGHTS</text><text x="604" y="202">CONDUIT</text>
+  </g>
+  <text x="380" y="256" fill="#8aa0b5" font-size="17" text-anchor="middle">each cell in the tilemap holds one of these numbers (255 = empty)</text>
+</svg>

@@ -6,14 +6,14 @@
 // Emulator screenshots: each example in examples/ is written into the browser
 // emulator's workspace as games/docs/<name>, its ROM is built in the browser,
 // the runtime is restarted into it, and the polar canvas is saved after the
-// scripted key presses. Nothing is written into the repo's games/ tree.
+// scripted key presses. Nothing is written into the repo's games/ tree. The
+// `game` entry instead loads the finished tutorial game, as it is in the repo
+// (games/demos/tutorial_game).
 //
 // Diagrams: each diagrams/*.svg is rendered to a PNG with the same browser.
 // `{{art:<path under games/>}}` in an SVG is replaced by that image as a data
 // URI, so diagrams can show the real art.
-//
-// The browser ROM builder does not read `glyphs:` from __images__.yaml, so the
-// examples pass glyphs= to label() instead.
+
 
 import fs from "node:fs";
 import path from "node:path";
@@ -24,16 +24,19 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
 const BASE = process.env.BASE || "http://localhost:8765";
 const OUT = process.env.OUT || path.join(REPO, "docs/vs2/images");
-const CHROMIUM = process.env.CHROMIUM || "/opt/pw-browsers/chromium";
+// Which browser: $CHROMIUM (a Chrome/Chromium binary), else the one in
+// /opt/pw-browsers if it exists, else Playwright's own (npx playwright-core install chromium).
+const CHROMIUM = process.env.CHROMIUM
+  || (fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
 
 const ART = {
   "ship.png": ["alecu/vixeous/images/ship.png", 4],
   "shots.png": ["alecu/vixeous/images/shots.png", 3],
   "enemy.png": ["alecu/vixeous/images/enemy.png", 6],
   "explosion.png": ["alecu/vixeous/images/explosion.png", 6],
-  "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12],
-  "messages.png": ["alecu/vixeous/images/messages.png", 3],
-  "terrain.png": ["alecu/mapdemo/images/terrain.png", 6],
+  "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
+  "trench.png": ["demos/tutorial_game/images/trench.png", 8],
+  "steel8x8.png": ["vsjam-may25/vasura_espacial/images/steel8x8.png", 256],
 };
 // Local art (under tools/vs2_doc_images/art) is written as "local:<file>".
 const FULLSCREEN_ART = { "clouds.png": ["local:clouds.png", 54] };
@@ -67,7 +70,7 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, {
       shot: "display-projections.png",
       labels: [
-        { x: 700, y: 150, text: "TUNNEL layer\ny = 0, 40, 80, 120, 170, 220", color: "#8fb4ff" },
+        { x: 210, y: 300, text: "TUNNEL layer\ny = 0, 40, 80,\n120, 170, 220", color: "#8fb4ff" },
         { x: 640, y: 740, text: "HUD layer\ny = 0, 14, 28, 40", color: "#ffd166" },
       ],
     }],
@@ -77,11 +80,6 @@ const EXAMPLES = {
     fullscreen: ["clouds.png"],
     steps: [{ wait: 800 }, {
       shot: "display-layers.png",
-      labels: [
-        { x: 24, y: 735, left: true, size: 22, text: "hud (HUD): the score", color: "#ffd166" },
-        { x: 24, y: 765, left: true, size: 22, text: "clouds (FULLSCREEN): drawn over the world", color: "#8fb4ff" },
-        { x: 24, y: 795, left: true, size: 22, text: "world (TUNNEL): the ship and enemies", color: "#7ee0a1" },
-      ],
     }],
   },
   flips: {
@@ -89,11 +87,28 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, {
       shot: "labels-flips.png",
       labels: [
-        { x: 24, y: 690, left: true, size: 24, text: "top, y = 1, no flips: upside-down", color: "#ff8f8f" },
-        { x: 24, y: 725, left: true, size: 24, text: "top, y = 14, flip_x and flip_y: upright", color: "#7ee0a1" },
-        { x: 24, y: 760, left: true, size: 24, text: "bottom, y = 1, no flips: upright", color: "#7ee0a1" },
+        { x: 440, y: 330, size: 24, text: "top, y = 1, no flips: upside-down", color: "#ff8f8f" },
+        { x: 440, y: 368, size: 24, text: "top, y = 14, flip_x and flip_y: upright", color: "#7ee0a1" },
+        { x: 440, y: 406, size: 24, text: "bottom, y = 1, no flips: upright", color: "#7ee0a1" },
       ],
     }],
+  },
+  game: {
+    repoGame: "demos/tutorial_game",
+    steps: [
+      { wait: 800 }, { shot: "game-title.png" },
+      ...key("Space"), { wait: 7000 },
+      { down: "ArrowLeft" }, { wait: 150 }, { up: "ArrowLeft" },
+      ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 250 },
+      { down: "ArrowRight" }, { wait: 300 }, { up: "ArrowRight" },
+      ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 150 },
+      { shot: "game-play.png" },
+    ],
+  },
+  gameover: {
+    art: ["numerals.png", "steel8x8.png"],
+    alsoLoad: ["demos/tutorial_game/code/tutorial_game.py"],
+    steps: [{ wait: 800 }, { shot: "game-over.png" }],
   },
   frames: {
     art: ["ship.png"],
@@ -115,17 +130,13 @@ const EXAMPLES = {
     ],
   },
   tilemap: {
-    art: ["ship.png", "terrain.png"],
+    art: ["ship.png", "trench.png"],
     steps: [{ wait: 800 }, { shot: "tilemaps.png" }],
   },
   labels: {
-    art: ["ship.png", "terrain.png", "numerals.png"],
+    art: ["ship.png", "trench.png", "numerals.png"],
     steps: [{ wait: 800 }, {
       shot: "labels.png",
-      labels: [
-        { x: 24, y: 690, left: true, size: 24, text: "top: x = 118, y = 14, flip_x and flip_y", color: "#7ee0a1" },
-        { x: 24, y: 725, left: true, size: 24, text: "bottom: x = 246, y = 1, no flips", color: "#7ee0a1" },
-      ],
     }],
   },
   legibility: {
@@ -138,16 +149,9 @@ const EXAMPLES = {
       ],
     }],
   },
-  title: {
-    art: ["ship.png", "enemy.png", "messages.png"],
-    steps: [
-      { wait: 800 }, { shot: "scenes-title.png" },
-      ...key("Space"), { wait: 1500 }, { shot: "scenes-play.png" },
-    ],
-  },
 };
 
-const only = process.argv.slice(2);
+const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const wanted = (name) => only.length === 0 || only.includes(name);
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -156,7 +160,30 @@ const gamesPath = (rel) =>
   rel.startsWith("local:") ? path.join(HERE, "art", rel.slice(6)) : path.join(REPO, "games", rel);
 const b64 = (file) => fs.readFileSync(file).toString("base64");
 
+// A game that lives in the repo (games/<group>/<name>) is loaded as it is.
+function repoGameFiles(ex) {
+  const dir = path.join(REPO, "games", ex.repoGame);
+  const [group, name] = ex.repoGame.split("/");
+  const root = `games/${group}/${name}`;
+  const files = [];
+  const walk = (sub) => {
+    for (const entry of fs.readdirSync(path.join(dir, sub), { withFileTypes: true })) {
+      const rel = path.posix.join(sub, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "__pycache__") walk(rel);
+      } else if (/\.(py|json|yaml)$/.test(entry.name)) {
+        files.push({ path: `${root}/${rel}`, enc: "utf8", content: fs.readFileSync(path.join(dir, rel), "utf8") });
+      } else if (/\.png$/.test(entry.name)) {
+        files.push({ path: `${root}/${rel}`, enc: "base64", content: b64(path.join(dir, rel)) });
+      }
+    }
+  };
+  walk("");
+  return { files, imagesRoot: `${root}/images`, slug: `${group}.${name}` };
+}
+
 function exampleFiles(name, ex) {
+  if (ex.repoGame) return repoGameFiles(ex);
   const root = `games/docs/${name}`;
   const files = [
     {
@@ -170,11 +197,15 @@ function exampleFiles(name, ex) {
       content: fs.readFileSync(path.join(HERE, "examples", `${name}.py`), "utf8"),
     },
   ];
+  // Repo files the example imports (games/<path>), written to the same place.
+  for (const rel of ex.alsoLoad || []) {
+    files.push({ path: `games/${rel}`, enc: "utf8", content: fs.readFileSync(gamesPath(rel), "utf8") });
+  }
   const strips = [];
   for (const art of ex.art) {
-    const [src, frames] = ART[art];
+    const [src, frames, glyphs] = ART[art];
     files.push({ path: `${root}/images/${art}`, enc: "base64", content: b64(gamesPath(src)) });
-    strips.push(`    - strip: ${art}\n      frames: ${frames}`);
+    strips.push(`    - strip: ${art}\n      frames: ${frames}` + (glyphs ? `\n      glyphs: "${glyphs}"` : ""));
   }
   let yaml = "palettegroups:\n  main:\n" + strips.join("\n") + "\n";
   for (const art of ex.fullscreen || []) {
@@ -186,36 +217,98 @@ function exampleFiles(name, ex) {
   return { files, imagesRoot: `${root}/images`, slug: `docs.${name}` };
 }
 
+// RENDERER picks what draws the disc: "2d" (default; the canvas fallback, which
+// works in headless Chromium without a GPU), "webgl" (the WebGL renderer with the
+// CPU compositor) or "shader" (WebGL plus the GPU shader compositor). The last
+// two want a real GPU: run with GPU=1 so Chromium is not forced onto SwiftShader.
+const RENDERER = process.env.RENDERER || "2d";
+
+// 880 CSS pixels is the size of every emulator screenshot, and what the label
+// coordinates below are written for. The stage is the viewport height minus the
+// 120px control bar above it (see .stage-display in web/styles.css).
+const STAGE = 880;
+
 async function openEmulator(browser) {
-  const page = await browser.newPage({ viewport: { width: 1000, height: 1000 } });
+  // A fresh context per run, so no UI state (open panels) carries over.
+  const context = await browser.newContext({ viewport: { width: 1300, height: STAGE + 120 } });
+  const page = await context.newPage();
   page.on("pageerror", (e) => console.log("pageerror:", e.message.slice(0, 300)));
+  if (process.env.DEBUG) page.on("console", (m) => console.log("console:", m.text().slice(0, 400)));
+  if (process.env.HOOK_APP) {
+    // Debugging: expose the emulator's app object as window.__vsApp.
+    await page.route("**/app.js*", async (route) => {
+      const res = await route.fetch();
+      const body = (await res.text()).replace(
+        "window.VentilastationWebEmulator = this.createIntegrationApi();",
+        "window.VentilastationWebEmulator = this.createIntegrationApi(); window.__vsApp = this;");
+      await route.fulfill({ response: res, body });
+    });
+  }
   await page.goto(`${BASE}/index.html`);
   await page.waitForFunction(() => window.VentilastationWebEmulator, null, { timeout: 60000 });
-  // The 2D renderer reads back reliably in headless Chromium; WebGL needs a GPU.
-  await page.evaluate(() => {
-    const box = document.getElementById("force-2d-fallback");
-    if (box && !box.checked) box.click();
-  });
-  if (process.env.RENDERER === "shader") {
-    await page.evaluate(() => {
+  // Screenshots are of the stage only: no base-controls preview or fullscreen button.
+  await page.addStyleTag({ content: ".base-preview, .stage-fullscreen-toggle { display: none !important; }" });
+  await page.evaluate((renderer) => {
+    const force2d = document.getElementById("force-2d-fallback");
+    if (force2d && force2d.checked !== (renderer === "2d")) force2d.click();
+    if (renderer === "shader") {
       const select = document.getElementById("scene-renderer-mode");
       select.value = "shader";
       select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-  }
+    }
+  }, RENDERER);
   await page.waitForTimeout(1000);
   return page;
 }
 
-async function canvasPng(page) {
-  const data = await page.evaluate(() => {
-    const canvas = [...document.querySelectorAll("canvas")].find(
-      (c) => !c.hidden && c.offsetParent !== null && c.id.startsWith("frame-canvas"));
-    return canvas ? canvas.toDataURL("image/png") : null;
-  });
-  if (!data) throw new Error("no visible frame canvas");
-  return Buffer.from(data.split(",")[1], "base64");
+// The stage element: the dark panel and the black disc inset in it, as the
+// emulator shows them.
+async function stagePng(page) {
+  // Pause the emulator while the shot is taken, the way it pauses when its tab
+  // is hidden. A scene that lights the whole disc is slow to composite, and with
+  // the loop running the screenshot can take a minute, long enough for the
+  // game's 30 second idle timeout to send it back to the launcher.
+  const setHidden = (hidden) => page.evaluate((h) => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => h });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+  await setHidden(true);
+  await page.waitForTimeout(300);
+  try {
+    return await page.locator(".stage-display").screenshot({ timeout: 120000 });
+  } finally {
+    await setHidden(false);
+  }
 }
+
+// The label coordinates were written for a disc that filled the stage with the
+// LED ring spanning LABEL_SPAN world units across it. The emulator now insets the
+// canvas in the stage and fits LED_VIEW_SPAN units across the canvas (see
+// #frame-canvas-gl in web/styles.css and led-ring-renderers.js), so labels that
+// point at the drawing are pulled in by the ratio, measured from the page rather
+// than copied here. `left` legends are not.
+const LABEL_SPAN = 200;
+const LED_VIEW_SPAN = Number(
+  /LED_VIEW_SPAN\s*=\s*(\d+)/.exec(
+    fs.readFileSync(path.join(REPO, "web/led-ring-renderers.js"), "utf8"))[1]);
+
+async function discFit(page) {
+  const canvasShare = await page.evaluate(() => {
+    const stage = document.querySelector(".stage-display").getBoundingClientRect();
+    const canvas = [...document.querySelectorAll("#frame-canvas-gl, #frame-canvas-2d")]
+      .filter((c) => getComputedStyle(c).display !== "none")
+      .map((c) => c.getBoundingClientRect())
+      .find((r) => r.width > 0);
+    return canvas ? canvas.width / stage.width : 1;
+  });
+  return canvasShare * LABEL_SPAN / LED_VIEW_SPAN;
+}
+
+const fit = (factor) => (l) => (l.left ? l : {
+  ...l,
+  x: STAGE / 2 + (l.x - STAGE / 2) * factor,
+  y: STAGE / 2 + (l.y - STAGE / 2) * factor,
+});
 
 // Draws text labels (canvas pixel coordinates, centred on x/y, or starting at x
 // with `left`) over a screenshot. Keep them clear of the drawing and of each other.
@@ -250,15 +343,30 @@ async function runExample(browser, name, ex) {
     if (step.wait) await page.waitForTimeout(step.wait);
     else if (step.down) await page.keyboard.down(step.down);
     else if (step.up) await page.keyboard.up(step.up);
+    else if (step.log) {
+      console.log(step.log, JSON.stringify(await page.evaluate(step.expr)));
+    }
     else if (step.shot) {
       const out = path.join(OUT, step.shot);
-      let png = await canvasPng(page);
-      if (step.labels) png = await annotate(browser, png, step.labels);
+      if (process.env.DEBUG) {
+        console.log(await page.evaluate(() => JSON.stringify({
+          shell: document.querySelector(".app-shell").className,
+          error: document.getElementById("scene-error-message")?.textContent?.slice(0, 300),
+          errorHidden: document.getElementById("scene-error-banner")?.hidden,
+          stage: document.querySelector(".stage-display").getBoundingClientRect().width,
+          panel: document.querySelector(".stage-panel").className,
+          inner: [window.innerWidth, window.innerHeight],
+          bodyH: document.body.scrollHeight,
+          mobile: document.body.className + "|" + document.documentElement.className,
+        })));
+      }
+      let png = await stagePng(page);
+      if (step.labels) png = await annotate(browser, png, step.labels.map(fit(await discFit(page))));
       fs.writeFileSync(out, png);
       console.log("wrote", path.relative(REPO, out));
     }
   }
-  await page.close();
+  await page.context().close();
 }
 
 async function renderDiagram(browser, svgFile) {
@@ -275,9 +383,47 @@ async function renderDiagram(browser, svgFile) {
   console.log("wrote", path.relative(REPO, out));
 }
 
+// --list: print every image this script makes, how it is made and where the docs
+// use it, as a Markdown table (the table in README.md comes from this).
+if (process.argv.includes("--list")) {
+  const docs = [];
+  const walkDocs = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (e.name !== "images" && e.name !== "_build") walkDocs(p); }
+      else if (e.name.endsWith(".md")) docs.push([path.relative(path.join(REPO, "docs/vs2"), p), fs.readFileSync(p, "utf8")]);
+    }
+  };
+  walkDocs(path.join(REPO, "docs/vs2"));
+  const usedIn = (file) => docs.filter(([, text]) => text.includes(`images/${file}`)).map(([n]) => n).join(", ") || "-";
+  const rows = [];
+  for (const f of fs.readdirSync(path.join(HERE, "diagrams")).filter((f) => f.endsWith(".svg")).sort()) {
+    const file = f.replace(/\.svg$/, ".png");
+    rows.push([file, "diagram", `diagrams/${f}`, `node capture.mjs ${f.replace(/\.svg$/, "")}`, usedIn(file)]);
+  }
+  for (const [name, ex] of Object.entries(EXAMPLES)) {
+    for (const step of ex.steps.filter((x) => x.shot)) {
+      const source = ex.repoGame ? `games/${ex.repoGame} (played)` : `examples/${name}.py`;
+      rows.push([step.shot, step.labels ? "emulator screenshot, annotated" : "emulator screenshot", source,
+        `node capture.mjs ${name}`, usedIn(step.shot)]);
+    }
+  }
+  console.log("| Image | Kind | Source | Command | Used in |\n|---|---|---|---|---|");
+  for (const [file, kind, source, cmd, used] of rows) {
+    console.log(`| \`${file}\` | ${kind} | \`${source}\` | \`${cmd}\` | ${used} |`);
+  }
+  process.exit(0);
+}
+
 const browser = await chromium.launch({
   executablePath: CHROMIUM,
-  args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--no-sandbox"],
+  headless: !process.env.HEADFUL,
+  args: process.env.GPU
+    ? ["--no-sandbox"]
+    // No GPU: rasterize canvases on the CPU. SwiftShader-accelerated 2D canvas
+    // cannot keep up with a frame that lights every LED, and screenshots then
+    // show a stale frame.
+    : ["--disable-gpu", "--disable-accelerated-2d-canvas", "--no-sandbox"],
 });
 try {
   const diagramDir = path.join(HERE, "diagrams");

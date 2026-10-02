@@ -39,12 +39,29 @@ they become sprite strips:
 
 ```yaml
 palettegroups:
-  world:
+  main:
     - strip: ship.png
       frames: 4
     - strip: shots.png
       frames: 3
+    - strip: enemy.png
+      frames: 6
+    - strip: explosion.png
+      frames: 6
+    - strip: trench.png
+      frames: 8
+    - strip: numerals.png
+      frames: 12
+      glyphs: "0123456789 *"
+  text:
+    - strip: steel8x8.png
+      frames: 256
 ```
+
+This is the complete file for the finished game, so you can write it once. This
+chapter only uses `ship.png`; the other strips appear in the chapters that follow,
+and the `glyphs:` line is explained in chapter 5. Every strip needs a `frames:`
+entry, because the file does not say how many images a PNG holds.
 
 A {term}`strip` is a horizontal filmstrip of equally sized frames — a 4-frame
 animation is one PNG four times as wide as one frame:
@@ -58,12 +75,14 @@ animation is one PNG four times as wide as one frame:
 ```
 
 A {term}`palette group` is a set of images that share 256 colours; put images
-that look alike in one group.
+that look alike in one group. The text font is in a group of its own, because its
+colours have little in common with the game art.
 
-To follow along, copy the art the tutorial uses: `ship.png`, `shots.png`,
-`enemy.png` and `explosion.png` from `games/alecu/vixeous/images/`,
-`numerals.png` from `games/alecu/vyruss_vs2/images/` and `terrain.png` from
-`games/alecu/mapdemo/images/`.
+To follow along, copy the art Tunnel Shooter uses into your `images/` folder
+from `games/demos/tutorial_game/images/`: `ship.png`, `shots.png`, `enemy.png`,
+`explosion.png`, `trench.png`, `numerals.png` and `steel8x8.png`. You only
+need `ship.png` for this chapter; the others appear later, and the yaml above
+already lists them.
 
 The emulator recompiles changed PNGs into a ROM every time it starts, so you
 just edit and rerun.
@@ -78,7 +97,7 @@ import vs2
 from vs2.controls import *
 
 
-class MyGame(vs2.Scene):
+class Game(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.ship = self.world.sprite("ship.png", x=128, y=0)
@@ -91,7 +110,7 @@ class MyGame(vs2.Scene):
 
 
 def main():
-    return MyGame()
+    return Game()
 ```
 
 That is a complete, playable game. Run `./vs-emu.sh` (or `vs-emu.bat`) and it is
@@ -135,7 +154,7 @@ The split is enforced. When `build()` returns, the scene is {term}`sealed`: try
 to create a sprite from `update()` and you get
 
 ```text
-SceneSealedError: sprite() is only allowed while MyGame.build() runs
+SceneSealedError: sprite() is only allowed while Game.build() runs
 ```
 
 So running out of sprites becomes an error the first time you enter the scene,
@@ -147,5 +166,5 @@ Players leave with the back button (`Y` or `BACK`), or after 30 seconds without
 input. Both return to the launcher on their own, so your game needs no exit
 code.
 
-Next: [the circular display](display.md), and why `x` behaves differently from
-`y`.
+This ship is where Tunnel Shooter starts. Next: [the circular display](display.md),
+and why `x` behaves differently from `y`.

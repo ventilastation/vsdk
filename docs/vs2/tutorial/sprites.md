@@ -87,5 +87,28 @@ X wrapping is handled: a sprite straddling column 0 collides correctly with one
 at column 254. Y does not wrap, because the disc has an inside and an outside.
 :::
 
+## In the game
+
+Let the ship's engine glow flicker by cycling through its four frames. `update()`
+runs once per rotation, so count the calls and change frame every few of them
+instead of on every one:
+
+```python
+def build(self):
+    self.world = self.layer("world", projection=vs2.TUNNEL)
+    self.ship = self.world.sprite("ship.png", x=128, y=0)
+    self.ticks = 0                              # counts update() calls
+
+def update(self):
+    self.ticks += 1
+    # ... steering, as before ...
+    self.ship.frame = (self.ticks // 4) % self.ship.image.frames
+```
+
+`self.ticks // 4` stays the same for four ticks in a row, so the frame changes
+four times more slowly than `update()` runs. `self.ship.image.frames` supplies
+the number of frames, so the line keeps working if you give the ship more frames
+later.
+
 Next: [sprite pools](pools.md), for everything you need many of. To share one
 image handle between several sprites, see [going further](../going-further.md).

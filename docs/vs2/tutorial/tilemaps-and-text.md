@@ -1,6 +1,6 @@
 # 5. Tilemaps and text
 
-A sprite per object stops scaling somewhere around a terrain field or a line of
+A sprite per object stops scaling somewhere around a tunnel wall or a line of
 text. A {term}`tilemap` draws a whole grid from one record.
 
 ## Tilemaps
@@ -8,18 +8,19 @@ text. A {term}`tilemap` draws a whole grid from one record.
 ```python
 def build(self):
     world = self.layer("world", projection=vs2.TUNNEL)
-    self.ground = world.tilemap("terrain.png", columns=8, rows=17,
-                                view_width=256, view_height=128)
+    self.ground = world.tilemap("trench.png", columns=16, rows=16,
+                                view_width=256, view_height=160)
 ```
 
 The tileset is an ordinary {term}`strip`: one frame per distinct {term}`tile`.
 
-```{figure} ../images/strip-terrain.png
-:alt: The terrain.png strip: six tiles named grass, water, rock, sand, marker and wall
+```{figure} ../images/strip-trench.png
+:alt: The trench.png strip: eight tiles named plate, seam, pipe, windows, vent, hazard, lights and conduit
 :width: 85%
 :align: center
 
-A tileset: tile 0 is grass, 1 is water, and so on.
+A tileset: tile 0 is a plain hull plate, 3 is a row of lit windows, and so on.
+Most of the tiles are near-black; the colour is in a few lit structures.
 ```
 
 
@@ -30,27 +31,28 @@ read-only.
 The grid is made of {term}`cells <cell>`, one byte each, holding a tile index:
 
 ```python
-self.ground[col, row] = ROCK           # (column, row) order
+self.ground[col, row] = WINDOWS        # (column, row) order
 tile = self.ground[col, row]
-self.ground.fill(GRASS)                # every cell
+self.ground.fill(PLATE)                # every cell
 ```
 
-Fill only the cells that have something in them. Dark or black backgrounds work
-better on the real Ventilastation, so leave the rest of the grid empty. (Always
-check your colours and intensities on the real hardware; see
-[Budgets and real hardware](budgets.md).)
+Dark or black backgrounds work better on the real Ventilastation, so draw a wall
+in near-black tiles and keep the colour for a few lit structures, the way
+`trench.png` does. (Always check your colours and intensities on the real
+hardware; see [Budgets and real hardware](budgets.md).)
 
 {py:data}`vs2.EMPTY_TILE` (255) leaves a cell blank and the renderer skips it.
 Freshly allocated grids are filled with it, so a new tilemap starts out dark.
-Here is a 16 by 16 map of the tiles above with an island of terrain in it and a
-ship on top. Every other cell is empty, so the rest of the disc stays black:
+Here is a 16 by 16 map of the tiles above: a ring of pipe at the rim, a ring of
+glowing conduit further in, and some windows, vents and lights between them, with
+a ship on top. The map wraps all the way round the tunnel:
 
 ```{figure} ../images/tilemaps.png
-:alt: A fan-shaped island of grass, water, rock and sand tiles on a black background, with a ship at the top
+:alt: A dark tunnel wall of near-black plating with a ring of cyan conduit, orange vents, amber windows and a ring of pipe at the rim, and a ship at the top
 :width: 60%
 :align: center
 
-A 16 by 16 tilemap on a `TUNNEL` layer with only some cells filled. Tiles near the rim are drawn larger.
+A 16 by 16 tilemap on a `TUNNEL` layer. Tiles near the rim are drawn larger.
 ```
 
 
@@ -61,12 +63,16 @@ not the data, so it costs one write:
 
 ```python
 def update(self):
-    self.depth += 1
-    self.ground.view_y = self.depth % self.ground.tile_height
+    self.ticks += 1
+    pattern_height = 6 * self.ground.tile_height     # the wall repeats every 6 rows
+    self.ground.view_y = (self.ticks // 2) % pattern_height
 ```
 
-Rewriting a row of cells only when a whole tile has scrolled past — rather than
-every tick — is what keeps a scrolling terrain affordable.
+If the picture repeats every 6 rows, the view can wrap back to the top after 6
+rows and nobody can tell: the wall scrolls forever without a single cell being
+rewritten. A map that does not repeat has to rewrite a row of cells each time a
+whole tile has scrolled past instead, which is still much cheaper than rewriting
+the grid every tick.
 
 ## Labels
 
@@ -79,7 +85,7 @@ def build(self):
     hud = self.layer("hud", projection=vs2.HUD)
     self.score  = hud.label("numerals.png", columns=5, x=246, y=1)   # bottom of the disc: upright
     self.status = hud.label("tinyfont.png", columns=21, rows=3, x=-42, y=0)
-    self.title  = hud.label("rainbow437.png", columns=18, text="READY")
+    self.title  = hud.label("steel8x8.png", columns=18, text="READY")
 ```
 
 One-line labels get a `text` property; multi-line ones use
@@ -141,7 +147,7 @@ mistake.** Nothing is wrong with your string or your font. Add
 A label with both flips, next to one with none, over a small map:
 
 ```{figure} ../images/labels.png
-:alt: A score reading 00420 upright at the top and at the bottom of the disc, above an island of terrain
+:alt: A score reading 00420 upright at the top and at the bottom of the disc, over a dark tunnel wall
 :width: 60%
 :align: center
 
@@ -151,14 +157,19 @@ Two labels: one at the top with `flip_x` and `flip_y`, one at the bottom with no
 ### Glyphs
 
 A label shows a character by picking the {term}`glyph` frame for it. By default
-that is {term}`CP437`, where `frame = ord(ch)` — what `rainbow437.png` and the
+that is {term}`CP437`, where `frame = ord(ch)` — what `steel8x8.png` and the
 other full font strips use. A strip with only a few characters, like a row of
 digits, declares its own mapping in `__images__.yaml`, next to the strip:
 
 ```yaml
 - strip: numerals.png
-  glyphs: "0123456789"
+  frames: 12
+  glyphs: "0123456789 *"
 ```
+
+Character *n* of the string is the glyph for frame *n*, so here frame 0 is `0`,
+frame 9 is `9`, frame 10 is a space and frame 11 is a `*`. The `frames:` entry
+is still needed; leave it out and the strip counts as one frame.
 
 Characters with no mapping, and spaces, are left blank. Other ways to set the
 mapping, and strips with a second colour, are in
@@ -167,7 +178,138 @@ mapping, and strips with a second colour, are in
 :::{note}
 Labels count against the **tilemap** {term}`budget`, not the sprite budget — 16
 tilemaps including labels. A score, a message line and a debug overlay are three
-before any terrain.
+before any tilemap for the world.
 :::
+
+## In the game
+
+Give Tunnel Shooter a trench to fly down, and a score.
+
+### Choosing a look
+
+A tunnel shooter is a good excuse for a dark game, so pick a setting where dark
+is natural. Tunnel Shooter takes place in a **derelict space station**: you fly
+down a maintenance trench between plates of dead, near-black hull. The station
+has no power to spare, so the only colour is in the few things that are still
+lit:
+
+- cyan conduit running round the trench in a bright ring;
+- amber windows and orange vents, in warm contrast to the cold blue-grey plating;
+- red, green and blue status lights and yellow hazard stripes, as small accents;
+- a ring of steel pipe at the rim, a little lighter than the hull, so the edge
+  of the wall is easy to find.
+
+This is a setting rather than only a palette because it gives a reason for every
+tile you draw, and it answers the question "what goes here?" the same way each
+time: if nothing is lit, leave it dark. That is also what suits the real
+Ventilastation. The LEDs make their own light, so a black or near-black
+background costs nothing and makes the lit structures stand out, where a bright
+backdrop would wash them out and tire the eye. The plating in `trench.png` is
+only a few steps above black, and the structures on it are bright.
+
+:::{note}
+The emulator shows you what the colours *are*, not how the LEDs will render them.
+The very dark tones in particular, such as the plating and its seams, may crush
+to black or look different on the disc. Treat them as a starting point and
+**check them on the real hardware** (see [Budgets and real hardware](budgets.md)),
+raising the darkest tones if the detail is lost.
+:::
+
+`trench.png` is the tileset you saw above, and the wall repeats every six rows,
+which is what lets it scroll forever.
+
+A second layer holds the score, so it is drawn over everything in the world. The
+wall goes into the world layer *before* the ship, so the ship is painted over it:
+
+```python
+# The trench's tiles, in the order they appear in trench.png.
+PLATE, SEAM, PIPE, WINDOWS, VENT, HAZARD, LIGHTS, CONDUIT = range(8)
+TRENCH_COLUMNS = 16  # around the tunnel
+TRENCH_ROWS = 16     # along it
+PATTERN_ROWS = 6     # the wall repeats every 6 rows, so it can scroll forever
+
+
+def trench_tile(col, band):
+    """Which tile goes at ``col`` in row ``band`` of the repeating pattern."""
+    if band == 0:
+        return PIPE
+    if band == 4:
+        return CONDUIT
+    if band == 2:
+        if col % 4 == 1:
+            return WINDOWS
+        if col % 4 == 3:
+            return VENT
+    if band == 5:
+        if col % 8 == 2:
+            return LIGHTS
+        if col % 8 == 6:
+            return HAZARD
+    return SEAM if col % 2 else PLATE
+
+
+def build(self):
+    self.world = self.layer("world", projection=vs2.TUNNEL)
+    self.hud = self.layer("hud", projection=vs2.HUD)
+
+    # The trench wall: dark plating all the way round, with a few lit
+    # structures. Its pattern repeats every PATTERN_ROWS rows.
+    self.ground = self.world.tilemap(
+        "trench.png", columns=TRENCH_COLUMNS, rows=TRENCH_ROWS,
+        view_width=256, view_height=160)
+    self.draw_trench()
+
+    self.ship = self.world.sprite("ship.png", x=128, y=0)
+    # ... the pools, as before ...
+
+    # Bottom of the disc, so the score reads upright.
+    self.score_label = self.hud.label("numerals.png", columns=5, x=246, y=1)
+
+    self.score = 0
+    self.ticks = 0
+    self.show_score()
+
+def draw_trench(self):
+    for row in range(TRENCH_ROWS):
+        for col in range(TRENCH_COLUMNS):
+            self.ground[col, row] = trench_tile(col, row % PATTERN_ROWS)
+
+def show_score(self):
+    self.score_label.set_number(self.score, width=5, pad="0")
+```
+
+Scroll the wall toward the ship in `update()`, right after the ship's animation:
+
+```python
+    # Scroll the wall toward the ship. After one whole pattern the picture
+    # is the same again, so the view can wrap without rewriting any cells.
+    pattern_height = PATTERN_ROWS * self.ground.tile_height
+    self.ground.view_y = (self.ticks // 2) % pattern_height
+```
+
+Add the points when a shot hits, in `move_shots()`:
+
+```python
+POINTS = 10
+
+            self.enemies.despawn(enemy)
+            boom = self.booms.spawn(x=enemy.x, y=enemy.y)
+            boom.frame = 0
+            self.shots.despawn(shot)
+            self.score += POINTS
+            self.show_score()
+```
+
+`numerals.png` declares its own glyphs in `__images__.yaml`, as in the glyphs
+section above, so `set_number()` knows which frame is which digit. The score sits
+at `x = 246`, the bottom of the disc, so it reads upright without any flips:
+
+```{figure} ../images/game-play.png
+:alt: Tunnel Shooter: a dark trench wall with a cyan conduit ring, amber windows and orange vents, a ship at the top, a shot, enemies, and a score at the bottom
+:width: 60%
+:align: center
+
+Tunnel Shooter so far.
+```
 
 Next: [scenes, input and sound](scenes-and-input.md).

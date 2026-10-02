@@ -67,7 +67,7 @@ sprite.frame = 3
 pool.spawn(x, y)
 pool.despawn(shot)
 tilemap.view_y = depth % tilemap.tile_height
-tilemap[col, row] = ROCK
+tilemap[col, row] = WINDOWS
 label.set_number(score, width=5)
 joy1.held(LEFT)
 ```
@@ -98,12 +98,35 @@ The same label at `y = 1` and at `y = 44`.
 **Backgrounds, colours and intensity.** Dark or black backgrounds work better on
 the real Ventilastation than bright ones. Leave empty space empty — `EMPTY_TILE`
 cells and transparent pixels draw nothing — and keep any backdrop you do draw
-dark. A tilemap that lights the whole disc, like the `fill(GRASS)` call in
-chapter 5, is the exception. How a colour looks on a monitor is not how it looks
+dark. A tilemap that lights the whole disc in bright colours is the exception, which
+is why the trench tiles in chapter 5 are near-black. How a colour looks on a monitor is not how it looks
 on the LEDs, and the emulator cannot judge their intensity for you, so **always
 test your colours and intensities on the real hardware** and adjust them there.
 Do it before you share a game, not after.
 
+
+## In the game
+
+Add up Tunnel Shooter's budget. The numbers are in `vs2.limits`:
+
+| Resource | Used by the game scene | Budget |
+|---|---|---|
+| Layers | 2 (`world`, `hud`) | 8 |
+| Sprites | 1 ship + 8 shots + 16 enemies + 4 explosions = 29 | 100 |
+| Tilemaps | 1 trench wall + 1 score label = 2 | 16 |
+| Image strips | 7 (ship, shots, enemy, explosion, trench, numerals, steel8x8) | 100 |
+
+Everything is created in `build()`, so the whole table is checked the first time
+the scene is entered. Here is the complete game, exactly as it is in
+`games/demos/tutorial_game/code/tutorial_game.py`:
+
+```{literalinclude} ../../../games/demos/tutorial_game/code/tutorial_game.py
+:language: python
+```
+
+Run it in the emulator, then run it on the real Ventilastation. The trench, the
+score and the title should all look the way they did on screen, but only the
+disc will tell you whether the colours are comfortable and the text is crisp.
 
 ## Packaging
 

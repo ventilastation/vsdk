@@ -34,10 +34,10 @@ Pass `cells=` when the game already owns the data, and the object is kept as it
 is, so writes to your buffer are what the renderer reads:
 
 ```python
-self.terrain_data = bytearray(TERRAIN_COLS * TERRAIN_ROWS)
-self.terrain = world.tilemap("terrain.png",
-                             columns=TERRAIN_COLS, rows=TERRAIN_ROWS,
-                             cells=self.terrain_data)
+self.wall_data = bytearray(WALL_COLS * WALL_ROWS)
+self.wall = world.tilemap("trench.png",
+                             columns=WALL_COLS, rows=WALL_ROWS,
+                             cells=self.wall_data)
 ```
 
 The length is checked at the call. The buffer cannot be replaced or resized
@@ -47,7 +47,7 @@ When you are filling in bulk and know every index is in range, index
 `tilemap.cells` directly and skip the bounds check:
 
 ```python
-self.ground.cells[row * self.ground.columns + col] = ROCK
+self.ground.cells[row * self.ground.columns + col] = WINDOWS
 ```
 
 ## Flipping tilemaps and labels

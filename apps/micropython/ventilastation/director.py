@@ -122,6 +122,8 @@ class Director:
         self.timedout = False
         self.romdata = None
         self.palette_data = None
+        # Filename of the ROM whose strips are currently registered, or None.
+        self.loaded_rom = None
         # Parsed alongside ``stripes`` so the V2 asset bank can validate frame
         # writes and infer tile sizes without asking a native sprite record.
         # V1 keeps using the existing name -> slot mapping unchanged.
@@ -547,6 +549,13 @@ class Director:
             }
 
     def load_rom(self, filename):
+        # Forget the old name first: a load that fails part-way leaves the
+        # strip table in an unknown state, so it must not look loaded.
+        self.loaded_rom = None
+        self._load_rom_file(filename)
+        self.loaded_rom = filename
+
+    def _load_rom_file(self, filename):
         # On the board, ROMs are stored gzip-compressed as "<name>.romz" in the
         # LittleFS image to save flash (see build_micropython_fs.py): a
         # little-endian uint32 uncompressed size followed by the gzip data.

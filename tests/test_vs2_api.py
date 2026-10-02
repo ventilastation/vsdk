@@ -506,6 +506,155 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertIsInstance(director.scene_stack[-1], Replacement)
         self.assertNotIn((b"music off", b""), director.platform.comms.sent[-1:])
 
+    def test_pushed_and_switched_scenes_inherit_the_app_markers(self):
+        # app_loader stamps only the scene main() returns. A scene that game
+        # code builds and passes to push()/switch() must inherit the markers,
+        # or the platform stops exporting its VS2 payload.
+        vs2 = self.vs2
+
+        class Page(vs2.Scene):
+            def build(self):
+                self.layer("world").sprite("ship.png")
+
+        class Other(Page):
+            _vs_api_slug = "games.other"
+            _vs_declared_api = "vs2"
+
+        game = Page()
+        game._vs_api_slug = "games.test_vs2"
+        game._vs_declared_api = "vs2"
+        with mock.patch.object(director, "load_rom"):
+            self.enter(game)
+            pushed = Page()
+            game.push(pushed)
+            game._commit_transition()
+            self.assertEqual(pushed._vs_api_slug, "games.test_vs2")
+            self.assertEqual(pushed._vs_declared_api, "vs2")
+
+            switched = Page()
+            pushed.switch(switched)
+            pushed._commit_transition()
+            self.assertIs(director.scene_stack[-1], switched)
+            self.assertEqual(switched._vs_api_slug, "games.test_vs2")
+            self.assertEqual(switched._vs_declared_api, "vs2")
+
+            # A scene that already names its own app keeps it.
+            foreign = Other()
+            switched.switch(foreign)
+            switched._commit_transition()
+            self.assertEqual(foreign._vs_api_slug, "games.other")
+
+    def test_scenes_without_app_markers_stay_anonymous(self):
+        vs2 = self.vs2
+
+        class Page(vs2.Scene):
+            def build(self):
+                self.layer("world").sprite("ship.png")
+
+        game = self.enter(Page())
+        child = Page()
+        game.push(child)
+        game._commit_transition()
+        self.assertIsNone(getattr(child, "_vs_api_slug", None))
+        self.assertIsNone(getattr(child, "_vs_declared_api", None))
+
+    def test_adopted_scenes_use_their_creators_asset_pack(self):
+        # An app that keeps its art in a shared pack ("other") has no ROM
+        # named after its own slug, so its child scenes must ask for the same
+        # pack, unless they name one of their own.
+        vs2 = self.vs2
+
+        class Page(vs2.Scene):
+            def build(self):
+                self.layer("world")
+
+        class Elsewhere(Page):
+            asset_pack = "elsewhere"
+
+        game = Page()
+        game._vs_api_slug = "games.shared"
+        game._vs_declared_api = "vs2"
+        game.asset_pack = "other"
+        with mock.patch.object(director, "load_rom") as load_rom:
+            self.enter(game)
+            child = Page()
+            game.push(child)
+            game._commit_transition()
+            own = Elsewhere()
+            child.switch(own)
+            child._commit_transition()
+        self.assertEqual(child.asset_pack, "other")
+        self.assertEqual(own.asset_pack, "elsewhere")
+        self.assertEqual([call.args[0] for call in load_rom.call_args_list],
+                         ["roms/other.rom", "roms/other.rom", "roms/elsewhere.rom"])
+
+    def test_adopted_scene_reuses_the_rom_that_is_already_loaded(self):
+        # Title -> Game -> GameOver -> Game must not inflate the same ROM on
+        # every switch, but the scene main() returned always loads its own.
+        vs2 = self.vs2
+
+        class Page(vs2.Scene):
+            def build(self):
+                self.layer("world")
+
+        game = Page()
+        game._vs_api_slug = "games.test_vs2"
+        game._vs_declared_api = "vs2"
+        with mock.patch.object(director, "load_rom") as load_rom:
+            self.enter(game)
+            self.assertEqual(load_rom.call_count, 1)
+            # The mock does not load anything, so say what is loaded.
+            self.runtime_director.loaded_rom = "roms/games.test_vs2.rom"
+            child = Page()
+            game.switch(child)
+            game._commit_transition()
+            self.assertEqual(load_rom.call_count, 1)
+            # Another app's ROM replaced it in the meantime: load again.
+            self.runtime_director.loaded_rom = "roms/games.other.rom"
+            again = Page()
+            child.switch(again)
+            child._commit_transition()
+            self.assertEqual(load_rom.call_count, 2)
+
+    def test_scenes_that_are_not_v2_scenes_keep_their_own_markers(self):
+        # The launcher pushes legacy apps, which app_loader stamps with an
+        # explicit declared api of None, and the native emulator launcher.
+        # Neither may be given the launcher's "vs2" identity.
+        vs2 = self.vs2
+
+        class Page(vs2.Scene):
+            def build(self):
+                self.layer("world")
+
+        class Legacy(LegacyScene):
+            def step(self):
+                pass
+
+        with mock.patch.object(director, "load_rom"):
+            launcher = Page()
+            launcher._vs_api_slug = "system.launcher"
+            launcher._vs_declared_api = "vs2"
+            self.enter(launcher)
+
+            legacy = Legacy()
+            legacy._vs_api_slug = "alecu.vyruss"
+            legacy._vs_declared_api = None
+            launcher.push(legacy)
+            launcher._commit_transition()
+            self.assertEqual(legacy._vs_api_slug, "alecu.vyruss")
+            self.assertIsNone(legacy._vs_declared_api)
+            self.assertIs(director.scene_stack[-1], legacy)
+
+            # A legacy scene nobody stamped (like the native launcher's) stays
+            # unmarked, so the platform never exports it as a VS2 scene.
+            director.pop()
+            launcher_again = director.scene_stack[-1]
+            bare = Legacy()
+            launcher_again.push(bare)
+            launcher_again._commit_transition()
+            self.assertIsNone(getattr(bare, "_vs_api_slug", None))
+            self.assertIsNone(getattr(bare, "_vs_declared_api", None))
+
     def test_idle_default_pops_and_back_button_can_be_claimed(self):
         vs2 = self.vs2
         idle_calls = []

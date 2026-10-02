@@ -1,0 +1,18 @@
+palettegroups:
+  main:
+    - strip: ship.png
+      frames: 4
+    - strip: shots.png
+      frames: 3
+    - strip: enemy.png
+      frames: 6
+    - strip: explosion.png
+      frames: 6
+    - strip: trench.png
+      frames: 8
+    - strip: numerals.png
+      frames: 12
+      glyphs: "0123456789 *"
+  text:
+    - strip: steel8x8.png
+      frames: 256

@@ -30,6 +30,75 @@
     return value;
   }
 
+  // Escapes YAML allows in a double-quoted scalar, beyond the numeric ones.
+  const YAML_ESCAPES = {
+    0: "\0", a: "\x07", b: "\b", t: "\t", "\t": "\t", n: "\n", v: "\v",
+    f: "\f", r: "\r", e: "\x1b", " ": " ", "\"": "\"", "/": "/", "\\": "\\",
+    N: "\u0085", _: "\u00a0", L: "\u2028", P: "\u2029",
+  };
+  const YAML_HEX_ESCAPES = { x: 2, u: 4, U: 8 };
+
+  // A quoted YAML string scalar, as the value of a key such as `glyphs:`,
+  // read the way PyYAML reads it for tools/generate_roms.py: double-quoted
+  // values take YAML's escapes ("\x41", "\e", "\u00e9"), single-quoted values
+  // escape a quote by doubling it, and a trailing `# comment` is ignored.
+  // Unquoted values are rejected: YAML would read `0123456789` as a number,
+  // which the CLI refuses, so the two builders must not disagree about it.
+  function parseYamlString(rawValue, context) {
+    const text = rawValue.trim();
+    const quote = text[0];
+    if (quote !== "\"" && quote !== "'") {
+      throw new Error(`${context} must be a quoted string, like "abc"`);
+    }
+    let result = "";
+    let index = 1;
+    for (;;) {
+      if (index >= text.length) {
+        throw new Error(`${context} has no closing quote`);
+      }
+      const char = text[index];
+      if (char === quote) {
+        if (quote === "'" && text[index + 1] === "'") {
+          result += "'";
+          index += 2;
+          continue;
+        }
+        index += 1;
+        break;
+      }
+      if (quote === "\"" && char === "\\") {
+        const code = text[index + 1];
+        if (code === undefined) {
+          throw new Error(`${context} ends inside an escape`);
+        }
+        if (Object.prototype.hasOwnProperty.call(YAML_HEX_ESCAPES, code)) {
+          const digits = text.slice(index + 2, index + 2 + YAML_HEX_ESCAPES[code]);
+          const codePoint = parseInt(digits, 16);
+          if (digits.length !== YAML_HEX_ESCAPES[code] || !/^[0-9a-fA-F]+$/.test(digits)
+              || codePoint > 0x10ffff) {
+            throw new Error(`${context} has an invalid \\${code} escape`);
+          }
+          result += String.fromCodePoint(codePoint);
+          index += 2 + digits.length;
+          continue;
+        }
+        if (!Object.prototype.hasOwnProperty.call(YAML_ESCAPES, code)) {
+          throw new Error(`${context} has an unknown escape \\${code}`);
+        }
+        result += YAML_ESCAPES[code];
+        index += 2;
+        continue;
+      }
+      result += char;
+      index += 1;
+    }
+    const rest = text.slice(index);
+    if (rest.trim() && !/^\s+#/.test(rest)) {
+      throw new Error(`${context} has unexpected text after the closing quote`);
+    }
+    return result;
+  }
+
   function parsePositiveInteger(rawValue, context) {
     if (!/^\d+$/.test(rawValue)) {
       throw new Error(`${context} must be a positive integer`);
@@ -110,13 +179,17 @@
         if (!currentItem) {
           throw new Error(`${at}: property declared before any item`);
         }
-        const match = content.match(/^(frames|radius|id):\s*(.+?)\s*$/);
+        const match = content.match(/^(frames|radius|id|glyphs):\s*(.+?)\s*$/);
         if (!match) {
-          throw new Error(`${at}: expected 'frames: N', 'radius: N', or 'id: name'`);
+          throw new Error(
+            `${at}: expected 'frames: N', 'radius: N', 'id: name' or 'glyphs: "chars"'`
+          );
         }
         const key = match[1];
         if (key === "id") {
           currentItem.id = stripQuotes(match[2]);
+        } else if (key === "glyphs") {
+          currentItem.glyphs = parseYamlString(match[2], `${at} glyphs`);
         } else {
           const value = parsePositiveInteger(match[2], `${at} ${key}`);
           currentItem[key] = value;
@@ -159,6 +232,7 @@
       radius: item.kind === "fullscreen"
         ? Number(item.radius || DEFAULT_FULLSCREEN_RADIUS)
         : undefined,
+      glyphs: item.glyphs === undefined ? "" : String(item.glyphs),
     };
 
     if (!normalized.filename) {
@@ -167,6 +241,10 @@
 
     if (!Number.isInteger(normalized.frames) || normalized.frames < 1) {
       throw new Error(`item ${normalized.filename} has an invalid frame count`);
+    }
+
+    if (new TextEncoder().encode(normalized.glyphs).length > 0xffff) {
+      throw new Error(`glyph map for ${normalized.filename} is too long`);
     }
 
     if (
@@ -625,10 +703,18 @@
           paletteIndex,
         ]);
         const filename = entry.item.id || entry.item.filename.split("/").pop();
+        // The optional glyph table trails the pixel data: a little-endian
+        // u16 length and that many UTF-8 bytes, zero-length when the strip
+        // declares none. tools/generate_roms.py writes the same trailer.
+        const glyphBytes = new TextEncoder().encode(entry.item.glyphs || "");
+        const glyphLength = new Uint8Array(2);
+        writeUint16LE(glyphLength, 0, glyphBytes.length);
         romStrips.push(concatArrays([
           encodePascalString(filename),
           attrs,
           rotated,
+          glyphLength,
+          glyphBytes,
         ]));
       }
     }
