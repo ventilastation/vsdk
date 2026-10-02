@@ -95,6 +95,7 @@ NODE_TESTS = [
     "tests/test_web_input_v2.mjs",
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",
+    "tests/test_rom_builder_core.mjs",
 ]
 
 

@@ -30,6 +30,24 @@
     return value;
   }
 
+  // A YAML scalar for a string-valued key such as `glyphs:`. Double-quoted
+  // values use JSON-style escapes (the same ones YAML allows for "\n" or
+  // "\u00e9"); single-quoted values escape a quote by doubling it.
+  function parseYamlString(rawValue, context) {
+    const value = rawValue.trim();
+    if (value.length >= 2 && value[0] === "\"" && value[value.length - 1] === "\"") {
+      try {
+        return JSON.parse(value);
+      } catch (error) {
+        throw new Error(`${context} is not a valid double-quoted string`);
+      }
+    }
+    if (value.length >= 2 && value[0] === "'" && value[value.length - 1] === "'") {
+      return value.slice(1, -1).replace(/''/g, "'");
+    }
+    return value;
+  }
+
   function parsePositiveInteger(rawValue, context) {
     if (!/^\d+$/.test(rawValue)) {
       throw new Error(`${context} must be a positive integer`);
@@ -110,13 +128,17 @@
         if (!currentItem) {
           throw new Error(`${at}: property declared before any item`);
         }
-        const match = content.match(/^(frames|radius|id):\s*(.+?)\s*$/);
+        const match = content.match(/^(frames|radius|id|glyphs):\s*(.+?)\s*$/);
         if (!match) {
-          throw new Error(`${at}: expected 'frames: N', 'radius: N', or 'id: name'`);
+          throw new Error(
+            `${at}: expected 'frames: N', 'radius: N', 'id: name' or 'glyphs: "chars"'`
+          );
         }
         const key = match[1];
         if (key === "id") {
           currentItem.id = stripQuotes(match[2]);
+        } else if (key === "glyphs") {
+          currentItem.glyphs = parseYamlString(match[2], `${at} glyphs`);
         } else {
           const value = parsePositiveInteger(match[2], `${at} ${key}`);
           currentItem[key] = value;
@@ -159,6 +181,7 @@
       radius: item.kind === "fullscreen"
         ? Number(item.radius || DEFAULT_FULLSCREEN_RADIUS)
         : undefined,
+      glyphs: item.glyphs === undefined ? "" : String(item.glyphs),
     };
 
     if (!normalized.filename) {
@@ -167,6 +190,10 @@
 
     if (!Number.isInteger(normalized.frames) || normalized.frames < 1) {
       throw new Error(`item ${normalized.filename} has an invalid frame count`);
+    }
+
+    if (new TextEncoder().encode(normalized.glyphs).length > 0xffff) {
+      throw new Error(`glyph map for ${normalized.filename} is too long`);
     }
 
     if (
@@ -625,10 +652,18 @@
           paletteIndex,
         ]);
         const filename = entry.item.id || entry.item.filename.split("/").pop();
+        // The optional glyph table trails the pixel data: a little-endian
+        // u16 length and that many UTF-8 bytes, zero-length when the strip
+        // declares none. tools/generate_roms.py writes the same trailer.
+        const glyphBytes = new TextEncoder().encode(entry.item.glyphs || "");
+        const glyphLength = new Uint8Array(2);
+        writeUint16LE(glyphLength, 0, glyphBytes.length);
         romStrips.push(concatArrays([
           encodePascalString(filename),
           attrs,
           rotated,
+          glyphLength,
+          glyphBytes,
         ]));
       }
     }

@@ -11,9 +11,7 @@
 // Diagrams: each diagrams/*.svg is rendered to a PNG with the same browser.
 // `{{art:<path under games/>}}` in an SVG is replaced by that image as a data
 // URI, so diagrams can show the real art.
-//
-// The browser ROM builder does not read `glyphs:` from __images__.yaml, so the
-// examples pass glyphs= to label() instead.
+
 
 import fs from "node:fs";
 import path from "node:path";
@@ -31,7 +29,7 @@ const ART = {
   "shots.png": ["alecu/vixeous/images/shots.png", 3],
   "enemy.png": ["alecu/vixeous/images/enemy.png", 6],
   "explosion.png": ["alecu/vixeous/images/explosion.png", 6],
-  "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12],
+  "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
   "messages.png": ["alecu/vixeous/images/messages.png", 3],
   "terrain.png": ["alecu/mapdemo/images/terrain.png", 6],
 };
@@ -172,9 +170,9 @@ function exampleFiles(name, ex) {
   ];
   const strips = [];
   for (const art of ex.art) {
-    const [src, frames] = ART[art];
+    const [src, frames, glyphs] = ART[art];
     files.push({ path: `${root}/images/${art}`, enc: "base64", content: b64(gamesPath(src)) });
-    strips.push(`    - strip: ${art}\n      frames: ${frames}`);
+    strips.push(`    - strip: ${art}\n      frames: ${frames}` + (glyphs ? `\n      glyphs: "${glyphs}"` : ""));
   }
   let yaml = "palettegroups:\n  main:\n" + strips.join("\n") + "\n";
   for (const art of ex.fullscreen || []) {
