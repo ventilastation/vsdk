@@ -35,16 +35,20 @@ tile = self.ground[col, row]
 self.ground.fill(GRASS)                # every cell
 ```
 
+Fill only the cells that have something in them. Dark or black backgrounds work
+better on the real Ventilastation, so leave the rest of the grid empty.
+
 {py:data}`vs2.EMPTY_TILE` (255) leaves a cell blank and the renderer skips it.
-Freshly allocated grids are filled with it. A 16 by 16 map of the tiles above,
-with a ship on top:
+Freshly allocated grids are filled with it, so a new tilemap starts out dark.
+Here is a 16 by 16 map of the tiles above with an island of terrain in it and a
+ship on top. Every other cell is empty, so the rest of the disc stays black:
 
 ```{figure} ../images/tilemaps.png
-:alt: A disc covered in a ring pattern of grass, water, rock and sand tiles, with a ship near the top
+:alt: A fan-shaped island of grass, water, rock and sand tiles on a black background, with a ship at the top
 :width: 60%
 :align: center
 
-A 16 by 16 tilemap on a `TUNNEL` layer. Tiles near the rim are drawn larger.
+A 16 by 16 tilemap on a `TUNNEL` layer with only some cells filled. Tiles near the rim are drawn larger.
 ```
 
 
@@ -71,22 +75,9 @@ no matter how often the text changes.
 ```python
 def build(self):
     hud = self.layer("hud", projection=vs2.HUD)
-    self.score  = hud.label("numerals.png", columns=5, x=246, y=1)   # bottom of the disc
+    self.score  = hud.label("numerals.png", columns=5, x=246, y=1)   # bottom of the disc: upright
     self.status = hud.label("tinyfont.png", columns=21, rows=3, x=-42, y=0)
     self.title  = hud.label("rainbow437.png", columns=18, text="READY")
-```
-
-Text is drawn around the disc, so which way up it reads depends on where it
-sits. At the bottom of the disc (`x` near 0, as in the example above) it reads
-upright. At the top it is upside-down, so a label placed there passes
-`flip_x=True, flip_y=True`, as the scoreboards in the games under `games/` do:
-
-```{figure} ../images/labels.png
-:alt: A score reading 00420 at the top and the bottom of the disc, both upright, over a terrain map
-:width: 60%
-:align: center
-
-Two labels: one at the bottom of the disc with no flips, one at the top with `flip_x` and `flip_y`.
 ```
 
 One-line labels get a `text` property; multi-line ones use
@@ -98,7 +89,8 @@ self.status.write(0, 1, "J1:.... .... ..")   # (column, row, text)
 ```
 
 You write ordinary left-to-right strings; the label handles the display's
-direction for you.
+direction for you. Which way up the text reads depends on where you put it, as
+the next section explains.
 
 ### Scores without allocating
 
@@ -109,6 +101,49 @@ instead:
 ```python
 def update(self):
     self.score.set_number(self.points, width=5, pad="0")
+```
+
+### Which way up? Flips
+
+Glyphs are drawn with their tops pointing toward the centre of the disc. At the
+bottom of the disc the centre is above the text, so it reads upright. At the top
+the centre is below the text, so the same label is **upside-down**. On the sides
+it runs sideways.
+
+```{figure} ../images/labels-flips.png
+:alt: Three copies of the score: upside-down at the top without flips, upright at the top with flips, and upright at the bottom without flips
+:width: 60%
+:align: center
+
+The same label in three places. Only the top one without flips is upside-down.
+```
+
+To read upright at the top, {term}`flip` the label both ways:
+
+```python
+self.top = hud.label("numerals.png", columns=5, x=118, y=14,
+                     flip_x=True, flip_y=True)
+```
+
+`flip_x` mirrors the label left to right and `flip_y` mirrors it top to bottom.
+Doing both turns it through 180 degrees, which is what you want at the top of
+the disc. One flip on its own just gives you mirrored text.
+
+:::{warning}
+**Upside-down text at the top of the disc is the most common newcomer
+mistake.** Nothing is wrong with your string or your font. Add
+`flip_x=True, flip_y=True` to the label. The scoreboards in the games under
+`games/` all do this. Sprites and tilemaps take the same two arguments.
+:::
+
+A label with both flips, next to one with none, over a small map:
+
+```{figure} ../images/labels.png
+:alt: A score reading 00420 upright at the top and at the bottom of the disc, above an island of terrain
+:width: 60%
+:align: center
+
+Two labels: one at the top with `flip_x` and `flip_y`, one at the bottom with no flips.
 ```
 
 ### Glyphs

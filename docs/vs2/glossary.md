@@ -71,6 +71,12 @@ Emulator
   Runs your game on a computer with the same renderer semantics as the
   {term}`console`. It does not enforce the per-column deadline.
 
+Flip
+  `flip_x=True` mirrors a sprite, tilemap or label left to right and
+  `flip_y=True` mirrors it top to bottom. Both together turn it through 180
+  degrees, which is how a label reads upright at the top of the {term}`display`.
+  See [Tilemaps and text](tutorial/tilemaps-and-text.md).
+
 Frame
   One image inside a {term}`strip`, counted from 0. Setting a sprite's frame
   never changes whether it is {term}`visible`.

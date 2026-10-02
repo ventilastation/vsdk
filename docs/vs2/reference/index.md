@@ -62,6 +62,7 @@ class MyGame(vs2.Scene):
 | Edit a map | `tilemap[col, row] = tile`, `tilemap.fill(tile)` |
 | Show text | `label.text = "GAME OVER"`, `label.write(col, row, text)` |
 | Show a score | `label.set_number(value, width=5)` |
+| Text at the top of the disc | `layer.label(..., flip_x=True, flip_y=True)`, or it reads upside-down |
 | Leave a scene | `self.pop()`, `self.push(other)`, `self.switch(other)` |
 | Run something later | `self.call_later(ms, callback, *args)` |
 | Play audio | `vs2.audio.sound(name)`, `vs2.audio.music(name, loop=True)` |

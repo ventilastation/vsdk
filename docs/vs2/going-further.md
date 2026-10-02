@@ -52,16 +52,10 @@ self.ground.cells[row * self.ground.columns + col] = ROCK
 
 ## Flipping tilemaps and labels
 
-`flip_x` and `flip_y` mirror a tilemap's or label's whole visible area. Setting
-both rotates a label 180 degrees while leaving the font strip in its normal
-orientation:
-
-```python
-self.top_score = hud.label(
-    "numerals.png", columns=5, x=110, y=1,
-    flip_x=True, flip_y=True,
-)
-```
+`flip_x` and `flip_y` mirror a tilemap's or label's whole visible area, leaving
+the source strip in its normal orientation. Why text at the top of the disc needs
+both is explained in
+[Tilemaps and text](tutorial/tilemaps-and-text.md#which-way-up-flips).
 
 ## Glyph tables in detail
 

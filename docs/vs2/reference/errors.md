@@ -58,7 +58,7 @@ decide how a layer maps Y to LEDs. The tutorial's
 .. py:data:: vs2.FULLSCREEN
    :value: 0
 
-   One centred image, for backdrops and planets. ``y = 0`` fills all 54 LEDs and
+   One centred image, for planets, backdrops and cloud cover. ``y = 0`` fills all 54 LEDs and
    larger Y contracts it toward the centre. Sprites only — creating a tilemap or
    label on a ``FULLSCREEN`` layer raises during ``build()``.
 ```

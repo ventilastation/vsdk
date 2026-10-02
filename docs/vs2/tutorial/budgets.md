@@ -75,7 +75,7 @@ joy1.held(LEFT)
 ## Moving to the console
 
 The {term}`emulator` and the {term}`console` run the same renderer semantics, so a game that
-looks right in the emulator generally looks right on the disc. Two things only
+looks right in the emulator generally looks right on the disc. Three things only
 the real thing tells you:
 
 **Timing.** The emulator does not enforce the per-column deadline. A scene near
@@ -94,6 +94,12 @@ Nothing warns you about this; you have to look at it:
 
 The same label at `y = 1` and at `y = 44`.
 ```
+
+**Backgrounds.** Dark or black backgrounds work better on the real
+Ventilastation than bright ones, and the emulator may not show you the
+difference. Leave empty space empty — `EMPTY_TILE` cells and transparent pixels
+draw nothing — and keep any backdrop you do draw dark. A tilemap that lights
+the whole disc, like the `fill(GRASS)` call in chapter 5, is the exception.
 
 
 ## Packaging

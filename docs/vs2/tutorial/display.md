@@ -52,7 +52,7 @@ something a sprite can change.
     `y = 53` is the centre. A sprite `h` tall stays fully on screen up to
     `y = 54 - h`. The usual choice for scores, messages and overlays.
 * - {py:data}`vs2.FULLSCREEN`
-  - One centred image, for backdrops and planets. It uses the same curve as
+  - One centred image, for planets, backdrops and cloud cover. It uses the same curve as
     `TUNNEL`: `y = 0` fills all 54 LEDs, and increasing Y contracts it toward
     one LED at `y = 255`. X rotates it. Sprites only — a tilemap or label on a
     `FULLSCREEN` layer raises during `build()`.
@@ -60,9 +60,9 @@ something a sprite can change.
 
 ```python
 def build(self):
-    self.sky   = self.layer("sky",   projection=vs2.FULLSCREEN)
-    self.world = self.layer("world", projection=vs2.TUNNEL)
-    self.hud   = self.layer("hud",   projection=vs2.HUD)
+    self.world  = self.layer("world",  projection=vs2.TUNNEL)
+    self.clouds = self.layer("clouds", projection=vs2.FULLSCREEN)
+    self.hud    = self.layer("hud",    projection=vs2.HUD)
 ```
 
 Here is the same ship at several Y values on a `TUNNEL` layer (top) and a `HUD`
@@ -114,7 +114,7 @@ use. Writing `% 256` works today but silently breaks on any future display.
 Two rules, and they compose:
 
 ```{figure} ../images/draw-order.png
-:alt: Three layers stacked: sky first at the bottom, world in the middle, hud last on top
+:alt: Three layers stacked: world first at the bottom, clouds in the middle, hud last on top
 :width: 100%
 :align: center
 
@@ -122,7 +122,8 @@ Layers paint in the order they are created.
 ```
 
 1. **Layers paint in creation order**, bottom to top. In the example above,
-   `sky` is painted first and `hud` last, so the HUD is on top of everything.
+   `world` is painted first and `hud` last, so the world is at the bottom, the
+   clouds drift over it, and the HUD is on top of everything.
 2. **Within a layer, drawables paint in creation order**, each over the ones
    before it — sprites, tilemaps and labels alike.
 
@@ -141,15 +142,15 @@ factories in. Creating a HUD label before a world sprite still leaves the label
 on top, because the HUD layer was created second.
 :::
 
-For example, a `FULLSCREEN` planet on the `sky` layer, a ship on the `world`
-layer and a score on the `hud` layer look like this:
+For example, a `world` layer with a ship and some enemies, a `FULLSCREEN` layer
+of `clouds` drawn over it, and a `hud` layer with a score look like this:
 
 ```{figure} ../images/display-layers.png
-:alt: A planet filling the middle of the disc, a ship at the top rim and a score at the bottom
+:alt: A ship at the top rim and three enemies in the dark, with clouds drifting over them and a score at the bottom
 :width: 60%
 :align: center
 
-Three layers: `sky` (planet), `world` (ship) and `hud` (score).
+Three layers: `world` (ship and enemies), `clouds` (drawn over the world) and `hud` (score).
 ```
 
 A whole layer can be toggled or re-projected at runtime, without touching a
