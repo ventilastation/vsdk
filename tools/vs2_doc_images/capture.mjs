@@ -30,10 +30,9 @@ const CHROMIUM = process.env.CHROMIUM
   || (fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
 
 const ART = {
-  "ship.png": ["alecu/vixeous/images/ship.png", 4],
-  "enemy.png": ["alecu/vixeous/images/enemy.png", 6],
+  "ship.png": ["demos/tutorial_game/images/ship.png", 4],
+  "enemy.png": ["demos/tutorial_game/images/enemy.png", 6],
   "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
-  "mario_runs.png": ["pycamp-mar25/vugo/images/mario_runs.png", 6],
   "trench.png": ["demos/tutorial_game/images/trench.png", 8],
   "steel8x8.png": ["vsjam-may25/vasura_espacial/images/steel8x8.png", 256],
 };
@@ -107,7 +106,7 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, { shot: "game-over.png" }],
   },
   frames: {
-    art: ["mario_runs.png"],
+    art: ["enemy.png"],
     steps: [{ wait: 800 }, {
       shot: "sprites-frames.png",
       labels: [

@@ -140,7 +140,7 @@ def move_enemies(self):
 ```
 
 Enemies move *toward* the ship by counting `y` **down**, because the ship is at
-the rim. They are the same drone in six frames, which `enemy.frame` cycles. For
+the rim. Each enemy is the spinning drone from chapter 3, and `enemy.frame` turns it. For
 now an enemy that reaches the ship simply flies through it; chapter 6 makes that
 end the game, and chapter 5 scores the ones you avoid.
 

@@ -21,19 +21,18 @@ def update(self):
     self.ship.flip_x = self.moving_left
 ```
 
-A sprite shows one {term}`frame` of its strip at a time. A walking character is
-the clearest example, since each frame is a different step of the stride. Here are
-four sprites showing frames 0 to 3 of `mario_runs.png` (art from the `vugo` game,
-in `games/pycamp-mar25/vugo/images/`), set side by side at the bottom of the disc
-with a gap between them:
+A sprite shows one {term}`frame` of its strip at a time. The game's enemy is a
+drone that spins, and each of its six frames turns its arms a little further.
+Here are four sprites showing frames 0 to 3 of `enemy.png`, set side by side at
+the bottom of the disc with a gap between them:
 
 ```{figure} ../images/sprites-frames.png
-:alt: Four copies of a walking character along the bottom of the disc, each in a different pose of the stride
+:alt: Four drones along the bottom of the disc, each with its four arms turned a little further than the one before
 :width: 60%
 :align: center
 
-`frame = 0, 1, 2, 3`: one strip, four poses. The outer two lean because they sit
-further round the curve of the disc.
+`frame = 0, 1, 2, 3`: one strip, four turns of the same drone. The outer two lean
+because they sit further round the curve of the disc.
 ```
 
 `frame` and `visible` are **independent axes**. Setting a frame never reveals a

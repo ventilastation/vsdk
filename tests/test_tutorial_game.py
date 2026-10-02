@@ -38,7 +38,7 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 # name: (frame width, height, frames, glyphs), as in the game's __images__.yaml
 STRIPS = {
     "ship.png": (18, 13, 4, None),
-    "enemy.png": (14, 11, 6, None),
+    "enemy.png": (16, 16, 6, None),
     "trench.png": (16, 16, 8, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
     "steel8x8.png": (8, 8, 256, None),
