@@ -41,7 +41,7 @@ STRIPS = {
     "shots.png": (6, 10, 3, None),
     "enemy.png": (14, 11, 6, None),
     "explosion.png": (20, 20, 6, None),
-    "terrain.png": (16, 16, 6, None),
+    "trench.png": (16, 16, 8, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
     "steel8x8.png": (8, 8, 256, None),
 }
@@ -108,6 +108,20 @@ class TutorialGameTests(unittest.TestCase):
         game.ship.x = 0
         self.step(director.JOY_LEFT)
         self.assertEqual(game.ship.x, 255)
+
+    def test_the_trench_wall_scrolls_and_wraps_seamlessly(self):
+        game = self.start_game()
+        pattern_height = 6 * game.ground.tile_height
+        seen = set()
+        for _ in range(2 * pattern_height + 4):
+            self.step(0)
+            seen.add(game.ground.view_y)
+            self.assertLess(game.ground.view_y, pattern_height)
+        self.assertEqual(seen, set(range(pattern_height)))
+        # The wall repeats every 6 rows, so the wrap shows the same picture.
+        for row in range(10):
+            for col in range(16):
+                self.assertEqual(game.ground[col, row], game.ground[col, row + 6])
 
     def test_a_shot_hits_an_enemy_and_scores(self):
         game = self.start_game()

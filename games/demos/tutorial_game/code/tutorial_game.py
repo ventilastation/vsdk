@@ -17,16 +17,43 @@ SPAWN_MS = 900       # time between enemies
 BOOM_TICKS = 3       # ticks each explosion frame stays on screen
 POINTS = 10
 
+# The trench's tiles, in the order they appear in trench.png.
+PLATE, SEAM, PIPE, WINDOWS, VENT, HAZARD, LIGHTS, CONDUIT = range(8)
+TRENCH_COLUMNS = 16  # around the tunnel
+TRENCH_ROWS = 16     # along it
+PATTERN_ROWS = 6     # the wall repeats every 6 rows, so it can scroll forever
+
+
+def trench_tile(col, band):
+    """Which tile goes at ``col`` in row ``band`` of the repeating pattern."""
+    if band == 0:
+        return PIPE
+    if band == 4:
+        return CONDUIT
+    if band == 2:
+        if col % 4 == 1:
+            return WINDOWS
+        if col % 4 == 3:
+            return VENT
+    if band == 5:
+        if col % 8 == 2:
+            return LIGHTS
+        if col % 8 == 6:
+            return HAZARD
+    return SEAM if col % 2 else PLATE
+
 
 class Game(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
 
-        # An island of terrain; every other cell stays empty, so it is dark.
-        self.ground = self.world.tilemap("terrain.png", columns=16, rows=16,
-                                         view_width=256, view_height=128, y=16)
-        self.draw_island()
+        # The trench wall: dark plating all the way round, with a few lit
+        # structures. Its pattern repeats every PATTERN_ROWS rows.
+        self.ground = self.world.tilemap(
+            "trench.png", columns=TRENCH_COLUMNS, rows=TRENCH_ROWS,
+            view_width=256, view_height=160)
+        self.draw_trench()
 
         self.ship = self.world.sprite("ship.png", x=128, y=0)
         self.shots = self.world.sprite_pool("shots.png", count=8)
@@ -42,18 +69,10 @@ class Game(vs2.Scene):
         self.show_score()
         self.call_later(SPAWN_MS, self.spawn_enemy)
 
-    def draw_island(self):
-        GRASS, WATER, ROCK, SAND = 0, 1, 2, 3
-        for row in range(1, 7):
-            for col in range(3, 10):
-                tile = GRASS
-                if col == 6:
-                    tile = WATER
-                elif row in (1, 6):
-                    tile = SAND
-                elif (col + row) % 5 == 0:
-                    tile = ROCK
-                self.ground[col, row] = tile
+    def draw_trench(self):
+        for row in range(TRENCH_ROWS):
+            for col in range(TRENCH_COLUMNS):
+                self.ground[col, row] = trench_tile(col, row % PATTERN_ROWS)
 
     def show_score(self):
         self.score_label.set_number(self.score, width=5, pad="0")
@@ -66,6 +85,11 @@ class Game(vs2.Scene):
         if joy1.held(RIGHT):
             self.ship.x = (self.ship.x + 1) % vs2.display.width
         self.ship.frame = (self.ticks // 4) % self.ship.image.frames
+
+        # Scroll the wall toward the ship. After one whole pattern the picture
+        # is the same again, so the view can wrap without rewriting any cells.
+        pattern_height = PATTERN_ROWS * self.ground.tile_height
+        self.ground.view_y = (self.ticks // 2) % pattern_height
 
         if joy1.just_pressed(A):
             self.fire()

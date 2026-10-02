@@ -8,8 +8,8 @@ palettegroups:
       frames: 6
     - strip: explosion.png
       frames: 6
-    - strip: terrain.png
-      frames: 6
+    - strip: trench.png
+      frames: 8
     - strip: numerals.png
       frames: 12
       glyphs: "0123456789 *"
