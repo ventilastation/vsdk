@@ -7,9 +7,9 @@ cycle through it:
 ```python
 def build(self):
     world = self.layer("world", projection=vs2.TUNNEL)
-    self.shots   = world.sprite_pool("shot.png", count=8)
+    self.shots   = world.sprite_pool("shots.png", count=8)
     self.enemies = world.sprite_pool("enemy.png", count=16)
-    self.booms   = world.sprite_pool("boom.png", count=4, on_empty=vs2.RECYCLE)
+    self.booms   = world.sprite_pool("explosion.png", count=4, on_empty=vs2.RECYCLE)
 ```
 
 That is 28 of your 100 sprites, spent in three numbers you can add up.
@@ -64,6 +64,14 @@ def update(self):
 
 On a `TUNNEL` layer a shot fired away from the player counts *up* in Y, and the
 cutoff is a depth you choose — see [the circular display](display.md).
+
+```{figure} ../images/pools.png
+:alt: A row of enemies near the centre, a shot flying toward them and a small explosion where one enemy was hit
+:width: 60%
+:align: center
+
+Seven enemies spawned from a pool, a shot in flight, and the explosion left by a hit.
+```
 
 {py:meth}`~vs2.SpritePool.despawn_all` clears a pool in one call, which is the
 usual way to reset a level:

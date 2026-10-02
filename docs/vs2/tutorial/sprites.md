@@ -21,6 +21,17 @@ def update(self):
     self.ship.flip_x = self.moving_left
 ```
 
+A sprite shows one {term}`frame` of its strip at a time. Four sprites showing
+frames 0 to 3 of `ship.png`:
+
+```{figure} ../images/sprites-frames.png
+:alt: Four ships side by side, each showing a different frame of the strip
+:width: 60%
+:align: center
+
+`frame = 0, 1, 2, 3`. The frames differ only in the engine glow.
+```
+
 `frame` and `visible` are **independent axes**. Setting a frame never reveals a
 hidden sprite, which is what lets you prepare something before showing it:
 

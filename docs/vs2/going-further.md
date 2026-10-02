@@ -58,7 +58,7 @@ orientation:
 
 ```python
 self.top_score = hud.label(
-    "digits.png", columns=5, x=110, y=1,
+    "numerals.png", columns=5, x=110, y=1,
     flip_x=True, flip_y=True,
 )
 ```
@@ -69,7 +69,7 @@ A label maps characters to frames through a glyph table, resolved once at
 `build()` in this order:
 
 1. **A `glyphs=` argument** at the call site, for one-offs:
-   `hud.label("digits.png", columns=5, glyphs="0123456789")`.
+   `hud.label("numerals.png", columns=5, glyphs="0123456789")`.
 2. **A `glyphs:` entry in `__images__.yaml`**, next to the strip it describes.
 3. **CP437**, the default, where `frame = ord(ch)`.
 

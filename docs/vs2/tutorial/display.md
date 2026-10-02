@@ -6,17 +6,26 @@ of 256 angles.
 
 ## X is an angle
 
-```text
-                x = 128
-                   │
-       x = 64 ─────┼───── x = 192
-                   │
-                x = 0
+```{figure} ../images/display-axes.png
+:alt: A disc with x = 0 at the bottom, 64 at the left, 128 at the top and 192 at the right; y grows from the rim toward the centre
+:width: 70%
+:align: center
+
+The two axes. X is an angle around the disc; Y is the distance in from the rim.
 ```
 
 X runs 0 at the bottom, 64 at the left, 128 at the top, 192 at the right, and
 wraps at `vs2.display.width` (256). A sprite at x=254 that is 8 columns wide
-simply straddles the seam, and collisions handle that too.
+simply straddles the seam, and collisions handle that too. Four ships at
+`x = 0, 64, 128, 192`, all at `y = 0`, in the emulator:
+
+```{figure} ../images/display-angles.png
+:alt: Four ships placed around the rim of the disc
+:width: 60%
+:align: center
+
+Four sprites at `x = 0`, `64`, `128` and `192`, all at `y = 0`.
+```
 
 ## Y is a distance inward from the rim
 
@@ -56,6 +65,19 @@ def build(self):
     self.hud   = self.layer("hud",   projection=vs2.HUD)
 ```
 
+Here is the same ship at several Y values on a `TUNNEL` layer (top) and a `HUD`
+layer (bottom). Tunnel objects shrink as Y grows. HUD objects keep their height in
+LEDs, though they look narrower near the centre because the same angle covers
+less distance there:
+
+```{figure} ../images/display-projections.png
+:alt: A column of ships shrinking toward the centre on the TUNNEL layer, and a column of full-size ships on the HUD layer
+:width: 60%
+:align: center
+
+The same sprite on a `TUNNEL` layer at `y = 0, 40, 80, 120, 170, 220` and on a `HUD` layer at `y = 0, 14, 28, 40`.
+```
+
 On a tunnel, an object at the player's end of the world sits at `y = 0`, and
 things move *away* by counting up:
 
@@ -91,6 +113,14 @@ use. Writing `% 256` works today but silently breaks on any future display.
 
 Two rules, and they compose:
 
+```{figure} ../images/draw-order.png
+:alt: Three layers stacked: sky first at the bottom, world in the middle, hud last on top
+:width: 100%
+:align: center
+
+Layers paint in the order they are created.
+```
+
 1. **Layers paint in creation order**, bottom to top. In the example above,
    `sky` is painted first and `hud` last, so the HUD is on top of everything.
 2. **Within a layer, drawables paint in creation order**, each over the ones
@@ -110,6 +140,17 @@ Draw order follows the **layer**, not the order you happened to call the
 factories in. Creating a HUD label before a world sprite still leaves the label
 on top, because the HUD layer was created second.
 :::
+
+For example, a `FULLSCREEN` planet on the `sky` layer, a ship on the `world`
+layer and a score on the `hud` layer look like this:
+
+```{figure} ../images/display-layers.png
+:alt: A planet filling the middle of the disc, a ship at the top rim and a score at the bottom
+:width: 60%
+:align: center
+
+Three layers: `sky` (planet), `world` (ship) and `hud` (score).
+```
 
 A whole layer can be toggled or re-projected at runtime, without touching a
 single drawable:

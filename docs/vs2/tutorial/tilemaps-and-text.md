@@ -13,6 +13,16 @@ def build(self):
 ```
 
 The tileset is an ordinary {term}`strip`: one frame per distinct {term}`tile`.
+
+```{figure} ../images/strip-terrain.png
+:alt: The terrain.png strip: six tiles named grass, water, rock, sand, marker and wall
+:width: 85%
+:align: center
+
+A tileset: tile 0 is grass, 1 is water, and so on.
+```
+
+
 Tile size comes from the image, so it can never disagree with it —
 {py:attr}`~vs2.Tilemap.tile_width` and {py:attr}`~vs2.Tilemap.tile_height` are
 read-only.
@@ -26,7 +36,17 @@ self.ground.fill(GRASS)                # every cell
 ```
 
 {py:data}`vs2.EMPTY_TILE` (255) leaves a cell blank and the renderer skips it.
-Freshly allocated grids are filled with it.
+Freshly allocated grids are filled with it. A 16 by 16 map of the tiles above,
+with a ship on top:
+
+```{figure} ../images/tilemaps.png
+:alt: A disc covered in a ring pattern of grass, water, rock and sand tiles, with a ship near the top
+:width: 60%
+:align: center
+
+A 16 by 16 tilemap on a `TUNNEL` layer. Tiles near the rim are drawn larger.
+```
+
 
 ### Scrolling
 
@@ -51,9 +71,22 @@ no matter how often the text changes.
 ```python
 def build(self):
     hud = self.layer("hud", projection=vs2.HUD)
-    self.score  = hud.label("digits.png", columns=5, x=100, y=1)
+    self.score  = hud.label("numerals.png", columns=5, x=246, y=1)   # bottom of the disc
     self.status = hud.label("tinyfont.png", columns=21, rows=3, x=-42, y=0)
     self.title  = hud.label("rainbow437.png", columns=18, text="READY")
+```
+
+Text is drawn around the disc, so which way up it reads depends on where it
+sits. At the bottom of the disc (`x` near 0, as in the example above) it reads
+upright. At the top it is upside-down, so a label placed there passes
+`flip_x=True, flip_y=True`, as the scoreboards in the games under `games/` do:
+
+```{figure} ../images/labels.png
+:alt: A score reading 00420 at the top and the bottom of the disc, both upright, over a terrain map
+:width: 60%
+:align: center
+
+Two labels: one at the bottom of the disc with no flips, one at the top with `flip_x` and `flip_y`.
 ```
 
 One-line labels get a `text` property; multi-line ones use
@@ -86,7 +119,7 @@ other full font strips use. A strip with only a few characters, like a row of
 digits, declares its own mapping in `__images__.yaml`, next to the strip:
 
 ```yaml
-- strip: digits.png
+- strip: numerals.png
   glyphs: "0123456789"
 ```
 

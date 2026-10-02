@@ -2,14 +2,12 @@
 
 Everything drawn belongs to a layer, and every layer belongs to a scene:
 
-```text
-Scene
- └─ Layer            ordered bottom → top
-     └─ Drawable     ordered bottom → top within the layer
-         ├─ Sprite
-         ├─ SpritePool   (a fixed group of Sprites)
-         ├─ Tilemap
-         └─ Label        (a Tilemap with text helpers)
+```{figure} ../images/layer-tree.png
+:alt: A scene holds layers; a layer holds sprites, sprite pools, tilemaps and labels
+:width: 100%
+:align: center
+
+How a scene is put together.
 ```
 
 Layers create their own drawables — there is no free-standing `Sprite(...)` —

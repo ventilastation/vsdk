@@ -85,7 +85,16 @@ the tilemap budget with several large maps is worth watching on hardware.
 the rim and crammed into almost nothing at the centre, so the same glyph is
 crisp near the rim and unreadable near the middle. Text belongs at **low Y** on
 a `HUD` layer — the in-tree games put their scoreboards at `y=0` or `y=1`.
-Nothing warns you about this; you have to look at it.
+Nothing warns you about this; you have to look at it:
+
+```{figure} ../images/budgets-legibility.png
+:alt: The same score at y = 1, crisp at the bottom rim, and at y = 44, a tiny unreadable smudge near the centre
+:width: 60%
+:align: center
+
+The same label at `y = 1` and at `y = 44`.
+```
+
 
 ## Packaging
 

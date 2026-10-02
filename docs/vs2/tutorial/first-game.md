@@ -41,15 +41,29 @@ they become sprite strips:
 palettegroups:
   world:
     - strip: ship.png
-      frames: 1
-    - strip: shot.png
-      frames: 1
+      frames: 4
+    - strip: shots.png
+      frames: 3
 ```
 
 A {term}`strip` is a horizontal filmstrip of equally sized frames — a 4-frame
-animation is one PNG four times as wide as one frame. A {term}`palette group`
-is a set of images that share 256 colours; put images that look alike in one
-group.
+animation is one PNG four times as wide as one frame:
+
+```{figure} ../images/strip-ship.png
+:alt: The ship.png strip: four 18 by 13 pixel frames side by side
+:width: 85%
+:align: center
+
+`ship.png` is 72 pixels wide and holds four frames, so its entry says `frames: 4`.
+```
+
+A {term}`palette group` is a set of images that share 256 colours; put images
+that look alike in one group.
+
+To follow along, copy the art the tutorial uses: `ship.png`, `shots.png`,
+`enemy.png` and `explosion.png` from `games/alecu/vixeous/images/`,
+`numerals.png` from `games/alecu/vyruss_vs2/images/` and `terrain.png` from
+`games/alecu/mapdemo/images/`.
 
 The emulator recompiles changed PNGs into a ROM every time it starts, so you
 just edit and rerun.
@@ -81,13 +95,41 @@ def main():
 ```
 
 That is a complete, playable game. Run `./vs-emu.sh` (or `vs-emu.bat`) and it is
-on the menu.
+on the menu. The ship sits at the top of the disc, because `x = 128` is the top:
+
+```{figure} ../images/first-game.png
+:alt: The emulator showing the ship at the top of the disc
+:width: 60%
+:align: center
+
+The ship at `x = 128`, `y = 0`: the top of the disc, on the rim.
+```
+
+Hold the left button and `x` counts down, so the ship slides toward the left
+side of the disc:
+
+```{figure} ../images/first-game-moved.png
+:alt: The emulator showing the ship moved toward the upper left
+:width: 60%
+:align: center
+
+After holding left for a moment.
+```
+
 
 ## What those two methods mean
 
 {term}`Build <build>` runs once each time the scene is entered and creates
 everything the scene will ever draw. {py:meth}`~vs2.Scene.update` runs once per
 {term}`rotation` and moves what already exists.
+
+```{figure} ../images/scene-lifecycle.png
+:alt: A scene starts building, becomes sealed when build returns, and is closed by pop, push or switch
+:width: 100%
+:align: center
+
+A scene's life. Only the building state may create layers and drawables.
+```
 
 The split is enforced. When `build()` returns, the scene is {term}`sealed`: try
 to create a sprite from `update()` and you get

@@ -45,6 +45,23 @@ self.pop()                    # resume the scene below, or exit the game
 self.switch(GameOver(score))  # replace this scene outright
 ```
 
+For example, a title scene that switches to the game when A is pressed:
+
+```{figure} ../images/scenes-title.png
+:alt: A title banner on the HUD layer
+:width: 50%
+:align: center
+
+The title scene: a banner on a `HUD` layer.
+```
+```{figure} ../images/scenes-play.png
+:alt: The game scene after pressing A: a ship near the rim and an enemy
+:width: 50%
+:align: center
+
+After pressing A, the game scene.
+```
+
 All three return `None`, so `return self.pop()` reads as "handle this input,
 then stop".
 
@@ -63,7 +80,7 @@ class Game(vs2.Scene):
 
     def build(self):
         self.hud = self.layer("hud", projection=vs2.HUD)
-        self.label = self.hud.label("digits.png", columns=5)   # rebuilt
+        self.label = self.hud.label("numerals.png", columns=5)   # rebuilt
 ```
 
 ## Timers

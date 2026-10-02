@@ -16,9 +16,9 @@ class MyGame(vs2.Scene):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
 
-        self.ship = self.world.sprite("ship.png", x=120.5, y=0)
-        self.bullets = self.world.sprite_pool("shot.png", count=8)
-        self.score = self.hud.label("digits.png", columns=5, x=100, y=1)
+        self.ship = self.world.sprite("ship.png", x=128, y=0)
+        self.bullets = self.world.sprite_pool("shots.png", count=8)
+        self.score = self.hud.label("numerals.png", columns=5, x=246, y=1)
 
     def update(self):
         if joy1.held(LEFT):
