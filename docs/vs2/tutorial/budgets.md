@@ -105,6 +105,29 @@ test your colours and intensities on the real hardware** and adjust them there.
 Do it before you share a game, not after.
 
 
+## In the game
+
+Add up Tunnel Shooter's budget. The numbers are in `vs2.limits`:
+
+| Resource | Used by the game scene | Budget |
+|---|---|---|
+| Layers | 2 (`world`, `hud`) | 8 |
+| Sprites | 1 ship + 8 shots + 16 enemies + 4 explosions = 29 | 100 |
+| Tilemaps | 1 island + 1 score label = 2 | 16 |
+| Image strips | 7 (ship, shots, enemy, explosion, terrain, numerals, rainbow437) | 100 |
+
+Everything is created in `build()`, so the whole table is checked the first time
+the scene is entered. Here is the complete game, exactly as it is in
+`games/demos/tutorial_game/code/tutorial_game.py`:
+
+```{literalinclude} ../../../games/demos/tutorial_game/code/tutorial_game.py
+:language: python
+```
+
+Run it in the emulator, then run it on the real Ventilastation. The island, the
+score and the title should all look the way they did on screen, but only the
+disc will tell you whether the colours are comfortable and the text is crisp.
+
 ## Packaging
 
 `tools/package_game.py` builds a `.vs2` package — a zip of your `meta.json`,

@@ -1,12 +1,39 @@
 # Tutorial
 
-Seven short chapters that go from an empty folder to a game running on the
-console. Each one builds on the last, so read them in order the first time.
+Seven short chapters that build one game, **Tunnel Shooter**, from an empty folder
+to a game running on the console. You fly a ship around the rim of the disc and
+shoot the enemies that come down the tunnel at you.
+
+```{figure} ../images/game-play.png
+:alt: Tunnel Shooter: a ship at the top of the disc, a shot flying away from it, enemies approaching, and a score at the bottom
+:width: 60%
+:align: center
+
+Tunnel Shooter, the game you will build.
+```
+
+Each chapter teaches one part of the API and ends with an **In the game**
+section that adds that part to the same file, so read them in order the first
+time:
+
+| Chapter | You learn | The game gets |
+|---|---|---|
+| [1. Your first game](first-game.md) | the folder, `build()` and `update()` | a ship you can steer |
+| [2. The circular display](display.md) | X, Y, projections, draw order | a ship that flies all the way round |
+| [3. Sprites](sprites.md) | frames, collisions | an animated ship |
+| [4. Sprite pools](pools.md) | `spawn()` and `despawn()` | shots, enemies and explosions |
+| [5. Tilemaps and text](tilemaps-and-text.md) | tilemaps, labels, flips | an island of terrain and a score |
+| [6. Scenes, input and sound](scenes-and-input.md) | scenes, timers, audio | a title screen, game over, sound |
+| [7. Budgets and real hardware](budgets.md) | limits, testing on the disc | a finished game |
+
+The finished game is in `games/demos/tutorial_game/`, and it shows up in the
+**Tech Demos** menu. If you get stuck, compare your file with it.
 
 You need the emulator installed — see the setup guides in the `docs/` folder for
 Linux, macOS and Windows — and no hardware at all until the last chapter.
 
 ```{toctree}
+:hidden:
 :maxdepth: 1
 
 first-game

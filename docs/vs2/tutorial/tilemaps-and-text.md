@@ -170,4 +170,72 @@ tilemaps including labels. A score, a message line and a debug overlay are three
 before any terrain.
 :::
 
+## In the game
+
+Give Tunnel Shooter something to fly over and a score. A second layer holds the
+score, so it is drawn over everything in the world. The island goes into the
+world layer *before* the ship, so the ship is painted over it:
+
+```python
+def build(self):
+    self.world = self.layer("world", projection=vs2.TUNNEL)
+    self.hud = self.layer("hud", projection=vs2.HUD)
+
+    # An island of terrain; every other cell stays empty, so it is dark.
+    self.ground = self.world.tilemap("terrain.png", columns=16, rows=16,
+                                     view_width=256, view_height=128, y=16)
+    self.draw_island()
+
+    self.ship = self.world.sprite("ship.png", x=128, y=0)
+    # ... the pools, as before ...
+
+    # Bottom of the disc, so the score reads upright.
+    self.score_label = self.hud.label("numerals.png", columns=5, x=246, y=1)
+
+    self.score = 0
+    self.ticks = 0
+    self.show_score()
+
+def draw_island(self):
+    GRASS, WATER, ROCK, SAND = 0, 1, 2, 3
+    for row in range(1, 7):
+        for col in range(3, 10):
+            tile = GRASS
+            if col == 6:
+                tile = WATER
+            elif row in (1, 6):
+                tile = SAND
+            elif (col + row) % 5 == 0:
+                tile = ROCK
+            self.ground[col, row] = tile
+
+def show_score(self):
+    self.score_label.set_number(self.score, width=5, pad="0")
+```
+
+Add the points when a shot hits, in `move_shots()`:
+
+```python
+POINTS = 10
+
+            self.enemies.despawn(enemy)
+            boom = self.booms.spawn(x=enemy.x, y=enemy.y)
+            boom.frame = 0
+            self.shots.despawn(shot)
+            self.score += POINTS
+            self.show_score()
+```
+
+`numerals.png` declares its own glyphs in `__images__.yaml`, as in the glyphs
+section above, so `set_number()` knows which frame is which digit. The score sits
+at `x = 246`, the bottom of the disc, so it reads upright without any flips:
+
+```{figure} ../images/game-play.png
+:alt: Tunnel Shooter with an island of terrain, a ship, a shot, enemies, and a score of 00010 at the bottom
+:width: 60%
+:align: center
+
+Tunnel Shooter so far.
+```
+
 Next: [scenes, input and sound](scenes-and-input.md).

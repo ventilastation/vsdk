@@ -39,11 +39,9 @@ they become sprite strips:
 
 ```yaml
 palettegroups:
-  world:
+  main:
     - strip: ship.png
       frames: 4
-    - strip: shots.png
-      frames: 3
 ```
 
 A {term}`strip` is a horizontal filmstrip of equally sized frames — a 4-frame
@@ -60,10 +58,10 @@ animation is one PNG four times as wide as one frame:
 A {term}`palette group` is a set of images that share 256 colours; put images
 that look alike in one group.
 
-To follow along, copy the art the tutorial uses: `ship.png`, `shots.png`,
-`enemy.png` and `explosion.png` from `games/alecu/vixeous/images/`,
-`numerals.png` from `games/alecu/vyruss_vs2/images/` and `terrain.png` from
-`games/alecu/mapdemo/images/`.
+To follow along, copy the art Tunnel Shooter uses into your `images/` folder
+from `games/demos/tutorial_game/images/`: `ship.png`, `shots.png`, `enemy.png`,
+`explosion.png`, `terrain.png`, `numerals.png` and `rainbow437.png`. You only
+need `ship.png` for this chapter; the others appear later.
 
 The emulator recompiles changed PNGs into a ROM every time it starts, so you
 just edit and rerun.
@@ -78,7 +76,7 @@ import vs2
 from vs2.controls import *
 
 
-class MyGame(vs2.Scene):
+class Game(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.ship = self.world.sprite("ship.png", x=128, y=0)
@@ -91,7 +89,7 @@ class MyGame(vs2.Scene):
 
 
 def main():
-    return MyGame()
+    return Game()
 ```
 
 That is a complete, playable game. Run `./vs-emu.sh` (or `vs-emu.bat`) and it is
@@ -135,7 +133,7 @@ The split is enforced. When `build()` returns, the scene is {term}`sealed`: try
 to create a sprite from `update()` and you get
 
 ```text
-SceneSealedError: sprite() is only allowed while MyGame.build() runs
+SceneSealedError: sprite() is only allowed while Game.build() runs
 ```
 
 So running out of sprites becomes an error the first time you enter the scene,
@@ -147,5 +145,5 @@ Players leave with the back button (`Y` or `BACK`), or after 30 seconds without
 input. Both return to the launcher on their own, so your game needs no exit
 code.
 
-Next: [the circular display](display.md), and why `x` behaves differently from
-`y`.
+This ship is where Tunnel Shooter starts. Next: [the circular display](display.md),
+and why `x` behaves differently from `y`.

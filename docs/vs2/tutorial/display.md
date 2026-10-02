@@ -161,4 +161,21 @@ self.hud.visible = False
 self.radar.projection = vs2.HUD     # was TUNNEL
 ```
 
+## In the game
+
+Right now the ship stops being steerable at the edge of the numbers: `x` just
+keeps counting. Wrap it at the width of the display, so the ship can fly all the
+way round the rim and come back:
+
+```python
+def update(self):
+    if joy1.held(LEFT):
+        self.ship.x = (self.ship.x - 1) % vs2.display.width
+    if joy1.held(RIGHT):
+        self.ship.x = (self.ship.x + 1) % vs2.display.width
+```
+
+The ship stays at `y = 0`, on the rim, for the whole game. Everything else will
+come at it from deeper in the tunnel.
+
 Next: [sprites](sprites.md).

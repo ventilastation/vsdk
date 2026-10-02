@@ -26,6 +26,11 @@ emulator URL and the output directory.
   browser, the runtime is restarted into it, and the polar canvas is saved
   after the scripted key presses listed in `capture.mjs`. Some screenshots get
   text labels drawn over them (`labels` in `capture.mjs`).
+- The `game` entry loads the finished tutorial game from `games/demos/tutorial_game`
+  as it is in the repo, and plays it with scripted key presses. The browser runs
+  the Python in `web/runtime-bundle.json`, so run `make web-runtime-bundle` first if
+  you changed anything under `apps/micropython`, or the screenshots will show the
+  old runtime.
 - `diagrams/*.svg` are rendered to PNG with the same browser. `{{art:...}}`
   in an SVG is replaced with a PNG from `games/` as a data URI.
 - The art comes from the games under `games/alecu/` (`ART` in `capture.mjs`),

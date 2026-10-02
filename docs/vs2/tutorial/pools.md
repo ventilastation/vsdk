@@ -45,7 +45,7 @@ Iterating a pool yields only the live sprites, and despawning the current one
 mid-loop is supported — which is exactly what the common loop needs:
 
 ```python
-SHOT_SPEED = 6
+SHOT_SPEED = 3
 SHOT_RANGE = 170          # depth at which a shot has gone too far to matter
 
 def update(self):
@@ -107,5 +107,84 @@ ValueError: sprite is not live in this pool
 That is always a bookkeeping bug — usually a sprite despawned in two branches of
 the same `if`. It is worth failing on, because the alternative is a sprite that
 is quietly in both the free list and the live list.
+
+## In the game
+
+Time to shoot things. Add three pools to `build()`, and a few enemies to shoot
+at (a timer will spawn them properly in chapter 6):
+
+```python
+SHOT_SPEED = 3       # depth units per tick, away from the ship
+SHOT_RANGE = 170     # depth at which a shot has gone too far to matter
+ENEMY_SPEED = 0.5    # depth units per tick, toward the ship
+ENEMY_START = 160    # depth at which enemies appear
+BOOM_TICKS = 3       # ticks each explosion frame stays on screen
+
+
+def build(self):
+    # ... the layer and the ship, as before ...
+    self.shots = self.world.sprite_pool("shots.png", count=8)
+    self.enemies = self.world.sprite_pool("enemy.png", count=16)
+    self.booms = self.world.sprite_pool("explosion.png", count=4,
+                                        on_empty=vs2.RECYCLE)
+    for i in range(5):
+        self.enemies.spawn(x=i * 51, y=ENEMY_START)
+```
+
+Then `update()` fires with the A button and moves everything:
+
+```python
+def update(self):
+    # ... steering and the ship's animation, as before ...
+    if joy1.just_pressed(A):
+        self.fire()
+
+    self.move_shots()
+    self.move_enemies()
+    self.animate_booms()
+
+def fire(self):
+    # Centre the 6-column shot on the 18-column ship.
+    self.shots.spawn(x=self.ship.x + 6, y=self.ship.y + 4)
+
+def move_shots(self):
+    for shot in self.shots:
+        shot.y += SHOT_SPEED
+        if shot.y > SHOT_RANGE:
+            self.shots.despawn(shot)
+            continue
+
+        enemy = shot.first_overlap(self.enemies)
+        if enemy:
+            self.enemies.despawn(enemy)
+            boom = self.booms.spawn(x=enemy.x, y=enemy.y)
+            boom.frame = 0
+            self.shots.despawn(shot)
+
+def move_enemies(self):
+    """Advance the enemies. Returns True if one touched the ship."""
+    for enemy in self.enemies:
+        enemy.y -= ENEMY_SPEED
+        enemy.frame = (self.ticks // 6) % enemy.image.frames
+        if enemy.overlaps(self.ship):
+            return True
+        if enemy.y < -enemy.image.height:
+            self.enemies.despawn(enemy)      # flew past the ship
+    return False
+
+def animate_booms(self):
+    if self.ticks % BOOM_TICKS:
+        return
+    for boom in self.booms:
+        if boom.frame >= boom.image.frames - 1:
+            self.booms.despawn(boom)         # the animation has played out
+        else:
+            boom.frame += 1
+```
+
+Three things to notice. Enemies move *toward* the ship by counting `y` **down**,
+because the ship is at the rim. `boom.frame = 0` restarts an explosion that was
+recycled from an older one. And `move_enemies()` reports a hit by returning
+`True`; nothing uses that yet, and chapter 6 ends the game with it.
 
 Next: [tilemaps and text](tilemaps-and-text.md).

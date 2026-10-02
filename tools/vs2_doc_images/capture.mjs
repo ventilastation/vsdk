@@ -6,7 +6,9 @@
 // Emulator screenshots: each example in examples/ is written into the browser
 // emulator's workspace as games/docs/<name>, its ROM is built in the browser,
 // the runtime is restarted into it, and the polar canvas is saved after the
-// scripted key presses. Nothing is written into the repo's games/ tree.
+// scripted key presses. Nothing is written into the repo's games/ tree. The
+// `game` entry instead loads the finished tutorial game, as it is in the repo
+// (games/demos/tutorial_game).
 //
 // Diagrams: each diagrams/*.svg is rendered to a PNG with the same browser.
 // `{{art:<path under games/>}}` in an SVG is replaced by that image as a data
@@ -30,7 +32,6 @@ const ART = {
   "enemy.png": ["alecu/vixeous/images/enemy.png", 6],
   "explosion.png": ["alecu/vixeous/images/explosion.png", 6],
   "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
-  "messages.png": ["alecu/vixeous/images/messages.png", 3],
   "terrain.png": ["alecu/mapdemo/images/terrain.png", 6],
 };
 // Local art (under tools/vs2_doc_images/art) is written as "local:<file>".
@@ -93,6 +94,19 @@ const EXAMPLES = {
       ],
     }],
   },
+  game: {
+    repoGame: "demos/tutorial_game",
+    steps: [
+      { wait: 800 }, { shot: "game-title.png" },
+      ...key("Space"), { wait: 7000 },
+      { shot: "game-play-early.png" },
+      { down: "ArrowLeft" }, { wait: 150 }, { up: "ArrowLeft" },
+      ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 250 },
+      { down: "ArrowRight" }, { wait: 300 }, { up: "ArrowRight" },
+      ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 150 },
+      { shot: "game-play.png" },
+    ],
+  },
   frames: {
     art: ["ship.png"],
     steps: [{ wait: 800 }, {
@@ -136,13 +150,6 @@ const EXAMPLES = {
       ],
     }],
   },
-  title: {
-    art: ["ship.png", "enemy.png", "messages.png"],
-    steps: [
-      { wait: 800 }, { shot: "scenes-title.png" },
-      ...key("Space"), { wait: 1500 }, { shot: "scenes-play.png" },
-    ],
-  },
 };
 
 const only = process.argv.slice(2);
@@ -154,7 +161,30 @@ const gamesPath = (rel) =>
   rel.startsWith("local:") ? path.join(HERE, "art", rel.slice(6)) : path.join(REPO, "games", rel);
 const b64 = (file) => fs.readFileSync(file).toString("base64");
 
+// A game that lives in the repo (games/<group>/<name>) is loaded as it is.
+function repoGameFiles(ex) {
+  const dir = path.join(REPO, "games", ex.repoGame);
+  const [group, name] = ex.repoGame.split("/");
+  const root = `games/${group}/${name}`;
+  const files = [];
+  const walk = (sub) => {
+    for (const entry of fs.readdirSync(path.join(dir, sub), { withFileTypes: true })) {
+      const rel = path.posix.join(sub, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "__pycache__") walk(rel);
+      } else if (/\.(py|json|yaml)$/.test(entry.name)) {
+        files.push({ path: `${root}/${rel}`, enc: "utf8", content: fs.readFileSync(path.join(dir, rel), "utf8") });
+      } else if (/\.png$/.test(entry.name)) {
+        files.push({ path: `${root}/${rel}`, enc: "base64", content: b64(path.join(dir, rel)) });
+      }
+    }
+  };
+  walk("");
+  return { files, imagesRoot: `${root}/images`, slug: `${group}.${name}` };
+}
+
 function exampleFiles(name, ex) {
+  if (ex.repoGame) return repoGameFiles(ex);
   const root = `games/docs/${name}`;
   const files = [
     {
