@@ -281,14 +281,33 @@ async function stagePng(page) {
   }
 }
 
-// The label coordinates were written for a disc that filled the stage; the disc
-// now sits inside a margin (see #frame-canvas-gl in web/styles.css). Labels that
-// point at the drawing are pulled in by the same factor; `left` legends are not.
-const DISC_FIT = 0.889;
-const fit = (l) => (l.left ? l : {
+// The label coordinates were written for a disc that filled the stage with the
+// LED ring spanning LABEL_SPAN world units across it. The emulator now insets the
+// canvas in the stage and fits LED_VIEW_SPAN units across the canvas (see
+// #frame-canvas-gl in web/styles.css and led-ring-renderers.js), so labels that
+// point at the drawing are pulled in by the ratio, measured from the page rather
+// than copied here. `left` legends are not.
+const LABEL_SPAN = 200;
+const LED_VIEW_SPAN = Number(
+  /LED_VIEW_SPAN\s*=\s*(\d+)/.exec(
+    fs.readFileSync(path.join(REPO, "web/led-ring-renderers.js"), "utf8"))[1]);
+
+async function discFit(page) {
+  const canvasShare = await page.evaluate(() => {
+    const stage = document.querySelector(".stage-display").getBoundingClientRect();
+    const canvas = [...document.querySelectorAll("#frame-canvas-gl, #frame-canvas-2d")]
+      .filter((c) => getComputedStyle(c).display !== "none")
+      .map((c) => c.getBoundingClientRect())
+      .find((r) => r.width > 0);
+    return canvas ? canvas.width / stage.width : 1;
+  });
+  return canvasShare * LABEL_SPAN / LED_VIEW_SPAN;
+}
+
+const fit = (factor) => (l) => (l.left ? l : {
   ...l,
-  x: STAGE / 2 + (l.x - STAGE / 2) * DISC_FIT,
-  y: STAGE / 2 + (l.y - STAGE / 2) * DISC_FIT,
+  x: STAGE / 2 + (l.x - STAGE / 2) * factor,
+  y: STAGE / 2 + (l.y - STAGE / 2) * factor,
 });
 
 // Draws text labels (canvas pixel coordinates, centred on x/y, or starting at x
@@ -342,7 +361,7 @@ async function runExample(browser, name, ex) {
         })));
       }
       let png = await stagePng(page);
-      if (step.labels) png = await annotate(browser, png, step.labels.map(fit));
+      if (step.labels) png = await annotate(browser, png, step.labels.map(fit(await discFit(page))));
       fs.writeFileSync(out, png);
       console.log("wrote", path.relative(REPO, out));
     }

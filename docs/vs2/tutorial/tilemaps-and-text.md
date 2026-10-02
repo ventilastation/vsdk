@@ -163,8 +163,13 @@ digits, declares its own mapping in `__images__.yaml`, next to the strip:
 
 ```yaml
 - strip: numerals.png
-  glyphs: "0123456789"
+  frames: 12
+  glyphs: "0123456789 *"
 ```
+
+Character *n* of the string is the glyph for frame *n*, so here frame 0 is `0`,
+frame 9 is `9`, frame 10 is a space and frame 11 is a `*`. The `frames:` entry
+is still needed; leave it out and the strip counts as one frame.
 
 Characters with no mapping, and spaces, are left blank. Other ways to set the
 mapping, and strips with a second colour, are in

@@ -16,6 +16,7 @@ ENEMY_START = 160    # depth at which enemies appear
 SPAWN_MS = 900       # time between enemies
 BOOM_TICKS = 3       # ticks each explosion frame stays on screen
 POINTS = 10
+RESTART_MS = 1000    # game over ignores fire taps this long, so the score is seen
 
 # The trench's tiles, in the order they appear in trench.png.
 PLATE, SEAM, PIPE, WINDOWS, VENT, HAZARD, LIGHTS, CONDUIT = range(8)
@@ -177,9 +178,16 @@ class GameOver(vs2.Scene):
         score = hud.label("numerals.png", columns=5, x=246, y=20)
         score.set_number(self.score, width=5, pad="0")
         centred_label(hud, "PRESS A", y=28)
+        # A player who is still tapping fire when the ship is hit would
+        # restart at once, so ignore input for a moment.
+        self.ready = False
+        self.call_later(RESTART_MS, self.get_ready)
+
+    def get_ready(self):
+        self.ready = True
 
     def update(self):
-        if joy1.just_pressed(A):
+        if self.ready and joy1.just_pressed(A):
             self.switch(Game())
 
 

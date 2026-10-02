@@ -182,6 +182,9 @@ class Title(vs2.Scene):
             self.switch(Game())
 
 
+RESTART_MS = 1000    # game over ignores fire taps this long, so the score is seen
+
+
 class GameOver(vs2.Scene):
     def __init__(self, score):
         vs2.Scene.__init__(self)
@@ -193,9 +196,16 @@ class GameOver(vs2.Scene):
         score = hud.label("numerals.png", columns=5, x=246, y=20)
         score.set_number(self.score, width=5, pad="0")
         centred_label(hud, "PRESS A", y=28)
+        # A player who is still tapping fire when the ship is hit would
+        # restart at once, so ignore input for a moment.
+        self.ready = False
+        self.call_later(RESTART_MS, self.get_ready)
+
+    def get_ready(self):
+        self.ready = True
 
     def update(self):
-        if joy1.just_pressed(A):
+        if self.ready and joy1.just_pressed(A):
             self.switch(Game())
 
 
@@ -204,7 +214,9 @@ def main():
 ```
 
 `__init__` runs once, so `GameOver` keeps the score it was given, while
-`build()` creates its drawables. `main()` now returns the title, so the game
+`build()` creates its drawables. A is also the fire button, so a player who is
+still tapping it when the ship is hit would restart before seeing the score;
+`GameOver` ignores input for the first second, using a timer. `main()` now returns the title, so the game
 starts there:
 
 ```{figure} ../images/game-title.png

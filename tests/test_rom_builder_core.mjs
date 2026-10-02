@@ -26,19 +26,34 @@ assert(glyphsOf('"0123456789 *"') === "0123456789 *", "double-quoted glyphs");
 assert(glyphsOf("'0123456789'") === "0123456789", "single-quoted glyphs");
 assert(glyphsOf("'it''s'") === "it's", "doubled single quote");
 assert(glyphsOf('"\\u00e9a"') === "\u00e9a", "double-quoted unicode escape");
-assert(glyphsOf("ABC") === "ABC", "unquoted glyphs");
+// The CLI reads these with PyYAML, so the browser must read them the same way.
+assert(glyphsOf('"0123456789"  # digits') === "0123456789", "trailing comment after a double-quoted value");
+assert(glyphsOf("'ab'   # note") === "ab", "trailing comment after a single-quoted value");
+assert(glyphsOf('"a # b"') === "a # b", "a # inside the quotes is part of the value");
+assert(glyphsOf('"\\x41\\e\\0"') === "A\u001b\u0000", "YAML hex and named escapes");
+assert(glyphsOf('"\\U0001F600"') === "\u{1F600}", "eight-digit unicode escape");
+assert(glyphsOf('"a\\tb\\\\"') === "a\tb\\", "tab and backslash escapes");
+assert(glyphsOf('""') === "", "an empty string");
 
 const noGlyphs = builder.parseStripedefsYaml(
   "palettegroups:\n  g:\n    - strip: a.png\n      frames: 2\n");
 assert(noGlyphs[0].items[0].glyphs === "", "no glyphs key means an empty table");
 
-let rejected = false;
-try {
-  glyphsOf('"unterminated\\"');
-} catch (error) {
-  rejected = true;
+function rejects(yamlValue) {
+  try {
+    glyphsOf(yamlValue);
+  } catch (error) {
+    return true;
+  }
+  return false;
 }
-assert(rejected, "a malformed double-quoted string is rejected");
+
+assert(rejects('"unterminated\\"'), "a malformed double-quoted string is rejected");
+assert(rejects("0123456789"), "an unquoted number is rejected, as generate_roms.py rejects it");
+assert(rejects("ABC"), "unquoted text is rejected");
+assert(rejects('"ab" cd'), "text after the closing quote is rejected");
+assert(rejects('"\\q"'), "an unknown escape is rejected");
+assert(rejects('"\\x4"'), "a short hex escape is rejected");
 
 // --- building ------------------------------------------------------------
 const yaml = [

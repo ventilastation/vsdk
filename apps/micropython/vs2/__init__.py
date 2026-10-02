@@ -627,7 +627,13 @@ class Scene(_Scene):
             # which case there is intentionally nothing to load.
             pack = self.asset_pack or getattr(self, "_vs_api_slug", None)
             if pack:
-                director.load_rom("roms/" + pack + ".rom")
+                rom = "roms/" + pack + ".rom"
+                # A scene the app created itself shares its creator's strips,
+                # so reuse them rather than inflating the same ROM again on
+                # every Title -> Game -> GameOver transition.
+                if not (getattr(self, "_vs_adopted", False)
+                        and getattr(director, "loaded_rom", None) == rom):
+                    director.load_rom(rom)
             image_count = len(stripes)
             if image_count > limits.image_strips:
                 raise AssetLimitError(
@@ -798,6 +804,31 @@ class Scene(_Scene):
             if self._pending_transition is not None:
                 break
 
+    def _adopt(self, scene):
+        """Give a scene built by this app's code the app's identity.
+
+        app_loader stamps only the scene returned by ``main()``. A scene that
+        game code creates and passes to :meth:`push` or :meth:`switch` belongs
+        to the same app, so it takes the same markers (which tell the platform
+        to export its VS2 payload and the API guard which app is running) and,
+        unless it names its own, the same asset pack. Scenes that already carry
+        markers, and scenes that are not V2 scenes, are left alone.
+        """
+        if not isinstance(scene, Scene):
+            return
+        slug = getattr(self, "_vs_api_slug", None)
+        declared = getattr(self, "_vs_declared_api", None)
+        if slug is None and declared is None:
+            return
+        if (getattr(scene, "_vs_api_slug", None) is not None
+                or getattr(scene, "_vs_declared_api", None) is not None):
+            return
+        scene._vs_api_slug = slug
+        scene._vs_declared_api = declared
+        if scene.asset_pack is None:
+            scene.asset_pack = self.asset_pack
+        scene._vs_adopted = True
+
     def _commit_transition(self):
         transition = self._pending_transition
         self._pending_transition = None
@@ -805,8 +836,10 @@ class Scene(_Scene):
             return
         kind, target = transition
         if kind == "push":
+            self._adopt(target)
             director.push(target)
         elif kind == "switch":
+            self._adopt(target)
             director.switch(target)
         else:
             director.pop()

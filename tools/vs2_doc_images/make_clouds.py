@@ -46,4 +46,5 @@ def main():
     image.save(__file__.replace("make_clouds.py", "art/clouds.png"))
 
 
-main()
+if __name__ == "__main__":
+    main()

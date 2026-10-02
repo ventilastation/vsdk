@@ -79,11 +79,19 @@ class TutorialGameTests(unittest.TestCase):
         self.step(buttons)
         self.step(0)
 
-    def start_game(self):
-        title = load_app("demos.tutorial_game")
+    def start_game(self, title=None, keep_timer=False):
+        """Press A on the title and return the Game it switches to.
+
+        The spawn timer is cleared: it counts real milliseconds, so on a slow
+        runner it could add a random enemy in the middle of a test. Tests that
+        want an enemy spawn one; the timer has its own test.
+        """
+        title = title or load_app("demos.tutorial_game")
         self.press(director.BUTTON_A)
         game = director.scene_stack[-1]
         self.assertIsNot(game, title)
+        if not keep_timer:
+            game.pending_calls.clear()
         return game
 
     def test_title_switches_to_a_game_that_inherits_the_app(self):
@@ -92,8 +100,10 @@ class TutorialGameTests(unittest.TestCase):
 
         title = load_app("demos.tutorial_game")
         self.assertIsInstance(title, Title)
-        game = self.start_game()
+        game = self.start_game(title)
         self.assertIsInstance(game, Game)
+        # The title was replaced, not stacked under the game.
+        self.assertEqual(len(director.scene_stack), 1)
         # The scene the game built itself must still be exported as VS2.
         self.assertEqual(game._vs_declared_api, "vs2")
         self.assertEqual(game._vs_api_slug, title._vs_api_slug)
@@ -157,6 +167,12 @@ class TutorialGameTests(unittest.TestCase):
             self.step(0)
         self.assertEqual(len(game.booms), 0)
 
+    def finish_game_over_delay(self, scene):
+        """Run the scene's pending timers now instead of waiting for them."""
+        while scene.pending_calls:
+            _when, callback, args, kwargs = scene.pending_calls.pop(0)
+            callback(*args, **kwargs)
+
     def test_an_enemy_reaching_the_ship_ends_the_game(self):
         from games.demos.tutorial_game.code.tutorial_game import Game, GameOver
 
@@ -169,10 +185,28 @@ class TutorialGameTests(unittest.TestCase):
         self.assertEqual(over.score, 30)
         self.assertEqual(over._vs_declared_api, "vs2")
 
+        self.finish_game_over_delay(over)
         self.press(director.BUTTON_A)
         again = director.scene_stack[-1]
         self.assertIsInstance(again, Game)
         self.assertEqual(again.score, 0)
+
+    def test_game_over_ignores_fire_taps_until_the_score_has_been_seen(self):
+        from games.demos.tutorial_game.code.tutorial_game import GameOver
+
+        game = self.start_game()
+        game.enemies.spawn(x=game.ship.x, y=game.ship.y + 2)
+        self.step(0)                           # the ship is hit
+        over = director.scene_stack[-1]
+        self.assertIsInstance(over, GameOver)
+
+        self.press(director.BUTTON_A)          # a player still tapping fire
+        self.press(director.BUTTON_A)
+        self.assertIs(director.scene_stack[-1], over)
+
+        self.finish_game_over_delay(over)      # the restart delay has passed
+        self.press(director.BUTTON_A)
+        self.assertIsNot(director.scene_stack[-1], over)
 
     def test_enemies_that_miss_the_ship_fly_past(self):
         game = self.start_game()
@@ -182,7 +216,8 @@ class TutorialGameTests(unittest.TestCase):
         self.assertEqual(len(game.enemies), 0)
 
     def test_the_spawn_timer_rearms_itself(self):
-        game = self.start_game()
+        game = self.start_game(keep_timer=True)
+        self.assertEqual(len(game.pending_calls), 1)   # build() armed it
         before = len(game.enemies)
         game.pending_calls.clear()
         game.spawn_enemy()
