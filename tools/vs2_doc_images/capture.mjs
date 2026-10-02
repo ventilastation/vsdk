@@ -36,6 +36,7 @@ const ART = {
   "explosion.png": ["alecu/vixeous/images/explosion.png", 6],
   "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
   "terrain.png": ["alecu/mapdemo/images/terrain.png", 6],
+  "rainbow437.png": ["../system/shared/other/images/rainbow437.png", 256],
 };
 // Local art (under tools/vs2_doc_images/art) is written as "local:<file>".
 const FULLSCREEN_ART = { "clouds.png": ["local:clouds.png", 54] };
@@ -103,6 +104,11 @@ const EXAMPLES = {
       ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 150 },
       { shot: "game-play.png" },
     ],
+  },
+  gameover: {
+    art: ["numerals.png", "rainbow437.png"],
+    alsoLoad: ["demos/tutorial_game/code/tutorial_game.py"],
+    steps: [{ wait: 800 }, { shot: "game-over.png" }],
   },
   frames: {
     art: ["ship.png"],
@@ -191,6 +197,10 @@ function exampleFiles(name, ex) {
       content: fs.readFileSync(path.join(HERE, "examples", `${name}.py`), "utf8"),
     },
   ];
+  // Repo files the example imports (games/<path>), written to the same place.
+  for (const rel of ex.alsoLoad || []) {
+    files.push({ path: `games/${rel}`, enc: "utf8", content: fs.readFileSync(gamesPath(rel), "utf8") });
+  }
   const strips = [];
   for (const art of ex.art) {
     const [src, frames, glyphs] = ART[art];

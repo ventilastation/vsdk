@@ -174,8 +174,8 @@ def centred_label(layer, text, y):
 class Title(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "TUNNEL SHOOTER", y=20)
-        centred_label(hud, "PRESS A", y=1)
+        centred_label(hud, "TUNNEL SHOOTER", y=1)
+        centred_label(hud, "PRESS A", y=20)
 
     def update(self):
         if joy1.just_pressed(A):
@@ -189,10 +189,10 @@ class GameOver(vs2.Scene):
 
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "GAME OVER", y=30)
+        centred_label(hud, "GAME OVER", y=1)
         score = hud.label("numerals.png", columns=5, x=246, y=20)
         score.set_number(self.score, width=5, pad="0")
-        centred_label(hud, "PRESS A", y=1)
+        centred_label(hud, "PRESS A", y=28)
 
     def update(self):
         if joy1.just_pressed(A):
@@ -214,5 +214,19 @@ starts there:
 
 The title screen. Both lines are labels at the bottom of the disc.
 ```
+
+and the game-over screen, with the score handed over by the scene that ended
+the game:
+
+```{figure} ../images/game-over.png
+:alt: The game-over screen: GAME OVER in coloured letters along the rim, a score of 00130 above it, and PRESS A nearer the centre
+:width: 60%
+:align: center
+
+The game-over screen, here after 13 kills (130 points).
+```
+
+All the text sits at low Y, near the rim, where it is crisp. Text placed near the
+centre gets squeezed, as chapter 7 shows.
 
 Next: [budgets and real hardware](budgets.md).

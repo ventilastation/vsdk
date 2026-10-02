@@ -28,6 +28,7 @@ This table comes from `node capture.mjs --list`.
 | `labels-flips.png` | emulator screenshot, annotated | `examples/flips.py` | `node capture.mjs flips` | tutorial/tilemaps-and-text.md |
 | `game-title.png` | emulator screenshot | `games/demos/tutorial_game (played)` | `node capture.mjs game` | tutorial/scenes-and-input.md |
 | `game-play.png` | emulator screenshot | `games/demos/tutorial_game (played)` | `node capture.mjs game` | tutorial/index.md, tutorial/tilemaps-and-text.md |
+| `game-over.png` | emulator screenshot | `examples/gameover.py` | `node capture.mjs gameover` | tutorial/scenes-and-input.md |
 | `sprites-frames.png` | emulator screenshot, annotated | `examples/frames.py` | `node capture.mjs frames` | tutorial/sprites.md |
 | `pools.png` | emulator screenshot | `examples/pools.py` | `node capture.mjs pools` | tutorial/pools.md |
 | `tilemaps.png` | emulator screenshot | `examples/tilemap.py` | `node capture.mjs tilemap` | tutorial/tilemaps-and-text.md |
@@ -41,6 +42,9 @@ Notes on specific images:
   picture shows enemies at several depths, a shot in flight and a score above
   `00000` (the script fires a few shots, so a hit is likely but not certain).
   `game-title.png` is written by the same run.
+- **`game-over.png`** does not play the game: `examples/gameover.py` opens the
+  game's own `GameOver` scene with a fixed score of 130 (13 kills), so it is the
+  same every time.
 - **Annotated** images have text drawn over the screenshot (`labels` in
   `capture.mjs`). The text is placed in empty parts of the disc and in coordinates
   of an 880 pixel square, so it should still sit in the same place with the WebGL
