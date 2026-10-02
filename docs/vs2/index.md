@@ -62,8 +62,7 @@ A game folder lives at `games/<group>/<name>/` and holds `code/`, `images/`,
 ```
 
 Your `code/<name>.py` defines a {py:class}`~vs2.Scene` subclass and a `main()`
-that returns an instance of it. The launcher finds the game by the folder
-existing — there is no registry to edit.
+that returns an instance of it. The launcher finds the game by its folder.
 
 Three rules explain most of the API:
 

@@ -29,15 +29,8 @@ This is what opts your game into VS2:
 }
 ```
 
-`api` and `api_revision` are required together — the loader refuses a `vs2` game
-without `"api_revision": 2`, so a game written against an older draft of the API
-fails at load with a clear message instead of misbehaving. `title` and `order`
-control the menu entry.
-
-:::{note}
-A game uses VS2 **or** the older `ventilastation.sprites` API, never both.
-Importing both from one game is rejected on purpose.
-:::
+`api` and `api_revision` are both required. `title` and `order` control the
+menu entry.
 
 ## Images
 
@@ -87,7 +80,7 @@ def main():
 ```
 
 That is a complete, playable game. Run `./vs-emu.sh` (or `vs-emu.bat`) and it is
-on the menu — there is no registry to edit, the launcher discovers game folders.
+on the menu.
 
 ## What those two methods mean
 
@@ -106,11 +99,11 @@ That is the point. Running out of sprites becomes an error the first time you
 enter the scene — reproducible, at a known line — instead of a crash ten minutes
 into play when a boss spawns one too many.
 
-## What you did not have to write
+## Leaving the game
 
-No exit handling: the back button (`Y` or `BACK`) and a 30-second idle timeout
-both return to the launcher on their own. No `super()` call. No ROM name — the
-asset pack defaults to your game. No director import.
+Players leave with the back button (`Y` or `BACK`), or after 30 seconds without
+input. Both return to the launcher on their own, so your game needs no exit
+code.
 
 Next: [the circular display](display.md), and why `x` behaves differently from
 `y`.

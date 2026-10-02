@@ -93,8 +93,7 @@ Nothing warns you about this; you have to look at it.
 ## Packaging
 
 `tools/package_game.py` builds a `.vs2` package — a zip of your `meta.json`,
-code, ROM, icon and sounds — and stamps `api_revision` into the metadata so the
-loader can reject a package built against an older API.
+code, ROM, icon and sounds — to share a game as a single file.
 
 ## Where to look next
 

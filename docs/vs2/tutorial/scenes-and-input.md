@@ -47,7 +47,7 @@ self.switch(GameOver(score))  # replace this scene outright
 ```
 
 All three return `None`, so `return self.pop()` reads as "handle this input,
-then stop". No VS2 scene raises `StopIteration`.
+then stop".
 
 Transitions are **queued and committed at the end of the tick**. Once one is
 queued no further game callbacks run that tick, so a timer coming due on the
@@ -85,9 +85,9 @@ touch drawables, and the drawables are gone.
 Scheduling is meant to be occasional: menus, respawn delays, wave timers. Do not
 call it every tick.
 
-## Leaving without writing any code
+## Back button and idle timeout
 
-Two behaviours every game used to hand-roll are now defaults:
+Every scene handles both by default. Set these class attributes to change that:
 
 ```python
 class MyGame(vs2.Scene):

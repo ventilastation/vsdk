@@ -11,9 +11,7 @@ def build(self):
     self.booms   = world.sprite_pool("boom.png", count=4, on_empty=vs2.RECYCLE)
 ```
 
-That is 28 of your 100 sprites, spent visibly in three numbers a reviewer can
-add up. The old way — a hand-rolled pool class, or a flat list per entity type —
-hid the total until the renderer ran out.
+That is 28 of your 100 sprites, spent in three numbers you can add up.
 
 Every sprite starts hidden. Nothing after this allocates.
 
