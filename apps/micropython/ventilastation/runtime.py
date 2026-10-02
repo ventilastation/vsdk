@@ -4,14 +4,30 @@ except ImportError:
     import json
 
 
+try:
+    import uos as _os
+except ImportError:
+    import os as _os
+
+
 class FileStorage:
     def read_json(self, filename):
         with open(filename, "r") as handle:
             return json.load(handle)
 
     def write_json(self, filename, data):
+        # Serialise first, so data that cannot be written as JSON raises
+        # before the file is opened and truncated.
+        text = json.dumps(data)
         with open(filename, "w") as handle:
-            json.dump(data, handle)
+            handle.write(text)
+
+    def makedirs(self, path):
+        """Make a directory if it is not there yet."""
+        try:
+            _os.mkdir(path)
+        except OSError:
+            pass
 
 
 class MemoryStorage:
@@ -25,6 +41,9 @@ class MemoryStorage:
 
     def write_json(self, filename, data):
         self.files[filename] = data
+
+    def makedirs(self, path):
+        pass
 
 
 class RuntimeContext:

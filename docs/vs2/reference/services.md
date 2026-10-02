@@ -116,6 +116,24 @@ vs2.audio.sound("alecu.vyruss/shoot1")    # another game's
 Music follows the app, not the scene: it keeps playing across `push`, `pop`
 and `switch`, and stops when the game returns to the launcher.
 
+## vs2.saves
+
+```{eval-rst}
+.. automethod:: vs2.saves.load
+.. automethod:: vs2.saves.save
+```
+
+Saved data is one small file per game, so a high score or a setting survives a
+restart. It lives on the console's flash, and in a `saves` folder under
+`apps/micropython/` in the desktop emulator (the web emulator keeps it in memory,
+so it is lost on reload). Load in `build()` and save only when a value changed.
+
+```python
+best = vs2.saves.load("best", 0)          # 0 if nothing is saved yet
+if score > best:
+    vs2.saves.save("best", score)
+```
+
 ## vs2.base
 
 Console base hardware — the RGB strip, the servo and the lit buttons. Values are

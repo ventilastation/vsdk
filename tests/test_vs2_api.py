@@ -723,6 +723,64 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertTrue(calls)
         self.assertNotIn(False, calls)
 
+    def test_saved_values_come_back_and_are_per_game(self):
+        saves = self.vs2.saves
+        self.assertEqual(saves.load("best"), None)
+        self.assertEqual(saves.load("best", 0), 0)
+        self.assertTrue(saves.save("best", 120))
+        self.assertTrue(saves.save("name", "ABC"))
+        self.assertEqual(saves.load("best", 0), 120)
+        self.assertEqual(saves.load("name"), "ABC")
+
+        api_guard.begin_app("games.other_game", "vs2")
+        self.assertEqual(saves.load("best", 0), 0)       # another game's file
+        api_guard.begin_app("games.test_vs2", "vs2")
+        self.assertEqual(saves.load("best", 0), 120)
+
+    def test_saving_an_unchanged_value_writes_nothing(self):
+        saves = self.vs2.saves
+        storage = self.runtime_director.platform.storage
+        writes = []
+        original = storage.write_json
+        storage.write_json = lambda name, data: (writes.append(name), original(name, data))
+        self.assertTrue(saves.save("best", 50))
+        self.assertFalse(saves.save("best", 50))
+        self.assertEqual(len(writes), 1)
+        self.assertTrue(saves.save("best", 60))
+        self.assertEqual(len(writes), 2)
+
+    def test_saves_reject_what_json_cannot_hold(self):
+        saves = self.vs2.saves
+        with self.assertRaises(TypeError):
+            saves.save("best", object())
+        with self.assertRaises(TypeError):
+            saves.save(5, 1)
+        self.assertIsNone(saves.load("best"))
+
+    def test_saves_need_a_running_game(self):
+        api_guard.reset()
+        with self.assertRaises(RuntimeError):
+            self.vs2.saves.load("best")
+
+    def test_saved_values_survive_in_a_real_file(self):
+        import tempfile
+        from ventilastation.runtime import FileStorage
+
+        saves = self.vs2.saves
+        self.runtime_director.platform.storage = FileStorage()
+        here = os.getcwd()
+        with tempfile.TemporaryDirectory() as folder:
+            os.chdir(folder)
+            try:
+                self.assertTrue(saves.save("best", 77))
+                self.assertTrue(os.path.exists(os.path.join("saves", "games.test_vs2.json")))
+                # A value that cannot be written as JSON must not wreck the file.
+                with self.assertRaises(TypeError):
+                    saves.save("bad", object())
+                self.assertEqual(saves.load("best"), 77)
+            finally:
+                os.chdir(here)
+
     def test_idle_default_pops_and_back_button_can_be_claimed(self):
         vs2 = self.vs2
         idle_calls = []

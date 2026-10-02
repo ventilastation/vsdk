@@ -44,3 +44,4 @@ Thumbs.db
 .*.swp
 dist/*
 apps/micropython/sencom.hi
+apps/micropython/saves/
