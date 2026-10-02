@@ -115,8 +115,17 @@ def main():
 ```
 
 That is a complete program, though not much of a game yet: it puts a ship on the
-disc and lets you steer it. Run `./vs-emu.sh` (or `vs-emu.bat`) and it is on the
-menu. The ship sits at the top of the disc, because `x = 128` is the top:
+disc and lets you steer it. Run it by naming the game, which skips the menu:
+
+```sh
+./vs-emu.sh --game myname.mygame        # vs-emu.bat --game myname.mygame on Windows
+```
+
+The name is the group and the folder, joined with a dot. When the game exits (the
+back button, or a crash) the emulator returns to the menu as usual, and the game is
+also there under **Más aplicaciones**, then **myname**, then **My Game**; run
+`./vs-emu.sh` with no arguments to start from the menu. The ship sits at the top
+of the disc, because `x = 128` is the top:
 
 ```{figure} ../images/first-game.png
 :alt: The emulator showing the ship at the top of the disc

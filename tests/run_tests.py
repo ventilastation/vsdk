@@ -54,6 +54,7 @@ CPYTHON_TESTS = [
     "tests/test_emulator_vs2_render.py",
     "tests/test_mapdemo_vs2.py",
     "tests/test_tutorial_game.py",
+    "tests/test_launch_flag.py",
     "tests/test_input_demo.py",
     "tests/test_vixeous_vs2.py",
     "tests/test_vyruss_vs2.py",

@@ -116,6 +116,44 @@ def import_app_module(slug):
     raise ImportError("Unknown app slug: %s" % slug)
 
 
+def requested_game(argv=None):
+    """The slug named by a ``--game=<slug>`` (or ``--game <slug>``) argument,
+    or None. The desktop emulator passes it through so a game under
+    development can be started without walking the menu."""
+    argv = argv if argv is not None else getattr(sys, "argv", ())
+    args = list(argv[1:]) if argv else []
+    for index, arg in enumerate(args):
+        if arg.startswith("--game="):
+            return arg.split("=", 1)[1] or None
+        if arg == "--game" and index + 1 < len(args):
+            return args[index + 1]
+    return None
+
+
+def launch_requested_game(argv=None):
+    """Launch the game named on the command line, if any, over the launcher.
+
+    Leaving the game returns to the launcher, as after a normal launch. A slug
+    that cannot be launched is reported and ignored, so the launcher still
+    starts and the mistake is visible in the terminal.
+    """
+    slug = requested_game(argv)
+    if not slug:
+        return None
+    try:
+        return load_app(slug)
+    except Exception as error:
+        print("launch: could not start %r: %s" % (slug, error))
+        try:
+            import io
+            buf = io.StringIO()
+            sys.print_exception(error, buf)
+            print(buf.getvalue())
+        except Exception:
+            pass
+        return None
+
+
 def load_app(slug):
     if is_native_app(slug):
         return launch_native_scene(slug)
