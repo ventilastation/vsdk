@@ -46,7 +46,7 @@ Console
 
 CP437
   The default {term}`glyph` mapping, where a character's frame is `ord(ch)`.
-  Full font strips such as `rainbow437.png` use it.
+  Full font strips such as `steel8x8.png` use it.
 
 Depth
   What Y means on a {py:data}`vs2.TUNNEL` layer: `0` at the {term}`rim`, `255`

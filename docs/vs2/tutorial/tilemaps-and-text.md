@@ -79,7 +79,7 @@ def build(self):
     hud = self.layer("hud", projection=vs2.HUD)
     self.score  = hud.label("numerals.png", columns=5, x=246, y=1)   # bottom of the disc: upright
     self.status = hud.label("tinyfont.png", columns=21, rows=3, x=-42, y=0)
-    self.title  = hud.label("rainbow437.png", columns=18, text="READY")
+    self.title  = hud.label("steel8x8.png", columns=18, text="READY")
 ```
 
 One-line labels get a `text` property; multi-line ones use
@@ -151,7 +151,7 @@ Two labels: one at the top with `flip_x` and `flip_y`, one at the bottom with no
 ### Glyphs
 
 A label shows a character by picking the {term}`glyph` frame for it. By default
-that is {term}`CP437`, where `frame = ord(ch)` — what `rainbow437.png` and the
+that is {term}`CP437`, where `frame = ord(ch)` — what `steel8x8.png` and the
 other full font strips use. A strip with only a few characters, like a row of
 digits, declares its own mapping in `__images__.yaml`, next to the strip:
 

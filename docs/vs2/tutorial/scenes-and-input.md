@@ -158,15 +158,15 @@ def update(self):
 ```
 
 **A title and a game-over screen.** Both are small scenes. The text is a
-{term}`label` using `rainbow437.png`, a full CP437 font, so it can write any
+{term}`label` using `steel8x8.png`, a full CP437 font, so it can write any
 letter. The helper centres a label on the bottom of the disc, where text reads
 upright, so it needs no flips:
 
 ```python
 def centred_label(layer, text, y):
     """A label for ``text``, centred on the bottom of the disc, where it reads
-    upright. rainbow437.png is a full CP437 font, 9 columns per character."""
-    label = layer.label("rainbow437.png", columns=len(text), x=0, y=y, text=text)
+    upright. steel8x8.png is a full CP437 font, 8 columns per character."""
+    label = layer.label("steel8x8.png", columns=len(text), x=0, y=y, text=text)
     label.x = -(len(text) * label.image.width) // 2
     return label
 
