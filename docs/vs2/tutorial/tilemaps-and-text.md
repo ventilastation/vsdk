@@ -178,11 +178,40 @@ before any tilemap for the world.
 
 ## In the game
 
-Give Tunnel Shooter a trench to fly down, and a score. The setting is a derelict
-space station: you fly along a maintenance trench between plates of dark hull,
-and the colour is in the lit structures on the walls. `trench.png` is the tileset
-you saw above, and the wall repeats every six rows, which is what lets it scroll
-forever.
+Give Tunnel Shooter a trench to fly down, and a score.
+
+### Choosing a look
+
+A tunnel shooter is a good excuse for a dark game, so pick a setting where dark
+is natural. Tunnel Shooter takes place in a **derelict space station**: you fly
+down a maintenance trench between plates of dead, near-black hull. The station
+has no power to spare, so the only colour is in the few things that are still
+lit:
+
+- cyan conduit running round the trench in a bright ring;
+- amber windows and orange vents, in warm contrast to the cold blue-grey plating;
+- red, green and blue status lights and yellow hazard stripes, as small accents;
+- a ring of steel pipe at the rim, a little lighter than the hull, so the edge
+  of the wall is easy to find.
+
+This is a setting rather than only a palette because it gives a reason for every
+tile you draw, and it answers the question "what goes here?" the same way each
+time: if nothing is lit, leave it dark. That is also what suits the real
+Ventilastation. The LEDs make their own light, so a black or near-black
+background costs nothing and makes the lit structures stand out, where a bright
+backdrop would wash them out and tire the eye. The plating in `trench.png` is
+only a few steps above black, and the structures on it are bright.
+
+:::{note}
+The emulator shows you what the colours *are*, not how the LEDs will render them.
+The very dark tones in particular, such as the plating and its seams, may crush
+to black or look different on the disc. Treat them as a starting point and
+**check them on the real hardware** (see [Budgets and real hardware](budgets.md)),
+raising the darkest tones if the detail is lost.
+:::
+
+`trench.png` is the tileset you saw above, and the wall repeats every six rows,
+which is what lets it scroll forever.
 
 A second layer holds the score, so it is drawn over everything in the world. The
 wall goes into the world layer *before* the ship, so the ship is painted over it:
