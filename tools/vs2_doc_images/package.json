@@ -1,0 +1,9 @@
+{
+  "name": "vsdk-vs2-doc-images",
+  "private": true,
+  "type": "module",
+  "description": "Regenerates the images used by docs/vs2 (emulator screenshots and diagrams).",
+  "dependencies": {
+    "playwright-core": "^1.50.0"
+  }
+}

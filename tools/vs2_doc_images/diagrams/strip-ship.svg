@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" width="760" height="300" font-family="system-ui,sans-serif">
+  <rect width="760" height="300" fill="#0b0f14"/>
+  <text x="40" y="44" fill="#e6edf3" font-size="24" font-weight="600">ship.png: one strip, four frames</text>
+  <!-- 72x13 px image scaled x8 -->
+  <rect x="87" y="77" width="586" height="106" fill="#111a24"/>
+  <image x="90" y="80" width="576" height="104" href="{{art:alecu/vixeous/images/ship.png}}" style="image-rendering:pixelated"/>
+  <g stroke="#f5b800" stroke-width="2" stroke-dasharray="6 5">
+    <line x1="90" y1="70" x2="90" y2="196"/><line x1="234" y1="70" x2="234" y2="196"/>
+    <line x1="378" y1="70" x2="378" y2="196"/><line x1="522" y1="70" x2="522" y2="196"/>
+    <line x1="666" y1="70" x2="666" y2="196"/>
+  </g>
+  <g fill="#e6edf3" font-size="22" font-weight="600" text-anchor="middle">
+    <text x="162" y="226">frame 0</text><text x="306" y="226">frame 1</text>
+    <text x="450" y="226">frame 2</text><text x="594" y="226">frame 3</text>
+  </g>
+  <g fill="#8aa0b5" font-size="17" text-anchor="middle">
+    <text x="162" y="252">18 px wide</text>
+    <text x="378" y="282">72 px wide in all: four frames side by side, each 18 x 13 px</text>
+  </g>
+</svg>

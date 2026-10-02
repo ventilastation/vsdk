@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" font-family="system-ui,sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8aa0b5"/>
+    </marker>
+  </defs>
+  <rect width="900" height="400" fill="#0b0f14"/>
+  <g font-weight="700" text-anchor="middle">
+    <rect x="20" y="110" width="200" height="140" rx="14" fill="#16314f" stroke="#4f8cff" stroke-width="2"/>
+    <text x="120" y="160" font-size="26" fill="#cfe0ff">building</text>
+    <rect x="350" y="110" width="200" height="140" rx="14" fill="#14382a" stroke="#3ecf8e" stroke-width="2"/>
+    <text x="450" y="160" font-size="26" fill="#c9f5e0">sealed</text>
+    <rect x="680" y="110" width="200" height="140" rx="14" fill="#3a2a14" stroke="#f5b800" stroke-width="2"/>
+    <text x="780" y="160" font-size="26" fill="#ffe8b0">closed</text>
+  </g>
+  <g fill="#aebccb" font-size="16" text-anchor="middle">
+    <text x="120" y="195">create layers, sprites,</text><text x="120" y="217">pools, tilemaps, labels</text>
+    <text x="450" y="195">move, re-frame,</text><text x="450" y="217">show and hide only</text>
+    <text x="780" y="195">drawables released,</text><text x="780" y="217">timers discarded</text>
+  </g>
+  <g stroke="#8aa0b5" stroke-width="3" fill="none" marker-end="url(#a)">
+    <path d="M 222 180 L 346 180"/>
+    <path d="M 552 180 L 676 180"/>
+    <path d="M 410 108 C 410 50 490 50 490 104"/>
+    <path d="M 780 254 C 780 350 120 350 120 258"/>
+  </g>
+  <g fill="#e6edf3" font-size="18" text-anchor="middle">
+    <text x="284" y="160">build()</text><text x="284" y="208" fill="#8aa0b5" font-size="15">returns</text>
+    <text x="614" y="160">pop / push</text><text x="614" y="208" fill="#8aa0b5" font-size="15">switch / home</text>
+    <text x="450" y="30">update() and timers, once per tick</text>
+    <text x="450" y="380" fill="#aebccb">scene entered again: a fresh build()</text>
+  </g>
+</svg>
