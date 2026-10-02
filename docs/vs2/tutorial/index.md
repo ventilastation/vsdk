@@ -1,15 +1,15 @@
 # Tutorial
 
-Seven short chapters that build one game, **Tunnel Shooter**, from an empty folder
+Seven short chapters that build one game, **Trench Run**, from an empty folder
 to a game running on the console. You fly a ship around the rim of the disc and
-shoot the enemies that come down the tunnel at you.
+dodge the enemies that come down the tunnel at you.
 
 ```{figure} ../images/game-play.png
-:alt: Tunnel Shooter: a ship at the top of the disc, a shot flying away from it, enemies approaching, and a score at the bottom
+:alt: Trench Run: a ship at the top of the disc, enemies approaching down the tunnel, and a score at the bottom
 :width: 60%
 :align: center
 
-Tunnel Shooter, the game you will build.
+Trench Run, the game you will build.
 ```
 
 Each chapter teaches one part of the API and ends with an **In the game**
@@ -21,9 +21,9 @@ time:
 | [1. Your first game](first-game.md) | the folder, `build()` and `update()` | a ship you can steer |
 | [2. The circular display](display.md) | X, Y, projections, draw order | a ship that flies all the way round |
 | [3. Sprites](sprites.md) | frames, collisions | an animated ship |
-| [4. Sprite pools](pools.md) | `spawn()` and `despawn()` | shots, enemies and explosions |
+| [4. Sprite pools](pools.md) | `spawn()` and `despawn()` | enemies coming down the tunnel |
 | [5. Tilemaps and text](tilemaps-and-text.md) | tilemaps, labels, flips | a scrolling trench wall and a score |
-| [6. Scenes, input and sound](scenes-and-input.md) | scenes, timers, audio | a title screen, game over, sound |
+| [6. Scenes, input and sound](scenes-and-input.md) | scenes, timers, audio | a game-over screen, a title screen, sound |
 | [7. Budgets and real hardware](budgets.md) | limits, testing on the disc | a finished game |
 
 The finished game is in `games/demos/tutorial_game/`, and it shows up in the

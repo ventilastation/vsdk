@@ -23,7 +23,7 @@ Buttons are `LEFT` `RIGHT` `UP` `DOWN`, `A` `B` `X` `Y`, `START` and `BACK`.
 ## Sound
 
 ```python
-vs2.audio.sound("shoot")
+vs2.audio.sound("boom")
 vs2.audio.music("theme", loop=True)
 vs2.audio.stop_music()
 ```
@@ -108,22 +108,8 @@ def on_idle(self):
 
 ## In the game
 
-Tunnel Shooter needs three finishing touches: sound, enemies that arrive on a
-timer, and screens before and after the game.
-
-**Sound.** Copy `shoot.mp3` and `boom.mp3` from
-`games/demos/tutorial_game/sounds/` into your game's `sounds/` folder, then play
-them by name:
-
-```python
-def fire(self):
-    # Centre the 6-column shot on the 18-column ship.
-    shot = self.shots.spawn(x=self.ship.x + 6, y=self.ship.y + 4)
-    if shot is not None:
-        vs2.audio.sound("shoot")      # only when a shot was really fired
-```
-
-and `vs2.audio.sound("boom")` after the score changes in `move_shots()`.
+Trench Run needs three finishing touches: a way to lose, enemies that arrive on
+a timer, and screens before and after the game.
 
 **A timer for the enemies.** Replace the five enemies from chapter 4 with one
 that re-arms itself. Start it at the end of `build()`:
@@ -144,17 +130,19 @@ def spawn_enemy(self):
 
 Timers die with the scene, so when the game ends nothing is left spawning.
 
-**Game over.** `move_enemies()` has been returning `True` when an enemy touches
-the ship. Use it to switch to a new scene, handing the score over through its
-constructor:
+**Game over, with a sound.** Copy `boom.mp3` from
+`games/demos/tutorial_game/sounds/` into your game's `sounds/` folder. When an
+enemy touches the ship, play it and switch to a new scene, handing the score over
+through its constructor. {py:meth}`~vs2.Sprite.first_overlap` accepts a pool, so
+one call checks every live enemy:
 
 ```python
 def update(self):
-    # ... as before, up to the shots ...
-    self.move_shots()
-    if self.move_enemies():
+    # ... as before, up to the enemies ...
+    self.move_enemies()
+    if self.ship.first_overlap(self.enemies):
+        vs2.audio.sound("boom")
         return self.switch(GameOver(self.score))
-    self.animate_booms()
 ```
 
 **A title and a game-over screen.** Both are small scenes. The text is a
@@ -174,15 +162,12 @@ def centred_label(layer, text, y):
 class Title(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "TUNNEL SHOOTER", y=1)
+        centred_label(hud, "TRENCH RUN", y=1)
         centred_label(hud, "PRESS A", y=20)
 
     def update(self):
         if joy1.just_pressed(A):
             self.switch(Game())
-
-
-RESTART_MS = 1000    # game over ignores fire taps this long, so the score is seen
 
 
 class GameOver(vs2.Scene):
@@ -196,16 +181,9 @@ class GameOver(vs2.Scene):
         score = hud.label("numerals.png", columns=5, x=246, y=20)
         score.set_number(self.score, width=5, pad="0")
         centred_label(hud, "PRESS A", y=28)
-        # A player who is still tapping fire when the ship is hit would
-        # restart at once, so ignore input for a moment.
-        self.ready = False
-        self.call_later(RESTART_MS, self.get_ready)
-
-    def get_ready(self):
-        self.ready = True
 
     def update(self):
-        if self.ready and joy1.just_pressed(A):
+        if joy1.just_pressed(A):
             self.switch(Game())
 
 
@@ -214,13 +192,11 @@ def main():
 ```
 
 `__init__` runs once, so `GameOver` keeps the score it was given, while
-`build()` creates its drawables. A is also the fire button, so a player who is
-still tapping it when the ship is hit would restart before seeing the score;
-`GameOver` ignores input for the first second, using a timer. `main()` now returns the title, so the game
+`build()` creates its drawables. `main()` now returns the title, so the game
 starts there:
 
 ```{figure} ../images/game-title.png
-:alt: The title screen: TUNNEL SHOOTER in coloured letters, with PRESS A below it, on the bottom of the disc
+:alt: The title screen: TRENCH RUN in coloured letters, with PRESS A below it, on the bottom of the disc
 :width: 60%
 :align: center
 
@@ -235,7 +211,7 @@ the game:
 :width: 60%
 :align: center
 
-The game-over screen, here after 13 kills (130 points).
+The game-over screen, here after 13 enemies dodged (130 points).
 ```
 
 All the text sits at low Y, near the rim, where it is crisp. Text placed near the

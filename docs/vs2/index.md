@@ -4,7 +4,8 @@ VS2 is the API for writing Ventilastation games in MicroPython. A game
 creates what it wants to draw once, in `build()`, and then moves those things
 around in `update()`.
 
-Here is a complete game:
+Here is a complete, very small program: a ship you can steer, and a score that
+goes up when you press A.
 
 ```python
 import vs2
@@ -17,8 +18,8 @@ class MyGame(vs2.Scene):
         self.hud = self.layer("hud", projection=vs2.HUD)
 
         self.ship = self.world.sprite("ship.png", x=128, y=0)
-        self.bullets = self.world.sprite_pool("shots.png", count=8)
         self.score = self.hud.label("numerals.png", columns=5, x=246, y=1)
+        self.points = 0
 
     def update(self):
         if joy1.held(LEFT):
@@ -27,7 +28,8 @@ class MyGame(vs2.Scene):
             self.ship.x += 0.5
 
         if joy1.just_pressed(A):
-            self.bullets.spawn(x=self.ship.x, y=self.ship.y + 4)
+            self.points += 10
+            self.score.set_number(self.points, width=5, pad="0")
 
 
 def main():

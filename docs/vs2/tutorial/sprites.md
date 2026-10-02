@@ -40,8 +40,8 @@ further round the curve of the disc.
 hidden sprite, which is what lets you prepare something before showing it:
 
 ```python
-shot.frame = BULLET_FRAME    # still hidden
-shot.show()                  # now visible, same frame
+enemy.frame = ANGRY_FRAME    # still hidden
+enemy.show()                 # now visible, same frame
 ```
 
 An out-of-range frame raises at the assignment rather than rendering garbage:
@@ -75,10 +75,10 @@ self.ship.image = "ship_damaged.png"
 Two allocation-free axis-aligned tests, with the circular X handled for you:
 
 ```python
-if shot.overlaps(enemy):
+if self.ship.overlaps(enemy):
     ...
 
-target = shot.first_overlap(self.enemies)   # a Sprite, or None
+target = self.ship.first_overlap(self.enemies)   # a Sprite, or None
 if target:
     ...
 ```

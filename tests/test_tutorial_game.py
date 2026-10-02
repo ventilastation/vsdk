@@ -1,4 +1,4 @@
-"""The shooter the VS2 tutorial builds (games/demos/tutorial_game)."""
+"""Trench Run, the game the VS2 tutorial builds (games/demos/tutorial_game)."""
 
 import os
 import random
@@ -38,9 +38,7 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 # name: (frame width, height, frames, glyphs), as in the game's __images__.yaml
 STRIPS = {
     "ship.png": (18, 13, 4, None),
-    "shots.png": (6, 10, 3, None),
     "enemy.png": (14, 11, 6, None),
-    "explosion.png": (20, 20, 6, None),
     "trench.png": (16, 16, 8, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
     "steel8x8.png": (8, 8, 256, None),
@@ -133,45 +131,14 @@ class TutorialGameTests(unittest.TestCase):
             for col in range(16):
                 self.assertEqual(game.ground[col, row], game.ground[col, row + 6])
 
-    def test_a_shot_hits_an_enemy_and_scores(self):
+    def test_an_enemy_that_flies_past_scores(self):
         game = self.start_game()
-        self.press(director.BUTTON_A)
-        self.assertEqual(len(game.shots), 1)
-        shot = next(iter(game.shots))
-        self.assertGreater(shot.y, game.ship.y)
-
-        enemy = game.enemies.spawn(x=shot.x, y=shot.y + 6)
-        self.assertEqual(len(game.enemies), 1)
-        for _ in range(5):
-            self.step(0)
-            if game.score:
-                break
-        self.assertEqual(game.score, 10)
-        self.assertEqual(len(game.enemies), 0)
-        self.assertEqual(len(game.shots), 0)
-        self.assertEqual(len(game.booms), 1)
-        self.assertEqual(game.score_label.text, "00010")
-
-    def test_a_shot_that_misses_is_retired(self):
-        game = self.start_game()
-        self.press(director.BUTTON_A)
-        for _ in range(80):
-            self.step(0)
-        self.assertEqual(len(game.shots), 0)
-        self.assertEqual(game.score, 0)
-
-    def test_explosions_play_out_and_are_released(self):
-        game = self.start_game()
-        game.booms.spawn(x=10, y=50)
+        game.enemies.spawn(x=(game.ship.x + 128) % 256, y=1)
         for _ in range(60):
             self.step(0)
-        self.assertEqual(len(game.booms), 0)
-
-    def finish_game_over_delay(self, scene):
-        """Run the scene's pending timers now instead of waiting for them."""
-        while scene.pending_calls:
-            _when, callback, args, kwargs = scene.pending_calls.pop(0)
-            callback(*args, **kwargs)
+        self.assertEqual(len(game.enemies), 0)
+        self.assertEqual(game.score, 10)
+        self.assertEqual(game.score_label.text, "00010")
 
     def test_an_enemy_reaching_the_ship_ends_the_game(self):
         from games.demos.tutorial_game.code.tutorial_game import Game, GameOver
@@ -185,35 +152,20 @@ class TutorialGameTests(unittest.TestCase):
         self.assertEqual(over.score, 30)
         self.assertEqual(over._vs_declared_api, "vs2")
 
-        self.finish_game_over_delay(over)
         self.press(director.BUTTON_A)
         again = director.scene_stack[-1]
         self.assertIsInstance(again, Game)
         self.assertEqual(again.score, 0)
 
-    def test_game_over_ignores_fire_taps_until_the_score_has_been_seen(self):
-        from games.demos.tutorial_game.code.tutorial_game import GameOver
-
+    def test_dodging_keeps_the_game_going(self):
         game = self.start_game()
-        game.enemies.spawn(x=game.ship.x, y=game.ship.y + 2)
-        self.step(0)                           # the ship is hit
-        over = director.scene_stack[-1]
-        self.assertIsInstance(over, GameOver)
-
-        self.press(director.BUTTON_A)          # a player still tapping fire
-        self.press(director.BUTTON_A)
-        self.assertIs(director.scene_stack[-1], over)
-
-        self.finish_game_over_delay(over)      # the restart delay has passed
-        self.press(director.BUTTON_A)
-        self.assertIsNot(director.scene_stack[-1], over)
-
-    def test_enemies_that_miss_the_ship_fly_past(self):
-        game = self.start_game()
-        game.enemies.spawn(x=(game.ship.x + 128) % 256, y=1)
-        for _ in range(80):
-            self.step(0)
+        game.enemies.spawn(x=game.ship.x, y=40)
+        # Steer away from the drone's angle while it comes down the tunnel.
+        for _ in range(120):
+            self.step(director.JOY_LEFT)
+        self.assertIs(director.scene_stack[-1], game)
         self.assertEqual(len(game.enemies), 0)
+        self.assertEqual(game.score, 10)
 
     def test_the_spawn_timer_rearms_itself(self):
         game = self.start_game(keep_timer=True)

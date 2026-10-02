@@ -41,13 +41,13 @@ Notes on specific images:
   tutorial game's art, because a walking character's frames differ visibly. The
   sprites are spaced 24 columns apart (each is 20 wide) so none overlap; retake it
   and check that after changing the spacing or the art.
-- **`game-play.png`** is a real game being played with scripted key presses, and
-  the enemies appear at random places. Run `node capture.mjs game` again until the
-  picture shows enemies at several depths, a shot in flight and a score above
-  `00000` (the script fires a few shots, so a hit is likely but not certain).
-  `game-title.png` is written by the same run.
+- **`game-play.png`** is the real game after pressing A on the title, and the
+  enemies appear at random places. Run `node capture.mjs game` again until the
+  picture shows several enemies at different depths and the ship still alive (the
+  script does not dodge, so an enemy can hit the ship first and the shot then shows
+  the game-over screen). `game-title.png` is written by the same run.
 - **`game-over.png`** does not play the game: `examples/gameover.py` opens the
-  game's own `GameOver` scene with a fixed score of 130 (13 kills), so it is the
+  game's own `GameOver` scene with a fixed score of 130 (13 enemies dodged), so it is the
   same every time.
 - **Annotated** images have text drawn over the screenshot (`labels` in
   `capture.mjs`). The text is placed in empty parts of the disc and in coordinates

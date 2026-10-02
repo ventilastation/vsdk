@@ -42,11 +42,7 @@ palettegroups:
   main:
     - strip: ship.png
       frames: 4
-    - strip: shots.png
-      frames: 3
     - strip: enemy.png
-      frames: 6
-    - strip: explosion.png
       frames: 6
     - strip: trench.png
       frames: 8
@@ -78,11 +74,10 @@ A {term}`palette group` is a set of images that share 256 colours; put images
 that look alike in one group. The text font is in a group of its own, because its
 colours have little in common with the game art.
 
-To follow along, copy the art Tunnel Shooter uses into your `images/` folder
-from `games/demos/tutorial_game/images/`: `ship.png`, `shots.png`, `enemy.png`,
-`explosion.png`, `trench.png`, `numerals.png` and `steel8x8.png`. You only
-need `ship.png` for this chapter; the others appear later, and the yaml above
-already lists them.
+To follow along, copy the art Trench Run uses into your `images/` folder
+from `games/demos/tutorial_game/images/`: `ship.png`, `enemy.png`, `trench.png`,
+`numerals.png` and `steel8x8.png`. You only need `ship.png` for this chapter; the
+others appear later, and the yaml above already lists them.
 
 The emulator recompiles changed PNGs into a ROM every time it starts, so you
 just edit and rerun.
@@ -113,8 +108,9 @@ def main():
     return Game()
 ```
 
-That is a complete, playable game. Run `./vs-emu.sh` (or `vs-emu.bat`) and it is
-on the menu. The ship sits at the top of the disc, because `x = 128` is the top:
+That is a complete program, though not much of a game yet: it puts a ship on the
+disc and lets you steer it. Run `./vs-emu.sh` (or `vs-emu.bat`) and it is on the
+menu. The ship sits at the top of the disc, because `x = 128` is the top:
 
 ```{figure} ../images/first-game.png
 :alt: The emulator showing the ship at the top of the disc
@@ -166,5 +162,6 @@ Players leave with the back button (`Y` or `BACK`), or after 30 seconds without
 input. Both return to the launcher on their own, so your game needs no exit
 code.
 
-This ship is where Tunnel Shooter starts. Next: [the circular display](display.md),
+This ship is where Trench Run starts. Over the next chapters it gets a tunnel to
+fly down, enemies to dodge, a score and a game-over screen. Next: [the circular display](display.md),
 and why `x` behaves differently from `y`.

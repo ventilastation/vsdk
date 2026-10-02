@@ -183,13 +183,14 @@ before any tilemap for the world.
 
 ## In the game
 
-Give Tunnel Shooter a trench to fly down, and a score.
+Give Trench Run a trench to fly down, and a score.
 
 ### Choosing a look
 
-A tunnel shooter is a good excuse for a dark game, so pick a setting where dark
-is natural. Tunnel Shooter takes place in a **derelict space station**: you fly
-down a maintenance trench between plates of dead, near-black hull. The station
+A trench run is a good excuse for a dark game, so pick a setting where dark
+is natural. Trench Run takes place in a **derelict space station**: you fly
+down a maintenance trench between plates of dead, near-black hull, dodging the
+station's drones. The station
 has no power to spare, so the only colour is in the few things that are still
 lit:
 
@@ -287,15 +288,16 @@ Scroll the wall toward the ship in `update()`, right after the ship's animation:
     self.ground.view_y = (self.ticks // 2) % pattern_height
 ```
 
-Add the points when a shot hits, in `move_shots()`:
+Score points for every enemy that gets past the ship, in `move_enemies()`:
 
 ```python
 POINTS = 10
 
-            self.enemies.despawn(enemy)
-            boom = self.booms.spawn(x=enemy.x, y=enemy.y)
-            boom.frame = 0
-            self.shots.despawn(shot)
+def move_enemies(self):
+    for enemy in self.enemies:
+        # ... moving and animating, as before ...
+        if enemy.y < -enemy.image.height:
+            self.enemies.despawn(enemy)      # flew past the ship
             self.score += POINTS
             self.show_score()
 ```
@@ -305,11 +307,11 @@ section above, so `set_number()` knows which frame is which digit. The score sit
 at `x = 246`, the bottom of the disc, so it reads upright without any flips:
 
 ```{figure} ../images/game-play.png
-:alt: Tunnel Shooter: a dark trench wall with a cyan conduit ring, amber windows and orange vents, a ship at the top, a shot, enemies, and a score at the bottom
+:alt: Trench Run: a dark trench wall with a cyan conduit ring, amber windows and orange vents, a ship at the top, enemies coming down the tunnel, and a score at the bottom
 :width: 60%
 :align: center
 
-Tunnel Shooter so far.
+Trench Run so far.
 ```
 
 Next: [scenes, input and sound](scenes-and-input.md).

@@ -1,38 +1,16 @@
-import vs2
-from vs2.controls import *
+"""A pool of enemies spawned in a V, heading for the ship on the rim. The pool is
+not updated here: the screenshot shows the moment after spawning."""
 
-SHOT_SPEED = 3
-SHOT_RANGE = 170
+import vs2
 
 
 class Pools(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.ship = self.world.sprite("ship.png", x=128, y=0)
-        self.shots = self.world.sprite_pool("shots.png", count=8)
         self.enemies = self.world.sprite_pool("enemy.png", count=16)
-        self.booms = self.world.sprite_pool(
-            "explosion.png", count=4, on_empty=vs2.RECYCLE)
         for i in range(7):
-            self.enemies.spawn(x=128 + (i - 3) * 14, y=70)
-
-    def update(self):
-        if joy1.just_pressed(A):
-            shot = self.shots.spawn(x=self.ship.x, y=self.ship.y + 4)
-            if shot is None:
-                return
-
-        for shot in self.shots:
-            shot.y += SHOT_SPEED
-            if shot.y > SHOT_RANGE:
-                self.shots.despawn(shot)
-                continue
-
-            enemy = shot.first_overlap(self.enemies)
-            if enemy:
-                self.enemies.despawn(enemy)
-                self.booms.spawn(x=enemy.x, y=enemy.y)
-                self.shots.despawn(shot)
+            self.enemies.spawn(x=128 + (i - 3) * 20, y=20 + abs(i - 3) * 16)
 
 
 def main():

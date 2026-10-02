@@ -107,14 +107,14 @@ Do it before you share a game, not after.
 
 ## In the game
 
-Add up Tunnel Shooter's budget. The numbers are in `vs2.limits`:
+Add up Trench Run's budget. The numbers are in `vs2.limits`:
 
 | Resource | Used by the game scene | Budget |
 |---|---|---|
 | Layers | 2 (`world`, `hud`) | 8 |
-| Sprites | 1 ship + 8 shots + 16 enemies + 4 explosions = 29 | 100 |
+| Sprites | 1 ship + 16 enemies = 17 | 100 |
 | Tilemaps | 1 trench wall + 1 score label = 2 | 16 |
-| Image strips | 7 (ship, shots, enemy, explosion, trench, numerals, steel8x8) | 100 |
+| Image strips | 5 (ship, enemy, trench, numerals, steel8x8) | 100 |
 
 Everything is created in `build()`, so the whole table is checked the first time
 the scene is entered. Here is the complete game, exactly as it is in

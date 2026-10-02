@@ -31,9 +31,7 @@ const CHROMIUM = process.env.CHROMIUM
 
 const ART = {
   "ship.png": ["alecu/vixeous/images/ship.png", 4],
-  "shots.png": ["alecu/vixeous/images/shots.png", 3],
   "enemy.png": ["alecu/vixeous/images/enemy.png", 6],
-  "explosion.png": ["alecu/vixeous/images/explosion.png", 6],
   "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
   "mario_runs.png": ["pycamp-mar25/vugo/images/mario_runs.png", 6],
   "trench.png": ["demos/tutorial_game/images/trench.png", 8],
@@ -98,11 +96,8 @@ const EXAMPLES = {
     repoGame: "demos/tutorial_game",
     steps: [
       { wait: 800 }, { shot: "game-title.png" },
-      ...key("Space"), { wait: 7000 },
-      { down: "ArrowLeft" }, { wait: 150 }, { up: "ArrowLeft" },
-      ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 250 },
-      { down: "ArrowRight" }, { wait: 300 }, { up: "ArrowRight" },
-      ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 150 },
+      ...key("Space"), { wait: 4500 },
+      { down: "ArrowLeft" }, { wait: 250 }, { up: "ArrowLeft" }, { wait: 150 },
       { shot: "game-play.png" },
     ],
   },
@@ -121,14 +116,8 @@ const EXAMPLES = {
     }],
   },
   pools: {
-    art: ["ship.png", "shots.png", "enemy.png", "explosion.png"],
-    steps: [
-      { wait: 800 },
-      ...key("Space"), { wait: 450 },
-      ...key("Space"), { wait: 450 },
-      ...key("Space"), { wait: 120 },
-      { shot: "pools.png" },
-    ],
+    art: ["ship.png", "enemy.png"],
+    steps: [{ wait: 800 }, { shot: "pools.png" }],
   },
   tilemap: {
     art: ["ship.png", "trench.png"],

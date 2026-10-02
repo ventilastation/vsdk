@@ -78,14 +78,14 @@ less distance there:
 The same sprite on a `TUNNEL` layer at `y = 0, 40, 80, 120, 170, 220` and on a `HUD` layer at `y = 0, 14, 28, 40`.
 ```
 
-On a tunnel, an object at the player's end of the world sits at `y = 0`, and
-things move *away* by counting up:
+On a tunnel, an object at the player's end of the world sits at `y = 0`. Things
+coming toward the player count *down* in Y, and things moving away count up:
 
 ```python
 self.player.y = 0                   # at the rim, where the player lives
-laser.y += 6                        # flying off down the tunnel
-if laser.y > 164:
-    self.lasers.despawn(laser)      # far enough away to retire
+enemy.y -= 1                        # coming up the tunnel toward the player
+if enemy.y < -20:
+    self.enemies.despawn(enemy)     # it has gone past: retire it
 ```
 
 :::{warning}
@@ -167,8 +167,8 @@ self.radar.projection = vs2.HUD     # was TUNNEL
 The ship from chapter 1 already flies all the way round: X wraps when it is
 drawn, so a ship at `x = 256` appears at 0 and one at `x = -1` appears at 255.
 What does not wrap is the number itself. `ship.x` keeps counting up or down, so
-code that reads it back, such as the position you spawn a shot at or a
-comparison with another sprite's `x`, sees values like 300 or -12 for a ship
+code that reads it back, such as a test of where the ship is or a comparison
+with another sprite's `x`, sees values like 300 or -12 for a ship
 that is really at 44 or 244. Wrap it at the width of the display to keep it in
 the range 0 to 255:
 
