@@ -35,7 +35,7 @@ const ART = {
   "enemy.png": ["alecu/vixeous/images/enemy.png", 6],
   "explosion.png": ["alecu/vixeous/images/explosion.png", 6],
   "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
-  "terrain.png": ["alecu/mapdemo/images/terrain.png", 6],
+  "trench.png": ["demos/tutorial_game/images/trench.png", 8],
   "steel8x8.png": ["vsjam-may25/vasura_espacial/images/steel8x8.png", 256],
 };
 // Local art (under tools/vs2_doc_images/art) is written as "local:<file>".
@@ -130,11 +130,11 @@ const EXAMPLES = {
     ],
   },
   tilemap: {
-    art: ["ship.png", "terrain.png"],
+    art: ["ship.png", "trench.png"],
     steps: [{ wait: 800 }, { shot: "tilemaps.png" }],
   },
   labels: {
-    art: ["ship.png", "terrain.png", "numerals.png"],
+    art: ["ship.png", "trench.png", "numerals.png"],
     steps: [{ wait: 800 }, {
       shot: "labels.png",
     }],
@@ -233,6 +233,17 @@ async function openEmulator(browser) {
   const context = await browser.newContext({ viewport: { width: 1300, height: STAGE + 120 } });
   const page = await context.newPage();
   page.on("pageerror", (e) => console.log("pageerror:", e.message.slice(0, 300)));
+  if (process.env.DEBUG) page.on("console", (m) => console.log("console:", m.text().slice(0, 400)));
+  if (process.env.HOOK_APP) {
+    // Debugging: expose the emulator's app object as window.__vsApp.
+    await page.route("**/app.js*", async (route) => {
+      const res = await route.fetch();
+      const body = (await res.text()).replace(
+        "window.VentilastationWebEmulator = this.createIntegrationApi();",
+        "window.VentilastationWebEmulator = this.createIntegrationApi(); window.__vsApp = this;");
+      await route.fulfill({ response: res, body });
+    });
+  }
   await page.goto(`${BASE}/index.html`);
   await page.waitForFunction(() => window.VentilastationWebEmulator, null, { timeout: 60000 });
   // Screenshots are of the stage only: no base-controls preview or fullscreen button.
@@ -253,7 +264,21 @@ async function openEmulator(browser) {
 // The stage element: the dark panel and the black disc inset in it, as the
 // emulator shows them.
 async function stagePng(page) {
-  return page.locator(".stage-display").screenshot();
+  // Pause the emulator while the shot is taken, the way it pauses when its tab
+  // is hidden. A scene that lights the whole disc is slow to composite, and with
+  // the loop running the screenshot can take a minute, long enough for the
+  // game's 30 second idle timeout to send it back to the launcher.
+  const setHidden = (hidden) => page.evaluate((h) => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => h });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+  await setHidden(true);
+  await page.waitForTimeout(300);
+  try {
+    return await page.locator(".stage-display").screenshot({ timeout: 120000 });
+  } finally {
+    await setHidden(false);
+  }
 }
 
 // The label coordinates were written for a disc that filled the stage; the disc
@@ -299,6 +324,9 @@ async function runExample(browser, name, ex) {
     if (step.wait) await page.waitForTimeout(step.wait);
     else if (step.down) await page.keyboard.down(step.down);
     else if (step.up) await page.keyboard.up(step.up);
+    else if (step.log) {
+      console.log(step.log, JSON.stringify(await page.evaluate(step.expr)));
+    }
     else if (step.shot) {
       const out = path.join(OUT, step.shot);
       if (process.env.DEBUG) {
@@ -373,7 +401,10 @@ const browser = await chromium.launch({
   headless: !process.env.HEADFUL,
   args: process.env.GPU
     ? ["--no-sandbox"]
-    : ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--no-sandbox"],
+    // No GPU: rasterize canvases on the CPU. SwiftShader-accelerated 2D canvas
+    // cannot keep up with a frame that lights every LED, and screenshots then
+    // show a stale frame.
+    : ["--disable-gpu", "--disable-accelerated-2d-canvas", "--no-sandbox"],
 });
 try {
   const diagramDir = path.join(HERE, "diagrams");

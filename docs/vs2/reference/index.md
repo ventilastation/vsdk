@@ -38,7 +38,7 @@ class MyGame(vs2.Scene):
         layer  = self.layer("world", projection=vs2.TUNNEL)
         sprite = layer.sprite("ship.png", x=128, y=0)
         pool   = layer.sprite_pool("shots.png", count=8, on_empty=vs2.RECYCLE)
-        ground = layer.tilemap("terrain.png", columns=8, rows=17)
+        ground = layer.tilemap("trench.png", columns=16, rows=16)
         score  = layer.label("numerals.png", columns=5)
 
     def update(self):

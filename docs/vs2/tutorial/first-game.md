@@ -60,7 +60,7 @@ that look alike in one group.
 
 To follow along, copy the art Tunnel Shooter uses into your `images/` folder
 from `games/demos/tutorial_game/images/`: `ship.png`, `shots.png`, `enemy.png`,
-`explosion.png`, `terrain.png`, `numerals.png` and `steel8x8.png`. You only
+`explosion.png`, `trench.png`, `numerals.png` and `steel8x8.png`. You only
 need `ship.png` for this chapter; the others appear later.
 
 The emulator recompiles changed PNGs into a ROM every time it starts, so you

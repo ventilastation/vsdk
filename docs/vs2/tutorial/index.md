@@ -22,7 +22,7 @@ time:
 | [2. The circular display](display.md) | X, Y, projections, draw order | a ship that flies all the way round |
 | [3. Sprites](sprites.md) | frames, collisions | an animated ship |
 | [4. Sprite pools](pools.md) | `spawn()` and `despawn()` | shots, enemies and explosions |
-| [5. Tilemaps and text](tilemaps-and-text.md) | tilemaps, labels, flips | an island of terrain and a score |
+| [5. Tilemaps and text](tilemaps-and-text.md) | tilemaps, labels, flips | a scrolling trench wall and a score |
 | [6. Scenes, input and sound](scenes-and-input.md) | scenes, timers, audio | a title screen, game over, sound |
 | [7. Budgets and real hardware](budgets.md) | limits, testing on the disc | a finished game |
 

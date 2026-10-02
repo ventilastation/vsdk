@@ -19,7 +19,7 @@ This table comes from `node capture.mjs --list`.
 | `layer-tree.png` | diagram | `diagrams/layer-tree.svg` | `node capture.mjs layer-tree` | reference/drawables.md |
 | `scene-lifecycle.png` | diagram | `diagrams/scene-lifecycle.svg` | `node capture.mjs scene-lifecycle` | reference/scene.md, tutorial/first-game.md |
 | `strip-ship.png` | diagram | `diagrams/strip-ship.svg` | `node capture.mjs strip-ship` | tutorial/first-game.md |
-| `strip-terrain.png` | diagram | `diagrams/strip-terrain.svg` | `node capture.mjs strip-terrain` | tutorial/tilemaps-and-text.md |
+| `strip-trench.png` | diagram | `diagrams/strip-trench.svg` | `node capture.mjs strip-trench` | tutorial/tilemaps-and-text.md |
 | `first-game.png` | emulator screenshot | `examples/first.py` | `node capture.mjs first` | tutorial/first-game.md |
 | `first-game-moved.png` | emulator screenshot | `examples/first.py` | `node capture.mjs first` | tutorial/first-game.md |
 | `display-angles.png` | emulator screenshot, annotated | `examples/angles.py` | `node capture.mjs angles` | tutorial/display.md |
@@ -130,5 +130,12 @@ Other environment variables: `BASE` (emulator URL, default
   base-controls preview and the fullscreen button are hidden for the shot.
 - `diagrams/*.svg` are rendered to PNG with the same browser. `{{art:...}}` in an
   SVG is replaced with a PNG from `games/` as a data URI.
-- The art comes from the games under `games/alecu/` (`ART` in `capture.mjs`),
-  except `art/clouds.png`, which `make_clouds.py` draws for the layers example.
+- The art comes from the games under `games/` (`ART` in `capture.mjs`), except
+  `art/clouds.png`, which `make_clouds.py` draws for the layers example. The
+  tutorial game's tileset, `games/demos/tutorial_game/images/trench.png`, is drawn
+  by `make_trench_tiles.py` (dark hull plating with a few lit structures); rerun it
+  after changing a tile, then retake the images that use it.
+- Before each screenshot the emulator is paused, the way it pauses when its tab is
+  hidden, and unpaused afterwards. A frame that lights the whole disc is slow to
+  composite, and with the loop running a screenshot could take a minute, which is
+  long enough for a game's 30 second idle timeout to send it back to the launcher.
