@@ -31,7 +31,8 @@ covers this in detail. If you want to know why the API is shaped the way it is,
 see [why VS2 works this way](../design-notes.md).
 
 Unlit space is black, and dark or black backgrounds work better on the real
-display, so the examples in this tutorial leave most of the disc empty.
+display, so the examples in this tutorial leave most of the disc empty. Test your
+colours and intensities on the real hardware before you share a game.
 
 Terms like *layer*, *sealed* and *strip* are defined in the
 [glossary](../glossary.md).

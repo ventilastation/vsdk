@@ -95,11 +95,14 @@ Nothing warns you about this; you have to look at it:
 The same label at `y = 1` and at `y = 44`.
 ```
 
-**Backgrounds.** Dark or black backgrounds work better on the real
-Ventilastation than bright ones, and the emulator may not show you the
-difference. Leave empty space empty — `EMPTY_TILE` cells and transparent pixels
-draw nothing — and keep any backdrop you do draw dark. A tilemap that lights
-the whole disc, like the `fill(GRASS)` call in chapter 5, is the exception.
+**Backgrounds, colours and intensity.** Dark or black backgrounds work better on
+the real Ventilastation than bright ones. Leave empty space empty — `EMPTY_TILE`
+cells and transparent pixels draw nothing — and keep any backdrop you do draw
+dark. A tilemap that lights the whole disc, like the `fill(GRASS)` call in
+chapter 5, is the exception. How a colour looks on a monitor is not how it looks
+on the LEDs, and the emulator cannot judge their intensity for you, so **always
+test your colours and intensities on the real hardware** and adjust them there.
+Do it before you share a game, not after.
 
 
 ## Packaging

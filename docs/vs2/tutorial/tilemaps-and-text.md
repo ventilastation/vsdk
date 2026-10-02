@@ -36,7 +36,9 @@ self.ground.fill(GRASS)                # every cell
 ```
 
 Fill only the cells that have something in them. Dark or black backgrounds work
-better on the real Ventilastation, so leave the rest of the grid empty.
+better on the real Ventilastation, so leave the rest of the grid empty. (Always
+check your colours and intensities on the real hardware; see
+[Budgets and real hardware](budgets.md).)
 
 {py:data}`vs2.EMPTY_TILE` (255) leaves a cell blank and the renderer skips it.
 Freshly allocated grids are filled with it, so a new tilemap starts out dark.
