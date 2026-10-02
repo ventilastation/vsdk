@@ -506,6 +506,58 @@ class Vs2ApiTests(unittest.TestCase):
         self.assertIsInstance(director.scene_stack[-1], Replacement)
         self.assertNotIn((b"music off", b""), director.platform.comms.sent[-1:])
 
+    def test_pushed_and_switched_scenes_inherit_the_app_markers(self):
+        # app_loader stamps only the scene main() returns. A scene that game
+        # code builds and passes to push()/switch() must inherit the markers,
+        # or the platform stops exporting its VS2 payload.
+        vs2 = self.vs2
+
+        class Page(vs2.Scene):
+            def build(self):
+                self.layer("world").sprite("ship.png")
+
+        class Other(Page):
+            _vs_api_slug = "games.other"
+            _vs_declared_api = "vs2"
+
+        game = Page()
+        game._vs_api_slug = "games.test_vs2"
+        game._vs_declared_api = "vs2"
+        with mock.patch.object(director, "load_rom"):
+            self.enter(game)
+            pushed = Page()
+            game.push(pushed)
+            game._commit_transition()
+            self.assertEqual(pushed._vs_api_slug, "games.test_vs2")
+            self.assertEqual(pushed._vs_declared_api, "vs2")
+
+            switched = Page()
+            pushed.switch(switched)
+            pushed._commit_transition()
+            self.assertIs(director.scene_stack[-1], switched)
+            self.assertEqual(switched._vs_api_slug, "games.test_vs2")
+            self.assertEqual(switched._vs_declared_api, "vs2")
+
+            # A scene that already names its own app keeps it.
+            foreign = Other()
+            switched.switch(foreign)
+            switched._commit_transition()
+            self.assertEqual(foreign._vs_api_slug, "games.other")
+
+    def test_scenes_without_app_markers_stay_anonymous(self):
+        vs2 = self.vs2
+
+        class Page(vs2.Scene):
+            def build(self):
+                self.layer("world").sprite("ship.png")
+
+        game = self.enter(Page())
+        child = Page()
+        game.push(child)
+        game._commit_transition()
+        self.assertIsNone(getattr(child, "_vs_api_slug", None))
+        self.assertIsNone(getattr(child, "_vs_declared_api", None))
+
     def test_idle_default_pops_and_back_button_can_be_claimed(self):
         vs2 = self.vs2
         idle_calls = []

@@ -320,8 +320,28 @@ class Director:
                     self.scene_stack.pop()
             raise
 
+    @staticmethod
+    def _inherit_app(scene, parent):
+        """Give a scene created by game code the app markers of its creator.
+
+        app_loader stamps only the scene returned by main(). A scene that game
+        code builds and hands to push() or switch() would otherwise lack
+        them: the platform would not export its VS2 payload (so it renders
+        through the legacy sprite table, or not at all for tilemaps and
+        labels), its asset pack would not be loaded, and the API guard and
+        app music would lose track of which app is running.
+        """
+        if parent is None:
+            return
+        for name in ("_vs_api_slug", "_vs_declared_api"):
+            if getattr(scene, name, None) is None:
+                value = getattr(parent, name, None)
+                if value is not None:
+                    setattr(scene, name, value)
+
     def push(self, scene):
         previous = self.scene_stack[-1] if self.scene_stack else None
+        self._inherit_app(scene, previous)
         if previous:
             self._exit_scene(previous)
         self.scene_stack.append(scene)
@@ -350,6 +370,7 @@ class Director:
     def switch(self, scene):
         """Replace the showing V2 scene without interrupting app music."""
         previous = self.scene_stack.pop()
+        self._inherit_app(scene, previous)
         self._exit_scene(previous)
         self.platform.sprites.reset_sprites()
         gc.collect()
