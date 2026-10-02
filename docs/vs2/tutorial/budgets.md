@@ -1,8 +1,9 @@
 # 7. Budgets and real hardware
 
-The console has on the order of 8 MB of RAM shared between MicroPython's heap,
-image strips, audio and the interpreter, and a hard deadline every column. The
-budgets exist so you find out at `build()` rather than mid-game.
+The {term}`console` has on the order of 8 MB of RAM shared between MicroPython's
+heap, image strips, audio and the interpreter, and a hard deadline every
+{term}`column`. The {term}`budgets <budget>` exist so you find out at `build()`
+rather than mid-game.
 
 | Resource | Budget | Notes |
 |---|---|---|
@@ -53,16 +54,12 @@ that shows up in the census. Sixteen individually created sprites do not.
 **Cell data, not sprites.** Anything on a grid — terrain, a starfield, a
 tile-based background — is one tilemap record however many cells it has.
 
-## The rule that makes it hold
+## Keep `update()` free of allocation
 
-Nothing in the running game may allocate. That is why the scene is sealed after
-`build()`, why pools exist, why `view_x`/`view_y` are scalars rather than a
-viewport tuple, and why {py:meth}`~vs2.Label.set_number` exists instead of
-`"%05d" %`.
-
-A per-frame tuple, dict or formatted string is not "a little garbage" here: over
-a session it is the difference between a stable heap and a GC pause landing on a
-visible frame. These all allocate nothing:
+Creating a tuple, dict or formatted string every tick adds up to garbage the
+console has to collect mid-game. Everything in this list is allocation-free, so
+it is safe to call every tick (the reasons are in
+[why VS2 works this way](../design-notes.md)):
 
 ```python
 sprite.x += 0.5
@@ -77,8 +74,8 @@ joy1.held(LEFT)
 
 ## Moving to the console
 
-The emulator and the hardware run the same renderer semantics, so a game that
-looks right in the emulator generally looks right on the disc. Two things only
+The {term}`emulator` and the {term}`console` run the same renderer semantics, so a game that
+looks right in the emulator generally looks right on the disc. Three things only
 the real thing tells you:
 
 **Timing.** The emulator does not enforce the per-column deadline. A scene near
@@ -88,17 +85,36 @@ the tilemap budget with several large maps is worth watching on hardware.
 the rim and crammed into almost nothing at the centre, so the same glyph is
 crisp near the rim and unreadable near the middle. Text belongs at **low Y** on
 a `HUD` layer — the in-tree games put their scoreboards at `y=0` or `y=1`.
-Nothing warns you about this; you have to look at it.
+Nothing warns you about this; you have to look at it:
+
+```{figure} ../images/budgets-legibility.png
+:alt: The same score at y = 1, crisp at the bottom rim, and at y = 44, a tiny unreadable smudge near the centre
+:width: 60%
+:align: center
+
+The same label at `y = 1` and at `y = 44`.
+```
+
+**Backgrounds, colours and intensity.** Dark or black backgrounds work better on
+the real Ventilastation than bright ones. Leave empty space empty — `EMPTY_TILE`
+cells and transparent pixels draw nothing — and keep any backdrop you do draw
+dark. A tilemap that lights the whole disc, like the `fill(GRASS)` call in
+chapter 5, is the exception. How a colour looks on a monitor is not how it looks
+on the LEDs, and the emulator cannot judge their intensity for you, so **always
+test your colours and intensities on the real hardware** and adjust them there.
+Do it before you share a game, not after.
+
 
 ## Packaging
 
 `tools/package_game.py` builds a `.vs2` package — a zip of your `meta.json`,
-code, ROM, icon and sounds — and stamps `api_revision` into the metadata so the
-loader can reject a package built against an older API.
+code, ROM, icon and sounds — to share a game as a single file.
 
 ## Where to look next
 
-- The [API reference](../reference/index.md) for the full surface.
+- The [API reference](../reference/index.md) for the full surface, and the
+  [glossary](../glossary.md) for any term you have forgotten.
+- [Going further](../going-further.md) for features this tutorial skipped.
 - Real games in the tree: `games/alecu/mapdemo` is the smallest complete VS2
   game, `games/demos/input_demo` shows every control, and
   `games/alecu/vixeous` uses pools, a scrolling terrain map and labels together.

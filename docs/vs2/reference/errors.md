@@ -25,75 +25,42 @@ meet.
 
 ### Reading the messages
 
-```text
-AssetNotFoundError: image 'ships.png' is not in alecu.my_game
-```
-
-A typo, or the PNG is not in the game's `images/` folder. The name is the
-image's id, which defaults to its filename.
-
-```text
-FrameError: ship.png has 4 frames; frame must be 0..3
-```
-
-An out-of-range frame. Frame counts come from the ROM, so
-`sprite.image.frames` is the authority — do not hard-code them.
-
-```text
-ResourceLimitError: sprite 101/100 in Vixeous (world: 62, hud: 39);
-  reduce the sprite budget
-```
-
-The census names every layer holding sprites, so the oversized one is visible
-without counting by hand. Shrink a `sprite_pool`, or move text from sprites to a
-{py:class}`~vs2.Label` — three lines of text as sprites cost 54 slots, and as a
-label cost one tilemap.
-
-```text
-SceneSealedError: sprite() is only allowed while MyGame.build() runs
-```
-
-Something tried to create a drawable from `update()` or a timer. Preallocate it
-in `build()`, usually as a {py:class}`~vs2.SpritePool`.
-
-```text
-SceneSealedError: cannot change x on a sprite from a closed V2 scene
-```
-
-A drawable handle outlived its scene — often a handle stashed on `self` in
-`__init__` instead of being rebuilt in `build()`.
+| Error | Usual cause | What to do |
+|---|---|---|
+| `AssetNotFoundError: image 'ships.png' is not in alecu.my_game` | A typo, or the PNG is not in the game's `images/` folder. The name is the image's id, which defaults to its filename. | Fix the name or add the image. |
+| `FrameError: ship.png has 4 frames; frame must be 0..3` | A frame out of range. | Use `sprite.image.frames` instead of a hard-coded count. |
+| `ResourceLimitError: sprite 101/100 in Vixeous (world: 62, hud: 39)` | Over a {term}`budget`. The {term}`census` shows which layer is largest. | Shrink a pool, or move text from sprites to a {py:class}`~vs2.Label`. See [Budgets](../tutorial/budgets.md). |
+| `SceneSealedError: sprite() is only allowed while MyGame.build() runs` | A drawable was created from `update()` or a timer. | Create it in `build()`, usually as a {py:class}`~vs2.SpritePool`. |
+| `SceneSealedError: cannot change x on a sprite from a closed V2 scene` | A drawable handle outlived its scene, often one stored in `__init__`. | Create drawables in `build()`, not `__init__`. |
 
 ## Constants
 
 ### Projections
 
 Passed to {py:meth}`Scene.layer <vs2.Scene.layer>` as `projection=`, and
-decide how a layer maps Y to LEDs.
+decide how a layer maps Y to LEDs. The tutorial's
+[circular display](../tutorial/display.md) chapter explains them with examples.
 
 ```{eval-rst}
 .. py:data:: vs2.TUNNEL
    :value: 1
 
-   Perspective. Y is depth, ``0..255``: 0 is the outermost ring, and increasing
-   values shrink and converge toward the centre, reached at 255. The usual
-   choice for a game world.
+   Perspective. Y is depth, ``0..255``, from the outermost ring to the centre.
+   The usual choice for a game world.
 
 .. py:data:: vs2.HUD
    :value: 2
 
-   Flat, no perspective. Y is a direct LED index measured inward from the rim,
-   ``0..53``, so ``y = 0`` is the outermost LED. A sprite ``h`` tall stays
-   fully on screen up to ``y = 54 - h``. The usual choice for scores and
-   overlays, which are most legible at low Y.
+   Flat, no perspective. Y is a direct LED index, ``0..53``, so ``y = 0`` is the
+   outermost LED. The usual choice for scores and overlays, which are most
+   legible at low Y.
 
 .. py:data:: vs2.FULLSCREEN
    :value: 0
 
-   One centred image, for backdrops and planets. It uses the TUNNEL radial
-   curve: ``y = 0`` fills all 54 LEDs, and increasing Y contracts the image
-   toward the centre until only its centre LED remains at 255. X rotates it.
-   Sprites only — creating a tilemap or label on a ``FULLSCREEN`` layer raises
-   during ``build()``.
+   One centred image, for planets, backdrops and cloud cover. ``y = 0`` fills all 54 LEDs and
+   larger Y contracts it toward the centre. Sprites only — creating a tilemap or
+   label on a ``FULLSCREEN`` layer raises during ``build()``.
 ```
 
 ### Tiles and pools

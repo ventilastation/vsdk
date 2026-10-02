@@ -8,19 +8,12 @@ display graph in {py:meth}`~vs2.Scene.build`, and drive it in
 
 `build()` runs on every entry, and when it returns the scene is **sealed**:
 
-```text
-   scene entered
-        │
-        ▼
-   ┌──────────┐  build() returns   ┌────────┐
-   │ building │ ─────────────────▶ │ sealed │ ◀─┐ update() and timers,
-   └──────────┘                    └────────┘ ──┘ every tick
-        ▲                               │
-        │ entered again                 │ pop / push / switch / home
-        │ (fresh build)                 ▼
-        └───────────────────────── ┌────────┐
-                                   │ closed │
-                                   └────────┘
+```{figure} ../images/scene-lifecycle.png
+:alt: A scene starts building, becomes sealed when build returns, and is closed by pop, push or switch
+:width: 100%
+:align: center
+
+The scene lifecycle.
 ```
 
 While *building*, layers and drawables may be created. Once *sealed*, they may
@@ -34,8 +27,9 @@ object. Drawable handles cannot: rebuild them in `build()`.
 
 ## Transitions
 
-All three queue and commit at the end of the tick, and all three return `None`,
-so `return self.pop()` reads as "handle this input, then stop":
+All three are {term}`transitions <transition>`. They queue and commit at the end
+of the tick, and all three return `None`, so `return self.pop()` reads as
+"handle this input, then stop":
 
 ```python
 self.push(PauseMenu())        # suspend this scene, run another on top

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 440" width="860" height="440" font-family="system-ui,sans-serif">
+  <rect width="860" height="440" fill="#0b0f14"/>
+  <g stroke="#52657a" stroke-width="2" fill="none">
+    <path d="M 430 80 L 430 120"/>
+    <path d="M 430 180 L 430 220"/>
+    <path d="M 115 220 L 725 220"/>
+    <path d="M 115 220 L 115 250 M 315 220 L 315 250 M 525 220 L 525 250 M 725 220 L 725 250"/>
+  </g>
+  <g font-size="22" font-weight="700" text-anchor="middle">
+    <rect x="330" y="20" width="200" height="60" rx="12" fill="#1c2733" stroke="#8aa0b5" stroke-width="2"/>
+    <text x="430" y="58" fill="#e6edf3">Scene</text>
+    <rect x="330" y="120" width="200" height="60" rx="12" fill="#16314f" stroke="#4f8cff" stroke-width="2"/>
+    <text x="430" y="158" fill="#cfe0ff">Layer</text>
+    <rect x="30" y="250" width="170" height="64" rx="12" fill="#14382a" stroke="#3ecf8e" stroke-width="2"/>
+    <text x="115" y="288" fill="#c9f5e0">Sprite</text>
+    <rect x="230" y="250" width="170" height="64" rx="12" fill="#14382a" stroke="#3ecf8e" stroke-width="2"/>
+    <text x="315" y="288" fill="#c9f5e0">SpritePool</text>
+    <rect x="440" y="250" width="170" height="64" rx="12" fill="#14382a" stroke="#3ecf8e" stroke-width="2"/>
+    <text x="525" y="288" fill="#c9f5e0">Tilemap</text>
+    <rect x="640" y="250" width="170" height="64" rx="12" fill="#14382a" stroke="#3ecf8e" stroke-width="2"/>
+    <text x="725" y="288" fill="#c9f5e0">Label</text>
+  </g>
+  <g fill="#8aa0b5" font-size="17">
+    <text x="448" y="106">a scene holds layers (8 at most)</text>
+    <text x="548" y="150">layers paint bottom to top,</text>
+    <text x="548" y="172">in creation order</text>
+    <text x="315" y="340" text-anchor="middle">a fixed group of sprites</text>
+    <text x="725" y="340" text-anchor="middle">a tilemap that holds text</text>
+    <text x="430" y="400" text-anchor="middle">a layer paints its drawables bottom to top, in creation order</text>
+  </g>
+</svg>

@@ -29,15 +29,8 @@ This is what opts your game into VS2:
 }
 ```
 
-`api` and `api_revision` are required together — the loader refuses a `vs2` game
-without `"api_revision": 2`, so a game written against an older draft of the API
-fails at load with a clear message instead of misbehaving. `title` and `order`
-control the menu entry.
-
-:::{note}
-A game uses VS2 **or** the older `ventilastation.sprites` API, never both.
-Importing both from one game is rejected on purpose.
-:::
+`api` and `api_revision` are both required. `title` and `order` control the
+menu entry.
 
 ## Images
 
@@ -48,22 +41,37 @@ they become sprite strips:
 palettegroups:
   world:
     - strip: ship.png
-      frames: 1
-    - strip: shot.png
-      frames: 1
+      frames: 4
+    - strip: shots.png
+      frames: 3
 ```
 
-A **strip** is a horizontal filmstrip of equally sized frames — a 4-frame
-animation is one PNG four times as wide as one frame. A **palette group** is a
-set of images that share 256 colours; put images that look alike in one group.
+A {term}`strip` is a horizontal filmstrip of equally sized frames — a 4-frame
+animation is one PNG four times as wide as one frame:
+
+```{figure} ../images/strip-ship.png
+:alt: The ship.png strip: four 18 by 13 pixel frames side by side
+:width: 85%
+:align: center
+
+`ship.png` is 72 pixels wide and holds four frames, so its entry says `frames: 4`.
+```
+
+A {term}`palette group` is a set of images that share 256 colours; put images
+that look alike in one group.
+
+To follow along, copy the art the tutorial uses: `ship.png`, `shots.png`,
+`enemy.png` and `explosion.png` from `games/alecu/vixeous/images/`,
+`numerals.png` from `games/alecu/vyruss_vs2/images/` and `terrain.png` from
+`games/alecu/mapdemo/images/`.
 
 The emulator recompiles changed PNGs into a ROM every time it starts, so you
 just edit and rerun.
 
 ## The code
 
-`code/mygame.py` needs a {py:class}`~vs2.Scene` subclass and a `main()` that
-returns an instance:
+`code/mygame.py` needs a {term}`scene` — a {py:class}`~vs2.Scene` subclass — and
+a `main()` that returns an instance:
 
 ```python
 import vs2
@@ -87,30 +95,57 @@ def main():
 ```
 
 That is a complete, playable game. Run `./vs-emu.sh` (or `vs-emu.bat`) and it is
-on the menu — there is no registry to edit, the launcher discovers game folders.
+on the menu. The ship sits at the top of the disc, because `x = 128` is the top:
+
+```{figure} ../images/first-game.png
+:alt: The emulator showing the ship at the top of the disc
+:width: 60%
+:align: center
+
+The ship at `x = 128`, `y = 0`: the top of the disc, on the rim.
+```
+
+Hold the left button and `x` counts down, so the ship slides toward the left
+side of the disc:
+
+```{figure} ../images/first-game-moved.png
+:alt: The emulator showing the ship moved toward the upper left
+:width: 60%
+:align: center
+
+After holding left for a moment.
+```
+
 
 ## What those two methods mean
 
-{py:meth}`~vs2.Scene.build` runs once each time the scene is entered and creates
+{term}`Build <build>` runs once each time the scene is entered and creates
 everything the scene will ever draw. {py:meth}`~vs2.Scene.update` runs once per
-rotation and moves what already exists.
+{term}`rotation` and moves what already exists.
 
-The split is enforced, not just conventional. When `build()` returns, the scene
-is **sealed**: try to create a sprite from `update()` and you get
+```{figure} ../images/scene-lifecycle.png
+:alt: A scene starts building, becomes sealed when build returns, and is closed by pop, push or switch
+:width: 100%
+:align: center
+
+A scene's life. Only the building state may create layers and drawables.
+```
+
+The split is enforced. When `build()` returns, the scene is {term}`sealed`: try
+to create a sprite from `update()` and you get
 
 ```text
 SceneSealedError: sprite() is only allowed while MyGame.build() runs
 ```
 
-That is the point. Running out of sprites becomes an error the first time you
-enter the scene — reproducible, at a known line — instead of a crash ten minutes
-into play when a boss spawns one too many.
+So running out of sprites becomes an error the first time you enter the scene,
+not a surprise in the middle of play.
 
-## What you did not have to write
+## Leaving the game
 
-No exit handling: the back button (`Y` or `BACK`) and a 30-second idle timeout
-both return to the launcher on their own. No `super()` call. No ROM name — the
-asset pack defaults to your game. No director import.
+Players leave with the back button (`Y` or `BACK`), or after 30 seconds without
+input. Both return to the launcher on their own, so your game needs no exit
+code.
 
 Next: [the circular display](display.md), and why `x` behaves differently from
 `y`.

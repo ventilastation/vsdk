@@ -1,26 +1,25 @@
 # 4. Sprite pools
 
 Bullets, enemies and explosions come and go. You cannot create them on the fly —
-the scene is sealed — so you reserve them up front and cycle them:
+the scene is {term}`sealed` — so you reserve a {term}`pool` of them up front and
+cycle through it:
 
 ```python
 def build(self):
     world = self.layer("world", projection=vs2.TUNNEL)
-    self.shots   = world.sprite_pool("shot.png", count=8)
+    self.shots   = world.sprite_pool("shots.png", count=8)
     self.enemies = world.sprite_pool("enemy.png", count=16)
-    self.booms   = world.sprite_pool("boom.png", count=4, on_empty=vs2.RECYCLE)
+    self.booms   = world.sprite_pool("explosion.png", count=4, on_empty=vs2.RECYCLE)
 ```
 
-That is 28 of your 100 sprites, spent visibly in three numbers a reviewer can
-add up. The old way — a hand-rolled pool class, or a flat list per entity type —
-hid the total until the renderer ran out.
+That is 28 of your 100 sprites, spent in three numbers you can add up.
 
 Every sprite starts hidden. Nothing after this allocates.
 
 ## Spawning
 
-{py:meth}`~vs2.SpritePool.spawn` takes a free sprite, positions it, shows it,
-and hands it back:
+{term}`Spawning <spawn>` with {py:meth}`~vs2.SpritePool.spawn` takes a free
+sprite, positions it, shows it, and hands it back:
 
 ```python
 if joy1.just_pressed(A):
@@ -37,8 +36,8 @@ if shot is None:
 ```
 
 For explosions and particles, dropping one looks worse than cutting another
-short, so pass `on_empty=vs2.RECYCLE` and an exhausted pool reuses its oldest
-live sprite instead of returning `None`.
+short, so pass `on_empty=vs2.RECYCLE` and an exhausted pool will {term}`recycle`
+its oldest live sprite instead of returning `None`.
 
 ## Despawning and iterating
 
@@ -63,9 +62,16 @@ def update(self):
             self.shots.despawn(shot)
 ```
 
-Remember Y is depth on a `TUNNEL` layer, running 0 at the rim to 255 at the
-centre — so a shot fired away from the player counts *up*, and the cutoff is a
-depth you choose, not `vs2.display.height`.
+On a `TUNNEL` layer a shot fired away from the player counts *up* in Y, and the
+cutoff is a depth you choose — see [the circular display](display.md).
+
+```{figure} ../images/pools.png
+:alt: A row of enemies near the centre, a shot flying toward them and a small explosion where one enemy was hit
+:width: 60%
+:align: center
+
+Seven enemies spawned from a pool, a shot in flight, and the explosion left by a hit.
+```
 
 {py:meth}`~vs2.SpritePool.despawn_all` clears a pool in one call, which is the
 usual way to reset a level:

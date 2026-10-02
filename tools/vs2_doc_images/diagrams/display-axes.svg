@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" width="720" height="720" font-family="system-ui,sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f5b800"/>
+    </marker>
+    <marker id="arrowb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4f8cff"/>
+    </marker>
+  </defs>
+  <rect width="720" height="720" fill="#0b0f14"/>
+  <circle cx="360" cy="360" r="220" fill="#111a24" stroke="#3a4a5c" stroke-width="2"/>
+  <g fill="none" stroke="#26333f" stroke-width="1">
+    <circle cx="360" cy="360" r="165"/><circle cx="360" cy="360" r="110"/><circle cx="360" cy="360" r="55"/>
+    <line x1="360" y1="140" x2="360" y2="580"/><line x1="140" y1="360" x2="580" y2="360"/>
+  </g>
+  <circle cx="360" cy="360" r="4" fill="#8aa0b5"/>
+  <text x="372" y="384" fill="#8aa0b5" font-size="17">centre</text>
+  <g fill="#e6edf3" font-size="26" font-weight="600">
+    <circle cx="360" cy="580" r="6" fill="#f5b800"/><text x="360" y="622" text-anchor="middle">x = 0</text>
+    <circle cx="140" cy="360" r="6" fill="#f5b800"/><text x="124" y="370" text-anchor="end">x = 64</text>
+    <circle cx="360" cy="140" r="6" fill="#f5b800"/><text x="360" y="108" text-anchor="middle">x = 128</text>
+    <circle cx="580" cy="360" r="6" fill="#f5b800"/><text x="596" y="370">x = 192</text>
+  </g>
+  <text x="360" y="682" fill="#8aa0b5" font-size="18" text-anchor="middle">x wraps: 256 is the same place as 0</text>
+  <path d="M 285 622 A 270 270 0 0 1 112 500" fill="none" stroke="#f5b800" stroke-width="4" marker-end="url(#arrow)"/>
+  <text x="70" y="612" fill="#f5b800" font-size="19" font-weight="600" text-anchor="middle">x grows</text>
+  <path d="M 516 516 L 408 408" stroke="#4f8cff" stroke-width="4" marker-end="url(#arrowb)"/>
+  <circle cx="516" cy="516" r="6" fill="#4f8cff"/>
+  <text x="536" y="562" fill="#8fb4ff" font-size="24" font-weight="600">y = 0</text>
+  <text x="536" y="586" fill="#8fb4ff" font-size="18">at the rim</text>
+  <text x="520" y="440" fill="#8fb4ff" font-size="19" font-weight="600">y grows</text>
+  <text x="520" y="464" fill="#8fb4ff" font-size="19" font-weight="600">inward</text>
+</svg>

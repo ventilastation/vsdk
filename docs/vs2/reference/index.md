@@ -37,9 +37,9 @@ class MyGame(vs2.Scene):
     def build(self):
         layer  = self.layer("world", projection=vs2.TUNNEL)
         sprite = layer.sprite("ship.png", x=128, y=0)
-        pool   = layer.sprite_pool("shot.png", count=8, on_empty=vs2.RECYCLE)
+        pool   = layer.sprite_pool("shots.png", count=8, on_empty=vs2.RECYCLE)
         ground = layer.tilemap("terrain.png", columns=8, rows=17)
-        score  = layer.label("digits.png", columns=5)
+        score  = layer.label("numerals.png", columns=5)
 
     def update(self):
         if joy1.held(LEFT):        ...   # level
@@ -62,6 +62,7 @@ class MyGame(vs2.Scene):
 | Edit a map | `tilemap[col, row] = tile`, `tilemap.fill(tile)` |
 | Show text | `label.text = "GAME OVER"`, `label.write(col, row, text)` |
 | Show a score | `label.set_number(value, width=5)` |
+| Text at the top of the disc | `layer.label(..., flip_x=True, flip_y=True)`, or it reads upside-down |
 | Leave a scene | `self.pop()`, `self.push(other)`, `self.switch(other)` |
 | Run something later | `self.call_later(ms, callback, *args)` |
 | Play audio | `vs2.audio.sound(name)`, `vs2.audio.music(name, loop=True)` |

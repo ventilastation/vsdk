@@ -20,13 +20,19 @@ budgets
 
 ## What you are writing for
 
-The Ventilastation display is a bar of 54 LEDs on a spinning arm. There is no
-framebuffer: the renderer is asked, 256 times per rotation, "what colour is each
-of these 54 LEDs at this angle?" and it answers by walking your scene.
+The Ventilastation display is a bar of 54 {term}`LEDs <LED>` on a spinning arm.
+There is no framebuffer: the renderer is asked, 256 times per {term}`rotation`,
+"what colour is each of these 54 LEDs at this angle?" and it answers by walking
+your scene.
 
-That single fact explains most of the API's shape. There is a hard deadline
-every column, so the answer has to be cheap: the display graph is fixed while
-the game runs, and moving something is a write into a record the renderer
-already holds. It also means the display is a **disc**, not a rectangle — X is
-an angle that wraps around, and Y is a distance inward from the rim that does
-not.
+That means the display is a **disc**, not a rectangle: X is an angle that
+wraps around, and Y is a distance inward from the rim that does not. Chapter 2
+covers this in detail. If you want to know why the API is shaped the way it is,
+see [why VS2 works this way](../design-notes.md).
+
+Unlit space is black, and dark or black backgrounds work better on the real
+display, so the examples in this tutorial leave most of the disc empty. Test your
+colours and intensities on the real hardware before you share a game.
+
+Terms like *layer*, *sealed* and *strip* are defined in the
+[glossary](../glossary.md).
