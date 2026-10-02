@@ -95,7 +95,8 @@ the screen" test — pick a depth threshold that suits your game.
 :::
 
 Both axes accept fractional values (`ship.x += 0.25` moves a quarter of a
-column), and out-of-range values clip rather than wrapping or crashing.
+column). An X outside 0 to 255 wraps around the disc; a Y outside the layer's
+range clips rather than crashing.
 
 ## Read the geometry, don't hard-code it
 
@@ -163,9 +164,13 @@ self.radar.projection = vs2.HUD     # was TUNNEL
 
 ## In the game
 
-Right now the ship stops being steerable at the edge of the numbers: `x` just
-keeps counting. Wrap it at the width of the display, so the ship can fly all the
-way round the rim and come back:
+The ship from chapter 1 already flies all the way round: X wraps when it is
+drawn, so a ship at `x = 256` appears at 0 and one at `x = -1` appears at 255.
+What does not wrap is the number itself. `ship.x` keeps counting up or down, so
+code that reads it back, such as the position you spawn a shot at or a
+comparison with another sprite's `x`, sees values like 300 or -12 for a ship
+that is really at 44 or 244. Wrap it at the width of the display to keep it in
+the range 0 to 255:
 
 ```python
 def update(self):
