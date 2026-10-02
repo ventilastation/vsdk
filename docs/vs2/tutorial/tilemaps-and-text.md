@@ -278,6 +278,17 @@ def show_score(self):
     self.score_label.set_number(self.score, width=5, pad="0")
 ```
 
+**Why `view_width=256, view_height=160`?** The view is the window onto the map,
+and it works in pixels. The map is 16 columns of 16-pixel tiles, so 256 pixels
+wide, which is exactly the 256 columns around the disc: the whole circle is
+visible. It is also 16 rows of 16 pixels, 256 pixels tall, but the view shows only
+160 of them. The wall repeats every 6 rows, which is 96 pixels, so `view_y` only
+ever needs to run from 0 to 95 before it wraps. Then the window, at its lowest
+position, covers pixels 95 to 254, still inside the 256 pixels of the map; a view
+up to 161 pixels tall would fit, and 160 is the round number below that. If you
+use another map, work it out the same way: take the repeat length in pixels, and
+make sure the map is at least that much taller than the view.
+
 Scroll the wall toward the ship in `update()`, right after the steering:
 
 ```python

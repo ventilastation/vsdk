@@ -19,17 +19,26 @@ other runs the renderer and the LED output, which is timing-critical. The
 renderer reads the sprite and tilemap records that Python created directly, in
 place, rather than being handed copies.
 
+Your game's `update()` is called on a fixed 30 ms timer, about 33 times a second,
+whatever the fan speed. The renderer does not wait for it: on the console it
+draws on its own, driven by the hall sensor, and at 400 to 700 RPM there are three
+to five updates per rotation. A tick that takes longer than 30 ms is not
+caught up on.
+
 MicroPython frees memory with a garbage collector that stops the interpreter while
-it walks the heap. The work grows with the amount of live data and the amount of
-garbage, and it can land in the middle of a frame. On a laptop nobody would notice.
-On the disc a late frame is a visible stutter.
+it walks the heap. The console's director turns automatic collection off, so
+there are no surprise pauses in the middle of a tick, and runs the collector
+itself when a scene is pushed, popped or switched. The catch is that garbage made
+in `update()` is not freed until then, so a game that allocates every tick fills
+the heap and can run out of memory mid-game. The desktop emulator keeps
+automatic collection on, so there the same habit shows up as occasional pauses.
 
 ## The display graph is fixed
 
 Everything a scene draws is created once, in `build()`. After that, moving
 something is a write into a record the renderer already holds. Nothing is
-allocated while the game runs, so there is almost no garbage for the collector to
-find, and its pauses stay rare and short.
+allocated while the game runs, so no garbage builds up between scene changes and
+nothing is left for a collector to pause over.
 
 That one idea explains several rules:
 
@@ -45,8 +54,8 @@ That one idea explains several rules:
   mid-game.
 
 A per-frame tuple, dict or formatted string is not "a little garbage" here: over
-a session it is the difference between a stable heap and a pause landing on a
-visible frame.
+a session it is the difference between a stable heap and one that fills up before
+the next scene change.
 
 ## Layers own drawables
 

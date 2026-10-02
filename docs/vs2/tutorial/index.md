@@ -29,8 +29,11 @@ time:
 The finished game is in `games/demos/tutorial_game/`, and it shows up in the
 **Tech Demos** menu. If you get stuck, compare your file with it.
 
-You need the emulator installed — see the setup guides in the `docs/` folder for
-Linux, macOS and Windows — and no hardware at all until the last chapter.
+You need the emulator installed — see the setup guide for
+[Linux](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.Linux.md),
+[macOS](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.macOS.md) or
+[Windows](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.Windows.md)
+— and no hardware at all until the last chapter.
 
 ```{toctree}
 :hidden:
@@ -56,14 +59,17 @@ does nothing but drive the LEDs on a hard deadline.
 Two habits follow from that, and the rest of the tutorial keeps coming back to
 them:
 
-- **Keep `update()` short.** It runs once per {term}`rotation`, and the LEDs
-  are not going to wait for it.
-- **Do not create objects while the game runs.** Python frees memory
-  automatically with a {term}`garbage collector <garbage collection>`, and on
-  this board a collection stops your game while it sweeps the heap. The more
-  garbage you make, the more often it happens, and a pause in the middle of a
-  frame is a visible stutter on the disc. So the API has you create everything
-  once, in `build()`, and only move things afterwards.
+- **Keep `update()` short.** It runs about 33 times a second (every 30 ms,
+  one {term}`tick`), whatever the fan speed, and the next tick does not wait for
+  a slow one.
+- **Do not create objects while the game runs.** Python frees memory with a
+  {term}`garbage collector <garbage collection>`, and the console has little
+  memory for it to work with. On the console the collector only runs when a
+  scene starts or ends, so anything you create every tick piles up until then,
+  and a long game that does it can run out of memory in the middle of play. (The
+  desktop emulator collects automatically instead, so there the cost is
+  occasional pauses.) So the API has you create everything once, in `build()`, and
+  only move things afterwards.
 
 The emulator runs the same code on a much faster machine, so a game that is
 smooth there can still stutter on the disc. Chapter 7 says what to watch for.

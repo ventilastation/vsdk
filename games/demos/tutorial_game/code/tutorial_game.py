@@ -136,9 +136,9 @@ class GameOver(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
         centred_label(hud, "GAME OVER", y=1)
-        score = hud.label("numerals.png", columns=5, x=246, y=20)
+        score = hud.label("numerals.png", columns=5, x=246, y=11)
         score.set_number(self.score, width=5, pad="0")
-        centred_label(hud, "PRESS A", y=28)
+        centred_label(hud, "PRESS A", y=20)
 
     def update(self):
         if joy1.just_pressed(A):

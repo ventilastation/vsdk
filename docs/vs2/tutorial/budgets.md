@@ -56,8 +56,8 @@ tile-based background — is one tilemap record however many cells it has.
 
 ## Keep `update()` free of allocation
 
-Creating a tuple, dict or formatted string every tick adds up to garbage the
-console has to collect mid-game. Everything in this list is allocation-free, so
+Creating a tuple, dict or formatted string every tick adds up to garbage that
+stays on the console's small heap until the next scene change. Everything in this list is allocation-free, so
 it is safe to call every tick (the reasons are in
 [why VS2 works this way](../design-notes.md)):
 

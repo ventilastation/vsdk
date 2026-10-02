@@ -12,9 +12,14 @@ Four things go in it:
 games/myname/mygame/
 ├── code/mygame.py        your game; the module name matches the folder
 ├── images/               PNGs plus __images__.yaml
-├── menu.png              the icon shown in the console menu
+├── menu.png              the icon shown in the console menu, 64 x 30 pixels
 └── meta.json             how the launcher lists it
 ```
+
+`menu.png` is a 64 by 30 pixel picture, which the launcher shows on your game's
+tile. Make it in any pixel editor, or copy
+`games/demos/tutorial_game/menu.png` to start with and change it. Keep it simple
+and dark, like the display: transparent pixels draw nothing.
 
 ## meta.json
 
@@ -74,10 +79,11 @@ A {term}`palette group` is a set of images that share 256 colours; put images
 that look alike in one group. The text font is in a group of its own, because its
 colours have little in common with the game art.
 
-To follow along, copy the art Trench Run uses into your `images/` folder
+To follow along, copy all five PNGs Trench Run uses into your `images/` folder
 from `games/demos/tutorial_game/images/`: `ship.png`, `enemy.png`, `trench.png`,
-`numerals.png` and `steel8x8.png`. You only need `ship.png` for this chapter; the
-others appear later, and the yaml above already lists them.
+`numerals.png` and `steel8x8.png`. This chapter only draws `ship.png`, but the
+emulator builds every PNG the yaml lists, and one that is missing stops it from
+starting, so copy them all now.
 
 The emulator recompiles changed PNGs into a ROM every time it starts, so you
 just edit and rerun.
@@ -132,11 +138,34 @@ After holding left for a moment.
 ```
 
 
+## Controls
+
+The code asks a controller for its buttons: `joy1.held(LEFT)` is true while the
+left button is down. On the console players use the game controllers. In the
+desktop emulator the keyboard stands in for them:
+
+| Keys | Controller 1 |
+|---|---|
+| Arrow keys, or `W` `A` `S` `D` | `LEFT` `RIGHT` `UP` `DOWN` |
+| `Space` `O` `P` `Y` | `A` `B` `X` `Y` |
+| `Page Up` / `Page Down` | `START` / `BACK` |
+
+A USB gamepad works too. `joy2` is the second controller, on `H` `J` `K` `L`,
+`Z` `X` `C` `V`, `Home` and `End`. Chapter 6 explains how `held()` differs from
+`just_pressed()`; until then every button in the tutorial is `held()`.
+
+## When something goes wrong
+
+Errors and anything your game `print()`s appear in the terminal where you ran
+`vs-emu.sh`. A crash is marked **Rotor traceback**, with the file and line that
+raised it. Watch that window while you edit, since mistakes like the one in the
+next section show up there and not on the disc.
+
 ## What those two methods mean
 
 {term}`Build <build>` runs once each time the scene is entered and creates
-everything the scene will ever draw. {py:meth}`~vs2.Scene.update` runs once per
-{term}`rotation` and moves what already exists.
+everything the scene will ever draw. {py:meth}`~vs2.Scene.update` runs about 33
+times a second (once per {term}`tick`) and moves what already exists.
 
 ```{figure} ../images/scene-lifecycle.png
 :alt: A scene starts building, becomes sealed when build returns, and is closed by pop, push or switch

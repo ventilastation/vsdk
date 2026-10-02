@@ -86,11 +86,12 @@ Glyph
   characters to frames. See [Tilemaps and text](tutorial/tilemaps-and-text.md).
 
 Garbage collection
-  How MicroPython frees memory that nothing refers to any more. The
-  {term}`console` has little memory and a slow CPU, so a collection stops the game
-  while it runs, long enough to show as a stutter. VS2 avoids it by creating
-  everything in {term}`build` and reusing it with {term}`pools <pool>`. See
-  [Why VS2 works this way](design-notes.md).
+  How MicroPython frees memory that nothing refers to any more. On the
+  {term}`console` it runs only when a scene starts or ends, so garbage made every
+  tick piles up until then and a long game can run out of memory; the desktop
+  emulator collects automatically and pauses instead. VS2 avoids both by
+  creating everything in {term}`build` and reusing it with {term}`pools <pool>`.
+  See [Why VS2 works this way](design-notes.md).
 
 Idle timeout
   Seconds without input from either controller before
@@ -149,8 +150,9 @@ ROM
   are read from it.
 
 Rotation
-  One full sweep of the bar around the disc. {py:meth}`~vs2.Scene.update` runs
-  once per rotation.
+  One full sweep of the bar around the disc, a few times per second. It is not
+  tied to {py:meth}`~vs2.Scene.update`: at the fan's usual 400 to 700 RPM there
+  are three to five {term}`ticks <tick>` per rotation.
 
 Rotor
   The spinning arm that carries the LED bar.
@@ -182,7 +184,8 @@ Strip
   four-frame animation is a PNG four times as wide as one frame.
 
 Tick
-  One call to `update()`. There is one per {term}`rotation`.
+  One call to `update()`. Ticks come every 30 ms, about 33 a second, whatever the
+  fan speed.
 
 Tile
   One picture in a tilemap's tileset, referred to by its frame number. Tile

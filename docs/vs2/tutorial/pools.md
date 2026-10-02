@@ -6,12 +6,13 @@ cycle through it.
 
 The reason is the hardware. Every new object takes memory from MicroPython's
 heap, and when a sprite is thrown away, its memory stays in use until the
-{term}`garbage collector <garbage collection>` finds it. The ESP32-S3 has a
-modest CPU and little memory, so a collection is slow, and it stops your game
-while it runs. A game that makes a sprite for every enemy would be producing
-garbage all the time and would hit those pauses in the middle of play. A pool
-makes the sprites once, in `build()`, and then lends them out and takes them
-back, so spawning an enemy allocates nothing:
+{term}`garbage collector <garbage collection>` finds it. On the console the
+collector only runs when a scene starts or ends, so a game that makes a sprite
+for every enemy would pile up garbage tick after tick, and a long game could run
+out of memory before the next scene change. (The desktop emulator collects
+automatically, so there it would pause instead.) A pool makes the sprites once,
+in `build()`, and then lends them out and takes them back, so spawning an enemy
+allocates nothing:
 
 ```python
 def build(self):
@@ -142,12 +143,16 @@ def move_enemies(self):
 ```
 
 Enemies move *toward* the ship by counting `y` **down**, because the ship is at
-the rim. `update()` runs once per rotation, so to animate at a pace you can see,
-count the calls and change frame every few of them instead of on every one:
-`self.ticks // 6` stays the same for six ticks in a row, so the enemy changes frame
-six times more slowly than `update()` runs. `enemy.image.frames` supplies the
-number of frames, so the line keeps working if you add one to the PNG. Each enemy cycles through the six frames of `enemy.png`. For
-now an enemy that reaches the ship simply flies through it; chapter 6 makes that
-end the game, and chapter 5 scores the ones you avoid.
+the rim. Speeds here are per tick, and a tick is about 30 ms, so 0.5 per tick
+means an enemy takes around ten seconds to come down from `y = 160`. That is the
+arithmetic to do when you tune a speed. The same applies to animation: to change
+frame at a pace you can see, count the ticks and change frame every few of them
+instead of on every one: `self.ticks // 6` stays the same for six ticks in a row,
+so the enemy changes frame six times more slowly than `update()` runs.
+`enemy.image.frames` supplies the number of frames, so the line keeps working if
+you add one to the PNG.
+
+For now an enemy that reaches the ship simply flies through it; chapter 6 makes
+that end the game, and chapter 5 scores the ones you avoid.
 
 Next: [tilemaps and text](tilemaps-and-text.md).
