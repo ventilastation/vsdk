@@ -352,8 +352,10 @@ def generate_all(search_roots=SEARCH_ROOTS):
     for search_root in search_roots:
         if not search_root.exists():
             continue
-        for root, dirs, files in search_root.walk(on_error=print):
+        # os.walk rather than Path.walk, which needs Python 3.12.
+        for root, dirs, files in os.walk(search_root, onerror=print):
             if STRIPEDEF_FILENAME in files:
+                root = Path(root)
                 spritedef_path = root / STRIPEDEF_FILENAME
                 palettegroups = load_palettegroups(spritedef_path)
                 generate_rom(root, palettegroups, spritedef_path)

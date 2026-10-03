@@ -41,6 +41,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -74,6 +75,49 @@ _spec = importlib.util.spec_from_file_location(
 _build_fs = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_build_fs)
 
+# The sprite ROMs and the web emulator's runtime bundle are build output:
+# rebuilt here, when the page or an OTA asks for them, instead of by hand
+# (see tools/generate_web_runtime_bundle.py). Loaded on first use.
+_web_bundle_builder = None
+_build_lock = threading.Lock()
+_missing_build_deps_reported = False
+
+
+def _builder():
+    global _web_bundle_builder
+    if _web_bundle_builder is None:
+        spec = importlib.util.spec_from_file_location(
+            "generate_web_runtime_bundle",
+            _VSDK_ROOT / "tools/generate_web_runtime_bundle.py",
+        )
+        _web_bundle_builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_web_bundle_builder)
+    return _web_bundle_builder
+
+
+def _refresh_build_output(web_runtime):
+    """Bring the sprite ROMs, and with web_runtime the web emulator's
+    manifest and bundle, up to date with their sources. Cheap when nothing
+    changed. Returns an error message for the client, or None."""
+    global _missing_build_deps_reported
+    builder = _builder()
+    with _build_lock:
+        try:
+            if web_runtime:
+                builder.build()
+            else:
+                builder.generate_roms()
+        except builder.MissingDependencies as error:
+            # A production base (a Raspberry Pi) has no numpy; it serves the
+            # build output it already has.
+            if not _missing_build_deps_reported:
+                print(f"upgrade_server: not rebuilding ROMs or the web bundle: {error}")
+                _missing_build_deps_reported = True
+        except Exception as error:
+            traceback.print_exc()
+            return f"rebuilding the ROMs or the web runtime bundle failed: {error}"
+    return None
+
 _PARTITION_BINS = {
     "prboom-go":   _VSDK_ROOT / "apps/retro-go/prboom-go/build/prboom-go.bin",
     "retro-core":  _VSDK_ROOT / "apps/retro-go/retro-core/build/retro-core.bin",
@@ -99,6 +143,9 @@ trigger_install = None    # called with (slug) to send install_start
 # The web editor is served from the checkout so the base is its own origin
 # (a GitHub-Pages HTTPS editor can't POST to this plain-HTTP server).
 _WEB_ROOT = _VSDK_ROOT / "web"
+
+# Generated on request; see _refresh_build_output().
+_WEB_RUNTIME_FILES = ("runtime-manifest.json", "runtime-bundle.json")
 
 # Directories /api/listdir may enumerate (the editor merges tree game
 # assets, e.g. sounds, with its in-browser workspace).
@@ -259,10 +306,12 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"upgrade_server: {fmt % args}")
 
-    def _send(self, code, content_type, body):
+    def _send(self, code, content_type, body, headers=()):
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        for name, value in headers:
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -276,13 +325,29 @@ class _Handler(BaseHTTPRequestHandler):
         if segments is None:
             self._send(404, "text/plain", b"not found")
             return
+        if len(segments) == 1 and segments[0] in _WEB_RUNTIME_FILES:
+            error = _refresh_build_output(web_runtime=True)
+            if error:
+                self._send(500, "text/plain; charset=utf-8", error.encode())
+                return
         target = _WEB_ROOT.joinpath(*segments) if segments else _WEB_ROOT
         if target.is_dir():
             target = target / "index.html"
         if not target.is_file():
             self._send(404, "text/plain", b"not found")
             return
-        self._send(200, _guess_type(target), target.read_bytes())
+        # Browsers revalidate every file on every load, so an edited module
+        # shows up without bumping its ?v= (publishing writes those).
+        stat = target.stat()
+        etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+        headers = (("ETag", etag), ("Cache-Control", "no-cache"))
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            for name, value in headers:
+                self.send_header(name, value)
+            self.end_headers()
+            return
+        self._send(200, _guess_type(target), target.read_bytes(), headers)
 
     def _handle_listdir(self, query):
         rel = urllib.parse.parse_qs(query).get("path", [""])[0]
@@ -391,6 +456,12 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/manifest":
+            if _BUNDLE_DIR is None:
+                # An OTA push is a deploy: send ROMs built from the current images.
+                error = _refresh_build_output(web_runtime=False)
+                if error:
+                    self._send(500, "text/plain; charset=utf-8", error.encode())
+                    return
             try:
                 manifest = _get_manifest()
                 body = json.dumps(manifest).encode()

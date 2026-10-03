@@ -212,8 +212,8 @@ The same rule applies to generic commands:
 - `vsdk/web/app.js`
   - heap diagnostics UI
   - streamed frame consumer
-- `DEPLOY.md`
-  - bundle refresh and cache-busting workflow
+- `docs/internals/deploying-web-emulator.md`
+  - how the bundle is rebuilt and the `?v=` versions are written
 
 ## Manual Regression Check
 
@@ -235,8 +235,4 @@ A useful follow-up check is:
 
 ## Refresh Caveat
 
-Python-side emulator changes do not take effect in the browser until `vsdk/web/runtime-bundle.json` is refreshed and `vsdk/web` is published into `emulator/`.
-
-Worker-side JS changes may also appear stale unless the worker cache-busting version is bumped.
-
-See `DEPLOY.md` for the exact refresh steps.
+The worker runs the Python in `vsdk/web/runtime-bundle.json`, which is build output. The desktop emulator's web server rebuilds it whenever the page asks for it and makes the browser revalidate every module, so a reload shows Python and JS changes alike. Served any other way, run `make web-runtime-bundle` first. Publishing rebuilds the bundle and writes the `?v=` versions; see [deploying-web-emulator.md](deploying-web-emulator.md).

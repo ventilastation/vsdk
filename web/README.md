@@ -10,9 +10,10 @@ builder, and debug/heap inspectors.
 This directory is the **source of truth**; the Jekyll site publishes a copy
 of it (see [DEPLOY.md](../docs/internals/deploying-web-emulator.md)). `apps`, `games` and `system` are
 symlinks to the repo trees so this directory can be served directly as the
-docroot (e.g. `python3 -m http.server` from here): the worker fetches
-non-bundled assets — PNGs, sounds — over HTTP relative to the page. The
-publish script replaces the symlinks with real copies.
+docroot: the worker fetches non-bundled assets — PNGs, sounds — over HTTP
+relative to the page. The desktop emulator serves it at
+`http://localhost:5653/`, rebuilding the generated files below on each page
+load. The publish script replaces the symlinks with real copies.
 
 ## Layout
 
@@ -28,7 +29,7 @@ publish script replaces the symlinks with real copies.
 | `micropython-bridge.js`, `wasm-worker.js`, `wasm-adapter.js` | browser⇄worker⇄WASM bridge (pointer-based frame transport; see ../docs/internals/web-emulator-architecture.md) |
 | `monaco-ide.js`, `piskel-embed.js` | embedded code/sprite editors |
 | `rom-builder-core.js`, `rom-builder-browser.js`, `workspace-rom-builder.js` | in-browser `.rom` building from `__images__.yaml` |
-| `runtime-manifest.json`, `runtime-bundle.json` | generated file list + bundle the worker mounts (`make web-runtime-bundle`) |
+| `runtime-manifest.json`, `runtime-bundle.json` | generated, not committed: file list + bundle the worker mounts (`tools/generate_web_runtime_bundle.py`) |
 | `vendor/` | pinned MicroPython WASM build, Monaco, Piskel |
 | `smoke-test.html`, `render-parity-test.js` | manual regression checks |
 
@@ -72,10 +73,12 @@ node tests/test_scene_shader_core.mjs
 
 ## Development notes
 
-- Python-side changes only reach the browser after `make web-runtime-bundle`
-  regenerates `runtime-bundle.json`.
-- When changing worker or module JS, bump the `?v=` cache-busting version in
-  `index.html` (and in module import specifiers) or browsers will keep the
-  old file.
+- Served by the desktop emulator, a page reload picks up Python, image and
+  JS changes: the server rebuilds the ROMs and `runtime-bundle.json` when
+  their sources changed, and makes the browser revalidate every file. Served
+  any other way, run `make web-runtime-bundle` first.
+- Don't bump `?v=` versions by hand: publishing writes them
+  (`tools/stamp_web_versions.py`). A new `?v=${SOME_VERSION}` constant has to
+  be added to that tool's `VERSION_CONSTANTS`.
 - After bridge/display changes, run the heap regression check described in
   ../docs/internals/web-emulator-architecture.md ("Manual Regression Check").

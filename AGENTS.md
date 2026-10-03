@@ -32,8 +32,12 @@ index.
   pointer + length, never as fresh bytes objects (docs/internals/web-emulator-architecture.md explains
   the heap leak this avoids). Re-run the heap regression check after
   touching the bridge.
-- Browser changes need `make web-runtime-bundle` (Python/ROM/meta changes)
-  and a `?v=` cache-bust (JS changes) before they show up; see docs/internals/deploying-web-emulator.md.
+- Sprite ROMs, `web/runtime-manifest.json` and `web/runtime-bundle.json` are
+  build output, never committed: the desktop emulator (and its web server,
+  on each page load) rebuilds them when sources change, and publishing
+  rebuilds them and writes the `?v=` versions. Don't commit them or bump
+  `?v=` by hand; outside the emulator, `make web-runtime-bundle` brings them
+  up to date. See docs/internals/deploying-web-emulator.md.
 - MicroPython quirks: no bytearray slice deletion; module `__getattr__`
   works; code under `apps/micropython`, `system/`, `games/` must compile
   with mpy-cross (CI checks this).

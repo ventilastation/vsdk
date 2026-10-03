@@ -284,9 +284,10 @@ declaring one. Add `Path(__file__)` to that `chain(...)`, and `__filename` plus
 deliberately restores `menu.rom`'s mtime because of this check — the dance
 still works, but its comment needs updating.
 
-Make `web-runtime-bundle` depend on `generate-roms`, then regenerate and commit
-`web/runtime-bundle.json` (tracked, 6.9 MB, embeds 34 ROMs as base64). Run
-`make build-fs` to recompress every `.romz`.
+`web/runtime-bundle.json` is no longer committed, and `make web-runtime-bundle`
+already runs the ROM step first, so the web emulator picks up rebuilt ROMs by
+itself (deploying-web-emulator.md). Run `make build-fs` to recompress every
+`.romz`.
 
 ### Step 5 — parity hardening and docs
 
