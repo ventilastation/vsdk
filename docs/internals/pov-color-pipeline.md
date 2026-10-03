@@ -214,7 +214,7 @@ povperf status
 povperf stop
 ```
 
-Use a busy VS2 scene such as `vixeous` or `mapdemo`; `povperf_state` records
+Use a busy VS2 scene such as `vixeous` or `povstress`; `povperf_state` records
 whether VS2 was active and its current layer, sprite, and tilemap slot counts.
 `povperf_timing` reports mean and maximum service/render/DMA-wait/copy time in
 microseconds. `deadline_us` is the measured revolution period divided by 256;

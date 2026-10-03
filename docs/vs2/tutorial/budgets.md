@@ -29,7 +29,7 @@ The census names every layer holding sprites, so the oversized one is visible
 without counting by hand.
 
 ```text
-ResourceLimitError: tilemap 17/16 in MapDemo (world: 14, hud: 3);
+ResourceLimitError: tilemap 17/16 in Game (world: 14, hud: 3);
   reduce the tilemap budget
 ```
 
@@ -134,7 +134,6 @@ code, ROM, icon and sounds — to share a game as a single file.
 - The [API reference](../reference/index.md) for the full surface, and the
   [glossary](../glossary.md) for any term you have forgotten.
 - [Going further](../going-further.md) for features this tutorial skipped.
-- Real games in the tree: `games/alecu/mapdemo` is the smallest complete VS2
-  game, `games/demos/input_demo` shows every control, and
+- Real games in the tree: `games/demos/input_demo` shows every control, and
   `games/alecu/vixeous` uses pools, a scrolling terrain map and labels together.
 - `games/demos/povstress` is the stress case, deliberately near the budgets.

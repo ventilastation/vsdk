@@ -254,8 +254,9 @@ Coverage delivered with the first slice:
   the mirrored fixtures against the real `render_vs2()`, so the hardware
   renderer is exercised without a board; the firmware build then only has to
   compile.
-- `games/alecu/mapdemo` is the on-device fixture: joystick pans the map
-  (x origin and viewport), one button mutates a cell in place.
+- The tilemap payload is shared with the scene, not copied: a write to a
+  caller-supplied `cells` buffer shows up on the next export
+  (`tests/test_vs2_api.py`).
 
 The non-goals for the first #111 slice are per-layer drawable interleaving,
 FULLSCREEN tilemaps, tilemap flip flags, animated tile metadata, collision

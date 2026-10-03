@@ -276,6 +276,28 @@ class Vs2ApiTests(unittest.TestCase):
         with self.assertRaises(BufferError):
             game.map.cells.append(1)
 
+    def test_tilemap_shares_a_caller_supplied_cells_buffer_with_the_payload(self):
+        vs2 = self.vs2
+        data = bytearray(4)
+
+        class Game(vs2.Scene):
+            def build(self):
+                layer = self.layer("world", projection=vs2.TUNNEL)
+                self.map = layer.tilemap("terrain.png", columns=2, rows=2, cells=data,
+                                         view_width=vs2.display.width, view_height=16)
+
+        game = self.enter(Game())
+        self.assertIs(game.map.cells, data)
+        payload = vs2.export_scene_payload(game)
+
+        # A write to the caller's buffer shows up on the next export, with no
+        # new payload allocated.
+        data[3] = 2
+        self.assertEqual(game.map[1, 1], 2)
+        game.map[0, 1] = 1
+        self.assertEqual(data[2], 1)
+        self.assertIs(vs2.export_scene_payload(game), payload)
+
     def test_tilemap_and_label_flips_round_trip_through_payload(self):
         vs2 = self.vs2
 
