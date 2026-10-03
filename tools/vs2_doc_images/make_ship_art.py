@@ -11,13 +11,14 @@ mirrored in X (hardware/rotor/modules/povdisplay/gpu.c), so a ship that moves
 to the left (x - 1) moves toward the right edge of its own image, and the left
 turn is the frame whose nose points to the image's right.
 
-The shapes are drawn with Pillow at 4x size, then reduced and thresholded, which
-keeps the edges crisp. Needs Pillow.
+Each shape is a polygon, sampled four times per pixel in each direction and kept
+where half or more of the pixel is covered, which keeps the edges crisp and the
+level frame exactly symmetric. Needs Pillow, to write the PNG.
 """
 from math import cos, radians, sin
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 SIZE = 18
 SCALE = 4                      # drawing resolution, per output pixel
@@ -44,15 +45,35 @@ FLAME_SHAPE = ((-1.5, 3.6), (1.5, 3.6), (1.5, 6.4), (-1.5, 6.4))
 FLAME_CORE = ((-1.5, 3.6), (1.5, 3.6), (1.5, 4.8), (-1.5, 4.8))
 
 
+def inside(px, py, points):
+    """Whether (px, py) is inside the polygon ``points`` (even-odd rule)."""
+    hit = False
+    for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1]):
+        if (y1 > py) != (y2 > py) and px < x1 + (py - y1) * (x2 - x1) / (y2 - y1):
+            hit = not hit
+    return hit
+
+
 def mask(shape, angle):
-    """A SIZE x SIZE bit mask of ``shape`` turned by ``angle`` degrees."""
+    """The pixels of a SIZE x SIZE image that ``shape``, turned by ``angle``
+    degrees, covers by half or more.
+
+    Coverage is counted on a SCALE x SCALE grid of sample points per pixel with
+    an exact point-in-polygon test. ImageDraw.polygon would be shorter, but it
+    also fills the outline on the right and bottom, and that makes a symmetric
+    shape come out lopsided.
+    """
     a = radians(angle)
-    points = [((CENTRE + x * cos(a) - y * sin(a) + 0.5) * SCALE,
-               (CENTRE + x * sin(a) + y * cos(a) + 0.5) * SCALE) for x, y in shape]
-    big = Image.new("L", (SIZE * SCALE, SIZE * SCALE), 0)
-    ImageDraw.Draw(big).polygon(points, fill=255)
-    small = big.resize((SIZE, SIZE), Image.BOX)
-    return {(x, y) for y in range(SIZE) for x in range(SIZE) if small.getpixel((x, y)) >= 128}
+    points = [(CENTRE + 0.5 + x * cos(a) - y * sin(a),
+               CENTRE + 0.5 + x * sin(a) + y * cos(a)) for x, y in shape]
+    covered = set()
+    for y in range(SIZE):
+        for x in range(SIZE):
+            samples = sum(inside(x + (i + 0.5) / SCALE, y + (j + 0.5) / SCALE, points)
+                          for i in range(SCALE) for j in range(SCALE))
+            if samples * 2 >= SCALE * SCALE:
+                covered.add((x, y))
+    return covered
 
 
 def frame(angle):

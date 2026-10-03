@@ -20,12 +20,12 @@ class Labels(vs2.Scene):
 
         # Upright at the bottom of the disc...
         self.score = hud.label("numerals.png", columns=5, x=246, y=1)
-        self.score.set_number(420, width=5, pad="0")
+        self.score.set_number(7260, width=5, pad="0")
 
         # ...and flipped both ways at the top.
         self.top = hud.label("numerals.png", columns=5, x=118, y=14,
                              flip_x=True, flip_y=True)
-        self.top.set_number(420, width=5, pad="0")
+        self.top.set_number(7260, width=5, pad="0")
 
 
 def main():

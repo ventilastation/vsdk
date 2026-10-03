@@ -147,7 +147,7 @@ mistake.** Nothing is wrong with your string or your font. Add
 A label with both flips, next to one with none, over a small map:
 
 ```{figure} ../images/labels.png
-:alt: A score reading 00420 upright at the top and at the bottom of the disc, over a dark tunnel wall
+:alt: A score reading 07260 upright at the top and at the bottom of the disc, over a dark tunnel wall
 :width: 60%
 :align: center
 

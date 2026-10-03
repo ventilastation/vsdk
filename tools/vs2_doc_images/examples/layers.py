@@ -13,7 +13,7 @@ class Layers(vs2.Scene):
         self.world.sprite("enemy.png", x=128, y=90)
         self.clouds.sprite("clouds.png", x=0, y=0)
         self.hud.label("numerals.png", columns=5,
-                       x=246, y=1, text="00420")
+                       x=246, y=1, text="04730")
 
 
 def main():
