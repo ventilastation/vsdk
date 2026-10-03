@@ -134,6 +134,9 @@ class HeadlessSprite:
 
         for target in targets:
             other = target
+            # Disabled sprites never collide, as on the console (sprites.c).
+            if other.frame() == 255:
+                continue
             if (intersects(self.x(), self.width(), other.x(), other.width()) and
                 intersects(self.y(), self.height(), other.y(), other.height())):
                 return target

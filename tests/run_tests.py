@@ -72,6 +72,7 @@ CPYTHON_TESTS = [
     "tests/test_web_runtime_bundle.py",
     "tests/test_stamp_web_versions.py",
     "tests/test_emu_rom_build.py",
+    "tests/test_v1_sprites.py",
     "tests/test_vszip.py",
     "tests/test_menurom.py",
     "tests/test_installer.py",
