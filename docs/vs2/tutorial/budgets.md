@@ -1,7 +1,7 @@
 # 7. Budgets and real hardware
 
 The {term}`console` has on the order of 8 MB of RAM shared between MicroPython's
-heap, image strips, audio and the interpreter, and a hard deadline every
+heap, the image strips and the interpreter, and a hard deadline every
 {term}`column`. The {term}`budgets <budget>` exist so you find out at `build()`
 rather than mid-game.
 

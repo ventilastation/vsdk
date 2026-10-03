@@ -13,8 +13,9 @@ answer must be cheap.
 ## The hardware is small
 
 Games are written in MicroPython, which runs on the console's ESP32-S3: two cores
-at 240 MHz, with about 8 MB of external RAM shared between the interpreter's heap,
-the image strips and the audio. One core runs MicroPython and your game; the
+at 240 MHz, with about 8 MB of external RAM shared between the interpreter's heap
+and the image strips. Sound never lives on the console: the base station plays your
+game's MP3s when the code asks for them. One core runs MicroPython and your game; the
 other runs the renderer and the LED output, which is timing-critical. The
 renderer reads the sprite and tilemap records that Python created directly, in
 place, rather than being handed copies.

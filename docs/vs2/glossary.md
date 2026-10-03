@@ -11,9 +11,10 @@ API revision
   See [Your first game](tutorial/first-game.md).
 
 Asset pack
-  The images and sounds a game loads, compiled into a {term}`ROM`. It defaults
-  to your own game's folder, so you rarely name it. Each pack has its own
-  {term}`budget` of image strips.
+  The images a game loads, compiled into a {term}`ROM`. It defaults to your own
+  game's folder, so you rarely name it. Each pack has its own {term}`budget` of
+  image strips. Sounds are not part of it: they stay as MP3s that the base station
+  plays.
 
 Back button
   The `Y` or `BACK` button. By default it pops the current {term}`scene`; set
@@ -146,8 +147,8 @@ Rim
   The outer edge of the {term}`display`, at `y = 0`.
 
 ROM
-  The compiled form of a game's images and sounds. Frame counts and image sizes
-  are read from it.
+  The compiled form of a game's images: strips, palettes and glyph tables. Frame
+  counts and image sizes are read from it.
 
 Rotation
   One full sweep of the bar around the disc, a few times per second. It is not

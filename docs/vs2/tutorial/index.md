@@ -52,8 +52,9 @@ budgets
 
 Your game is written in {term}`MicroPython`, a compact version of Python 3 made for
 microcontrollers, and on the {term}`console` it runs on an ESP32-S3: two cores at
-240 MHz and about 8 MB of RAM, which also holds your images and sounds. That is
-a small, slow computer next to a laptop. One core runs your game; the other
+240 MHz and about 8 MB of RAM, which also holds your images. (Sounds don't go on
+the console at all: the base station plays them.) That is a small, slow computer
+next to a laptop. One core runs your game; the other
 does nothing but drive the LEDs on a hard deadline.
 
 Two habits follow from that, and the rest of the tutorial keeps coming back to

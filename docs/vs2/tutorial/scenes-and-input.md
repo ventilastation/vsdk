@@ -231,8 +231,9 @@ def spawn_enemy(self):
 Use `self.spawn_delay()` in `build()` too, for the first call. A timer can be
 re-armed with any delay, so this is all it takes to change the pace while the
 game runs. The floor is 650 ms because that is as fast as the pool can keep up: an
-enemy takes about ten seconds to come down, and 16 of them in ten seconds is one
-every 650 ms. Spawn faster and `spawn()` would only return `None` more often.
+enemy takes a little over ten seconds to come down and get past the ship, and 16
+of them in that time is one every 640 ms or so. Spawn faster and `spawn()` would
+only return `None` more often.
 Past that point the pool is the ceiling on how hard the game gets.
 
 **Remembering the best score.** `vs2.saves` keeps named values between
