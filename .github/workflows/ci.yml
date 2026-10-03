@@ -48,6 +48,10 @@ jobs:
       - name: Generate sprite ROMs
         run: python3 tools/generate_roms.py
 
+      # Not committed: make sure a clean checkout can build what the website publishes.
+      - name: Build the web runtime bundle
+        run: python3 tools/generate_web_runtime_bundle.py
+
       - name: Syntax-check web modules
         run: |
           for f in web/*.js; do node --check "$f"; done
