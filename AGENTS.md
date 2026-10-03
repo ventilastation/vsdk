@@ -47,6 +47,15 @@ index.
   this per target (docs/internals/building.md).
 - Scene lifecycle errors must surface: the director reports tracebacks
   over comms; don't swallow exceptions when changing scene handling.
+- Audio never lives on the rotor (the ESP32 console). Sound effects and
+  music are MP3s in a game's `sounds/`, played by the base (a Raspberry
+  Pi) or the emulator host; the rotor's filesystem image skips `sounds/`
+  (`hardware/rotor/build_micropython_fs.py`) and the rotor only sends
+  `sound`/`music`/`notes` commands over comms. Native emulator apps stream
+  sound-chip register writes for the base to synthesise
+  (docs/internals/emulator-audio.md). So a ROM holds images and palettes,
+  and the rotor's RAM holds the heap and image strips — never sounds. Don't
+  write otherwise in docs or code comments.
 
 ## Workflow
 
