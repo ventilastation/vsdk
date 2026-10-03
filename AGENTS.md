@@ -38,6 +38,10 @@ index.
   rebuilds them and writes the `?v=` versions. Don't commit them or bump
   `?v=` by hand; outside the emulator, `make web-runtime-bundle` brings them
   up to date. See docs/internals/deploying-web-emulator.md.
+- Strip headers store width and frame count minus one (1..256 in a byte;
+  docs/internals/rom-format.md). Never decode them by hand: use
+  `ventilastation/romformat.py`, `strip_frame_width()`/`strip_total_frames()`
+  in C, `povrender._strip_header` or `decodeImageStripPayload`.
 - MicroPython quirks: no bytearray slice deletion; module `__getattr__`
   works; code under `apps/micropython`, `system/`, `games/` must compile
   with mpy-cross (CI checks this).

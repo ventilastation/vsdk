@@ -1,10 +1,46 @@
 # Retiring the ROM width sentinel (`255` means `256`)
 
-Status as of 2026-07-28: **planned, not implemented.** This file records the
-audit that found the problem, the encoding decision and why the alternatives
-were rejected, and the sequenced work order. [rom-format.md](rom-format.md)
-remains the normative spec and still documents the current behaviour; it gets
-updated in step 5 below, not before.
+Status: **implemented** (2026-10). [rom-format.md](rom-format.md) is the
+normative spec and describes the result. This file keeps the audit that found
+the problem, the encoding decision and why the alternatives were rejected, and
+the work order it was carried out in.
+
+## Outcome, and where it differs from the plan below
+
+Every step below landed, with these differences:
+
+- **Older ROMs still load.** The plan accepted that ROMs from before the flip
+  would over-read (or, for installed `.vs2` packages, render wrong until
+  reinstalled). Instead `ventilastation/romformat.py`'s `resolve()` tells the
+  encodings apart by record length: a record's span pins down which reading
+  accounts for it exactly, including the two genuinely 255-wide images and the
+  clamped fonts. The director and `menurom.py` decode every record through it
+  and pass strips on with the current header, so renderers see one encoding
+  and installed packages keep working. Rebuilding everything is still what the
+  generators do (they now rebuild when their own code changes).
+- **V1 `Sprite.width()` still reports a full-circle image as 255**, on the
+  console and in the emulators, so no old game changes its layout. Internally
+  every runtime uses the true width (256). The plan's warning about collisions
+  was wrong: `intersects()` pins one sprite at column 128 before comparing, so
+  widths 255 and 256 give the same answer for every pair of positions (checked
+  exhaustively); a full-circle sprite overlaps another on the x axis in about
+  55% of positions either way, not always.
+- **Found along the way and fixed:** the emulators' V1 `collision()` didn't
+  skip disabled sprites as `sprites.c` does; the GPU shaders kept a strip's
+  frame count in 8 bits, so a 256-glyph font wrapped to 0; `menurom.py`
+  dropped glyph tables when merging icons; and V1 `render()` never wrapped a
+  frame number, which the bounds guard now makes harmless.
+- **`chr(255)` still draws blank in a VS2 `Label`**, though fonts now keep all
+  256 frames: a tilemap cell uses 255 to mean `EMPTY_TILE`, so frame 255 can't
+  be placed in one. V1 sprites likewise use frame 255 for "disabled".
+- **Class 3 sheets** were fixed in the art and declarations (2bam_sencom's
+  `font8_*` are 64 frames, vs's numerals 12, `pollitos.png` cropped to 255 px)
+  and tvnel's unused `FallingTembacSmall.png` left its ROM.
+- **Not yet done: hardware.** The firmware wasn't built or flashed while this
+  was implemented. The C was compiled and tested on the host (the renderer
+  tests, and `sprites.c`/`vs2_native.c` built into a unix MicroPython); the
+  hardware checks under *Verification* still need a `make vsdk` and a full
+  flash.
 
 ## The problem
 
@@ -172,8 +208,8 @@ every-record one. **This is why the step 0 bounds guard is load-bearing rather
 than defence-in-depth, and why it must land before the encoding flip.** With it,
 a stale ROM degrades to a clipped or garbled draw instead of an OOB read.
 
-Accepted residue: a board's previously-installed `.vs2` packages render one
-pixel narrow until reinstalled. Nothing in `installer.py` or `meta.json`
+Superseded (see Outcome): older ROMs are recognised by record length and keep
+loading, so previously-installed `.vs2` packages need no reinstall. Nothing in `installer.py` or `meta.json`
 changes. `games/vsjam-oct25/2bam_sencom/code/2bam_sencom.py:1304` — a fifth,
 in-game container parser — reads only `palette_offsets[0]` and is unaffected, so
 no jam-game code is touched.
@@ -211,11 +247,11 @@ than today's 255. Callers are already safe (`intersects()` takes `int`;
 `emulator/scene_shader.py:249` through `povrender._strip_header` instead of
 re-decoding `raw[:4]`.
 
-> **Behavioural risk to audit here.** V1 `.width()` on a planet backdrop goes
-> 255 → 256, and `intersects(x1, 256, x2, w2)` is unconditionally true — a
-> 256-wide sprite collides with everything. At 255 it was very-nearly-always
-> true, so this is close but not identical. Check the `.width()` callers that
-> can receive a fullscreen strip, notably `2bam_sencom.py:195,235,240,267,520,525,990,1006`.
+> **Resolved differently (see Outcome).** This note claimed `intersects(x1, 256,
+> x2, w2)` is always true; it isn't, and it gives the same result as width 255
+> for every position. V1 `.width()` keeps returning 255 for a full-circle
+> image, so the `.width()` callers in `2bam_sencom.py` and elsewhere see no
+> change.
 
 ### Step 1 — one decode helper per runtime (no output change)
 

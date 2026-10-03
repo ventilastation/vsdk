@@ -67,9 +67,10 @@ shape and the rules that keep biting.
   sprite corruption after ~70-75s idle; two bugs found and fixed by static
   analysis, neither yet verified on hardware.
 - **[rom-width-sentinel.md](rom-width-sentinel.md)** — the ROM `width` byte's
-  "255 means 256" sentinel collides with genuinely 255px art and reads out of
-  bounds in two shipped ROMs; audit, bias-by-one replacement, and work order.
-  Planned, not implemented.
+  "255 means 256" sentinel collided with genuinely 255px art and read out of
+  bounds in two shipped ROMs, and 256-glyph fonts lost a glyph; audit,
+  bias-by-one replacement, and work order. Implemented; the hardware checks
+  still need a full flash.
 
 ## Where the code lives
 
