@@ -116,14 +116,15 @@ static mp_obj_t sprite_disable(mp_obj_t self_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(sprite_disable_obj, sprite_disable);
 
-uint8_t width(sprite_obj_t* sprite) {
+// The strip's true size: up to 256 wide.
+static int width(sprite_obj_t* sprite) {
     if ((uintptr_t)sprite->image_strip < 1000) {
         return 0;
     }
-    return sprite->image_strip->frame_width;
+    return strip_frame_width(sprite->image_strip);
 }
 
-uint8_t height(sprite_obj_t* sprite) {
+static int height(sprite_obj_t* sprite) {
     if ((uintptr_t)sprite->image_strip < 1000) {
         return 0;
     }
@@ -197,7 +198,11 @@ static MP_DEFINE_CONST_FUN_OBJ_2(sprite_set_y_obj, sprite_set_y);
 
 static mp_obj_t sprite_width(mp_obj_t self_in) {
     sprite_obj_t *self = self_in;
-    return mp_obj_new_int(width(self));
+    // V1 games have always been told a full-circle (256 wide) image is 255
+    // wide, and center and lay out with that number, so .width() keeps
+    // saying so. Collisions use the true width; they come out the same
+    // either way (see intersects()).
+    return mp_obj_new_int(MIN(width(self), 255));
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(sprite_width_obj, sprite_width);
 

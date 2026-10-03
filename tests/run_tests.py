@@ -54,6 +54,7 @@ CPYTHON_TESTS = [
     "tests/test_pov_screenshot.py",
     "tests/test_tutorial_vs2.py",
     "tests/test_emulator_vs2_render.py",
+    "tests/test_scene_shader_pack.py",
     "tests/test_mapdemo_vs2.py",
     "tests/test_tutorial_game.py",
     "tests/test_launch_flag.py",
@@ -73,6 +74,7 @@ CPYTHON_TESTS = [
     "tests/test_stamp_web_versions.py",
     "tests/test_emu_rom_build.py",
     "tests/test_v1_sprites.py",
+    "tests/test_romformat.py",
     "tests/test_vszip.py",
     "tests/test_menurom.py",
     "tests/test_installer.py",
@@ -98,6 +100,7 @@ MICROPYTHON_TESTS = [
     "tests/test_browser_input_v2.py",
     "tests/test_director_headless.py",
     "tests/test_installer_micropython.py",
+    "tests/test_romformat.py",
 ]
 
 NODE_TESTS = [
@@ -105,6 +108,8 @@ NODE_TESTS = [
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",
     "tests/test_rom_builder_core.mjs",
+    "tests/test_app_support.mjs",
+    "tests/test_scene_shader_core.mjs",
     "tests/test_starfield_flag.mjs",
 ]
 

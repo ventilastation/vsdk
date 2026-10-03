@@ -260,12 +260,10 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   uint32_t strip_length = image_strip_lengths[t->image_strip];
   int tile_width = t->tile_width;
   int tile_height = t->tile_height;
-  int strip_width = is->frame_width;
-  if (strip_width == 255) strip_width++;
-  if (strip_width != tile_width || is->frame_height != tile_height) {
+  if (strip_frame_width(is) != tile_width || is->frame_height != tile_height) {
     return;
   }
-  int total_frames = is->total_frames ? is->total_frames : 1;
+  int total_frames = strip_total_frames(is);
   int map_w = t->columns * tile_width;
   int map_h = t->rows * tile_height;
   int viewport_x = t->viewport_x;
@@ -360,8 +358,7 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
     uint32_t strip_length = image_strip_lengths[s->image_strip];
 
     uint32_t* current_palette = palette_pal + 256 * is->palette;
-    int width = is->frame_width;
-    if (width == 255) width++;
+    int width = strip_frame_width(is);
     int visible_column = get_source_column(
       fixed_floor_to_int(s->x),
       width,
@@ -373,8 +370,8 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
     }
 
     uint8_t height = is->frame_height;
-    uint8_t total_frames = is->total_frames ? is->total_frames : 1;
-    uint8_t frame = s->frame % total_frames;
+    int total_frames = strip_total_frames(is);
+    int frame = s->frame % total_frames;
     uint8_t mode = vs2_slot_mode(scene, s->layer, s->mode);
     int sprite_y = fixed_floor_to_int(s->y);
     int base = visible_column * height + (frame * width * height);
@@ -526,8 +523,7 @@ void render(int column, uint32_t* led_buffer) {
       continue;
     }
     uint32_t* current_palette = palette_pal + 256 * is->palette;
-    int width = is->frame_width;
-    if (width == 255) width++; // caso especial, para los planetas
+    int width = strip_frame_width(is);
     int visible_column = get_visible_column(s->x, width, column);
     if (visible_column != -1) {
       uint8_t height = is->frame_height;

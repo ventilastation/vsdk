@@ -14,6 +14,7 @@ except ImportError:
     import json as _json
 
 from ventilastation import api_guard
+from ventilastation import romformat as _romformat
 from ventilastation.director import director, stripes
 from ventilastation.display_geometry import DISPLAY_HEIGHT, DISPLAY_WIDTH
 from ventilastation.scene import Scene as _Scene
@@ -443,9 +444,8 @@ def _strip_metadata(number):
     if isinstance(strip, dict):
         return strip
     if strip is not None and len(strip) >= 4:
-        width = strip[0]
-        return {"width": 256 if width == 255 else width, "height": strip[1],
-                "frames": strip[2], "palette": strip[3]}
+        width, height, frames, palette = _romformat.decode_header(strip)
+        return {"width": width, "height": height, "frames": frames, "palette": palette}
     return None
 
 

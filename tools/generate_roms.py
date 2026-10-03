@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import sys
 import struct
@@ -14,8 +15,22 @@ GAMES_ROOT = ROOT_DIR / "games"
 SYSTEM_ROOT = ROOT_DIR / "system"
 ROMS_FOLDER = ROOT_DIR / "apps" / "micropython" / "roms"
 SEARCH_ROOTS = (GAMES_ROOT, SYSTEM_ROOT)
-GENERATOR_PATH = Path(__file__).resolve()
+ROMFORMAT_PATH = ROOT_DIR / "apps" / "micropython" / "ventilastation" / "romformat.py"
+# The code that decides the bytes written; a change to either rebuilds every ROM.
+GENERATOR_SOURCES = (Path(__file__).resolve(), ROMFORMAT_PATH)
 MAX_IMAGE_STRIPS = 100
+
+
+def _load_romformat():
+    # The header encoding is shared with the runtime that reads it; loaded
+    # by path so apps/micropython's modules don't shadow anything here.
+    spec = importlib.util.spec_from_file_location("romformat", ROMFORMAT_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+romformat = _load_romformat()
 
 os.makedirs(ROMS_FOLDER, exist_ok=True)
 
@@ -96,7 +111,7 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None, force
     # This script is an input too: a change to the format it writes must
     # rebuild every ROM, or the old bytes stay on disk looking current.
     if not force and all(f.stat().st_mtime <= rom_timestamp
-                         for f in chain(src_filenames, [spritedef_path, GENERATOR_PATH], watch_dirs)):
+                         for f in chain(src_filenames, [spritedef_path, *GENERATOR_SOURCES], watch_dirs)):
         # print("Skipping", rom_name, file=sys.stderr)
         return
     print("Generating", rom_name, file=sys.stderr)
@@ -129,11 +144,8 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None, force
         for fn, i in images.items():
             workspace.alpha_composite(i, (0, y))
             y += i.height
-            opts = images_opts[fn]
-            frames = opts["frames"]
-            if frames > 255:
-                frames = 255
-            width = i.width // frames
+            frames = images_opts[fn]["frames"]
+            width = frame_width(spritedef_path, fn, i, frames)
             attributes[fn] = (width, i.height, frames, palnumber)
 
         def fill_palette(palette):
@@ -173,16 +185,8 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None, force
             if len(rom_strips) >= MAX_IMAGE_STRIPS:
                 raise ValueError("%s defines %d images; this target supports %d"
                                  % (rom_name, len(rom_strips) + 1, MAX_IMAGE_STRIPS))
-            frames, palette = attributes[fn][2:4]
-            width = i.width // frames
-            if width > 255:
-                width = 255
-            attrs = (width, i.height, frames, palette)
-            attrbytes = bytes(attrs)
-
-            var_name = filename.rsplit(".", 1)[0].replace(".", "_") + "_data"
-            if var_name.startswith("0") or var_name.startswith("1"):
-                var_name = "_" + var_name
+            width, height, frames, palette = attributes[fn]
+            attrbytes = romformat.encode_header(width, height, frames, palette)
 
             fnb = filename.encode("utf-8")
             pascal_filename = struct.pack("B", len(fnb)) + fnb
@@ -190,9 +194,9 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None, force
             glyph_bytes = glyphs.encode("utf-8")
             if len(glyph_bytes) > 0xFFFF:
                 raise ValueError("glyph map for %s is too long" % filename)
-            # Strip offsets already delimit every record, so the optional V2
-            # glyph table can trail the established V1 image data without
-            # changing its header or the bytes V1 registers with the GPU.
+            # Every record ends with the glyph table's u16 length, zero when
+            # the strip has none, so a record's size always follows from its
+            # header (docs/internals/rom-format.md).
             rom_strips.append(pascal_filename + attrbytes + b + struct.pack("<H", len(glyph_bytes)) + glyph_bytes)
         
     with open(rom_filename, "wb") as rom:
@@ -215,6 +219,25 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None, force
 
 
 STRIPEDEF_FILENAME = "__images__.yaml"
+
+
+def frame_width(spritedef_path, filename, image, frames):
+    """The width of one of `image`'s `frames` frames. Raises ValueError,
+    naming the file, for an image no strip header can describe exactly."""
+    where = "%s: %s" % (spritedef_path, filename)
+    if not 1 <= frames <= romformat.MAX_FRAMES:
+        raise ValueError("%s declares %d frames; a strip holds 1 to %d"
+                         % (where, frames, romformat.MAX_FRAMES))
+    if image.width % frames:
+        raise ValueError("%s is %d px wide, which doesn't divide into %d equal frames"
+                         % (where, image.width, frames))
+    width = image.width // frames
+    if width > romformat.MAX_WIDTH:
+        raise ValueError("%s has %d px wide frames; at most %d fit around the display"
+                         % (where, width, romformat.MAX_WIDTH))
+    if not 1 <= image.height <= 255:
+        raise ValueError("%s is %d px tall; strips are 1 to 255 px tall" % (where, image.height))
+    return width
 
 def _game_menu_strip_items(spritedef_path):
     """Expand a `game_menu_strips: true` item into one strip per

@@ -1,12 +1,25 @@
 #include <stdint.h>
 
+/* A strip's header, as written by tools/generate_roms.py (see
+ * docs/internals/rom-format.md). Width and frame count run 1..256 and are
+ * stored minus one, so read them only through strip_frame_width() and
+ * strip_total_frames(): the field names make a direct read stand out.
+ * Height is stored as is. */
 typedef struct {
-    const uint8_t frame_width;
+    const uint8_t frame_width_minus_1;
     const uint8_t frame_height;
-    const uint8_t total_frames;
+    const uint8_t total_frames_minus_1;
     const uint8_t palette;
     const uint8_t data[];
 } ImageStrip;
+
+static inline int strip_frame_width(const ImageStrip* strip) {
+    return strip->frame_width_minus_1 + 1;
+}
+
+static inline int strip_total_frames(const ImageStrip* strip) {
+    return strip->total_frames_minus_1 + 1;
+}
 
 typedef struct _sprite_obj_t {
     mp_obj_base_t   base;

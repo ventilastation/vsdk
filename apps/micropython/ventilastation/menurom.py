@@ -24,6 +24,7 @@ try:
 except ImportError:
     import os
 
+from ventilastation import romformat
 from ventilastation import vszip
 
 ROMS_DIR = "/roms"
@@ -33,24 +34,35 @@ ICON_MEMBER = "menu-icon.rom"
 
 
 def parse(data):
-    """Split a rom into ([name, palette_index, strip_blob], ...) and raw
-    palette blobs. Strip blobs cover name_len..pixels, sized from the strip
-    header itself (width byte 255 means 256)."""
+    """Split a rom into ([name, palette_index, strip_record], ...) and raw
+    palette blobs. Each strip record is complete (name, header, pixels and
+    glyph trailer) and in the current encoding: a record from a rom built
+    before it (an older package's icon) is re-encoded, so a merged menu rom
+    never mixes encodings."""
     num_strips, num_palettes = struct.unpack_from("<HH", data, 0)
     offsets = struct.unpack_from("<%dL" % (num_strips + num_palettes), data, 4)
 
     strips = []
-    for off in offsets[:num_strips]:
+    for n in range(num_strips):
+        off = offsets[n]
+        # The next strip, or the first palette.
+        record_end = offsets[n + 1] if n + 1 < len(offsets) else len(data)
         name_len = data[off]
         name = bytes(data[off + 1:off + 1 + name_len])
-        attrs = off + 1 + name_len
-        width = data[attrs]
-        height = data[attrs + 1]
-        frames = data[attrs + 2] or 1
-        palette = data[attrs + 3]
-        real_width = 256 if width == 255 else width
-        blob_len = 5 + name_len + real_width * height * frames
-        strips.append([name, palette, bytes(data[off:off + blob_len])])
+        header_start = off + 1 + name_len
+        width, height, frames, palette, glyph_length = romformat.resolve_in(
+            data, header_start, record_end)
+        record = bytes(data[off:record_end])
+        if record[1 + name_len:5 + name_len] != romformat.encode_header(width, height, frames, palette):
+            pixels_start = header_start + romformat.HEADER_SIZE
+            pixels_end = pixels_start + romformat.pixel_length(width, height, frames)
+            glyphs = b""
+            if glyph_length:
+                glyphs_start = pixels_end + romformat.TRAILER_SIZE
+                glyphs = bytes(data[glyphs_start:glyphs_start + glyph_length])
+            record = romformat.encode_record(
+                name, width, height, frames, palette, data[pixels_start:pixels_end], glyphs)
+        strips.append([name, palette, record])
 
     palettes = []
     palette_offsets = offsets[num_strips:]

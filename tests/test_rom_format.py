@@ -22,29 +22,44 @@ ROMS = ROOT / "apps" / "micropython" / "roms"
 
 
 def parse_rom(data):
-    """Reference parser for docs/internals/rom-format.md. Returns (strips, palettes)."""
+    """Reference parser for docs/internals/rom-format.md. Returns (strips, palettes).
+
+    Every strip record must be exactly its name, header, pixels and glyph
+    trailer: a header that describes more or less than its record (the old
+    255-means-256 width, a clamped frame count, a sheet that didn't divide
+    into whole frames) fails here."""
     num_strips, num_palettes = struct.unpack_from("<HH", data, 0)
     offsets = struct.unpack_from("<%dL" % (num_strips + num_palettes), data, 4)
     strip_offsets = offsets[:num_strips]
     palette_offsets = offsets[num_strips:]
 
     strips = []
-    for off in strip_offsets:
+    for n, off in enumerate(strip_offsets):
+        record_end = offsets[n + 1] if n + 1 < len(offsets) else len(data)
         name_len = data[off]
         name = data[off + 1:off + 1 + name_len].decode("utf-8")
-        width, height, frames, palette = data[off + 1 + name_len:off + 5 + name_len]
-        real_width = 256 if width == 255 else width
+        header = bytes(data[off + 1 + name_len:off + 5 + name_len])
+        width_minus_1, height, frames_minus_1, palette = header
+        width, frames = width_minus_1 + 1, frames_minus_1 + 1
         pixels_start = off + 5 + name_len
-        pixels_len = real_width * height * (frames or 1)
-        assert pixels_start + pixels_len <= len(data), (name, "pixels out of bounds")
+        pixels_len = width * height * frames
+        trailer = pixels_start + pixels_len
+        assert trailer + 2 <= record_end, (name, "record shorter than its header describes")
+        glyph_len = struct.unpack_from("<H", data, trailer)[0]
+        assert trailer + 2 + glyph_len == record_end, (
+            name, "record is %d bytes, header and trailer describe %d"
+            % (record_end - off, trailer + 2 + glyph_len - off))
         strips.append({
             "name": name,
-            "width": real_width,
+            "header": header,
+            "width": width,
             "height": height,
-            "frames": frames or 1,
+            "frames": frames,
             "palette": palette,
             "pixels_start": pixels_start,
             "pixels_len": pixels_len,
+            "glyphs": bytes(data[trailer + 2:record_end]),
+            "record_len": record_end - off,
         })
 
     palettes = []
@@ -64,8 +79,6 @@ def validate_rom(path):
     assert len(names) == len(set(names)), f"{path.name}: duplicate strip ids"
     for strip in strips:
         assert strip["palette"] < len(palettes), (path.name, strip["name"], "palette index out of range")
-        # Strip entries are written back to back: the pixel run must not
-        # overlap the next strip's entry.
     for palette in palettes:
         assert len(palette) % 1024 == 0 and len(palette) >= 1024, (path.name, "palette size", len(palette))
         # Alpha byte first in every entry, always 0xFF.

@@ -390,12 +390,13 @@ def set_pixel(pixels, led, color):
 _strip_header_cache = {}
 
 def _strip_header(strip):
+    """(width, height, frames, palette base, pixel data) of a strip. Width
+    and frame count are stored minus one (docs/internals/rom-format.md)."""
     cached = _strip_header_cache.get(id(strip))
     if cached is not None and cached[0] is strip:
         return cached[1:]
-    w, h, total_frames, pal = unpack("BBBB", strip[0:4])
-    if w == 255: w = 256 # special case for the planet backdrops
-    header = (w, h, total_frames, 256 * pal, memoryview(strip)[4:])
+    width_minus_1, h, frames_minus_1, pal = unpack("BBBB", strip[0:4])
+    header = (width_minus_1 + 1, h, frames_minus_1 + 1, 256 * pal, memoryview(strip)[4:])
     _strip_header_cache[id(strip)] = (strip,) + header
     return header
 
@@ -412,7 +413,6 @@ def render_tilemap(pixels, column, tilemap):
     tile_h = tilemap["tile_height"]
     if w != tile_w or h != tile_h:
         return
-    total_frames = total_frames or 1
 
     map_columns = tilemap["columns"]
     map_w = map_columns * tile_w

@@ -99,8 +99,8 @@ bool emu_gpu_set_palette(const uint8_t* data, int length) {
     return true;
 }
 
-/* Zero-copy: ImageStrip's layout (frame_width, frame_height, total_frames,
- * palette, then raw pixel data) is byte-identical to the wire strip blob
+/* Zero-copy: ImageStrip's layout (its 4-byte header, then raw pixel data;
+ * see sprites.h) is byte-identical to the wire strip blob
  * already stored in povrender.all_strips, so this just casts the pointer.
  * `data` must stay alive for as long as the slot is installed -- the Python
  * side keeps the originating bytes object in all_strips permanently. */

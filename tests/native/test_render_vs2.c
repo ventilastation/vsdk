@@ -45,7 +45,8 @@ static void count_service(void) {
  * palette index 1, the rest 2. Frame 1: solid 3. Frame 2: solid 4 with the
  * tile's screen pixel (0, 0) transparent. */
 static uint8_t tile_strip_bytes[4 + 3 * 16];
-static uint8_t sprite_strip_bytes[4 + 4] = { 2, 2, 1, 0, 1, 2, 3, 4 };
+/* Headers store width and frame count minus one (sprites.h). */
+static uint8_t sprite_strip_bytes[4 + 4] = { 2 - 1, 2, 1 - 1, 0, 1, 2, 3, 4 };
 static uint8_t fullscreen_strip_bytes[4 + PIXELS];
 static uint32_t palette_storage[256];
 
@@ -69,9 +70,9 @@ static void register_strip(int slot, const uint8_t* bytes, uint32_t total_length
 static const uint8_t default_frames[4] = { 0, 1, 2, 255 };
 
 static void build_tile_strip(void) {
-    tile_strip_bytes[0] = 4;  /* frame_width */
-    tile_strip_bytes[1] = 4;  /* frame_height */
-    tile_strip_bytes[2] = 3;  /* total_frames */
+    tile_strip_bytes[0] = 4 - 1;  /* frame width */
+    tile_strip_bytes[1] = 4;      /* frame height */
+    tile_strip_bytes[2] = 3 - 1;  /* frames */
     tile_strip_bytes[3] = 0;  /* palette */
     uint8_t* frame0 = tile_strip_bytes + 4;
     uint8_t* frame1 = frame0 + 16;
@@ -143,15 +144,15 @@ int main(void) {
     palette_storage[4] = 40u << 24;
     register_strip(8, sprite_strip_bytes, sizeof(sprite_strip_bytes));
     register_strip(9, tile_strip_bytes, sizeof(tile_strip_bytes));
-    fullscreen_strip_bytes[0] = 1;
+    fullscreen_strip_bytes[0] = 1 - 1;
     fullscreen_strip_bytes[1] = PIXELS;
-    fullscreen_strip_bytes[2] = 1;
+    fullscreen_strip_bytes[2] = 1 - 1;
     fullscreen_strip_bytes[3] = 0;
     memset(fullscreen_strip_bytes + 4, 1, PIXELS);
     register_strip(10, fullscreen_strip_bytes, sizeof(fullscreen_strip_bytes));
-    overdeclared.strip[0] = 4;  /* frame_width */
-    overdeclared.strip[1] = 4;  /* frame_height */
-    overdeclared.strip[2] = 3;  /* total_frames: two more than registered */
+    overdeclared.strip[0] = 4 - 1;  /* frame width */
+    overdeclared.strip[1] = 4;      /* frame height */
+    overdeclared.strip[2] = 3 - 1;  /* frames: two more than registered */
     overdeclared.strip[3] = 0;
     memset(overdeclared.strip + 4, 2, 16);
     memset(overdeclared.canary, 5, sizeof(overdeclared.canary));
@@ -479,6 +480,59 @@ int main(void) {
         }
         sprites[1] = NULL;
         starfield_enabled = saved_starfield;
+    }
+
+    /* Width and frame count decode the same way at every value, the full
+     * circle and a 256-glyph font included: no special case for 255. */
+    {
+        static uint8_t header[4];
+        const ImageStrip* strip = (const ImageStrip*)header;
+        header[0] = 254;
+        header[2] = 254;
+        CHECK_EQ(strip_frame_width(strip), 255, "width byte 254 is 255 wide");
+        CHECK_EQ(strip_total_frames(strip), 255, "frames byte 254 is 255 frames");
+        header[0] = 255;
+        header[2] = 255;
+        CHECK_EQ(strip_frame_width(strip), 256, "width byte 255 is the full circle");
+        CHECK_EQ(strip_total_frames(strip), 256, "frames byte 255 is 256 frames");
+        header[0] = 0;
+        header[2] = 0;
+        CHECK_EQ(strip_frame_width(strip), 1, "width byte 0 is 1 wide");
+        CHECK_EQ(strip_total_frames(strip), 1, "frames byte 0 is 1 frame");
+    }
+
+    /* A 255-wide strip draws 255 columns and a 256-wide one all 256; the
+     * column a 255-wide strip lacks stays dark instead of reading past it. */
+    {
+        static uint8_t wide[2][4 + 256 * 2];
+        for (int n = 0; n < 2; n++) {
+            int strip_width = 255 + n;
+            wide[n][0] = (uint8_t)(strip_width - 1);
+            wide[n][1] = 2;
+            wide[n][2] = 0;
+            wide[n][3] = 0;
+            memset(wide[n] + 4, 3, (size_t)strip_width * 2);
+            register_strip(12 + n, wide[n], (uint32_t)(4 + strip_width * 2));
+        }
+        memset(wide[0] + 4 + 255 * 2, 5, 2);  /* canary where a 256th column would be */
+        for (int n = 0; n < 2; n++) {
+            vs2_sprite_t sprite = {
+                .layer = 255, .image_strip = (uint8_t)(12 + n), .frame = 0, .mode = 2,
+                .flags = 0x01, .x = 0, .y = 40 * 256,
+            };
+            const vs2_sprite_t* records[] = { &sprite };
+            vs2_scene_t scene = {
+                .layer_count = 0, .sprite_count = 1, .tilemap_count = 0,
+                .layers = NULL, .sprites = records, .tilemaps = NULL,
+            };
+            int lit = 0;
+            for (int column = 0; column < 256; column++) {
+                uint32_t marker = render_led(&scene, column, HUD_LED(40));
+                CHECK_EQ(marker == 0 || marker == 30, 1, "wide strip draws only its own pixels");
+                lit += marker == 30;
+            }
+            CHECK_EQ(lit, 255 + n, "wide strip lights exactly its width");
+        }
     }
 
     if (failures) {

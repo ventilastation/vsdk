@@ -379,17 +379,17 @@ function decodeSpriteStateBuffer(buffer) {
   return sprites;
 }
 
+// The one place the web emulator reads a strip header. Width and frame
+// count run 1..256 and are stored minus one (docs/internals/rom-format.md);
+// everything downstream uses the decoded asset.
 function decodeImageStripPayload(slot, payload) {
   if (!(payload instanceof Uint8Array) || payload.length < 4) {
     return null;
   }
-  let width = payload[0];
-  if (width === 255) {
-    width = 256;
-  }
+  const width = payload[0] + 1;
   const height = payload[1];
-  const frames = payload[2] || 1;
-  const palette = payload[3] || 0;
+  const frames = payload[2] + 1;
+  const palette = payload[3];
   const data = payload.slice(4);
   return {
     slot,

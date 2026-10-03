@@ -32,8 +32,8 @@
 //             (header stripped) concatenated; byte i lives at texel
 //             (i % ATLAS_WIDTH, i / ATLAS_WIDTH).
 // u_strip_meta RGBA32UI, 256x1. Per strip slot:
-//             R=width (255 already widened to 256), G=height,
-//             B=frames | (palette << 8), A=byte offset into u_strips.
+//             R=width (1..256), G=height,
+//             B=(frames - 1) | (palette << 8), A=byte offset into u_strips.
 //             width==0 marks an empty slot.
 // u_palette   RGBA8 (normalized), 256 wide x numPalettes tall. Raw wire
 //             palette bytes uploaded as-is: each entry is [0xFF, B, G, R],
@@ -166,11 +166,11 @@
       if (!asset || !asset.data || !asset.data.length || !asset.height) {
         continue;
       }
-      const width = asset.width === 255 ? 256 : asset.width;
       const base = slot * 4;
-      meta[base] = width;
+      meta[base] = asset.width;
       meta[base + 1] = asset.height;
-      meta[base + 2] = (Math.max(asset.frames || 1, 1) & 0xff) | ((asset.palette || 0) << 8);
+      // Frames are stored minus one so 1..256 fits the low byte.
+      meta[base + 2] = ((Math.max(asset.frames || 1, 1) - 1) & 0xff) | ((asset.palette || 0) << 8);
       meta[base + 3] = offset;
       chunks.push(asset.data);
       offset += asset.data.length;
@@ -628,7 +628,7 @@
       return null;
     }
     const framesAndPalette = meta[strip * 4 + 2];
-    const totalFrames = Math.max(framesAndPalette & 0xff, 1);
+    const totalFrames = (framesAndPalette & 0xff) + 1;
     const paletteIndex = framesAndPalette >> 8;
     const stripOffset = meta[strip * 4 + 3];
 
@@ -719,7 +719,7 @@
       return null;
     }
     const framesAndPalette = meta[strip * 4 + 2];
-    const totalFrames = Math.max(framesAndPalette & 0xff, 1);
+    const totalFrames = (framesAndPalette & 0xff) + 1;
     const paletteIndex = framesAndPalette >> 8;
     const stripOffset = meta[strip * 4 + 3];
 
@@ -932,7 +932,7 @@ bool probeSprite(int row, int renderColumn, int led, out vec4 color) {
   if (width == 0 || height == 0) {
     return false;
   }
-  int totalFrames = max(int(meta.b & 255u), 1);
+  int totalFrames = int(meta.b & 255u) + 1;
   int paletteIndex = int(meta.b >> 8);
   int stripOffset = int(meta.a);
 
@@ -1044,7 +1044,7 @@ bool probeTilemap(int row, int renderColumn, int led, out vec4 color) {
   if (width == 0 || height == 0) {
     return false;
   }
-  int totalFrames = max(int(meta.b & 255u), 1);
+  int totalFrames = int(meta.b & 255u) + 1;
   int paletteIndex = int(meta.b >> 8);
   int stripOffset = int(meta.a);
 
