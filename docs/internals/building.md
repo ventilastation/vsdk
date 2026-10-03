@@ -126,6 +126,6 @@ comments in the [Makefile](../../Makefile), [ota.md](ota.md) and
 ## Web emulator runtime
 
 ```sh
-make web-runtime-bundle       # refresh web/runtime-bundle.json after Python changes
+make web-runtime-bundle       # bring the ROMs and web/runtime-*.json up to date (the emulator's web server does this on each page load)
 make micropython-webassembly  # rebuild the pinned MicroPython WASM runtime
 ```
