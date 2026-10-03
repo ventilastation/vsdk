@@ -368,6 +368,15 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         pixels_column_10 = povrender.render(10)
         self.assertEqual(pixels_column_10[povrender.vs2_deepspace[40]], 10)
 
+    def test_strip_header_decodes_full_width_and_frame_range(self):
+        # Width and frame count are stored minus one; the second call of
+        # each comes from the id() cache.
+        wide = bytes([254, 8, 254, 1]) + bytes(255 * 8 * 255)
+        full = bytes([255, 8, 255, 0]) + bytes(256 * 8 * 256)
+        for _ in range(2):
+            self.assertEqual(povrender._strip_header(wide)[:4], (255, 8, 255, 256))
+            self.assertEqual(povrender._strip_header(full)[:4], (256, 8, 256, 0))
+
     def test_vs2_modes_share_a_rim_origin_and_fullscreen_contracts_inward(self):
         povrender.all_strips[8] = bytes(
             [1 - 1, povrender.led_count, 1 - 1, 0]

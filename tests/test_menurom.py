@@ -126,6 +126,17 @@ class MergeIconTests(unittest.TestCase):
         strips, _ = parse_rom(menurom.merge_icon(menu_fixture(), icon))
         self.assertEqual(strips[-1]["width"], 256)
 
+    def test_an_icon_shorter_than_its_header_is_rejected(self):
+        # It must not splice a neighbour's bytes into the merged menu rom.
+        icon = build_legacy_rom([("alecu/cut/menu.png", 32, 30, 2, 0, 4)], [build_palette(1)])
+        name_len = len("alecu/cut/menu.png")
+        offset = struct.unpack_from("<L", icon, 4)[0]
+        frames_at = offset + 1 + name_len + 2
+        cut = bytearray(icon)
+        cut[frames_at] = 9  # header now claims 9 frames; the record holds 2
+        with self.assertRaises(ValueError):
+            menurom.merge_icon(menu_fixture(), bytes(cut))
+
     def test_icon_rom_without_strips_is_rejected(self):
         empty = menurom.serialize([], [build_palette(0)])
         with self.assertRaises(ValueError):
