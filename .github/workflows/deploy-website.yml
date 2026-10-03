@@ -1,0 +1,90 @@
+name: Deploy website
+
+# After CI passes on main, point the website's vsdk submodule at the new
+# commit and push it. The website's own Pages workflow then rebuilds the
+# ROMs, the web runtime bundle and the published emulator from that commit,
+# and deploys (docs/internals/deploying-web-emulator.md).
+#
+# Needs a WEBSITE_DEPLOY_TOKEN repository secret: a fine-grained token with
+# Contents: read and write on ventilastation/website. Until it is set, the
+# job only reports that it skipped.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-website
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump-website:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      WEBSITE_DEPLOY_TOKEN: ${{ secrets.WEBSITE_DEPLOY_TOKEN }}
+      VSDK_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - name: Check for the deploy token
+        id: token
+        run: |
+          if [ -z "$WEBSITE_DEPLOY_TOKEN" ]; then
+            echo "::notice::WEBSITE_DEPLOY_TOKEN is not set, so the website was not updated (see docs/internals/deploying-web-emulator.md)"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out vsdk
+        if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.VSDK_SHA }}
+          path: vsdk
+          fetch-depth: 0
+
+      - name: Check out the website
+        if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@v5
+        with:
+          repository: ventilastation/website
+          token: ${{ secrets.WEBSITE_DEPLOY_TOKEN }}
+          path: website
+          fetch-depth: 0
+
+      - name: Bump the website's vsdk submodule
+        if: steps.token.outputs.present == 'true'
+        working-directory: website
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          subject="$(git -C ../vsdk log -1 --format=%s "$VSDK_SHA")"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            pinned="$(git ls-tree HEAD vsdk | awk '{print $3}')"
+            # Runs can finish out of order: never move the website back.
+            if git -C ../vsdk merge-base --is-ancestor "$VSDK_SHA" "$pinned" 2>/dev/null; then
+              echo "::notice::The website already deploys vsdk $pinned, which includes $VSDK_SHA"
+              exit 0
+            fi
+            git update-index --cacheinfo "160000,$VSDK_SHA,vsdk"
+            git commit -m "Bump vsdk to ${VSDK_SHA:0:7}: $subject" \
+              -m "Pushed by vsdk's deploy-website workflow after CI passed on https://github.com/ventilastation/vsdk/commit/$VSDK_SHA"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            # Someone pushed to the website meanwhile; start again from theirs.
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push the vsdk bump to the website"
+          exit 1
