@@ -115,6 +115,9 @@ class TravelAway(TravelBy):
 
 
 class VyrusGame(vs2.Scene):
+    # A space shooter: keep the stars.
+    starfield = True
+
     BLINK_RATE = 45
     BLINK_FRAMES = {0: 0, 14: 1, 22: 2, 37: 3}
 

@@ -22,7 +22,7 @@ from base_control import BaseControlState
 from povcal_state import PovCalibrationState
 from povperf_controls import start_capture, stop_capture
 from povrender import set_palettes, set_image_strip, set_spritedata
-from povrender import clear_vs2_scene, set_vs2_scene
+from povrender import clear_vs2_scene, set_vs2_scene, set_starfield_enabled
 from povrender import (
     set_voom_frame_rgb,
     set_voom_frame_apa102,
@@ -384,6 +384,10 @@ def dispatch_command(conn, command, args):
         clear_voom_frame()
         length = int(args[0]) if args else 0
         set_vs2_scene(conn.read(length))
+
+    elif command == b"starfield":
+        # "starfield 0|1": the running scene's starfield flag (vs2.Scene).
+        set_starfield_enabled(not args or args[0] != b"0")
 
     elif command == b"palette":
         paldata = conn.read(1024 * int(args[0]))

@@ -11,6 +11,7 @@ Modes (see also config.py):
 """
 
 import argparse
+import os
 import platform
 import subprocess
 
@@ -32,13 +33,36 @@ def parse_args(argv=None):
                         help="USB serial transport port (default: autodetect)")
     parser.add_argument("--no-ota-server", dest="ota_server", action="store_false", default=True,
                         help="do not serve OTA upgrades locally; use another ventilastation-base.local server")
+    parser.add_argument("--game", metavar="GROUP.NAME", default=None,
+                        help="start this game straight away, e.g. myname.mygame (a folder "
+                             "games/myname/mygame); leaving it returns to the menu")
     parser.add_argument("--scene-renderer", choices=("cpu", "shader"), default="cpu",
                         help="desktop Pyglet 2 renderer (F2 switches live; default: cpu)")
     return parser.parse_args(argv)
 
 
+def _game_exists(slug):
+    """Whether ``slug`` (group.name) names a folder under games/ or system/."""
+    parts = [part for part in slug.split(".") if part]
+    if not parts:
+        return False
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return any(os.path.isdir(os.path.join(root, top, *parts))
+               for top in ("games", "system"))
+
+
 def main(argv=None):
     args = parse_args(argv)
+
+    if args.game and (args.remote or args.no_display):
+        print("emu.py: --game is ignored with --remote and --no-display: "
+              "there is no local MicroPython to start it in")
+        args.game = None
+
+    if args.game and not _game_exists(args.game):
+        raise SystemExit(
+            "emu.py: no game %r: --game takes <group>.<name>, the folder "
+            "games/<group>/<name>" % args.game)
 
     import config
     config.configure(args)
@@ -64,10 +88,10 @@ def main(argv=None):
     upy = None
     try:
         if spawn_upy:
-            upy = subprocess.Popen(
-                [UPY_EXEC, "-X", "heapsize=8m", "main.py", "--platform=desktop"],
-                cwd=UPY_ROOT,
-            )
+            command = [UPY_EXEC, "-X", "heapsize=8m", "main.py", "--platform=desktop"]
+            if args.game:
+                command.append("--game=" + args.game)
+            upy = subprocess.Popen(command, cwd=UPY_ROOT)
         if config.DISPLAY_ENABLED:
             from pygletengine import PygletEngine
             PygletEngine(LED_COUNT, comms.send)

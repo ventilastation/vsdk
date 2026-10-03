@@ -183,13 +183,14 @@ before any tilemap for the world.
 
 ## In the game
 
-Give Tunnel Shooter a trench to fly down, and a score.
+Give Trench Run a trench to fly down, and a score.
 
 ### Choosing a look
 
-A tunnel shooter is a good excuse for a dark game, so pick a setting where dark
-is natural. Tunnel Shooter takes place in a **derelict space station**: you fly
-down a maintenance trench between plates of dead, near-black hull. The station
+A trench run is a good excuse for a dark game, so pick a setting where dark
+is natural. Trench Run takes place in a **derelict space station**: you fly
+down a maintenance trench between plates of dead, near-black hull, dodging the
+station's enemies. The station
 has no power to spare, so the only colour is in the few things that are still
 lit:
 
@@ -266,7 +267,7 @@ def build(self):
     self.score_label = self.hud.label("numerals.png", columns=5, x=246, y=1)
 
     self.score = 0
-    self.ticks = 0
+    self.ticks = 0                      # as in chapter 4
     self.show_score()
 
 def draw_trench(self):
@@ -278,7 +279,18 @@ def show_score(self):
     self.score_label.set_number(self.score, width=5, pad="0")
 ```
 
-Scroll the wall toward the ship in `update()`, right after the ship's animation:
+**Why `view_width=256, view_height=160`?** The view is the window onto the map,
+and it works in pixels. The map is 16 columns of 16-pixel tiles, so 256 pixels
+wide, which is exactly the 256 columns around the disc: the whole circle is
+visible. It is also 16 rows of 16 pixels, 256 pixels tall, but the view shows only
+160 of them. The wall repeats every 6 rows, which is 96 pixels, so `view_y` only
+ever needs to run from 0 to 95 before it wraps. Then the window, at its lowest
+position, covers pixels 95 to 254, still inside the 256 pixels of the map; a view
+up to 161 pixels tall would fit, and 160 is the round number below that. If you
+use another map, work it out the same way: take the repeat length in pixels, and
+make sure the map is at least that much taller than the view.
+
+Scroll the wall toward the ship in `update()`, right after the steering:
 
 ```python
     # Scroll the wall toward the ship. After one whole pattern the picture
@@ -287,15 +299,16 @@ Scroll the wall toward the ship in `update()`, right after the ship's animation:
     self.ground.view_y = (self.ticks // 2) % pattern_height
 ```
 
-Add the points when a shot hits, in `move_shots()`:
+Score points for every enemy that gets past the ship, in `move_enemies()`:
 
 ```python
 POINTS = 10
 
-            self.enemies.despawn(enemy)
-            boom = self.booms.spawn(x=enemy.x, y=enemy.y)
-            boom.frame = 0
-            self.shots.despawn(shot)
+def move_enemies(self):
+    for enemy in self.enemies:
+        # ... moving and animating, as before ...
+        if enemy.y < -enemy.image.height:
+            self.enemies.despawn(enemy)      # flew past the ship
             self.score += POINTS
             self.show_score()
 ```
@@ -305,11 +318,20 @@ section above, so `set_number()` knows which frame is which digit. The score sit
 at `x = 246`, the bottom of the disc, so it reads upright without any flips:
 
 ```{figure} ../images/game-play.png
-:alt: Tunnel Shooter: a dark trench wall with a cyan conduit ring, amber windows and orange vents, a ship at the top, a shot, enemies, and a score at the bottom
+:alt: Trench Run: a dark trench wall with a cyan conduit ring, amber windows and orange vents, a ship at the top, enemies coming down the tunnel, and a score at the bottom
 :width: 60%
 :align: center
 
-Tunnel Shooter so far.
+Trench Run so far.
+```
+
+## The file so far
+
+Everything from this chapter in one file, as it stands after chapter 5. If yours misbehaves, compare it
+with this one. It is `docs/vs2/tutorial/steps/step5_tilemaps.py` in the repository.
+
+```{literalinclude} steps/step5_tilemaps.py
+:language: python
 ```
 
 Next: [scenes, input and sound](scenes-and-input.md).

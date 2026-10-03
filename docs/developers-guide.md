@@ -39,6 +39,10 @@ emulator. Arrow keys (or W/A/S/D) move Joy1; Space/O/P/Y are Joy1 A/B/X/Y;
 Page Up and Page Down are Start and Back. H/J/K/L plus Z/X/C/V provide Joy2,
 and Home/End are Joy2 Start/Back. A USB gamepad works too.
 
+To start one game straight away instead of walking the menu, name it:
+`./vs-emu.sh --game myname.mygame` (group and folder, joined with a dot).
+Leaving the game returns to the menu.
+
 ## Part II: How to clone the simplest game
 
 Let's start by cloning a very simple game, `ventap`, as a new game called

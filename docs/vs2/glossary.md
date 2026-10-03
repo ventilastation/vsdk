@@ -11,9 +11,10 @@ API revision
   See [Your first game](tutorial/first-game.md).
 
 Asset pack
-  The images and sounds a game loads, compiled into a {term}`ROM`. It defaults
-  to your own game's folder, so you rarely name it. Each pack has its own
-  {term}`budget` of image strips.
+  The images a game loads, compiled into a {term}`ROM`. It defaults to your own
+  game's folder, so you rarely name it. Each pack has its own {term}`budget` of
+  image strips. Sounds are not part of it: they stay as MP3s that the base station
+  plays.
 
 Back button
   The `Y` or `BACK` button. By default it pops the current {term}`scene`; set
@@ -81,6 +82,14 @@ Frame
   One image inside a {term}`strip`, counted from 0. Setting a sprite's frame
   never changes whether it is {term}`visible`.
 
+Garbage collection
+  How MicroPython frees memory that nothing refers to any more. On the
+  {term}`console` it runs only when a scene starts or ends, so garbage made every
+  tick piles up until then and a long game can run out of memory; the desktop
+  emulator collects automatically and pauses instead. VS2 avoids both by
+  creating everything in {term}`build` and reusing it with {term}`pools <pool>`.
+  See [Why VS2 works this way](design-notes.md).
+
 Glyph
   The image frame that stands for one character. A *glyph table* maps
   characters to frames. See [Tilemaps and text](tutorial/tilemaps-and-text.md).
@@ -113,6 +122,10 @@ Level
   An input test that is true while a button is down:
   {py:meth}`~vs2.controls.joy1.held`. Compare {term}`edge`.
 
+MicroPython
+  A compact implementation of Python 3 for microcontrollers. Games are written in
+  it and run on the {term}`console`'s ESP32-S3, with limited memory and CPU.
+
 Palette group
   A set of images in `__images__.yaml` that share one 256-colour palette. Put
   images that look alike in the same group.
@@ -134,12 +147,13 @@ Rim
   The outer edge of the {term}`display`, at `y = 0`.
 
 ROM
-  The compiled form of a game's images and sounds. Frame counts and image sizes
-  are read from it.
+  The compiled form of a game's images: strips, palettes and glyph tables. Frame
+  counts and image sizes are read from it.
 
 Rotation
-  One full sweep of the bar around the disc. {py:meth}`~vs2.Scene.update` runs
-  once per rotation.
+  One full sweep of the bar around the disc, a few times per second. It is not
+  tied to {py:meth}`~vs2.Scene.update`: at the fan's usual 400 to 700 RPM there
+  are three to five {term}`ticks <tick>` per rotation.
 
 Rotor
   The spinning arm that carries the LED bar.
@@ -171,7 +185,8 @@ Strip
   four-frame animation is a PNG four times as wide as one frame.
 
 Tick
-  One call to `update()`. There is one per {term}`rotation`.
+  One call to `update()`. Ticks come every 30 ms, about 33 a second, whatever the
+  fan speed.
 
 Tile
   One picture in a tilemap's tileset, referred to by its frame number. Tile

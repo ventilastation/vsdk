@@ -7,7 +7,7 @@ import {
   createLedRingGeometry,
   DEFAULT_WEBGL_RESOLUTION_SCALE,
 } from "./app-support.js?v=20260717b";
-import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260729a";
+import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20261004a";
 
 // The LED ring spans +/-103.2 world units; this many units fit across the
 // canvas, so the outermost LEDs just touch the circular edge the stylesheet

@@ -8,6 +8,11 @@ once, then mutates it without allocating renderer records while it runs.
 import struct
 import utime
 
+try:
+    import ujson as _json
+except ImportError:
+    import json as _json
+
 from ventilastation import api_guard
 from ventilastation.director import director, stripes
 from ventilastation.display_geometry import DISPLAY_HEIGHT, DISPLAY_WIDTH
@@ -308,6 +313,70 @@ class _Audio:
 audio = _Audio()
 
 
+class _Saves:
+    """A game's saved data, exposed as ``vs2.saves``.
+
+    Each game has one small file of named values, kept on the console's flash
+    (and in a ``saves`` folder beside the emulator's runtime), so a high score
+    or a setting survives a restart. Values can be anything JSON can hold:
+    numbers, strings, booleans, lists and dicts of those.
+
+    Reading allocates and writing is slow, so load in ``build()`` and save only
+    when the value has changed, never every tick.
+    """
+
+    def _filename(self):
+        slug = api_guard.current_app()
+        if not slug:
+            raise RuntimeError("vs2.saves can only be used by a running game")
+        return "saves/" + slug + ".json"
+
+    def _read(self, filename):
+        try:
+            data = get_platform().storage.read_json(filename)
+        except Exception:
+            return {}                    # no file yet, or one that cannot be read
+        return data if isinstance(data, dict) else {}
+
+    def load(self, name, default=None):
+        """Return the value saved under ``name``, or ``default`` if there is
+        none (nothing saved yet, or the file cannot be read)."""
+        return self._read(self._filename()).get(name, default)
+
+    def save(self, name, value):
+        """Save ``value`` under ``name``.
+
+        Returns:
+            bool: ``True`` if a file was written. ``False`` if the value was
+            already saved (nothing is written then, which spares the flash) or
+            the file could not be written, in which case the reason is printed
+            and the game carries on.
+
+        Raises:
+            TypeError: If ``name`` is not a string or ``value`` cannot be
+                saved as JSON.
+        """
+        if not isinstance(name, str):
+            raise TypeError("a save name must be a string")
+        _json.dumps(value)               # raises TypeError for what JSON cannot hold
+        filename = self._filename()
+        data = self._read(filename)
+        if name in data and data[name] == value:
+            return False
+        data[name] = value
+        storage = get_platform().storage
+        try:
+            storage.makedirs("saves")
+            storage.write_json(filename, data)
+        except OSError as error:
+            print("vs2.saves: could not write %s: %s" % (filename, error))
+            return False
+        return True
+
+
+saves = _Saves()
+
+
 def _vs2_backend():
     return getattr(get_platform(), "vs2", None)
 
@@ -473,7 +542,8 @@ class Scene(_Scene):
     back_button = True
 
     #: When true, the drifting starfield is drawn behind this scene. Applied on
-    #: entry and restored on exit.
+    #: entry; a scene that leaves it false has no stars, whatever came before.
+    #: (Scenes written for the older sprite API always have them.)
     starfield = False
 
     #: Name of the asset pack to load, defaulting to the current app's own.
@@ -668,9 +738,6 @@ class Scene(_Scene):
             self._payload_drawables = ()
             self._payload_frames_size = 0
             self._phase = "closed"
-            setter = getattr(get_platform().display, "set_starfield", None)
-            if setter is not None:
-                setter(False)
             if backend is not None:
                 backend.set_active(False)
                 backend.reset_scene()

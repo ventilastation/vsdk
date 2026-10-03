@@ -1,23 +1,11 @@
-"""The small game that the VS2 tutorial builds, chapter by chapter.
-
-Trench Run: fly the ship around the rim and dodge the enemies that come down the
-tunnel at you. Every enemy that gets past scores; one that touches the ship ends
-the game. The best score is kept between runs. See docs/vs2/tutorial/.
-"""
-
-from urandom import randrange
-
+# Trench Run, chapter 5: a trench to fly down, and a score.
 import vs2
 from vs2.controls import *
 
 LEVEL, TURN_LEFT, TURN_RIGHT = range(3)      # the frames of ship.png
 ENEMY_SPEED = 0.5    # depth units per tick, toward the ship
 ENEMY_START = 160    # depth at which enemies appear
-SPAWN_MS = 900       # time between enemies at the start
-MIN_SPAWN_MS = 650   # ...and the shortest: 16 enemies, ten seconds each, is the
-                     # fastest the pool can keep up with
 POINTS = 10
-BEST = "best"        # the name the best score is saved under
 
 # The trench's tiles, in the order they appear in trench.png.
 PLATE, SEAM, PIPE, WINDOWS, VENT, HAZARD, LIGHTS, CONDUIT = range(8)
@@ -59,6 +47,8 @@ class Game(vs2.Scene):
 
         self.ship = self.world.sprite("ship.png", x=128, y=0)
         self.enemies = self.world.sprite_pool("enemy.png", count=16)
+        for i in range(5):
+            self.enemies.spawn(x=i * 51, y=ENEMY_START)
 
         # Bottom of the disc, so the score reads upright.
         self.score_label = self.hud.label("numerals.png", columns=5, x=246, y=1)
@@ -66,7 +56,6 @@ class Game(vs2.Scene):
         self.score = 0
         self.ticks = 0
         self.show_score()
-        self.call_later(self.spawn_delay(), self.spawn_enemy)
 
     def draw_trench(self):
         for row in range(TRENCH_ROWS):
@@ -94,78 +83,17 @@ class Game(vs2.Scene):
         pattern_height = PATTERN_ROWS * self.ground.tile_height
         self.ground.view_y = (self.ticks // 2) % pattern_height
 
-        if self.move_enemies():
-            vs2.audio.sound("boom")
-            return self.switch(GameOver(self.score))
+        self.move_enemies()
 
     def move_enemies(self):
-        """Advance the enemies. Returns True if one touched the ship."""
         for enemy in self.enemies:
             enemy.y -= ENEMY_SPEED
             enemy.frame = (self.ticks // 6) % enemy.image.frames
-            if enemy.overlaps(self.ship):
-                return True
             if enemy.y < -enemy.image.height:
                 self.enemies.despawn(enemy)      # flew past the ship
                 self.score += POINTS
                 self.show_score()
-        return False
-
-    def spawn_delay(self):
-        """Milliseconds until the next enemy: one less for every point, so the
-        game gets busier the longer you last, down to MIN_SPAWN_MS."""
-        return max(MIN_SPAWN_MS, SPAWN_MS - self.score)
-
-    def spawn_enemy(self):
-        self.enemies.spawn(x=randrange(vs2.display.width), y=ENEMY_START)
-        self.call_later(self.spawn_delay(), self.spawn_enemy)
-
-
-def centred_label(layer, text, y):
-    """A label for ``text``, centred on the bottom of the disc, where it reads
-    upright. steel8x8.png is a full CP437 font, 8 columns per character."""
-    label = layer.label("steel8x8.png", columns=len(text), x=0, y=y, text=text)
-    label.x = -(len(text) * label.image.width) // 2
-    return label
-
-
-class Title(vs2.Scene):
-    def build(self):
-        hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "TRENCH RUN", y=1)
-        best = vs2.saves.load(BEST, 0)
-        if best:
-            centred_label(hud, "BEST %05d" % best, y=11)
-        centred_label(hud, "PRESS A", y=20)
-
-    def update(self):
-        if joy1.just_pressed(A):
-            self.switch(Game())
-
-
-class GameOver(vs2.Scene):
-    def __init__(self, score):
-        vs2.Scene.__init__(self)
-        self.score = score
-        # Saved once, here, when the game ends. Writing flash is slow, so it is
-        # done only when the record is beaten, never while playing.
-        self.best = vs2.saves.load(BEST, 0)
-        self.new_best = score > self.best
-        if self.new_best:
-            self.best = score
-            vs2.saves.save(BEST, score)
-
-    def build(self):
-        hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "NEW BEST!" if self.new_best else "GAME OVER", y=1)
-        score = hud.label("numerals.png", columns=5, x=246, y=11)
-        score.set_number(self.score, width=5, pad="0")
-        centred_label(hud, "PRESS A", y=20)
-
-    def update(self):
-        if joy1.just_pressed(A):
-            self.switch(Game())
 
 
 def main():
-    return Title()
+    return Game()

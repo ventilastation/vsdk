@@ -1,4 +1,4 @@
-"""The shooter the VS2 tutorial builds (games/demos/tutorial_game)."""
+"""Trench Run, the game the VS2 tutorial builds (games/demos/tutorial_game)."""
 
 import os
 import random
@@ -37,10 +37,8 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 
 # name: (frame width, height, frames, glyphs), as in the game's __images__.yaml
 STRIPS = {
-    "ship.png": (18, 13, 4, None),
-    "shots.png": (6, 10, 3, None),
+    "ship.png": (18, 18, 3, None),
     "enemy.png": (14, 11, 6, None),
-    "explosion.png": (20, 20, 6, None),
     "trench.png": (16, 16, 8, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
     "steel8x8.png": (8, 8, 256, None),
@@ -119,6 +117,55 @@ class TutorialGameTests(unittest.TestCase):
         self.step(director.JOY_LEFT)
         self.assertEqual(game.ship.x, 255)
 
+    def test_the_ship_leans_into_a_turn(self):
+        from games.demos.tutorial_game.code.tutorial_game import (
+            LEVEL, TURN_LEFT, TURN_RIGHT)
+
+        game = self.start_game()
+        self.assertEqual(game.ship.frame, LEVEL)
+        self.step(director.JOY_LEFT)
+        self.assertEqual(game.ship.frame, TURN_LEFT)
+        self.step(director.JOY_RIGHT)
+        self.assertEqual(game.ship.frame, TURN_RIGHT)
+        self.step(0)
+        self.assertEqual(game.ship.frame, LEVEL)
+
+    def test_the_turned_frames_point_their_nose_the_way_the_ship_travels(self):
+        # The renderer draws a sprite's image mirrored in X, so moving left
+        # (x - 1) moves the ship toward its image's right edge: the left-turn
+        # frame must have its nose on the image's right, and the right-turn
+        # frame on its left. (See tools/vs2_doc_images/make_ship_art.py.)
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+        from games.demos.tutorial_game.code.tutorial_game import (
+            LEVEL, TURN_LEFT, TURN_RIGHT)
+
+        strip = Image.open(os.path.join(
+            ROOT, "games", "demos", "tutorial_game", "images", "ship.png")).convert("RGBA")
+        width = strip.width // 3
+
+        def nose_offset(frame):
+            """How far right of the image's centre the topmost pixels are."""
+            pixels = strip.crop((frame * width, 0, (frame + 1) * width, strip.height))
+            top = next(y for y in range(pixels.height)
+                       if any(pixels.getpixel((x, y))[3] for x in range(width)))
+            xs = [x for x in range(width) if pixels.getpixel((x, top))[3]]
+            return sum(xs) / len(xs) - (width - 1) / 2
+
+        self.assertAlmostEqual(nose_offset(LEVEL), 0, delta=1)
+        self.assertGreater(nose_offset(TURN_LEFT), 1)
+        self.assertLess(nose_offset(TURN_RIGHT), -1)
+
+    def test_both_directions_held_cancel_out(self):
+        from games.demos.tutorial_game.code.tutorial_game import LEVEL
+
+        game = self.start_game()
+        self.step(director.JOY_LEFT | director.JOY_RIGHT)
+        self.assertEqual(game.ship.x, 128)
+        self.assertEqual(game.ship.frame, LEVEL)
+
     def test_the_trench_wall_scrolls_and_wraps_seamlessly(self):
         game = self.start_game()
         pattern_height = 6 * game.ground.tile_height
@@ -133,45 +180,14 @@ class TutorialGameTests(unittest.TestCase):
             for col in range(16):
                 self.assertEqual(game.ground[col, row], game.ground[col, row + 6])
 
-    def test_a_shot_hits_an_enemy_and_scores(self):
+    def test_an_enemy_that_flies_past_scores(self):
         game = self.start_game()
-        self.press(director.BUTTON_A)
-        self.assertEqual(len(game.shots), 1)
-        shot = next(iter(game.shots))
-        self.assertGreater(shot.y, game.ship.y)
-
-        enemy = game.enemies.spawn(x=shot.x, y=shot.y + 6)
-        self.assertEqual(len(game.enemies), 1)
-        for _ in range(5):
-            self.step(0)
-            if game.score:
-                break
-        self.assertEqual(game.score, 10)
-        self.assertEqual(len(game.enemies), 0)
-        self.assertEqual(len(game.shots), 0)
-        self.assertEqual(len(game.booms), 1)
-        self.assertEqual(game.score_label.text, "00010")
-
-    def test_a_shot_that_misses_is_retired(self):
-        game = self.start_game()
-        self.press(director.BUTTON_A)
-        for _ in range(80):
-            self.step(0)
-        self.assertEqual(len(game.shots), 0)
-        self.assertEqual(game.score, 0)
-
-    def test_explosions_play_out_and_are_released(self):
-        game = self.start_game()
-        game.booms.spawn(x=10, y=50)
+        game.enemies.spawn(x=(game.ship.x + 128) % 256, y=1)
         for _ in range(60):
             self.step(0)
-        self.assertEqual(len(game.booms), 0)
-
-    def finish_game_over_delay(self, scene):
-        """Run the scene's pending timers now instead of waiting for them."""
-        while scene.pending_calls:
-            _when, callback, args, kwargs = scene.pending_calls.pop(0)
-            callback(*args, **kwargs)
+        self.assertEqual(len(game.enemies), 0)
+        self.assertEqual(game.score, 10)
+        self.assertEqual(game.score_label.text, "00010")
 
     def test_an_enemy_reaching_the_ship_ends_the_game(self):
         from games.demos.tutorial_game.code.tutorial_game import Game, GameOver
@@ -185,35 +201,75 @@ class TutorialGameTests(unittest.TestCase):
         self.assertEqual(over.score, 30)
         self.assertEqual(over._vs_declared_api, "vs2")
 
-        self.finish_game_over_delay(over)
         self.press(director.BUTTON_A)
         again = director.scene_stack[-1]
         self.assertIsInstance(again, Game)
         self.assertEqual(again.score, 0)
 
-    def test_game_over_ignores_fire_taps_until_the_score_has_been_seen(self):
-        from games.demos.tutorial_game.code.tutorial_game import GameOver
-
+    def test_dodging_keeps_the_game_going(self):
         game = self.start_game()
-        game.enemies.spawn(x=game.ship.x, y=game.ship.y + 2)
-        self.step(0)                           # the ship is hit
-        over = director.scene_stack[-1]
-        self.assertIsInstance(over, GameOver)
-
-        self.press(director.BUTTON_A)          # a player still tapping fire
-        self.press(director.BUTTON_A)
-        self.assertIs(director.scene_stack[-1], over)
-
-        self.finish_game_over_delay(over)      # the restart delay has passed
-        self.press(director.BUTTON_A)
-        self.assertIsNot(director.scene_stack[-1], over)
-
-    def test_enemies_that_miss_the_ship_fly_past(self):
-        game = self.start_game()
-        game.enemies.spawn(x=(game.ship.x + 128) % 256, y=1)
-        for _ in range(80):
-            self.step(0)
+        game.enemies.spawn(x=game.ship.x, y=40)
+        # Steer away from the enemy's angle while it comes down the tunnel.
+        for _ in range(120):
+            self.step(director.JOY_LEFT)
+        self.assertIs(director.scene_stack[-1], game)
         self.assertEqual(len(game.enemies), 0)
+        self.assertEqual(game.score, 10)
+
+    def test_the_spawn_interval_shrinks_as_the_score_rises(self):
+        from games.demos.tutorial_game.code.tutorial_game import (
+            MIN_SPAWN_MS, SPAWN_MS)
+
+        game = self.start_game()
+        self.assertEqual(game.spawn_delay(), SPAWN_MS)
+        game.score = 100
+        self.assertEqual(game.spawn_delay(), SPAWN_MS - 100)
+        game.score = 10 ** 6
+        self.assertEqual(game.spawn_delay(), MIN_SPAWN_MS)
+
+    def crash(self, game, score):
+        game.score = score
+        game.enemies.spawn(x=game.ship.x, y=game.ship.y + 2)
+        self.step(0)
+        return director.scene_stack[-1]
+
+    def label_texts(self, scene):
+        return [drawable.text for layer in scene.layers for drawable in layer._drawables
+                if getattr(drawable, "text", None)]
+
+    def test_the_best_score_is_saved_shown_and_survives_a_restart(self):
+        import vs2
+        from games.demos.tutorial_game.code.tutorial_game import BEST, Title
+
+        title = load_app("demos.tutorial_game")
+        self.assertIsNone(vs2.saves.load(BEST))
+        self.assertFalse(any("BEST" in text for text in self.label_texts(title)))
+
+        over = self.crash(self.start_game(title), 30)
+        self.assertTrue(over.new_best)
+        self.assertEqual(vs2.saves.load(BEST), 30)
+        self.assertIn("NEW BEST!", self.label_texts(over))
+        self.assertIn("00030", self.label_texts(over))
+
+        # A lower score leaves the record, and the file, alone.
+        writes = []
+        storage = director.platform.storage
+        original = storage.write_json
+        storage.write_json = lambda name, data: (writes.append(name), original(name, data))
+        self.press(director.BUTTON_A)
+        over = self.crash(director.scene_stack[-1], 10)
+        self.assertFalse(over.new_best)
+        self.assertEqual(vs2.saves.load(BEST), 30)
+        self.assertEqual(writes, [])
+        self.assertIn("GAME OVER", self.label_texts(over))
+        self.assertIn("00010", self.label_texts(over))
+        self.assertEqual(over.best, 30)
+
+        # A fresh start of the game, as after a power cycle, shows the record.
+        director.scene_stack.clear()
+        title = load_app("demos.tutorial_game")
+        self.assertIsInstance(title, Title)
+        self.assertIn("BEST 00030", self.label_texts(title))
 
     def test_the_spawn_timer_rearms_itself(self):
         game = self.start_game(keep_timer=True)

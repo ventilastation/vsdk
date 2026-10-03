@@ -415,5 +415,22 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(pixels_column_10, [0] * povrender.led_count)
 
 
+    def test_the_scene_can_switch_the_starfield_off(self):
+        lit_rows = [y for y in range(256) if povrender.deepspace[y] < povrender.PIXELS]
+        saved = list(povrender.starfield)
+        povrender.starfield[:] = [(5, lit_rows[0])]
+        try:
+            povrender.set_starfield_enabled(True)
+            self.assertEqual(sum(1 for pixel in povrender.render(5) if pixel), 1)
+            self.assertEqual(len(povrender.snapshot_scene_shader_input()["stars"]), 1)
+
+            povrender.set_starfield_enabled(False)
+            self.assertEqual(sum(1 for pixel in povrender.render(5) if pixel), 0)
+            self.assertEqual(povrender.snapshot_scene_shader_input()["stars"], ())
+        finally:
+            povrender.starfield[:] = saved
+            povrender.set_starfield_enabled(True)
+
+
 if __name__ == "__main__":
     unittest.main()

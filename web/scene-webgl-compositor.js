@@ -2,7 +2,7 @@
 // scene into integer textures and lets scene-shader-core's fragment shader
 // write the complete 256-column LED frame into the ring renderer's texture.
 
-import "./scene-shader-core.js?v=20260729a";
+import "./scene-shader-core.js?v=20261004a";
 
 const SceneShaderCore = globalThis.VentilastationSceneShaderCore;
 
@@ -198,7 +198,7 @@ class LedSceneWebGLCompositor {
     const scene = input.sceneKind === "vs2"
       ? packSceneVs2(input.sceneBytes)
       : packSceneLegacy(input.sceneBytes);
-    const stars = packStars(computeStarPositions(input.frameNumber));
+    const stars = packStars(computeStarPositions(input.frameNumber, input.starfield));
     const afterPackAt = performance.now();
     this.uploadIntegerTexture(this.textures.scene, {
       width: scene.sceneWidth,

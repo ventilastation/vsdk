@@ -78,12 +78,19 @@ Font strips that pack a second colour at a fixed offset are reached with
 self.status.write(3, 1, "ABXY", frame_offset=0x80)   # the red variant
 ```
 
-## Scene-scoped effects
+## The starfield
+
+The drifting stars behind the display are off unless a scene asks for them:
 
 ```python
 class MyGame(vs2.Scene):
-    starfield = True       # applied on entry, restored on exit
+    starfield = True       # stars behind this scene
 ```
+
+The flag is read each time the scene is entered, so a scene that leaves it `False`
+has no stars, whatever scene came before it. It belongs to the scene, not the
+game: a game with a title screen and a play screen sets it on each one that wants
+stars. Games written for the older sprite API always have the stars.
 
 ## Reading idle time directly
 

@@ -1,15 +1,15 @@
 # Tutorial
 
-Seven short chapters that build one game, **Tunnel Shooter**, from an empty folder
+Seven short chapters that build one game, **Trench Run**, from an empty folder
 to a game running on the console. You fly a ship around the rim of the disc and
-shoot the enemies that come down the tunnel at you.
+dodge the enemies that come down the tunnel at you.
 
 ```{figure} ../images/game-play.png
-:alt: Tunnel Shooter: a ship at the top of the disc, a shot flying away from it, enemies approaching, and a score at the bottom
+:alt: Trench Run: a ship at the top of the disc, enemies approaching down the tunnel, and a score at the bottom
 :width: 60%
 :align: center
 
-Tunnel Shooter, the game you will build.
+Trench Run, the game you will build.
 ```
 
 Each chapter teaches one part of the API and ends with an **In the game**
@@ -20,17 +20,20 @@ time:
 |---|---|---|
 | [1. Your first game](first-game.md) | the folder, `build()` and `update()` | a ship you can steer |
 | [2. The circular display](display.md) | X, Y, projections, draw order | a ship that flies all the way round |
-| [3. Sprites](sprites.md) | frames, collisions | an animated ship |
-| [4. Sprite pools](pools.md) | `spawn()` and `despawn()` | shots, enemies and explosions |
+| [3. Sprites](sprites.md) | frames, collisions | a ship that leans into its turns |
+| [4. Sprite pools](pools.md) | `spawn()` and `despawn()` | enemies coming down the tunnel |
 | [5. Tilemaps and text](tilemaps-and-text.md) | tilemaps, labels, flips | a scrolling trench wall and a score |
-| [6. Scenes, input and sound](scenes-and-input.md) | scenes, timers, audio | a title screen, game over, sound |
+| [6. Scenes, input and sound](scenes-and-input.md) | scenes, timers, audio | a game-over screen, a title screen, sound |
 | [7. Budgets and real hardware](budgets.md) | limits, testing on the disc | a finished game |
 
 The finished game is in `games/demos/tutorial_game/`, and it shows up in the
 **Tech Demos** menu. If you get stuck, compare your file with it.
 
-You need the emulator installed — see the setup guides in the `docs/` folder for
-Linux, macOS and Windows — and no hardware at all until the last chapter.
+You need the emulator installed — see the setup guide for
+[Linux](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.Linux.md),
+[macOS](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.macOS.md) or
+[Windows](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.Windows.md)
+— and no hardware at all until the last chapter.
 
 ```{toctree}
 :hidden:
@@ -44,6 +47,35 @@ tilemaps-and-text
 scenes-and-input
 budgets
 ```
+
+## What your code runs on
+
+Your game is written in {term}`MicroPython`, a compact version of Python 3 made for
+microcontrollers, and on the {term}`console` it runs on an ESP32-S3: two cores at
+240 MHz and about 8 MB of RAM, which also holds your images. (Sounds don't go on
+the console at all: the base station plays them.) That is a small, slow computer
+next to a laptop. One core runs your game; the other
+does nothing but drive the LEDs on a hard deadline.
+
+Two habits follow from that, and the rest of the tutorial keeps coming back to
+them:
+
+- **Keep `update()` short.** It runs about 33 times a second (every 30 ms,
+  one {term}`tick`), whatever the fan speed. A tick that takes longer delays the
+  next one and the lost time is not made up, so a slow `update()` slows the whole
+  game down.
+- **Do not create objects while the game runs.** Python frees memory with a
+  {term}`garbage collector <garbage collection>`, and the console has little
+  memory for it to work with. On the console the collector only runs when a
+  scene starts or ends, so anything you create every tick piles up until then,
+  and a long game that does it can run out of memory in the middle of play. (The
+  desktop emulator collects automatically instead, so there the cost is
+  occasional pauses.) So the API has you create everything once, in `build()`, and
+  only move things afterwards.
+
+The emulator runs the same code on a much faster machine, so a game that is
+smooth there can still stutter on the disc. Chapter 7 says what to watch for.
+[Why VS2 works this way](../design-notes.md) has the details.
 
 ## What you are writing for
 

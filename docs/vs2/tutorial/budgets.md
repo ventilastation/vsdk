@@ -1,7 +1,7 @@
 # 7. Budgets and real hardware
 
 The {term}`console` has on the order of 8 MB of RAM shared between MicroPython's
-heap, image strips, audio and the interpreter, and a hard deadline every
+heap, the image strips and the interpreter, and a hard deadline every
 {term}`column`. The {term}`budgets <budget>` exist so you find out at `build()`
 rather than mid-game.
 
@@ -56,8 +56,8 @@ tile-based background — is one tilemap record however many cells it has.
 
 ## Keep `update()` free of allocation
 
-Creating a tuple, dict or formatted string every tick adds up to garbage the
-console has to collect mid-game. Everything in this list is allocation-free, so
+Creating a tuple, dict or formatted string every tick adds up to garbage that
+stays on the console's small heap until the next scene change. Everything in this list is allocation-free, so
 it is safe to call every tick (the reasons are in
 [why VS2 works this way](../design-notes.md)):
 
@@ -65,7 +65,7 @@ it is safe to call every tick (the reasons are in
 sprite.x += 0.5
 sprite.frame = 3
 pool.spawn(x, y)
-pool.despawn(shot)
+pool.despawn(enemy)
 tilemap.view_y = depth % tilemap.tile_height
 tilemap[col, row] = WINDOWS
 label.set_number(score, width=5)
@@ -107,22 +107,18 @@ Do it before you share a game, not after.
 
 ## In the game
 
-Add up Tunnel Shooter's budget. The numbers are in `vs2.limits`:
+Add up Trench Run's budget. The numbers are in `vs2.limits`:
 
 | Resource | Used by the game scene | Budget |
 |---|---|---|
 | Layers | 2 (`world`, `hud`) | 8 |
-| Sprites | 1 ship + 8 shots + 16 enemies + 4 explosions = 29 | 100 |
+| Sprites | 1 ship + 16 enemies = 17 | 100 |
 | Tilemaps | 1 trench wall + 1 score label = 2 | 16 |
-| Image strips | 7 (ship, shots, enemy, explosion, trench, numerals, steel8x8) | 100 |
+| Image strips | 5 (ship, enemy, trench, numerals, steel8x8) | 100 |
 
 Everything is created in `build()`, so the whole table is checked the first time
-the scene is entered. Here is the complete game, exactly as it is in
-`games/demos/tutorial_game/code/tutorial_game.py`:
-
-```{literalinclude} ../../../games/demos/tutorial_game/code/tutorial_game.py
-:language: python
-```
+the scene is entered. The complete game is at the end of
+[chapter 6](scenes-and-input.md#the-whole-game).
 
 Run it in the emulator, then run it on the real Ventilastation. The trench, the
 score and the title should all look the way they did on screen, but only the

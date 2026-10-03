@@ -30,10 +30,8 @@ const CHROMIUM = process.env.CHROMIUM
   || (fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
 
 const ART = {
-  "ship.png": ["alecu/vixeous/images/ship.png", 4],
-  "shots.png": ["alecu/vixeous/images/shots.png", 3],
-  "enemy.png": ["alecu/vixeous/images/enemy.png", 6],
-  "explosion.png": ["alecu/vixeous/images/explosion.png", 6],
+  "ship.png": ["demos/tutorial_game/images/ship.png", 3],
+  "enemy.png": ["demos/tutorial_game/images/enemy.png", 6],
   "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
   "trench.png": ["demos/tutorial_game/images/trench.png", 8],
   "steel8x8.png": ["vsjam-may25/vasura_espacial/images/steel8x8.png", 256],
@@ -97,11 +95,8 @@ const EXAMPLES = {
     repoGame: "demos/tutorial_game",
     steps: [
       { wait: 800 }, { shot: "game-title.png" },
-      ...key("Space"), { wait: 7000 },
-      { down: "ArrowLeft" }, { wait: 150 }, { up: "ArrowLeft" },
-      ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 250 },
-      { down: "ArrowRight" }, { wait: 300 }, { up: "ArrowRight" },
-      ...key("Space"), { wait: 250 }, ...key("Space"), { wait: 150 },
+      ...key("Space"), { wait: 4500 },
+      { down: "ArrowLeft" }, { wait: 250 }, { up: "ArrowLeft" }, { wait: 150 },
       { shot: "game-play.png" },
     ],
   },
@@ -115,19 +110,15 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, {
       shot: "sprites-frames.png",
       labels: [
-        { x: 440, y: 330, text: "frame = 0, 1, 2, 3  (left to right)" },
+        { x: 232, y: 640, text: "frame = 1" },
+        { x: 440, y: 665, text: "frame = 0" },
+        { x: 650, y: 640, text: "frame = 2" },
       ],
     }],
   },
   pools: {
-    art: ["ship.png", "shots.png", "enemy.png", "explosion.png"],
-    steps: [
-      { wait: 800 },
-      ...key("Space"), { wait: 450 },
-      ...key("Space"), { wait: 450 },
-      ...key("Space"), { wait: 120 },
-      { shot: "pools.png" },
-    ],
+    art: ["ship.png", "enemy.png"],
+    steps: [{ wait: 800 }, { shot: "pools.png" }],
   },
   tilemap: {
     art: ["ship.png", "trench.png"],

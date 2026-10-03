@@ -22,6 +22,8 @@ STARS = COLUMNS // 2
 led_count = PIXELS
 
 starfield = [(random.randrange(COLUMNS), random.randrange(ROWS)) for n in range(STARS)]
+# Whether the stars are drawn: the running scene sets it (comms "starfield").
+starfield_enabled = True
 spritedata = bytearray( b"\0\0\0\xff\xff" * 100)
 
 # The native compositor normally consumes decoded Python structures.  The
@@ -181,7 +183,7 @@ def snapshot_scene_shader_input():
             "scene": _vs2_scene_bytes if _vs2_scene_bytes is not None else bytes(spritedata),
             "assets": tuple(all_strips.items()),
             "palette": _palette_wire_bytes,
-            "stars": tuple(starfield),
+            "stars": tuple(starfield) if starfield_enabled else (),
             "assets_revision": _scene_assets_revision,
             "palette_revision": _scene_palette_revision,
         }
@@ -497,6 +499,12 @@ def render_sprite(pixels, column, x, y, image, frame, perspective,
                 set_pixel(pixels, led, upalette[index + pal_base])
 
 
+def set_starfield_enabled(enabled):
+    global starfield_enabled
+    starfield_enabled = bool(enabled)
+    native_render.set_starfield(starfield_enabled)
+
+
 def step_starfield():
     for (n, (x, y)) in enumerate(starfield):
         y -= 1
@@ -530,7 +538,7 @@ def render(column, vs2_scene=_CURRENT_VS2_SCENE):
 
     pixels = [0x00000000] * led_count
 
-    for (x,y) in starfield:
+    for (x,y) in (starfield if starfield_enabled else ()):
         if x == column:
             try:
                 px = deepspace[y]

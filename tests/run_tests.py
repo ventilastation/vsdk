@@ -32,6 +32,8 @@ MPY_SOURCE_ROOTS = [
     ROOT / "apps" / "micropython" / "vsdk_ota_rings.py",
     ROOT / "apps" / "micropython" / "ventilastation",
     ROOT / "system",
+    # The tutorial pages include these files, so readers copy them to a game.
+    ROOT / "docs" / "vs2" / "tutorial" / "steps",
     ROOT / "games",
 ]
 
@@ -54,6 +56,8 @@ CPYTHON_TESTS = [
     "tests/test_emulator_vs2_render.py",
     "tests/test_mapdemo_vs2.py",
     "tests/test_tutorial_game.py",
+    "tests/test_launch_flag.py",
+    "tests/test_tutorial_steps.py",
     "tests/test_input_demo.py",
     "tests/test_vixeous_vs2.py",
     "tests/test_vyruss_vs2.py",
@@ -97,6 +101,7 @@ NODE_TESTS = [
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",
     "tests/test_rom_builder_core.mjs",
+    "tests/test_starfield_flag.mjs",
 ]
 
 

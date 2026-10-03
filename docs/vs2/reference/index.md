@@ -66,4 +66,5 @@ class MyGame(vs2.Scene):
 | Leave a scene | `self.pop()`, `self.push(other)`, `self.switch(other)` |
 | Run something later | `self.call_later(ms, callback, *args)` |
 | Play audio | `vs2.audio.sound(name)`, `vs2.audio.music(name, loop=True)` |
+| Keep a high score | `vs2.saves.load(name, default)`, `vs2.saves.save(name, value)` |
 | Know the display size | `vs2.display.width` (256), `vs2.display.height` (54) |

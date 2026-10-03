@@ -1,18 +1,26 @@
 # 4. Sprite pools
 
-Bullets, enemies and explosions come and go. You cannot create them on the fly —
+Enemies, bonuses and sparks come and go. You cannot create them on the fly —
 the scene is {term}`sealed` — so you reserve a {term}`pool` of them up front and
-cycle through it:
+cycle through it.
+
+The reason is the hardware. Every new object takes memory from MicroPython's
+heap, and when a sprite is thrown away, its memory stays in use until the
+{term}`garbage collector <garbage collection>` finds it. On the console the
+collector only runs when a scene starts or ends, so a game that makes a sprite
+for every enemy would pile up garbage tick after tick, and a long game could run
+out of memory before the next scene change. (The desktop emulator collects
+automatically, so there it would pause instead.) A pool makes the sprites once,
+in `build()`, and then lends them out and takes them back, so spawning an enemy
+allocates nothing:
 
 ```python
 def build(self):
     world = self.layer("world", projection=vs2.TUNNEL)
-    self.shots   = world.sprite_pool("shots.png", count=8)
     self.enemies = world.sprite_pool("enemy.png", count=16)
-    self.booms   = world.sprite_pool("explosion.png", count=4, on_empty=vs2.RECYCLE)
 ```
 
-That is 28 of your 100 sprites, spent in three numbers you can add up.
+That is 16 of your 100 sprites, spent in one number you can add up.
 
 Every sprite starts hidden. Nothing after this allocates.
 
@@ -22,22 +30,22 @@ Every sprite starts hidden. Nothing after this allocates.
 sprite, positions it, shows it, and hands it back:
 
 ```python
-if joy1.just_pressed(A):
-    shot = self.shots.spawn(x=self.ship.x, y=self.ship.y + 4)
+enemy = self.enemies.spawn(x=100, y=160)
 ```
 
-When the pool is empty it returns `None`, because "no free bullet this frame" is
-a game rule, not an error:
+When the pool is empty it returns `None`, because "no free enemy this time" is a
+game rule, not an error:
 
 ```python
-shot = self.shots.spawn(x=..., y=...)
-if shot is None:
-    return          # player is already firing as fast as they may
+enemy = self.enemies.spawn(x=..., y=...)
+if enemy is None:
+    return          # the tunnel is already full; skip this one
 ```
 
-For explosions and particles, dropping one looks worse than cutting another
-short, so pass `on_empty=vs2.RECYCLE` and an exhausted pool will {term}`recycle`
-its oldest live sprite instead of returning `None`.
+For sparks and particles, dropping one looks worse than cutting another short,
+so pass `on_empty=vs2.RECYCLE` when you create the pool, for example
+`world.sprite_pool("spark.png", count=32, on_empty=vs2.RECYCLE)`, and an exhausted
+pool will {term}`recycle` its oldest live sprite instead of returning `None`.
 
 ## Despawning and iterating
 
@@ -45,32 +53,25 @@ Iterating a pool yields only the live sprites, and despawning the current one
 mid-loop is supported — which is exactly what the common loop needs:
 
 ```python
-SHOT_SPEED = 3
-SHOT_RANGE = 170          # depth at which a shot has gone too far to matter
+ENEMY_SPEED = 0.5
 
 def update(self):
-    for shot in self.shots:
-        shot.y += SHOT_SPEED          # away from the player, down the tunnel
-        if shot.y > SHOT_RANGE:
-            self.shots.despawn(shot)
-            continue
-
-        enemy = shot.first_overlap(self.enemies)
-        if enemy:
-            self.enemies.despawn(enemy)
-            self.booms.spawn(x=enemy.x, y=enemy.y)
-            self.shots.despawn(shot)
+    for enemy in self.enemies:
+        enemy.y -= ENEMY_SPEED                 # toward the player, at the rim
+        if enemy.y < -enemy.image.height:
+            self.enemies.despawn(enemy)        # gone past the rim: retire it
 ```
 
-On a `TUNNEL` layer a shot fired away from the player counts *up* in Y, and the
-cutoff is a depth you choose — see [the circular display](display.md).
+On a `TUNNEL` layer the rim is `y = 0`, so something coming toward the player
+counts *down* in Y, and the cutoff is a depth you choose — see
+[the circular display](display.md).
 
 ```{figure} ../images/pools.png
-:alt: A row of enemies near the centre, a shot flying toward them and a small explosion where one enemy was hit
+:alt: Seven enemies spread through the tunnel at different depths and angles, with a ship on the rim at the top
 :width: 60%
 :align: center
 
-Seven enemies spawned from a pool, a shot in flight, and the explosion left by a hit.
+Seven enemies spawned from a pool, at different depths, heading for the ship.
 ```
 
 {py:meth}`~vs2.SpritePool.despawn_all` clears a pool in one call, which is the
@@ -79,7 +80,6 @@ usual way to reset a level:
 ```python
 def start_wave(self, n):
     self.enemies.despawn_all()
-    self.shots.despawn_all()
     ...
 ```
 
@@ -110,81 +110,58 @@ is quietly in both the free list and the live list.
 
 ## In the game
 
-Time to shoot things. Add three pools to `build()`, and a few enemies to shoot
-at (a timer will spawn them properly in chapter 6):
+Time for something to dodge. Add a pool of enemies to `build()`, with a few of
+them already spawned (a timer will spawn them properly in chapter 6):
 
 ```python
-SHOT_SPEED = 3       # depth units per tick, away from the ship
-SHOT_RANGE = 170     # depth at which a shot has gone too far to matter
 ENEMY_SPEED = 0.5    # depth units per tick, toward the ship
 ENEMY_START = 160    # depth at which enemies appear
-BOOM_TICKS = 3       # ticks each explosion frame stays on screen
 
 
 def build(self):
     # ... the layer and the ship, as before ...
-    self.shots = self.world.sprite_pool("shots.png", count=8)
     self.enemies = self.world.sprite_pool("enemy.png", count=16)
-    self.booms = self.world.sprite_pool("explosion.png", count=4,
-                                        on_empty=vs2.RECYCLE)
     for i in range(5):
         self.enemies.spawn(x=i * 51, y=ENEMY_START)
+    self.ticks = 0                              # counts update() calls
 ```
 
-Then `update()` fires with the A button and moves everything:
+Then `update()` moves them:
 
 ```python
 def update(self):
-    # ... steering and the ship's animation, as before ...
-    if joy1.just_pressed(A):
-        self.fire()
-
-    self.move_shots()
+    self.ticks += 1
+    # ... steering, as before ...
     self.move_enemies()
-    self.animate_booms()
-
-def fire(self):
-    # Centre the 6-column shot on the 18-column ship.
-    self.shots.spawn(x=self.ship.x + 6, y=self.ship.y + 4)
-
-def move_shots(self):
-    for shot in self.shots:
-        shot.y += SHOT_SPEED
-        if shot.y > SHOT_RANGE:
-            self.shots.despawn(shot)
-            continue
-
-        enemy = shot.first_overlap(self.enemies)
-        if enemy:
-            self.enemies.despawn(enemy)
-            boom = self.booms.spawn(x=enemy.x, y=enemy.y)
-            boom.frame = 0
-            self.shots.despawn(shot)
 
 def move_enemies(self):
-    """Advance the enemies. Returns True if one touched the ship."""
     for enemy in self.enemies:
         enemy.y -= ENEMY_SPEED
         enemy.frame = (self.ticks // 6) % enemy.image.frames
-        if enemy.overlaps(self.ship):
-            return True
         if enemy.y < -enemy.image.height:
             self.enemies.despawn(enemy)      # flew past the ship
-    return False
-
-def animate_booms(self):
-    if self.ticks % BOOM_TICKS:
-        return
-    for boom in self.booms:
-        if boom.frame >= boom.image.frames - 1:
-            self.booms.despawn(boom)         # the animation has played out
-        else:
-            boom.frame += 1
 ```
 
-Three things to notice. Enemies move *toward* the ship by counting `y` **down**,
-because the ship is at the rim. `boom.frame = 0` restarts an explosion that was
-recycled from an older one. And `move_enemies()` reports a hit by returning
-`True`; nothing uses that yet, and chapter 6 ends the game with it.
+Enemies move *toward* the ship by counting `y` **down**, because the ship is at
+the rim. Speeds here are per tick, and a tick is about 30 ms, so 0.5 per tick
+means an enemy takes around ten seconds to come down from `y = 160`. That is the
+arithmetic to do when you tune a speed. The same applies to animation: to change
+frame at a pace you can see, count the ticks and change frame every few of them
+instead of on every one: `self.ticks // 6` stays the same for six ticks in a row,
+so the enemy changes frame six times more slowly than `update()` runs.
+`enemy.image.frames` supplies the number of frames, so the line keeps working if
+you add one to the PNG.
+
+For now an enemy that reaches the ship simply flies through it; chapter 6 makes
+that end the game, and chapter 5 scores the ones you avoid.
+
+## The file so far
+
+Everything from this chapter in one file, as it stands after chapter 4. If yours misbehaves, compare it
+with this one. It is `docs/vs2/tutorial/steps/step4_pools.py` in the repository.
+
+```{literalinclude} steps/step4_pools.py
+:language: python
+```
 
 Next: [tilemaps and text](tilemaps-and-text.md).

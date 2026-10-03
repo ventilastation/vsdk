@@ -13,6 +13,8 @@ def create_hardware_platform():
     board_config.load()
     display = LazyModule("vshw_povdisplay")
     display.update = lambda: None  # GPU renders autonomously via hall sensor interrupt
+    # The scene's starfield flag; the C module's own name for it.
+    display.set_starfield = lambda enabled: display.set_starfield_enabled(bool(enabled))
     return Platform(
         name="hardware",
         comms=LazyModule("ventilastation.serialcomms"),

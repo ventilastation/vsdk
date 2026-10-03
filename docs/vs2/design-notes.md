@@ -10,12 +10,36 @@ times per rotation, "what colour is each LED at this angle?" and answers by
 walking your scene. A column has to be ready before the arm reaches it, so the
 answer must be cheap.
 
+## The hardware is small
+
+Games are written in MicroPython, which runs on the console's ESP32-S3: two cores
+at 240 MHz, with about 8 MB of external RAM shared between the interpreter's heap
+and the image strips. Sound never lives on the console: the base station plays your
+game's MP3s when the code asks for them. One core runs MicroPython and your game; the
+other runs the renderer and the LED output, which is timing-critical. The
+renderer reads the sprite and tilemap records that Python created directly, in
+place, rather than being handed copies.
+
+Your game's `update()` is called on a fixed 30 ms timer, about 33 times a second,
+whatever the fan speed. The renderer does not wait for it: on the console it
+draws on its own, driven by the hall sensor, and at 400 to 700 RPM there are three
+to five updates per rotation. A tick that takes longer than 30 ms is not
+caught up on.
+
+MicroPython frees memory with a garbage collector that stops the interpreter while
+it walks the heap. The console's director turns automatic collection off, so
+there are no surprise pauses in the middle of a tick, and runs the collector
+itself when a scene is pushed, popped or switched. The catch is that garbage made
+in `update()` is not freed until then, so a game that allocates every tick fills
+the heap and can run out of memory mid-game. The desktop emulator keeps
+automatic collection on, so there the same habit shows up as occasional pauses.
+
 ## The display graph is fixed
 
 Everything a scene draws is created once, in `build()`. After that, moving
 something is a write into a record the renderer already holds. Nothing is
-allocated while the game runs, so no garbage collection pause can land on a
-visible frame.
+allocated while the game runs, so no garbage builds up between scene changes and
+nothing is left for a collector to pause over.
 
 That one idea explains several rules:
 
@@ -31,8 +55,8 @@ That one idea explains several rules:
   mid-game.
 
 A per-frame tuple, dict or formatted string is not "a little garbage" here: over
-a session it is the difference between a stable heap and a pause landing on a
-visible frame.
+a session it is the difference between a stable heap and one that fills up before
+the next scene change.
 
 ## Layers own drawables
 

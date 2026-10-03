@@ -37,14 +37,21 @@ This table comes from `node capture.mjs --list`.
 
 Notes on specific images:
 
-- **`game-play.png`** is a real game being played with scripted key presses, and
-  the enemies appear at random places. Run `node capture.mjs game` again until the
-  picture shows enemies at several depths, a shot in flight and a score above
-  `00000` (the script fires a few shots, so a hit is likely but not certain).
-  `game-title.png` is written by the same run.
+- **`sprites-frames.png`** shows the three frames of the game's `ship.png`, with
+  frame 0 in the middle and a 6 column gap between neighbours; the sprite width is
+  read from the sprite, so a change to the art keeps the spacing. The ship art is
+  drawn by `make_ship_art.py` (needs Pillow), which writes
+  `games/demos/tutorial_game/images/ship.png`. Retake it and look at the result
+  after changing the art: the outer two ships are also tilted by their place on the
+  disc.
+- **`game-play.png`** is the real game after pressing A on the title, and the
+  enemies appear at random places. Run `node capture.mjs game` again until the
+  picture shows several enemies at different depths and the ship still alive (the
+  script does not dodge, so an enemy can hit the ship first and the shot then shows
+  the game-over screen). `game-title.png` is written by the same run.
 - **`game-over.png`** does not play the game: `examples/gameover.py` opens the
-  game's own `GameOver` scene with a fixed score of 130 (13 kills), so it is the
-  same every time.
+  game's own `GameOver` scene with a fixed score of 130 (13 enemies dodged) and a
+  saved best of 250 (written with `vs2.saves` first), so it is the same every time.
 - **Annotated** images have text drawn over the screenshot (`labels` in
   `capture.mjs`). The text is placed in empty parts of the disc and in coordinates
   of an 880 pixel square, so it should still sit in the same place with the WebGL

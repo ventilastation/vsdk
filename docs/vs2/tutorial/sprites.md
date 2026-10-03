@@ -21,29 +21,33 @@ def update(self):
     self.ship.flip_x = self.moving_left
 ```
 
-A sprite shows one {term}`frame` of its strip at a time. Four sprites showing
-frames 0 to 3 of `ship.png`:
+A sprite shows one {term}`frame` of its strip at a time. The game's ship has
+three: one flying level and one turned to each side. Here are three sprites
+showing frames 0 to 2 of `ship.png`, set side by side at the bottom of the disc
+with a gap between them (frame 0, the level ship, is in the middle):
 
 ```{figure} ../images/sprites-frames.png
-:alt: Four ships side by side, each showing a different frame of the strip
+:alt: Three ships along the bottom of the disc, labelled with their frame numbers: frame 0, pointing straight up, in the middle, and frames 1 and 2 leaning to either side of it
 :width: 60%
 :align: center
 
-`frame = 0, 1, 2, 3`. The frames differ only in the engine glow.
+One strip, three poses of the same ship. The outer two are also tilted by where
+they sit on the disc, which is a circle: chapter 1 shows the three frames as they
+are drawn in the strip.
 ```
 
 `frame` and `visible` are **independent axes**. Setting a frame never reveals a
 hidden sprite, which is what lets you prepare something before showing it:
 
 ```python
-shot.frame = BULLET_FRAME    # still hidden
-shot.show()                  # now visible, same frame
+enemy.frame = ANGRY_FRAME    # still hidden
+enemy.show()                 # now visible, same frame
 ```
 
 An out-of-range frame raises at the assignment rather than rendering garbage:
 
 ```text
-FrameError: ship.png has 4 frames; frame must be 0..3
+FrameError: ship.png has 3 frames; frame must be 0..2
 ```
 
 ## Frame counts and sizes
@@ -71,10 +75,10 @@ self.ship.image = "ship_damaged.png"
 Two allocation-free axis-aligned tests, with the circular X handled for you:
 
 ```python
-if shot.overlaps(enemy):
+if self.ship.overlaps(enemy):
     ...
 
-target = shot.first_overlap(self.enemies)   # a Sprite, or None
+target = self.ship.first_overlap(self.enemies)   # a Sprite, or None
 if target:
     ...
 ```
@@ -89,26 +93,45 @@ at column 254. Y does not wrap, because the disc has an inside and an outside.
 
 ## In the game
 
-Let the ship's engine glow flicker by cycling through its four frames. `update()`
-runs once per rotation, so count the calls and change frame every few of them
-instead of on every one:
+Make the ship lean into its turns. A frame can show *state*, here which way the
+ship is steering, so choose it from the buttons:
 
 ```python
-def build(self):
-    self.world = self.layer("world", projection=vs2.TUNNEL)
-    self.ship = self.world.sprite("ship.png", x=128, y=0)
-    self.ticks = 0                              # counts update() calls
+LEVEL, TURN_LEFT, TURN_RIGHT = range(3)      # the frames of ship.png
 
 def update(self):
-    self.ticks += 1
-    # ... steering, as before ...
-    self.ship.frame = (self.ticks // 4) % self.ship.image.frames
+    # -1 for left, +1 for right, 0 for neither (or both held: they cancel).
+    steer = joy1.held(RIGHT) - joy1.held(LEFT)
+    self.ship.x = (self.ship.x + steer) % vs2.display.width
+    if steer < 0:
+        self.ship.frame = TURN_LEFT
+    elif steer > 0:
+        self.ship.frame = TURN_RIGHT
+    else:
+        self.ship.frame = LEVEL
 ```
 
-`self.ticks // 4` stays the same for four ticks in a row, so the frame changes
-four times more slowly than `update()` runs. `self.ship.image.frames` supplies
-the number of frames, so the line keeps working if you give the ship more frames
-later.
+`held()` is true or false, so subtracting two of them gives the direction in one
+line, and pressing both directions at once cancels out as it did in chapter 2. The
+names for the frames make the code say what it means, and they are the same
+three numbers the strip is laid out in. Setting a frame is a single write, so
+doing it every tick costs nothing.
+
+:::{note}
+The renderer draws a sprite's image mirrored in X, because `x` counts the way the
+disc turns. Moving left (`x - 1`) moves the ship toward the *right* edge of its own
+image, so the frame for a left turn is the one whose nose points to the image's
+right. If your own art leans the wrong way, swap the two frames.
+:::
+
+## The file so far
+
+Everything from this chapter in one file, as it stands after chapter 3. If yours misbehaves, compare it
+with this one. It is `docs/vs2/tutorial/steps/step3_sprites.py` in the repository.
+
+```{literalinclude} steps/step3_sprites.py
+:language: python
+```
 
 Next: [sprite pools](pools.md), for everything you need many of. To share one
 image handle between several sprites, see [going further](../going-further.md).

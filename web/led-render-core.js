@@ -445,7 +445,9 @@
     }
 
     const columnOffset = positiveMod(Number(frame?.column_offset || 0), COLUMNS);
-    drawStarfield(pixels, frame?.frame || 0, columnOffset);
+    if (frame?.starfield !== false) {
+      drawStarfield(pixels, frame?.frame || 0, columnOffset);
+    }
 
     if (!(palette instanceof Uint8Array) || !Array.isArray(frame?.sprites)) {
       return pixels;

@@ -23,7 +23,7 @@ Buttons are `LEFT` `RIGHT` `UP` `DOWN`, `A` `B` `X` `Y`, `START` and `BACK`.
 ## Sound
 
 ```python
-vs2.audio.sound("shoot")
+vs2.audio.sound("boom")
 vs2.audio.music("theme", loop=True)
 vs2.audio.stop_music()
 ```
@@ -108,22 +108,8 @@ def on_idle(self):
 
 ## In the game
 
-Tunnel Shooter needs three finishing touches: sound, enemies that arrive on a
-timer, and screens before and after the game.
-
-**Sound.** Copy `shoot.mp3` and `boom.mp3` from
-`games/demos/tutorial_game/sounds/` into your game's `sounds/` folder, then play
-them by name:
-
-```python
-def fire(self):
-    # Centre the 6-column shot on the 18-column ship.
-    shot = self.shots.spawn(x=self.ship.x + 6, y=self.ship.y + 4)
-    if shot is not None:
-        vs2.audio.sound("shoot")      # only when a shot was really fired
-```
-
-and `vs2.audio.sound("boom")` after the score changes in `move_shots()`.
+Trench Run needs a few finishing touches: a way to lose, enemies that arrive on
+a timer, screens before and after the game, and a best score that is kept.
 
 **A timer for the enemies.** Replace the five enemies from chapter 4 with one
 that re-arms itself. Start it at the end of `build()`:
@@ -142,19 +128,36 @@ def spawn_enemy(self):
     self.call_later(SPAWN_MS, self.spawn_enemy)
 ```
 
-Timers die with the scene, so when the game ends nothing is left spawning.
+Timers die with the scene, so when the game ends nothing is left spawning. If the
+pool is full, `spawn()` returns `None` and this skips that enemy, which is all the
+handling it needs.
 
-**Game over.** `move_enemies()` has been returning `True` when an enemy touches
-the ship. Use it to switch to a new scene, handing the score over through its
-constructor:
+**Game over, with a sound.** Copy `boom.mp3` from
+`games/demos/tutorial_game/sounds/` into your game's `sounds/` folder. When an
+enemy touches the ship, play it and switch to a new scene, handing the score over
+through its constructor. {py:meth}`~vs2.Sprite.overlaps` tests two sprites, and
+`move_enemies()` is already looping over every live enemy, so it can make the
+check and report a hit by returning `True`:
 
 ```python
 def update(self):
-    # ... as before, up to the shots ...
-    self.move_shots()
+    # ... as before, up to the enemies ...
     if self.move_enemies():
+        vs2.audio.sound("boom")
         return self.switch(GameOver(self.score))
-    self.animate_booms()
+
+def move_enemies(self):
+    """Advance the enemies. Returns True if one touched the ship."""
+    for enemy in self.enemies:
+        enemy.y -= ENEMY_SPEED
+        enemy.frame = (self.ticks // 6) % enemy.image.frames
+        if enemy.overlaps(self.ship):
+            return True
+        if enemy.y < -enemy.image.height:
+            self.enemies.despawn(enemy)      # flew past the ship
+            self.score += POINTS
+            self.show_score()
+    return False
 ```
 
 **A title and a game-over screen.** Both are small scenes. The text is a
@@ -174,15 +177,12 @@ def centred_label(layer, text, y):
 class Title(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "TUNNEL SHOOTER", y=1)
+        centred_label(hud, "TRENCH RUN", y=1)
         centred_label(hud, "PRESS A", y=20)
 
     def update(self):
         if joy1.just_pressed(A):
             self.switch(Game())
-
-
-RESTART_MS = 1000    # game over ignores fire taps this long, so the score is seen
 
 
 class GameOver(vs2.Scene):
@@ -193,19 +193,12 @@ class GameOver(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
         centred_label(hud, "GAME OVER", y=1)
-        score = hud.label("numerals.png", columns=5, x=246, y=20)
+        score = hud.label("numerals.png", columns=5, x=246, y=11)
         score.set_number(self.score, width=5, pad="0")
-        centred_label(hud, "PRESS A", y=28)
-        # A player who is still tapping fire when the ship is hit would
-        # restart at once, so ignore input for a moment.
-        self.ready = False
-        self.call_later(RESTART_MS, self.get_ready)
-
-    def get_ready(self):
-        self.ready = True
+        centred_label(hud, "PRESS A", y=20)
 
     def update(self):
-        if self.ready and joy1.just_pressed(A):
+        if joy1.just_pressed(A):
             self.switch(Game())
 
 
@@ -214,31 +207,106 @@ def main():
 ```
 
 `__init__` runs once, so `GameOver` keeps the score it was given, while
-`build()` creates its drawables. A is also the fire button, so a player who is
-still tapping it when the ship is hit would restart before seeing the score;
-`GameOver` ignores input for the first second, using a timer. `main()` now returns the title, so the game
-starts there:
+`build()` creates its drawables. `main()` now returns the title, so the game
+starts there. The title and game-over screens are labels at the bottom of the
+disc, all at low Y, near the rim, where text is crisp; text placed near the centre
+gets squeezed, as chapter 7 shows.
+
+**Getting busier.** The game never changes pace, so a good player can last
+indefinitely. Make the interval between enemies shrink as the score rises, by
+asking a method for the delay instead of using the constant:
+
+```python
+MIN_SPAWN_MS = 650   # the shortest the interval gets
+
+def spawn_delay(self):
+    """One millisecond less for every point, down to MIN_SPAWN_MS."""
+    return max(MIN_SPAWN_MS, SPAWN_MS - self.score)
+
+def spawn_enemy(self):
+    self.enemies.spawn(x=randrange(vs2.display.width), y=ENEMY_START)
+    self.call_later(self.spawn_delay(), self.spawn_enemy)
+```
+
+Use `self.spawn_delay()` in `build()` too, for the first call. A timer can be
+re-armed with any delay, so this is all it takes to change the pace while the
+game runs. The floor is 650 ms because that is as fast as the pool can keep up: an
+enemy takes a little over ten seconds to come down and get past the ship, and 16
+of them in that time is one every 640 ms or so. Spawn faster and `spawn()` would
+only return `None` more often.
+Past that point the pool is the ceiling on how hard the game gets.
+
+**Remembering the best score.** `vs2.saves` keeps named values between
+runs, in a small file for your game. Load the record when a screen is built, show
+it, and save it only when it is beaten: flash writes are slow, so never save every
+tick. `GameOver` does it once, when the game ends, and says so when the record
+falls; the title shows what is saved:
+
+```python
+BEST = "best"        # the name the best score is saved under
+
+
+class Title(vs2.Scene):
+    def build(self):
+        hud = self.layer("hud", projection=vs2.HUD)
+        centred_label(hud, "TRENCH RUN", y=1)
+        best = vs2.saves.load(BEST, 0)               # 0 until something is saved
+        if best:
+            centred_label(hud, "BEST %05d" % best, y=11)
+        centred_label(hud, "PRESS A", y=20)
+
+    # ... update() as before ...
+
+
+class GameOver(vs2.Scene):
+    def __init__(self, score):
+        vs2.Scene.__init__(self)
+        self.score = score
+        self.best = vs2.saves.load(BEST, 0)
+        self.new_best = score > self.best
+        if self.new_best:
+            self.best = score
+            vs2.saves.save(BEST, score)
+
+    def build(self):
+        hud = self.layer("hud", projection=vs2.HUD)
+        centred_label(hud, "NEW BEST!" if self.new_best else "GAME OVER", y=1)
+        score = hud.label("numerals.png", columns=5, x=246, y=11)
+        score.set_number(self.score, width=5, pad="0")
+        centred_label(hud, "PRESS A", y=20)
+
+    # ... update() as before ...
+```
+
+Try it: play, lose, quit the emulator and run it again, and the title shows the
+score you left.
 
 ```{figure} ../images/game-title.png
-:alt: The title screen: TUNNEL SHOOTER in coloured letters, with PRESS A below it, on the bottom of the disc
+:alt: The title screen: TRENCH RUN in coloured letters, with PRESS A below it, on the bottom of the disc
 :width: 60%
 :align: center
 
-The title screen. Both lines are labels at the bottom of the disc.
+The title screen, before any score has been saved.
 ```
-
-and the game-over screen, with the score handed over by the scene that ended
-the game:
 
 ```{figure} ../images/game-over.png
-:alt: The game-over screen: GAME OVER in coloured letters along the rim, a score of 00130 above it, and PRESS A nearer the centre
+:alt: The game-over screen: GAME OVER along the rim, the score 00130 above it, and PRESS A nearer the centre
 :width: 60%
 :align: center
 
-The game-over screen, here after 13 kills (130 points).
+The game-over screen, here after 13 enemies dodged (130 points) short of a saved
+best of 250. Beating it would replace GAME OVER with NEW BEST!.
 ```
 
-All the text sits at low Y, near the rim, where it is crisp. Text placed near the
-centre gets squeezed, as chapter 7 shows.
+## The whole game
+
+This is the finished file, exactly as it is in
+`games/demos/tutorial_game/code/tutorial_game.py`. The complete file at the end
+of each earlier chapter is in `docs/vs2/tutorial/steps/`, so you can compare
+yours with a working one at every stage.
+
+```{literalinclude} ../../../games/demos/tutorial_game/code/tutorial_game.py
+:language: python
+```
 
 Next: [budgets and real hardware](budgets.md).

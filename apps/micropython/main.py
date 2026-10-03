@@ -190,6 +190,10 @@ from system.launcher.code import setup as setup_launcher
 
 def setup():
     setup_launcher()
+    # "--game=<group>.<name>" (emu.py --game) starts that game over the
+    # launcher, so it can be run without menu navigation.
+    from ventilastation.app_loader import launch_requested_game
+    launch_requested_game()
 
 _confirmed = False
 _boot_ticks_start = None

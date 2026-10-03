@@ -4,14 +4,40 @@ except ImportError:
     import json
 
 
+try:
+    import uos as _os
+except ImportError:
+    import os as _os
+
+
 class FileStorage:
     def read_json(self, filename):
         with open(filename, "r") as handle:
             return json.load(handle)
 
     def write_json(self, filename, data):
-        with open(filename, "w") as handle:
-            json.dump(data, handle)
+        # Serialise first, so data that cannot be written as JSON raises
+        # before any file is touched. Then write a temporary file and rename
+        # it over the real one (atomic on LittleFS, as in updater.py), so a
+        # power cut leaves either the old file or the new one, never a
+        # truncated one.
+        text = json.dumps(data)
+        temporary = filename + ".tmp"
+        with open(temporary, "w") as handle:
+            handle.write(text)
+        try:
+            _os.rename(temporary, filename)
+        except OSError:
+            # Some filesystems will not rename over an existing file.
+            _os.remove(filename)
+            _os.rename(temporary, filename)
+
+    def makedirs(self, path):
+        """Make a directory if it is not there yet."""
+        try:
+            _os.mkdir(path)
+        except OSError:
+            pass
 
 
 class MemoryStorage:
@@ -25,6 +51,9 @@ class MemoryStorage:
 
     def write_json(self, filename, data):
         self.files[filename] = data
+
+    def makedirs(self, path):
+        pass
 
 
 class RuntimeContext:

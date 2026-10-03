@@ -1,20 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" width="760" height="300" font-family="system-ui,sans-serif">
-  <rect width="760" height="300" fill="#0b0f14"/>
-  <text x="40" y="44" fill="#e6edf3" font-size="24" font-weight="600">ship.png: one strip, four frames</text>
-  <!-- 72x13 px image scaled x8 -->
-  <rect x="87" y="77" width="586" height="106" fill="#111a24"/>
-  <image x="90" y="80" width="576" height="104" href="{{art:alecu/vixeous/images/ship.png}}" style="image-rendering:pixelated"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 370" width="760" height="370" font-family="system-ui,sans-serif">
+  <rect width="760" height="370" fill="#0b0f14"/>
+  <text x="40" y="44" fill="#e6edf3" font-size="24" font-weight="600">ship.png: one strip, three frames</text>
+  <!-- 54x18 px image scaled x12 -->
+  <rect x="55" y="77" width="654" height="222" fill="#111a24"/>
+  <image x="58" y="80" width="648" height="216" href="{{art:demos/tutorial_game/images/ship.png}}" style="image-rendering:pixelated"/>
   <g stroke="#f5b800" stroke-width="2" stroke-dasharray="6 5">
-    <line x1="90" y1="70" x2="90" y2="196"/><line x1="234" y1="70" x2="234" y2="196"/>
-    <line x1="378" y1="70" x2="378" y2="196"/><line x1="522" y1="70" x2="522" y2="196"/>
-    <line x1="666" y1="70" x2="666" y2="196"/>
+    <line x1="58" y1="70" x2="58" y2="306"/><line x1="274" y1="70" x2="274" y2="306"/>
+    <line x1="490" y1="70" x2="490" y2="306"/><line x1="706" y1="70" x2="706" y2="306"/>
   </g>
   <g fill="#e6edf3" font-size="22" font-weight="600" text-anchor="middle">
-    <text x="162" y="226">frame 0</text><text x="306" y="226">frame 1</text>
-    <text x="450" y="226">frame 2</text><text x="594" y="226">frame 3</text>
+    <text x="166" y="332">frame 0: level</text><text x="382" y="332">frame 1: left</text>
+    <text x="598" y="332">frame 2: right</text>
   </g>
   <g fill="#8aa0b5" font-size="17" text-anchor="middle">
-    <text x="162" y="252">18 px wide</text>
-    <text x="378" y="282">72 px wide in all: four frames side by side, each 18 x 13 px</text>
+    <text x="382" y="358">54 px wide in all: three frames side by side, each 18 x 18 px</text>
   </g>
 </svg>
