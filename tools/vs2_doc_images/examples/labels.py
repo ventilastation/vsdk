@@ -16,7 +16,6 @@ class Labels(vs2.Scene):
         for col in range(1, 16, 4):
             self.ground[col, 2] = WINDOWS
             self.ground[col + 2, 2] = VENT
-        self.ship = world.sprite("ship.png", x=128, y=0)
 
         # Upright at the bottom of the disc...
         self.score = hud.label("numerals.png", columns=5, x=246, y=1)

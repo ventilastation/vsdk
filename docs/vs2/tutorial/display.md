@@ -147,11 +147,11 @@ For example, a `world` layer with a ship and some enemies, a `FULLSCREEN` layer
 of `clouds` drawn over it, and a `hud` layer with a score look like this:
 
 ```{figure} ../images/display-layers.png
-:alt: A ship at the top rim and three enemies in the dark, with clouds drifting over them and a score at the bottom
+:alt: A ship at the bottom rim and three enemies in the dark, with clouds drifting over them and a score at the top
 :width: 60%
 :align: center
 
-Three layers: `world` (ship and enemies), `clouds` (drawn over the world) and `hud` (score).
+Three layers: `world` (ship and enemies), `clouds` (drawn over the world) and `hud` (the score, at the top, flipped so it reads upright; chapter 5 explains why).
 ```
 
 A whole layer can be toggled or re-projected at runtime, without touching a
@@ -169,16 +169,21 @@ drawn, so a ship at `x = 256` appears at 0 and one at `x = -1` appears at 255.
 What does not wrap is the number itself. `ship.x` keeps counting up or down, so
 code that reads it back, such as a test of where the ship is or a comparison
 with another sprite's `x`, sees values like 300 or -12 for a ship
-that is really at 44 or 244. Wrap it at the width of the display to keep it in
-the range 0 to 255:
+that is really at 44 or 244. (The ship starts at `x = -9`, for one: it is drawn
+at 247.) Wrap it at the width of the display to keep it in the range 0 to 255:
 
 ```python
 def update(self):
     if joy1.held(LEFT):
-        self.ship.x = (self.ship.x - 1) % vs2.display.width
-    if joy1.held(RIGHT):
         self.ship.x = (self.ship.x + 1) % vs2.display.width
+    if joy1.held(RIGHT):
+        self.ship.x = (self.ship.x - 1) % vs2.display.width
 ```
+
+The left button adds to `x` because of the diagram at the top of this chapter: X
+grows from the bottom toward the left (64 is on the left), so at the bottom of the
+disc, where the ship lives, left is *up*. A ship at the top of the disc would be
+the other way round.
 
 The ship stays at `y = 0`, on the rim, for the whole game. Everything else will
 come at it from deeper in the tunnel.

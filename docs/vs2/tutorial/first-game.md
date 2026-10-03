@@ -68,11 +68,11 @@ A {term}`strip` is a horizontal filmstrip of equally sized frames — a 3-frame
 strip is one PNG three times as wide as one frame:
 
 ```{figure} ../images/strip-ship.png
-:alt: The ship.png strip: three 18 by 18 pixel frames side by side, a level ship and the ship turned to each side
+:alt: The ship.png strip: three 19 by 19 pixel frames side by side, a level ship and the ship turned to each side
 :width: 85%
 :align: center
 
-`ship.png` is 54 pixels wide and holds three frames, so its entry says `frames: 3`.
+`ship.png` is 57 pixels wide and holds three frames, so its entry says `frames: 3`.
 ```
 
 A {term}`palette group` is a set of images that share 256 colours; put images
@@ -101,13 +101,14 @@ from vs2.controls import *
 class Game(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
-        self.ship = self.world.sprite("ship.png", x=128, y=0)
+        self.ship = self.world.sprite("ship.png", y=0)
+        self.ship.x = -(self.ship.width // 2)
 
     def update(self):
         if joy1.held(LEFT):
-            self.ship.x -= 1
-        if joy1.held(RIGHT):
             self.ship.x += 1
+        if joy1.held(RIGHT):
+            self.ship.x -= 1
 
 
 def main():
@@ -124,22 +125,27 @@ disc and lets you steer it. Run it by naming the game, which skips the menu:
 The name is the group and the folder, joined with a dot. When the game exits (the
 back button, or a crash) the emulator returns to the menu as usual, and the game is
 also there under **Más aplicaciones**, then **myname**, then **My Game**; run
-`./vs-emu.sh` with no arguments to start from the menu. The ship sits at the top
-of the disc, because `x = 128` is the top:
+`./vs-emu.sh` with no arguments to start from the menu. The ship sits at the
+bottom of the disc, because `x = 0` is the bottom and `y = 0` is the rim:
 
 ```{figure} ../images/first-game.png
-:alt: The emulator showing the ship at the top of the disc
+:alt: The emulator showing the ship at the bottom of the disc
 :width: 60%
 :align: center
 
-The ship at `x = 128`, `y = 0`: the top of the disc, on the rim.
+The ship at `x = 0`, `y = 0`: the bottom of the disc, on the rim.
 ```
 
-Hold the left button and `x` counts down, so the ship slides toward the left
-side of the disc:
+A sprite's `x` is where its image starts, not its middle, so the second line of
+`build()` backs up by half the ship's width, 9 columns, to centre the ship on the
+bottom.
+
+Hold the left button and `x` counts up: at the bottom of the disc that is the
+direction of the player's left, as the diagram in the next chapter shows. The
+ship slides toward the left side of the disc:
 
 ```{figure} ../images/first-game-moved.png
-:alt: The emulator showing the ship moved toward the upper left
+:alt: The emulator showing the ship moved toward the lower left
 :width: 60%
 :align: center
 

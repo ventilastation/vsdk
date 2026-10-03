@@ -5,7 +5,7 @@ to a game running on the console. You fly a ship around the rim of the disc and
 dodge the enemies that come down the tunnel at you.
 
 ```{figure} ../images/game-play.png
-:alt: Trench Run: a ship at the top of the disc, enemies approaching down the tunnel, and a score at the bottom
+:alt: Trench Run: a ship at the bottom of the disc, enemies approaching down the tunnel, and a score at the top
 :width: 60%
 :align: center
 

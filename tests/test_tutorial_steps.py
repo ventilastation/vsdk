@@ -29,7 +29,7 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 
 # name: (frame width, height, frames, glyphs), as in the game's __images__.yaml
 STRIPS = {
-    "ship.png": (18, 18, 3, None),
+    "ship.png": (19, 19, 3, None),
     "enemy.png": (14, 11, 6, None),
     "trench.png": (16, 16, 8, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
@@ -81,18 +81,19 @@ class TutorialStepTests(unittest.TestCase):
 
     def test_step1_steers_the_ship(self):
         game = self.start("step1_first_game.py")
-        self.assertEqual(game.ship.x, 128)
+        # Centred on x = 0, the bottom of the disc: x counts up toward the left.
+        self.assertEqual(game.ship.x, -9)
         self.step(director.JOY_LEFT, 10)
-        self.assertEqual(game.ship.x, 118)
+        self.assertEqual(game.ship.x, 1)
         self.step(director.JOY_RIGHT, 20)
-        self.assertEqual(game.ship.x, 138)
+        self.assertEqual(game.ship.x, -19)
 
     def test_step2_wraps_the_ship_round_the_disc(self):
         game = self.start("step2_display.py")
         game.ship.x = 0
-        self.step(director.JOY_LEFT)
-        self.assertEqual(game.ship.x, 255)
         self.step(director.JOY_RIGHT)
+        self.assertEqual(game.ship.x, 255)
+        self.step(director.JOY_LEFT)
         self.assertEqual(game.ship.x, 0)
 
     def test_step3_leans_the_ship_into_a_turn(self):

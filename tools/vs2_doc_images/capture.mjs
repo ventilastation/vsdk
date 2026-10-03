@@ -125,7 +125,7 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, { shot: "tilemaps.png" }],
   },
   labels: {
-    art: ["ship.png", "trench.png", "numerals.png"],
+    art: ["trench.png", "numerals.png"],
     steps: [{ wait: 800 }, {
       shot: "labels.png",
     }],
