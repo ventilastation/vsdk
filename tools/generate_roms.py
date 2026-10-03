@@ -14,6 +14,7 @@ GAMES_ROOT = ROOT_DIR / "games"
 SYSTEM_ROOT = ROOT_DIR / "system"
 ROMS_FOLDER = ROOT_DIR / "apps" / "micropython" / "roms"
 SEARCH_ROOTS = (GAMES_ROOT, SYSTEM_ROOT)
+GENERATOR_PATH = Path(__file__).resolve()
 MAX_IMAGE_STRIPS = 100
 
 os.makedirs(ROMS_FOLDER, exist_ok=True)
@@ -73,7 +74,7 @@ def rom_name_for_folder(folder):
     return folder.parts[-1]
 
 
-def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
+def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None, force=False):
     if rom_filename is None:
         rom_name = rom_name_for_folder(folder)
         rom_filename = Path(ROMS_FOLDER) / (rom_name + ".rom")
@@ -92,8 +93,10 @@ def generate_rom(folder, palettegroups, spritedef_path, rom_filename=None):
     # particular rom -- GAMES_ROOT only has a few dozen entries.
     watch_dirs = [GAMES_ROOT, *(p for p in GAMES_ROOT.glob("*") if p.is_dir())] if GAMES_ROOT.exists() else []
 
-    if all(f.stat().st_mtime <= rom_timestamp
-           for f in chain(src_filenames, [spritedef_path], watch_dirs)):
+    # This script is an input too: a change to the format it writes must
+    # rebuild every ROM, or the old bytes stay on disk looking current.
+    if not force and all(f.stat().st_mtime <= rom_timestamp
+                         for f in chain(src_filenames, [spritedef_path, GENERATOR_PATH], watch_dirs)):
         # print("Skipping", rom_name, file=sys.stderr)
         return
     print("Generating", rom_name, file=sys.stderr)
@@ -348,7 +351,7 @@ def generate_menu_icon_rom(game_dir, rom_filename):
     generate_rom(game_dir, palettegroups, menu_png, rom_filename=rom_filename)
 
 
-def generate_all(search_roots=SEARCH_ROOTS):
+def generate_all(search_roots=SEARCH_ROOTS, force=False):
     for search_root in search_roots:
         if not search_root.exists():
             continue
@@ -358,8 +361,9 @@ def generate_all(search_roots=SEARCH_ROOTS):
                 root = Path(root)
                 spritedef_path = root / STRIPEDEF_FILENAME
                 palettegroups = load_palettegroups(spritedef_path)
-                generate_rom(root, palettegroups, spritedef_path)
+                generate_rom(root, palettegroups, spritedef_path, force=force)
 
 
 if __name__ == "__main__":
-    generate_all()
+    # --force rebuilds every ROM, not only those whose inputs changed.
+    generate_all(force="--force" in sys.argv[1:])

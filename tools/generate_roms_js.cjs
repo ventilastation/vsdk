@@ -94,6 +94,11 @@ function expandGameMenuStrips(folder) {
   return items;
 }
 
+// The builder's own sources are inputs too: a change to the format they
+// write must rebuild every ROM, or the old bytes stay on disk looking current.
+const GENERATOR_SOURCES = [__filename, require.resolve("../web/rom-builder-core.js")];
+const FORCE = process.argv.includes("--force");
+
 async function generateRomForFolder(folder) {
   const stripedefPath = path.join(folder, STRIPEDEF_FILENAME);
   const romName = romNameForFolder(folder);
@@ -101,7 +106,7 @@ async function generateRomForFolder(folder) {
   const stripedefsYaml = fs.readFileSync(stripedefPath, "utf8");
   const palettegroups = romBuilder.parseStripedefsYaml(stripedefsYaml);
 
-  const inputFilenames = [stripedefPath];
+  const inputFilenames = [stripedefPath, ...GENERATOR_SOURCES];
   for (const group of palettegroups) {
     for (const item of group.items) {
       if (item.kind === "game_menu_strips") {
@@ -114,7 +119,7 @@ async function generateRomForFolder(folder) {
     }
   }
 
-  if (fs.existsSync(romFilename)) {
+  if (!FORCE && fs.existsSync(romFilename)) {
     const romTimestamp = fs.statSync(romFilename).mtimeMs;
     const needsRebuild = inputFilenames.some((filename) => fs.statSync(filename).mtimeMs > romTimestamp);
     if (!needsRebuild) {
@@ -134,8 +139,9 @@ async function generateRomForFolder(folder) {
 }
 
 async function main() {
-  const targetFolder = process.argv[2]
-    ? path.resolve(process.cwd(), process.argv[2])
+  const folderArgument = process.argv.slice(2).find((arg) => arg !== "--force");
+  const targetFolder = folderArgument
+    ? path.resolve(process.cwd(), folderArgument)
     : null;
 
   if (targetFolder) {
