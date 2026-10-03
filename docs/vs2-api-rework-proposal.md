@@ -49,8 +49,9 @@ and system app keeps working with zero source changes.
    position in this layer" and should not think about tile dimensions,
    viewport tuples, or numeric strip ids to get there.
 5. **Nothing in the hot path allocates.** The board has on the order of 8 MB
-   of usable RAM shared between MicroPython's heap, image strips, audio, and
-   the interpreter, and the renderer must produce a new column of LEDs every
+   of usable RAM shared between MicroPython's heap, image strips and the
+   interpreter (audio is never on the board: the base plays it), and the
+   renderer must produce a new column of LEDs every
    rotation tick. A per-frame tuple, dict, or formatted string is not "a
    little garbage" — over a session it is the difference between a stable
    heap and a GC pause landing on a visible frame.

@@ -46,6 +46,10 @@ apps — head to [internals/](internals/README.md) instead.
 - The display is polar: 54 LEDs from center to edge × 256 angular steps.
   You draw with up to 100 hardware-accelerated `Sprite`s; PNG assets are
   compiled into ROM files automatically when the emulator starts.
+- Sound effects and music are MP3s in your game's `sounds/` folder. The
+  base station (or the emulator) plays them when your code asks; they are
+  never copied to the console, so they take none of its flash or memory and
+  are not part of a ROM.
 - New games import `vs2` and declare `"api": "vs2"` with
   `"api_revision": 2` in `meta.json`; existing games using
   `ventilastation.sprites` continue to run during the deprecation period.
