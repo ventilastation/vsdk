@@ -217,7 +217,7 @@ indefinitely. Make the interval between enemies shrink as the score rises, by
 asking a method for the delay instead of using the constant:
 
 ```python
-MIN_SPAWN_MS = 350   # the shortest the interval gets
+MIN_SPAWN_MS = 650   # the shortest the interval gets
 
 def spawn_delay(self):
     """One millisecond less for every point, down to MIN_SPAWN_MS."""
@@ -230,8 +230,10 @@ def spawn_enemy(self):
 
 Use `self.spawn_delay()` in `build()` too, for the first call. A timer can be
 re-armed with any delay, so this is all it takes to change the pace while the
-game runs. Enemies cannot pile up beyond the 16 in the pool, which is the natural
-ceiling on how hard it gets.
+game runs. The floor is 650 ms because that is as fast as the pool can keep up: an
+enemy takes about ten seconds to come down, and 16 of them in ten seconds is one
+every 650 ms. Spawn faster and `spawn()` would only return `None` more often.
+Past that point the pool is the ceiling on how hard the game gets.
 
 **Remembering the best score.** `vs2.saves` keeps named values between
 runs, in a small file for your game. Load the record when a screen is built, show
@@ -276,8 +278,7 @@ class GameOver(vs2.Scene):
 ```
 
 Try it: play, lose, quit the emulator and run it again, and the title shows the
-score you left. (The web emulator keeps saved data only until the page is
-reloaded.)
+score you left.
 
 ```{figure} ../images/game-title.png
 :alt: The title screen: TRENCH RUN in coloured letters, with PRESS A below it, on the bottom of the disc

@@ -14,7 +14,8 @@ LEVEL, TURN_LEFT, TURN_RIGHT = range(3)      # the frames of ship.png
 ENEMY_SPEED = 0.5    # depth units per tick, toward the ship
 ENEMY_START = 160    # depth at which enemies appear
 SPAWN_MS = 900       # time between enemies at the start
-MIN_SPAWN_MS = 350   # ...and the shortest they get as the score rises
+MIN_SPAWN_MS = 650   # ...and the shortest: 16 enemies, ten seconds each, is the
+                     # fastest the pool can keep up with
 POINTS = 10
 BEST = "best"        # the name the best score is saved under
 

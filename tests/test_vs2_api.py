@@ -778,6 +778,15 @@ class Vs2ApiTests(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     saves.save("bad", object())
                 self.assertEqual(saves.load("best"), 77)
+                # The write goes through a temporary file that is renamed over
+                # the real one, so none is left behind, and one left by a power
+                # cut does not matter.
+                self.assertEqual(os.listdir("saves"), ["games.test_vs2.json"])
+                with open(os.path.join("saves", "games.test_vs2.json.tmp"), "w") as handle:
+                    handle.write("{\"best\": 1")
+                self.assertTrue(saves.save("best", 78))
+                self.assertEqual(saves.load("best"), 78)
+                self.assertEqual(os.listdir("saves"), ["games.test_vs2.json"])
             finally:
                 os.chdir(here)
 

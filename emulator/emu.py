@@ -54,6 +54,11 @@ def _game_exists(slug):
 def main(argv=None):
     args = parse_args(argv)
 
+    if args.game and (args.remote or args.no_display):
+        print("emu.py: --game is ignored with --remote and --no-display: "
+              "there is no local MicroPython to start it in")
+        args.game = None
+
     if args.game and not _game_exists(args.game):
         raise SystemExit(
             "emu.py: no game %r: --game takes <group>.<name>, the folder "

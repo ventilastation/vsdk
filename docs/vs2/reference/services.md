@@ -125,8 +125,8 @@ and `switch`, and stops when the game returns to the launcher.
 
 Saved data is one small file per game, so a high score or a setting survives a
 restart. It lives on the console's flash, and in a `saves` folder under
-`apps/micropython/` in the desktop emulator (the web emulator keeps it in memory,
-so it is lost on reload). Load in `build()` and save only when a value changed.
+`apps/micropython/` in the desktop emulator. Load in `build()` and save only when
+a value changed.
 
 ```python
 best = vs2.saves.load("best", 0)          # 0 if nothing is saved yet

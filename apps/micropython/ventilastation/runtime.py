@@ -17,10 +17,20 @@ class FileStorage:
 
     def write_json(self, filename, data):
         # Serialise first, so data that cannot be written as JSON raises
-        # before the file is opened and truncated.
+        # before any file is touched. Then write a temporary file and rename
+        # it over the real one (atomic on LittleFS, as in updater.py), so a
+        # power cut leaves either the old file or the new one, never a
+        # truncated one.
         text = json.dumps(data)
-        with open(filename, "w") as handle:
+        temporary = filename + ".tmp"
+        with open(temporary, "w") as handle:
             handle.write(text)
+        try:
+            _os.rename(temporary, filename)
+        except OSError:
+            # Some filesystems will not rename over an existing file.
+            _os.remove(filename)
+            _os.rename(temporary, filename)
 
     def makedirs(self, path):
         """Make a directory if it is not there yet."""

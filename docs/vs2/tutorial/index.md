@@ -60,8 +60,9 @@ Two habits follow from that, and the rest of the tutorial keeps coming back to
 them:
 
 - **Keep `update()` short.** It runs about 33 times a second (every 30 ms,
-  one {term}`tick`), whatever the fan speed, and the next tick does not wait for
-  a slow one.
+  one {term}`tick`), whatever the fan speed. A tick that takes longer delays the
+  next one and the lost time is not made up, so a slow `update()` slows the whole
+  game down.
 - **Do not create objects while the game runs.** Python frees memory with a
   {term}`garbage collector <garbage collection>`, and the console has little
   memory for it to work with. On the console the collector only runs when a
