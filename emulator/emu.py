@@ -41,6 +41,23 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def _build_roms():
+    """Bring the sprite ROMs up to date before the local MicroPython loads
+    them. Only ROMs whose images changed are rebuilt, so this is quick on
+    every run but the first."""
+    import importlib.util
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location(
+        "generate_web_runtime_bundle",
+        os.path.join(root, "tools", "generate_web_runtime_bundle.py"))
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    try:
+        builder.generate_roms()
+    except builder.MissingDependencies as error:
+        raise SystemExit("emu.py: " + str(error))
+
+
 def _game_exists(slug):
     """Whether ``slug`` (group.name) names a folder under games/ or system/."""
     parts = [part for part in slug.split(".") if part]
@@ -64,6 +81,11 @@ def main(argv=None):
             "emu.py: no game %r: --game takes <group>.<name>, the folder "
             "games/<group>/<name>" % args.game)
 
+    # Spawn the local desktop MicroPython only when it is our frame source.
+    spawn_upy = not (args.no_display or args.remote)
+    if spawn_upy:
+        _build_roms()
+
     import config
     config.configure(args)
 
@@ -83,8 +105,6 @@ def main(argv=None):
 
     comms.start()
 
-    # Spawn the local desktop MicroPython only when it is our frame source.
-    spawn_upy = not (args.no_display or args.remote)
     upy = None
     try:
         if spawn_upy:

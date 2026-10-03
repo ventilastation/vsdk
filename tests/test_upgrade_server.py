@@ -116,6 +116,132 @@ class BundleServerSpecialCharsTests(unittest.TestCase):
         self.assertEqual(body, b"asterix bytes")
 
 
+class WebEmulatorServingTests(unittest.TestCase):
+    """The desktop emulator serves web/ for the browser emulator. The runtime
+    manifest and bundle are build output, so asking for them rebuilds them
+    first; every other file is revalidated on each load."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.web = pathlib.Path(self.tmp.name)
+        (self.web / "index.html").write_text("<!doctype html>")
+        (self.web / "runtime-manifest.json").write_text('{"files": ["old"]}')
+        self.builds = 0
+        self.rom_builds = 0
+        self.failure = None
+
+        class MissingDependencies(RuntimeError):
+            pass
+
+        def build():
+            if self.failure is not None:
+                raise self.failure
+            self.builds += 1
+            (self.web / "runtime-manifest.json").write_text('{"files": ["fresh"]}')
+
+        def generate_roms():
+            if self.failure is not None:
+                raise self.failure
+            self.rom_builds += 1
+
+        self.fake_builder = type("FakeBuilder", (), {
+            "MissingDependencies": MissingDependencies,
+            "build": staticmethod(build),
+            "generate_roms": staticmethod(generate_roms),
+        })
+        self.saved = {name: getattr(upgrade_server, name) for name in (
+            "_WEB_ROOT", "_web_bundle_builder", "_missing_build_deps_reported",
+            "_register_mdns", "_get_manifest")}
+        upgrade_server._WEB_ROOT = self.web
+        upgrade_server._web_bundle_builder = self.fake_builder
+        upgrade_server._missing_build_deps_reported = False
+        upgrade_server._register_mdns = lambda port: None
+        upgrade_server._get_manifest = lambda: {"files": [], "partitions": {}}
+        self.server = upgrade_server.start(port=0)
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        for name, value in self.saved.items():
+            setattr(upgrade_server, name, value)
+        self.tmp.cleanup()
+
+    def _get(self, path, headers=None):
+        request = urllib.request.Request("http://127.0.0.1:%d%s" % (self.port, path), headers=headers or {})
+        try:
+            with urllib.request.urlopen(request, timeout=5) as resp:
+                return resp.status, resp.headers, resp.read()
+        except urllib.error.HTTPError as error:
+            return error.code, error.headers, error.read()
+
+    def test_runtime_manifest_is_rebuilt_before_it_is_served(self):
+        status, _headers, body = self._get("/runtime-manifest.json?v=20260714b")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"files": ["fresh"]})
+        self.assertEqual(self.builds, 1)
+
+    def test_runtime_bundle_request_also_checks(self):
+        (self.web / "runtime-bundle.json").write_text('{"files": []}')
+        self._get("/runtime-bundle.json")
+        self.assertEqual(self.builds, 1)
+
+    def test_other_files_do_not_trigger_a_build(self):
+        status, _headers, _body = self._get("/index.html")
+        self.assertEqual(status, 200)
+        self.assertEqual(self.builds, 0)
+
+    def test_files_are_revalidated_instead_of_cached(self):
+        status, headers, _body = self._get("/")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Cache-Control"], "no-cache")
+        etag = headers["ETag"]
+        status, _headers, body = self._get("/", {"If-None-Match": etag})
+        self.assertEqual((status, body), (304, b""))
+        (self.web / "index.html").write_text("<!doctype html><title>edited</title>")
+        status, _headers, body = self._get("/", {"If-None-Match": etag})
+        self.assertEqual(status, 200)
+        self.assertIn(b"edited", body)
+
+    def test_a_failed_build_is_reported_not_hidden(self):
+        self.failure = ValueError("games/x/y/images/__images__.yaml: bad frames")
+        status, _headers, body = self._get("/runtime-manifest.json")
+        self.assertEqual(status, 500)
+        self.assertIn(b"bad frames", body)
+
+    def test_without_the_rom_packages_the_existing_files_are_served(self):
+        # A production base (Raspberry Pi) has no numpy.
+        self.failure = self.fake_builder.MissingDependencies("no numpy")
+        for _ in range(2):
+            status, _headers, body = self._get("/runtime-manifest.json")
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body), {"files": ["old"]})
+        self.assertTrue(upgrade_server._missing_build_deps_reported)
+
+    def test_ota_manifest_rebuilds_roms_first(self):
+        status, _headers, _body = self._get("/manifest")
+        self.assertEqual(status, 200)
+        self.assertEqual((self.rom_builds, self.builds), (1, 0))
+
+    def test_ota_manifest_reports_a_failed_rom_build(self):
+        self.failure = ValueError("bad png")
+        status, _headers, body = self._get("/manifest")
+        self.assertEqual(status, 500)
+        self.assertIn(b"bad png", body)
+
+    def test_a_prebuilt_ota_bundle_is_served_as_is(self):
+        bundle_dir = pathlib.Path(self.tmp.name) / "bundle"
+        bundle_dir.mkdir()
+        (bundle_dir / "manifest.json").write_text('{"files": [], "partitions": {}}')
+        upgrade_server._BUNDLE_DIR = bundle_dir
+        try:
+            status, _headers, _body = self._get("/manifest")
+        finally:
+            upgrade_server._BUNDLE_DIR = None
+        self.assertEqual(status, 200)
+        self.assertEqual(self.rom_builds, 0)
+
+
 class MdnsAdvertisementTests(unittest.TestCase):
     """upgrade_server.start() advertises ventilastation-base.local over mDNS
     so the desktop dev loop works without any manual dns-sd/avahi-publish
