@@ -28,9 +28,9 @@ palettegroups:
     - strip: dedo-frames65.png
       frames: 13
     - strip: font8_top.png
-      frames: 63
+      frames: 64
     - strip: font8_bottom.png
-      frames: 63
+      frames: 64
     - fullscreen: aspas.png
   palette2:
     - strip: 2bam_sencom_top.png
