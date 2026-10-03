@@ -2,14 +2,14 @@
 
     python3 make_ship_art.py
 
-Three 18x18 frames of an arrowhead ship, nose toward the centre of the disc:
+Three 19x19 frames of an arrowhead ship, nose toward the centre of the disc:
 frame 0 flies level, frame 1 leans into a turn to the left and frame 2 into a
 turn to the right. The game picks the frame from the steering.
 
-"Left" is the direction x counts down in. The renderer draws a sprite's image
-mirrored in X (hardware/rotor/modules/povdisplay/gpu.c), so a ship that moves
-to the left (x - 1) moves toward the right edge of its own image, and the left
-turn is the frame whose nose points to the image's right.
+The width is odd on purpose: the level ship is exactly symmetric and ends in a
+single-pixel point, which needs a centre column. At the bottom of the disc, where
+the ship flies, a sprite looks just like its PNG, so the left-turn frame is the one
+whose nose points to the image's left.
 
 Each shape is a polygon, sampled four times per pixel in each direction and kept
 where half or more of the pixel is covered, which keeps the edges crisp and the
@@ -20,11 +20,11 @@ from pathlib import Path
 
 from PIL import Image
 
-SIZE = 18
+SIZE = 19
 SCALE = 4                      # drawing resolution, per output pixel
 CENTRE = (SIZE - 1) / 2
 TURN = 24                      # degrees a banked frame is turned
-FRAMES = (0, TURN, -TURN)      # level, left (nose to the image's right), right
+FRAMES = (0, -TURN, TURN)      # level, left (nose to the image's left), right
 
 HULL = (118, 128, 148)
 EDGE = (214, 224, 240)
@@ -35,7 +35,7 @@ FLAME = (255, 140, 30)
 FLAME_HOT = (255, 225, 120)
 
 # Shapes with the nose up, around the origin, y growing downward as in an image.
-HULL_SHAPE = ((0, -7.5), (5.5, 6.5), (0, 3.5), (-5.5, 6.5))
+HULL_SHAPE = ((0, -7.8), (6.0, 6.5), (0, 3.5), (-6.0, 6.5))
 CORE_SHAPE = ((0, -6), (3.2, 5.6), (0, 3.2), (-3.2, 5.6))
 CANOPY_SHAPE = tuple((1.5 * cos(radians(a)), -0.5 + 2.3 * sin(radians(a)))
                      for a in range(0, 360, 30))
