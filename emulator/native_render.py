@@ -55,7 +55,7 @@ def _load():
     lib.emu_gpu_set_color_pipeline_enabled.restype = ctypes.c_bool
     lib.emu_gpu_set_palette.argtypes = [ctypes.c_char_p, ctypes.c_int]
     lib.emu_gpu_set_palette.restype = ctypes.c_bool
-    lib.emu_gpu_set_image_strip.argtypes = [ctypes.c_int, ctypes.c_char_p]
+    lib.emu_gpu_set_image_strip.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
     lib.emu_gpu_set_image_strip.restype = ctypes.c_bool
     lib.emu_gpu_clear_image_strip.argtypes = [ctypes.c_int]
     lib.emu_gpu_clear_image_strip.restype = None
@@ -122,7 +122,7 @@ def set_palette(paldata):
 def set_image_strip(slot, data):
     if available:
         payload = bytes(data)
-        if _lib.emu_gpu_set_image_strip(slot, payload):
+        if _lib.emu_gpu_set_image_strip(slot, payload, len(payload)):
             _image_strip_bytes[slot] = payload
 
 

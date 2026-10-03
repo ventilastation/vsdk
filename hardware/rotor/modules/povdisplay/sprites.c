@@ -64,9 +64,16 @@ static MP_DEFINE_CONST_FUN_OBJ_0(reset_sprites_obj, reset_sprites);
 
 
 static mp_obj_t set_imagestrip(mp_obj_t strip_number, mp_obj_t strip_data) {
-    int strip_nr = mp_obj_get_int(strip_number);
-    const char* strip_data_ptr = memoryview_data(strip_data);
-    image_stripes[strip_nr % NUM_IMAGES] = (const ImageStrip*) strip_data_ptr;
+    int strip_nr = mp_obj_get_int(strip_number) % NUM_IMAGES;
+    mp_obj_array_t *mv = MP_OBJ_TO_PTR(strip_data);
+    if (mv->len < 4) {
+        mp_raise_ValueError(MP_ERROR_TEXT("image strip is shorter than its header"));
+    }
+    // The renderer runs concurrently: zero the length first so it never
+    // pairs the new pointer with the old (possibly larger) length.
+    image_strip_lengths[strip_nr] = 0;
+    image_stripes[strip_nr] = (const ImageStrip*) memoryview_data(strip_data);
+    image_strip_lengths[strip_nr] = mv->len - 4;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(set_imagestrip_obj, set_imagestrip);
@@ -89,6 +96,7 @@ mp_obj_t sprite_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, 
     sprite_obj_t *self = m_new_obj(sprite_obj_t);
     self->base.type = type;
     self->image_strip = image_stripes[0];
+    self->image_strip_length = image_strip_lengths[0];
     self->perspective = 1;
     self->x = 0;
     self->y = 0;
@@ -109,10 +117,16 @@ static mp_obj_t sprite_disable(mp_obj_t self_in) {
 static MP_DEFINE_CONST_FUN_OBJ_1(sprite_disable_obj, sprite_disable);
 
 uint8_t width(sprite_obj_t* sprite) {
+    if ((uintptr_t)sprite->image_strip < 1000) {
+        return 0;
+    }
     return sprite->image_strip->frame_width;
 }
 
 uint8_t height(sprite_obj_t* sprite) {
+    if ((uintptr_t)sprite->image_strip < 1000) {
+        return 0;
+    }
     return sprite->image_strip->frame_height;
 }
 
@@ -208,8 +222,16 @@ static MP_DEFINE_CONST_FUN_OBJ_2(sprite_set_frame_obj, sprite_set_frame);
 
 static mp_obj_t sprite_set_strip(mp_obj_t self_in, mp_obj_t new_strip) {
     sprite_obj_t *self = self_in;
-    uint8_t strip_num = mp_obj_get_int(new_strip);
+    int strip_num = mp_obj_get_int(new_strip);
+    // Out of range means no strip, as in the desktop emulator (emu_bridge.c).
+    if (strip_num < 0 || strip_num >= NUM_IMAGES) {
+        self->image_strip = NULL;
+        self->image_strip_length = 0;
+        return mp_const_none;
+    }
+    self->image_strip_length = 0;
     self->image_strip = image_stripes[strip_num];
+    self->image_strip_length = image_strip_lengths[strip_num];
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(sprite_set_strip_obj, sprite_set_strip);

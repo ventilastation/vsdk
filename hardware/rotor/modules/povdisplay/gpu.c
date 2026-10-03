@@ -40,6 +40,7 @@ int gamma_mode;
 
 uint32_t* palette_pal;
 const ImageStrip* image_stripes[NUM_IMAGES];
+uint32_t image_strip_lengths[NUM_IMAGES];
 
 #define STARS COLUMNS/2
 
@@ -143,6 +144,12 @@ int get_visible_column(int sprite_x, int sprite_width, int render_column) {
     } else {
         return -1;
     }
+}
+
+// One pixel of a strip registered with `length` bytes of pixel data, or
+// TRANSPARENT past the end (see image_strip_lengths in sprites.h).
+static inline uint8_t strip_pixel(const ImageStrip* is, uint32_t length, int index) {
+  return (uint32_t)index < length ? is->data[index] : TRANSPARENT;
 }
 
 static int clamp_int(int value, int minimum, int maximum) {
@@ -250,6 +257,7 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   if ((uintptr_t)is < 1000) {
     return;
   }
+  uint32_t strip_length = image_strip_lengths[t->image_strip];
   int tile_width = t->tile_width;
   int tile_height = t->tile_height;
   int strip_width = is->frame_width;
@@ -293,7 +301,7 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
       }
       int strip_base = source_column * tile_height
           + (frame % total_frames) * tile_width * tile_height;
-      uint8_t color = is->data[strip_base + (sy % tile_height)];
+      uint8_t color = strip_pixel(is, strip_length, strip_base + (sy % tile_height));
       if (color != TRANSPARENT) {
         int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
         set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
@@ -320,7 +328,7 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
       int source_row = row_in_tile;
       int run_end = y + run;
       for (; y < run_end; y++, source_row++) {
-        uint8_t color = is->data[strip_base + source_row];
+        uint8_t color = strip_pixel(is, strip_length, strip_base + source_row);
         if (color != TRANSPARENT) {
           int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
           set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
@@ -349,6 +357,7 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
     if ((uintptr_t)is < 1000) {
       return;
     }
+    uint32_t strip_length = image_strip_lengths[s->image_strip];
 
     uint32_t* current_palette = palette_pal + 256 * is->palette;
     int width = is->frame_width;
@@ -379,7 +388,7 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
         if ((s->flags & VS2_FLAG_FLIP_Y) != 0) {
           source_row = height - 1 - source_row;
         }
-        uint8_t color = is->data[base + source_row];
+        uint8_t color = strip_pixel(is, strip_length, base + source_row);
         if (color != TRANSPARENT) {
           int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
           set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
@@ -395,7 +404,7 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
         if ((s->flags & VS2_FLAG_FLIP_Y) == 0) {
           source_row = height - 1 - source_row;
         }
-        uint8_t color = is->data[base + source_row];
+        uint8_t color = strip_pixel(is, strip_length, base + source_row);
         if (color != TRANSPARENT) {
           set_colorbuf_pixel(colorbuf, led, current_palette[color]);
         }
@@ -527,10 +536,10 @@ void render(int column, uint32_t* led_buffer) {
         int desde = MAX(s->y, 0);
         int hasta = MIN(s->y + height, ROWS-1);
         int comienzo = MAX(-s->y, 0);
-        const uint8_t* imagen = is->data + base + comienzo;
+        int index = base + comienzo;
 
-        for(int y = desde; y < hasta; y++, imagen++) {
-          uint8_t color = *imagen;
+        for(int y = desde; y < hasta; y++, index++) {
+          uint8_t color = strip_pixel(is, s->image_strip_length, index);
           if (color != TRANSPARENT) {
             int px_y;
             if (s->perspective == 1) {
@@ -548,7 +557,7 @@ void render(int column, uint32_t* led_buffer) {
           if (src >= height) {
             break;
           }
-          uint8_t color = is->data[base + height - 1 - src];
+          uint8_t color = strip_pixel(is, s->image_strip_length, base + height - 1 - src);
           if (color != TRANSPARENT) {
             set_colorbuf_pixel(colorbuf, led, current_palette[color]);
           }

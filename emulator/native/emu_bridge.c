@@ -51,6 +51,7 @@ void emu_gpu_init(void) {
     }
     gamma_mode = 0;
     memset(image_stripes, 0, sizeof(image_stripes));
+    memset(image_strip_lengths, 0, sizeof(image_strip_lengths));
     init_sprites(); /* seeds starfield + calculates deepspace[] */
 }
 
@@ -103,11 +104,12 @@ bool emu_gpu_set_palette(const uint8_t* data, int length) {
  * already stored in povrender.all_strips, so this just casts the pointer.
  * `data` must stay alive for as long as the slot is installed -- the Python
  * side keeps the originating bytes object in all_strips permanently. */
-bool emu_gpu_set_image_strip(int slot, const uint8_t* data) {
-    if (slot < 0 || slot >= NUM_IMAGES) {
+bool emu_gpu_set_image_strip(int slot, const uint8_t* data, int length) {
+    if (slot < 0 || slot >= NUM_IMAGES || length < 4) {
         return false;
     }
     image_stripes[slot] = (const ImageStrip*)data;
+    image_strip_lengths[slot] = (uint32_t)(length - 4);
     return true;
 }
 
@@ -116,6 +118,7 @@ void emu_gpu_clear_image_strip(int slot) {
         return;
     }
     image_stripes[slot] = NULL;
+    image_strip_lengths[slot] = 0;
 }
 
 /* `data` must stay alive for as long as this scene is active: tilemap frame
@@ -188,6 +191,7 @@ void emu_gpu_render_legacy_frame(uint32_t* out_pixels) {
         for (int i = 0; i < NUM_SPRITES; i++) {
             uint8_t idx = legacy_sprite_image_index[i];
             legacy_sprites[i].image_strip = (idx < NUM_IMAGES) ? image_stripes[idx] : NULL;
+            legacy_sprites[i].image_strip_length = (idx < NUM_IMAGES) ? image_strip_lengths[idx] : 0;
         }
     }
     uint32_t column_buf[PIXELS];
