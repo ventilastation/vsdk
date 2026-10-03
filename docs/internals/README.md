@@ -84,6 +84,13 @@ shape and the rules that keep biting.
 | Generators and host tools | `tools/` |
 | Test suite (`python3 tests/run_tests.py`) | `tests/` |
 
+## Proposed improvements
+
+- **[Documentation improvement proposal](documentation-improvement-proposal.md)**
+  — project-wide review, file-by-file recommendations, and a phased plan to
+  simplify onboarding, correct outdated instructions, and separate current
+  documentation from history. Proposed; implementation has not started.
+
 ## Historical documents
 
 [history/](history/) keeps plans that have since shipped or changed —
