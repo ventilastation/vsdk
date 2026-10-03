@@ -9,7 +9,13 @@ const ROOT_DIR = path.resolve(__dirname, "..");
 const GAMES_ROOT = path.join(ROOT_DIR, "games");
 const SYSTEM_ROOT = path.join(ROOT_DIR, "system");
 const SEARCH_ROOTS = [GAMES_ROOT, SYSTEM_ROOT];
-const ROMS_FOLDER = path.join(ROOT_DIR, "apps", "micropython", "roms");
+// Usage: generate_roms_js.cjs [--force] [--out DIR] [IMAGES_FOLDER]
+// --out writes the ROMs somewhere other than apps/micropython/roms (the
+// builder parity test uses it).
+const OUT_INDEX = process.argv.indexOf("--out");
+const ROMS_FOLDER = OUT_INDEX >= 0
+  ? path.resolve(process.cwd(), process.argv[OUT_INDEX + 1])
+  : path.join(ROOT_DIR, "apps", "micropython", "roms");
 const STRIPEDEF_FILENAME = "__images__.yaml";
 
 function walkDirectories(rootFolder) {
@@ -139,7 +145,8 @@ async function generateRomForFolder(folder) {
 }
 
 async function main() {
-  const folderArgument = process.argv.slice(2).find((arg) => arg !== "--force");
+  const folderArgument = process.argv.slice(2).find(
+    (arg, index, args) => arg !== "--force" && arg !== "--out" && args[index - 1] !== "--out");
   const targetFolder = folderArgument
     ? path.resolve(process.cwd(), folderArgument)
     : null;
