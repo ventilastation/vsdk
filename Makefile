@@ -252,8 +252,9 @@ run-emulator:
 voom-sounds:
 	cd emulator && python build_voom_sounds.py
 
+# FORCE=1 rebuilds every ROM instead of only those whose inputs changed.
 generate-roms:
-	$(ASSET_PYTHON) tools/generate_roms.py
+	$(ASSET_PYTHON) tools/generate_roms.py $(if $(FORCE),--force,)
 
 build-fs: generate-roms
 	python3 hardware/rotor/build_micropython_fs.py

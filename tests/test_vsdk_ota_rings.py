@@ -488,12 +488,15 @@ class StripBytesTests(unittest.TestCase):
         self.rings = rings
 
     def test_header_encodes_full_width_and_pixel_height_and_one_frame(self):
+        # vsdk_ota_rings writes header bytes itself (it can't import
+        # romformat); the shared decoder must read them as intended. One
+        # frame: position is baked into the data, not selected by frame.
+        from ventilastation import romformat
         strip = self.rings._build_ring_strip(self.rings._WIFI, 5)
-        header = strip[:4]
-        self.assertEqual(header[0], 255)  # width byte: "actually 256"
-        self.assertEqual(header[1], self.rings.PIXELS)
-        self.assertEqual(header[2], 1)  # one frame -- position is baked into the data, not selected via frame index
-        self.assertEqual(header[3], self.rings._PALETTE_GROUP[self.rings._WIFI])
+        self.assertEqual(
+            romformat.decode_header(strip[:4]),
+            (256, self.rings.PIXELS, 1, self.rings._PALETTE_GROUP[self.rings._WIFI]))
+        self.assertEqual(len(strip), 4 + 256 * self.rings.PIXELS)
 
     def test_every_column_has_exactly_the_target_row_lit(self):
         row = 12
@@ -522,12 +525,24 @@ class StripBytesTests(unittest.TestCase):
             self.assertEqual(palette[offset:offset + 4], bytes([255, b, g, r]))
 
     def test_label_header_encodes_message_width_and_glyph_height(self):
+        from ventilastation import romformat
         strip = self.rings._build_label_strip("i")
-        header = strip[:4]
-        self.assertEqual(header[0], self.rings._CHAR_STEP)  # one character wide
-        self.assertEqual(header[1], self.rings._GLYPH_HEIGHT)
-        self.assertEqual(header[2], 1)
-        self.assertEqual(header[3], self.rings._PALETTE_GROUP[self.rings._LABEL])
+        self.assertEqual(
+            romformat.decode_header(strip[:4]),
+            (self.rings._CHAR_STEP, self.rings._GLYPH_HEIGHT, 1,
+             self.rings._PALETTE_GROUP[self.rings._LABEL]))
+
+    def test_label_as_wide_as_the_display_still_fits(self):
+        from ventilastation import romformat
+        text = "i" * (self.rings.WIDTH // self.rings._CHAR_STEP)
+        strip = self.rings._build_label_strip(text)
+        self.assertEqual(romformat.decode_header(strip[:4])[0], self.rings.WIDTH)
+
+    def test_label_wider_than_the_display_is_rejected(self):
+        text = "i" * (self.rings.WIDTH // self.rings._CHAR_STEP + 1)
+        with self.assertRaises(ValueError) as caught:
+            self.rings._build_label_strip(text)
+        self.assertIn("columns", str(caught.exception))
 
     def test_label_strip_lights_the_correct_glyph_pixels(self):
         # "i" == (0, 2, 0, 2, 2, 0): bit 1 (the middle of 3 columns) lit on

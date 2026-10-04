@@ -112,7 +112,8 @@ def make_tile_strip():
     frame1 = bytearray([3] * 16)
     frame2 = bytearray([4] * 16)
     frame2[(3 - 0) * 4 + 0] = 255
-    return bytes(bytearray([4, 4, 3, 0]) + frame0 + frame1 + frame2)
+    # Headers store width and frame count minus one (docs/internals/rom-format.md).
+    return bytes(bytearray([4 - 1, 4, 3 - 1, 0]) + frame0 + frame1 + frame2)
 
 
 # 2x2 map: top row = frame 0 | frame 1, bottom row = frame 2 | empty cell
@@ -153,7 +154,7 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         povrender.clear_vs2_scene()
 
     def test_vs2_hud_flip_x_and_flip_y(self):
-        povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
+        povrender.all_strips[8] = bytes([2 - 1, 2, 1 - 1, 0, 1, 2, 3, 4])
         povrender.set_vs2_scene(make_vs2_scene([], [
             {"image": 8, "mode": 2, "flags": 1 | 2 | 4, "x": 20, "y": 51},
         ]))
@@ -176,7 +177,7 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(decoded["tilemaps"], [])
 
     def test_vs2_signed_fractional_x_wraps_while_y_clips(self):
-        povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
+        povrender.all_strips[8] = bytes([2 - 1, 2, 1 - 1, 0, 1, 2, 3, 4])
         povrender.set_vs2_scene(make_vs2_scene([], [
             {"image": 8, "mode": 2, "flags": 1, "x": -0.25, "y": -0.25},
         ]))
@@ -294,7 +295,7 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         self.assertEqual(povrender.render(30)[13], 10)
 
     def test_legacy_vs2_tilemap_renders_before_sprites(self):
-        povrender.all_strips[8] = bytes([2, 2, 1, 0, 1, 2, 3, 4])
+        povrender.all_strips[8] = bytes([2 - 1, 2, 1 - 1, 0, 1, 2, 3, 4])
         povrender.all_strips[9] = make_tile_strip()
         povrender.set_vs2_scene(make_vs2_scene([], [
             {"image": 8, "mode": 2, "flags": 1, "x": 10, "y": 40},
@@ -325,7 +326,7 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         runtime.platform.sprites.stripes[9] = {
             "width": 4, "height": 4, "frames": 3, "palette": 0,
         }
-        povrender.all_strips[8] = bytes([2, 2, 1, 0, 3, 3, 3, 3])
+        povrender.all_strips[8] = bytes([2 - 1, 2, 1 - 1, 0, 3, 3, 3, 3])
         povrender.all_strips[9] = make_tile_strip()
         api_guard.begin_app("games.desktop_v3", "vs2")
 
@@ -367,9 +368,18 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         pixels_column_10 = povrender.render(10)
         self.assertEqual(pixels_column_10[povrender.vs2_deepspace[40]], 10)
 
+    def test_strip_header_decodes_full_width_and_frame_range(self):
+        # Width and frame count are stored minus one; the second call of
+        # each comes from the id() cache.
+        wide = bytes([254, 8, 254, 1]) + bytes(255 * 8 * 255)
+        full = bytes([255, 8, 255, 0]) + bytes(256 * 8 * 256)
+        for _ in range(2):
+            self.assertEqual(povrender._strip_header(wide)[:4], (255, 8, 255, 256))
+            self.assertEqual(povrender._strip_header(full)[:4], (256, 8, 256, 0))
+
     def test_vs2_modes_share_a_rim_origin_and_fullscreen_contracts_inward(self):
         povrender.all_strips[8] = bytes(
-            [1, povrender.led_count, 1, 0]
+            [1 - 1, povrender.led_count, 1 - 1, 0]
             + [1] * povrender.led_count
         )
 

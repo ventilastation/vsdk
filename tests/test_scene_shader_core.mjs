@@ -447,4 +447,28 @@ function blankFrame(overrides = {}) {
   });
 }
 
+{
+  // A 256-glyph font and a full-circle image: the strip metadata keeps the
+  // frame count in a byte (stored minus one), so frame 254 of 256 must not
+  // wrap to frame 0, and a 256-wide strip covers every column.
+  const table = makeLegacyTable([
+    { slot: 0, x: 20, y: 40, image_strip: 7, frame: 254, perspective: 2 },
+    { slot: 1, x: 40, y: 40, image_strip: 7, frame: 3, perspective: 2 },
+    { slot: 2, x: 0, y: 120, image_strip: 8, frame: 0, perspective: 1 },
+  ]);
+  const assets = new Map([
+    [7, patternedAsset({ width: 2, height: 3, frames: 256 })],
+    [8, patternedAsset({ width: 256, height: 2, frames: 1 })],
+  ]);
+  const strips = core.packStrips(assets);
+  assert.equal(strips.meta[7 * 4 + 2] & 0xff, 255, "256 frames are stored as 255");
+  assert.equal(strips.meta[8 * 4], 256, "full-circle width");
+  compareScene("256-frame font and full-circle strip", {
+    assets,
+    paletteBytes: PALETTE,
+    frame: blankFrame({ sprites: decodeLegacyTable(table) }),
+    sceneData: core.packSceneLegacy(table),
+  });
+}
+
 console.log("scene shader core: software executor matches computeLedFramePixels");

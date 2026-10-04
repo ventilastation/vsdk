@@ -239,9 +239,7 @@ static mp_obj_t vs2_sprite_width(mp_obj_t self_in) {
     if ((uintptr_t)strip < 1000) {
         return mp_obj_new_int(0);
     }
-    int width = strip->frame_width;
-    if (width == 255) width++;
-    return mp_obj_new_int(width);
+    return mp_obj_new_int(strip_frame_width(strip));
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(vs2_sprite_width_obj, vs2_sprite_width);
 

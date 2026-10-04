@@ -10,6 +10,7 @@ calls below are kept only as compatibility fallbacks.
 
 import uctypes
 
+from ventilastation import romformat
 from ventilastation.compat import ticks_diff_us, ticks_us
 from ventilastation.platforms.base import Platform
 from ventilastation.platforms.headless import NullDisplay
@@ -437,15 +438,13 @@ class BrowserDisplay(NullDisplay):
     def _decode_imagestrip(self, slot, stripmap):
         if len(stripmap) < 4:
             return None
-        width = stripmap[0]
-        if width == 255:
-            width = 256
+        width, height, frames, palette = romformat.decode_header(stripmap)
         return {
             "slot": slot,
             "width": width,
-            "height": stripmap[1],
-            "frames": stripmap[2] or 1,
-            "palette": stripmap[3] or 0,
+            "height": height,
+            "frames": frames,
+            "palette": palette,
             "data": stripmap[4:],
         }
 
