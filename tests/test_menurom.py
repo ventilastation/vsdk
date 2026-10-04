@@ -1,4 +1,6 @@
 import gzip
+import hashlib
+import json
 import os
 import struct
 import sys
@@ -136,6 +138,22 @@ class MergeIconTests(unittest.TestCase):
         cut[frames_at] = 9  # header now claims 9 frames; the record holds 2
         with self.assertRaises(ValueError):
             menurom.merge_icon(menu_fixture(), bytes(cut))
+
+    def test_a_real_icon_from_an_older_package_merges(self):
+        # tests/fixtures/romformat/preswitch-menu-icon.rom: a game package's
+        # menu icon as the generator before the current encoding wrote it.
+        fixtures = os.path.join(ROOT, "tests", "fixtures", "romformat")
+        with open(os.path.join(fixtures, "preswitch-menu-icon.rom"), "rb") as f:
+            icon = f.read()
+        with open(os.path.join(fixtures, "expected.json")) as f:
+            (expected,) = json.load(f)["preswitch-menu-icon.rom"]
+        merged = menurom.merge_icon(menu_fixture(), icon)
+        strips, _ = parse_rom(merged)  # record-exact: fails on a legacy record
+        added = strips[-1]
+        self.assertEqual((added["name"], added["width"], added["height"], added["frames"]),
+                         (expected["name"], expected["width"], expected["height"], expected["frames"]))
+        pixels = merged[added["pixels_start"]:added["pixels_start"] + added["pixels_len"]]
+        self.assertEqual(hashlib.sha256(pixels).hexdigest(), expected["pixels_sha256"])
 
     def test_icon_rom_without_strips_is_rejected(self):
         empty = menurom.serialize([], [build_palette(0)])

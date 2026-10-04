@@ -236,6 +236,71 @@ def test_director_names_the_rom_and_strip_of_a_corrupt_record():
         assert "cut.png" in message and ".rom" in message and "rebuild" in message, message
 
 
+# --- real ROMs from the older generators -----------------------------------
+# tests/fixtures/romformat holds records written by the generators before
+# the current encoding (see its README): strips from the pre-glyph-table ROMs
+# and from the generator just before the switch, plus a game package's menu
+# icon. expected.json gives each strip's true size (from its source image),
+# glyph table and pixel hash.
+
+FIXTURES = "tests/fixtures/romformat/"
+
+
+def fixture_bytes(name):
+    with open(FIXTURES + name, "rb") as f:
+        return f.read()
+
+
+def expected_strips():
+    import json
+    with open(FIXTURES + "expected.json") as f:
+        return json.load(f)
+
+
+def sha256_hex(data):
+    import binascii
+    import hashlib
+    return binascii.hexlify(hashlib.sha256(bytes(data)).digest()).decode()
+
+
+def fixture_records(data):
+    num_strips, num_palettes = struct.unpack_from("<HH", data, 0)
+    offsets = struct.unpack_from("<%dL" % (num_strips + num_palettes), data, 4)
+    for n in range(num_strips):
+        name_len = data[offsets[n]]
+        yield offsets[n] + 1 + name_len, offsets[n + 1]
+
+
+def test_real_older_records_resolve_to_their_true_size():
+    for fixture, strips in sorted(expected_strips().items()):
+        data = fixture_bytes(fixture)
+        records = list(fixture_records(data))
+        assert len(records) == len(strips), fixture
+        for (header_start, record_end), strip in zip(records, strips):
+            width, height, frames, _palette, glyph_length = romformat.resolve_in(data, header_start, record_end)
+            assert (width, height, frames) == (strip["width"], strip["height"], strip["frames"]), (
+                fixture, strip["name"], (width, height, frames))
+            assert (glyph_length or 0) == len(strip["glyphs"].encode("utf-8")), (fixture, strip["name"])
+
+
+def test_director_loads_real_older_roms():
+    for fixture in ("preglyph.rom", "preswitch.rom"):
+        strips = expected_strips()[fixture]
+        for streaming in (True, False):
+            label = "%s streaming=%s" % (fixture, streaming)
+            runtime = load(fixture_bytes(fixture), streaming)
+            backend = runtime.platform.sprites
+            for n, strip in enumerate(strips):
+                entry = director.image_metadata[n]
+                size = (strip["width"], strip["height"], strip["frames"])
+                assert (entry["width"], entry["height"], entry["frames"]) == size, (label, strip["name"], entry)
+                assert (entry["glyphs"] or "") == strip["glyphs"], (label, strip["name"])
+                # Renderers get the current header and the strip's own pixels.
+                assert romformat.decode_header(backend.stripes[n])[:3] == size, (label, strip["name"])
+                pixels = director._stripe_buffers[n][4:]
+                assert sha256_hex(pixels) == strip["pixels_sha256"], (label, strip["name"])
+
+
 def main():
     tests = [(name, value) for name, value in sorted(globals().items()) if name.startswith("test_")]
     for name, test in tests:
