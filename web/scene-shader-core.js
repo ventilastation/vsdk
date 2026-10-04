@@ -508,10 +508,11 @@
 
   // scene: a decoded VS2 scene -- led-render-core.js decodeVs2SceneBuffer's
   // shape ({sprites: [{slot, x, y, image_strip, frame, perspective, vs2:
-  // {flip_x, flip_y}}], tilemaps: [...]}) or the desktop decode_vs2_scene
-  // shape ({sprites: [{slot, x, y, image, frame, perspective, flip_x,
-  // flip_y}], tilemaps: [...]}). Both list only visible entities in slot
-  // order with layer modes already resolved.
+  // true, flip_x, flip_y}], tilemaps: [...]}) or the desktop
+  // decode_vs2_scene shape ({sprites: [{slot, x, y, image, frame,
+  // perspective, flip_x, flip_y}], tilemaps: [...]}) -- both keep flip_x/
+  // flip_y flat on the entity itself. Both list only visible entities in
+  // slot order with layer modes already resolved.
   function packSceneVs2(scene) {
     if (scene instanceof Uint8Array) {
       return packSceneVs2Bytes(scene);
@@ -524,8 +525,8 @@
         strip: value.image_strip ?? value.image,
         frame: value.frame || 0,
         mode: value.perspective,
-        flipX: Boolean(value.vs2 ? value.vs2.flip_x : value.flip_x),
-        flipY: Boolean(value.vs2 ? value.vs2.flip_y : value.flip_y),
+        flipX: Boolean(value.flip_x),
+        flipY: Boolean(value.flip_y),
         vs2Coordinates: true,
       });
     };
@@ -542,8 +543,8 @@
         tileHeight: value.tile_height,
         viewport: value.viewport,
         frames: value.frames,
-        flipX: Boolean(value.vs2 ? value.vs2.flip_x : value.flip_x),
-        flipY: Boolean(value.vs2 ? value.vs2.flip_y : value.flip_y),
+        flipX: Boolean(value.flip_x),
+        flipY: Boolean(value.flip_y),
         vs2Coordinates: true,
       });
     };

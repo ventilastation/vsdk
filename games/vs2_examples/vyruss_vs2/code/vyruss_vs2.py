@@ -222,6 +222,13 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
         # structure), so it has no declarative equivalent and stays
         # hand-written here -- unchanged from the original build()'s own
         # last line.
+        #
+        # baddie_height: every baddies-pool slot shares one image
+        # ("galaga.png"), so its height is a build-time constant -- cached
+        # once here so update_player_collision()/update_projectiles() can
+        # precompute a Y-band bound per call instead of per baddie (see
+        # those methods' own comments for why that split matters).
+        self.baddie_height = self.image("galaga.png").height
         self.start_level()
 
     # -- game logic (unchanged from the original except where noted in
@@ -536,7 +543,14 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
         # frame/age bookkeeping, now Transient(animate=True, ticks=5).
         for laser in self.laser:
             hit = None
+            # Y-band prefilter before the float-heavy overlaps() check --
+            # see update_player_collision()'s matching comment for why.
+            laser_y = laser.y
+            y_lo = laser_y - self.baddie_height
+            y_hi = laser_y + laser.height
             for baddie in self.everyone:
+                if baddie.y <= y_lo or baddie.y >= y_hi:
+                    continue
                 if laser.overlaps(baddie):
                     hit = baddie
                     break
@@ -552,7 +566,25 @@ class VyrussVs2(vyruss_vs2_scene.VyrussScene):
             self.bombs.despawn(hit)
             self.explode_player()
             return
+        # Sprite.overlaps() computes its (float, mod-wrapping) X-overlap
+        # check unconditionally before ever looking at Y, so a naive "check
+        # every baddie every tick" loop pays that cost up to MAX_BADDIES
+        # times a frame even though the player sits on a fixed Y band and
+        # almost no baddie is ever within reach of it. y_lo/y_hi below are
+        # the exact negation of overlaps()'s own Y test (baddie.y <= y_lo or
+        # baddie.y >= y_hi means player.overlaps(baddie) cannot be True --
+        # not an approximation), computed once per call instead of once per
+        # baddie so the per-baddie check is two plain comparisons with no
+        # arithmetic of their own -- MicroPython heap-allocates every float
+        # arithmetic result, so this is what actually cuts the GC pressure
+        # that caused this game's web-emulator-only frame stutter (native
+        # MicroPython's GC is fast enough to hide the same cost).
+        player_y = self.player.y
+        y_lo = player_y - self.baddie_height
+        y_hi = player_y + self.player.height
         for baddie in self.everyone:
+            if baddie.y <= y_lo or baddie.y >= y_hi:
+                continue
             if self.player.overlaps(baddie):
                 self.kill_baddie(baddie)
                 self.explode_player()
