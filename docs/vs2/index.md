@@ -42,6 +42,12 @@ the game needs no exit code.
 
 ## Start here
 
+First, [set up the desktop emulator](../guides/desktop.md), or
+[try editing in the browser](../guides/browser.md). The
+[assets and sharing guide](../guides/assets-and-sharing.md) covers menu metadata
+and contributing your game.
+
+
 **[Tutorial](tutorial/index.md)** — seven short chapters that build a game from
 an empty folder: the circular display, sprites and pools, tilemaps and text,
 scenes and input, and what the budgets mean when you move to real hardware.
@@ -97,4 +103,5 @@ reference/index
 glossary
 going-further
 design-notes
+migration
 ```

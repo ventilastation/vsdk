@@ -2,7 +2,7 @@
 
 This covers building and flashing the ESP32-S3 firmware images. For the
 desktop/web emulators (no hardware needed) see the setup guides in
-[docs/](docs/) instead.
+[documentation](../README.md) instead.
 
 ## Prerequisites
 

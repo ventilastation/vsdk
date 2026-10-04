@@ -22,7 +22,8 @@ def build(self):
 
 That is 16 of your 100 sprites, spent in one number you can add up.
 
-Every sprite starts hidden. Nothing after this allocates.
+Every sprite starts hidden. Spawning reuses these reserved sprites instead of
+creating new render objects; unrelated Python expressions can still allocate.
 
 ## Spawning
 

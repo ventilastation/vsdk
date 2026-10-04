@@ -1,3 +1,7 @@
+# Historical gallery notes
+
+> Historical attribution and behavior notes; not current game-development guidance.
+
 = Design notes =
 
 == Iterando por imágenes ==

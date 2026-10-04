@@ -115,7 +115,7 @@ def update(self):
 line, and pressing both directions at once cancels out as it did in chapter 2. The
 names for the frames make the code say what it means, and they are the same
 three numbers the strip is laid out in. Setting a frame is a single write, so
-doing it every tick costs nothing.
+it reuses the existing sprite record.
 
 :::{note}
 The renderer draws a sprite's image mirrored in X, because `x` counts the way the

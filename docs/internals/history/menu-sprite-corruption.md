@@ -1,3 +1,10 @@
+---
+nosearch: true
+---
+
+> **Historical: implemented/resolved.** These are dated investigation or request
+> records, not current setup instructions. See [current internals](../README.md).
+
 # Main-menu sprite corruption investigation
 
 Status as of 2026-07-24 (hardware session): **root cause found and fixed,

@@ -3,12 +3,14 @@
 You do not need this page to write a game. It explains the reasons behind the
 rules you meet in the tutorial, so they are easier to remember.
 
-## The display has a deadline, not a framebuffer
+## The physical display has a deadline
 
-The display is a bar of 54 LEDs on a spinning arm. The renderer is asked, 256
-times per rotation, "what colour is each LED at this angle?" and answers by
-walking your scene. A column has to be ready before the arm reaches it, so the
-answer must be cheap.
+The display is a bar of 54 LEDs on a spinning arm. A column has to be ready
+before the arm reaches it. The current renderer projects scenes into two polar
+framebuffers; physical LED-column service uses the published buffer independently
+of the projection work. Game updates are independent of rotation timing.
+See [hardware acceptance](../internals/vs2-hardware-acceptance.md) for the separate
+projection and column-service budgets.
 
 ## The hardware is small
 
@@ -37,9 +39,10 @@ automatic collection on, so there the same habit shows up as occasional pauses.
 ## The display graph is fixed
 
 Everything a scene draws is created once, in `build()`. After that, moving
-something is a write into a record the renderer already holds. Nothing is
-allocated while the game runs, so no garbage builds up between scene changes and
-nothing is left for a collector to pause over.
+something is a write into a record the renderer already holds. Sealing prevents new render objects; it cannot prevent your Python code from
+allocating tuples, strings or other temporary objects. Build once and reuse
+objects, and measure heap behavior for frequent updates. Timers also store their
+callbacks and arguments.
 
 That one idea explains several rules:
 

@@ -272,7 +272,7 @@ no pre-baked frame-per-position table (that would cost ~750 KB per ring at
 this display's 256×54 resolution for negligible benefit). Both the strip
 buffer and the shared palette buffer must be wrapped in `memoryview(...)`
 before crossing into the native `set_imagestrip()`/`set_palettes()` calls —
-see [ota-ring-sprite-corruption.md](ota-ring-sprite-corruption.md) for the
+see [ota-ring-sprite-corruption.md](history/ota-ring-sprite-corruption.md) for the
 real bug this fixed (a type-confusion issue, not the GC-lifetime issue
 originally suspected) and how it was found.
 

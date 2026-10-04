@@ -1,5 +1,8 @@
 # 1. Your first game
 
+Before creating these files, complete [desktop setup](../../guides/desktop.md)
+and run `demos.tutorial_game`. Keep the terminal open to see tracebacks.
+
 A game is a folder. Create one under your own group name:
 
 ```sh
