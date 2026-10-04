@@ -104,6 +104,7 @@ MICROPYTHON_TESTS = [
 ]
 
 NODE_TESTS = [
+    "tests/test_game_starter.mjs",
     "tests/test_web_input_v2.mjs",
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",
