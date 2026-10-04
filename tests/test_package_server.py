@@ -261,9 +261,13 @@ class PackageServerTests(unittest.TestCase):
         # (the routing around the new endpoints is).
         sample = pathlib.Path(self._tmp.name) / "sample.py"
         sample.write_bytes(b"print('hi')\n")
+        # /manifest also brings the real sprite ROMs up to date first, which
+        # takes seconds when they're stale; that has its own tests in
+        # test_upgrade_server.py.
         with unittest.mock.patch.object(
                 upgrade_server, "_lfs_files",
-                lambda: [("sample.py", sample)]):
+                lambda: [("sample.py", sample)]), unittest.mock.patch.object(
+                upgrade_server, "_refresh_build_output", lambda web_runtime: None):
             status, body = self._get("/manifest")
             self.assertEqual(status, 200)
             manifest = json.loads(body)
