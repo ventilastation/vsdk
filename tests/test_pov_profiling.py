@@ -12,6 +12,7 @@ class FakeDisplay:
         self.enabled = False
         self.calibrated = True
         self.reset_count = 0
+        self.gpu_idle = None
 
     def set_performance_profiling(self, enabled):
         self.enabled = enabled
@@ -21,6 +22,9 @@ class FakeDisplay:
 
     def set_color_pipeline_enabled(self, enabled):
         self.calibrated = enabled
+
+    def set_gpu_idle(self, enabled):
+        self.gpu_idle = enabled
 
     def get_performance_stats(self):
         return {
@@ -90,14 +94,25 @@ class FakeGateScene:
         }
 
 
+class FakeVs2Backend:
+    def __init__(self, avg_us=7):
+        self.avg_us = avg_us
+        self.calls = []
+
+    def flattened_probe(self, count, passes):
+        self.calls.append((count, passes))
+        return self.avg_us
+
+
 class PovProfilingTests(unittest.TestCase):
-    def command(self, parts, display=None, scene=None):
+    def command(self, parts, display=None, scene=None, vs2_backend=None):
         sent = []
         pov_profiling.handle_command(
             parts,
             lambda line: sent.append(line),
             display or FakeDisplay(),
             scene=scene,
+            vs2_backend=vs2_backend,
         )
         return sent
 
@@ -167,6 +182,45 @@ class PovProfilingTests(unittest.TestCase):
             self.command(["gate", "start"], scene=scene),
             [b"povperf_error invalid_command"],
         )
+
+    def test_gpuidle_on_and_off_toggle_the_display(self):
+        display = FakeDisplay()
+        self.assertEqual(self.command(["gpuidle", "on"], display), [b"povperf_gpuidle ok=1"])
+        self.assertTrue(display.gpu_idle)
+        self.assertEqual(self.command(["gpuidle", "off"], display), [b"povperf_gpuidle ok=1"])
+        self.assertFalse(display.gpu_idle)
+
+    def test_gpuidle_status_does_not_change_the_display(self):
+        display = FakeDisplay()
+        display.gpu_idle = True
+        self.assertEqual(self.command(["gpuidle", "status"], display), [b"povperf_gpuidle ok=1"])
+        self.assertTrue(display.gpu_idle)
+
+    def test_gpuidle_unsupported_without_display_hook(self):
+        self.assertEqual(
+            self.command(["gpuidle", "on"], display=object()),
+            [b"povperf_error unsupported"],
+        )
+
+    def test_flatprobe_reports_avg_us_from_the_vs2_backend(self):
+        backend = FakeVs2Backend(avg_us=42)
+        sent = self.command(["flatprobe", "90", "10000"], vs2_backend=backend)
+        self.assertEqual(backend.calls, [(90, 10000)])
+        self.assertEqual(sent, [b"povperf_flatprobe count=90 passes=10000 avg_us=42"])
+
+    def test_flatprobe_unsupported_without_vs2_backend(self):
+        self.assertEqual(
+            self.command(["flatprobe", "90", "10000"]),
+            [b"povperf_error unsupported"],
+        )
+
+    def test_flatprobe_rejects_wrong_argument_count(self):
+        backend = FakeVs2Backend()
+        self.assertEqual(
+            self.command(["flatprobe", "90"], vs2_backend=backend),
+            [b"povperf_error invalid_command"],
+        )
+        self.assertEqual(backend.calls, [])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,223 @@
+{
+  "actions": [
+    {
+      "action_class": "Collide",
+      "args": {
+        "targets": {
+          "kind": "param",
+          "name": "hits"
+        }
+      },
+      "bind": "hit"
+    }
+  ],
+  "apply_to_all": [],
+  "class_name": "EnemyStates",
+  "params": [
+    {
+      "default": null,
+      "label": "Player shots",
+      "name": "hits",
+      "type": "pool"
+    },
+    {
+      "default": 80,
+      "label": "Orbit duration",
+      "max": 255,
+      "min": 1,
+      "name": "orbit_ticks",
+      "step": 1,
+      "type": "number",
+      "unit": "tick"
+    },
+    {
+      "default": 30,
+      "label": "Chiller-fall duration",
+      "max": 255,
+      "min": 1,
+      "name": "chiller_ticks",
+      "step": 1,
+      "type": "number",
+      "unit": "tick"
+    },
+    {
+      "default": 2,
+      "label": "Fall speed",
+      "max": 8,
+      "min": 0,
+      "name": "fall_speed",
+      "step": 0.25,
+      "type": "number",
+      "unit": "led/tick"
+    },
+    {
+      "default": 100,
+      "label": "Ground",
+      "max": 255,
+      "min": 0,
+      "name": "ground_y",
+      "step": 1,
+      "type": "number",
+      "unit": "led"
+    },
+    {
+      "default": null,
+      "label": "Explosion pool",
+      "name": "explosion",
+      "type": "pool"
+    },
+    {
+      "default": null,
+      "label": "Explosion sound",
+      "name": "sound",
+      "type": "sound"
+    },
+    {
+      "default": null,
+      "label": "On death",
+      "name": "on_death",
+      "type": "callback"
+    }
+  ],
+  "per_sprite": [],
+  "state": [],
+  "state_machine": {
+    "bodies": {
+      "chiller_falling": {
+        "enter": [
+          {
+            "kind": "hold",
+            "then": "falling",
+            "ticks": {
+              "kind": "param",
+              "name": "chiller_ticks"
+            }
+          }
+        ],
+        "step": [
+          {
+            "bind": "hit",
+            "else": [],
+            "kind": "if_action",
+            "then": [
+              {
+                "kind": "goto_state",
+                "name": "exploding"
+              }
+            ]
+          }
+        ]
+      },
+      "exploding": {
+        "enter": [
+          {
+            "kind": "play_sound",
+            "name": "sound"
+          },
+          {
+            "kind": "spawn",
+            "pool": "explosion",
+            "x": {
+              "kind": "state",
+              "name": "x"
+            },
+            "y": {
+              "kind": "state",
+              "name": "y"
+            }
+          },
+          {
+            "args": [],
+            "kind": "call_callback",
+            "name": "on_death"
+          }
+        ],
+        "step": [
+          {
+            "kind": "despawn"
+          }
+        ]
+      },
+      "falling": {
+        "step": [
+          {
+            "amount": {
+              "kind": "param",
+              "name": "fall_speed"
+            },
+            "kind": "accumulate",
+            "state": "y"
+          },
+          {
+            "condition": {
+              "kind": "compare",
+              "left": {
+                "kind": "state",
+                "name": "y"
+              },
+              "op": ">=",
+              "right": {
+                "kind": "param",
+                "name": "ground_y"
+              }
+            },
+            "else": [
+              {
+                "bind": "hit",
+                "else": [],
+                "kind": "if_action",
+                "then": [
+                  {
+                    "kind": "goto_state",
+                    "name": "exploding"
+                  }
+                ]
+              }
+            ],
+            "kind": "if_else",
+            "then": [
+              {
+                "kind": "goto_state",
+                "name": "exploding"
+              }
+            ]
+          }
+        ]
+      },
+      "orbiting": {
+        "enter": [
+          {
+            "kind": "hold",
+            "then": "chiller_falling",
+            "ticks": {
+              "kind": "param",
+              "name": "orbit_ticks"
+            }
+          }
+        ],
+        "step": [
+          {
+            "bind": "hit",
+            "else": [],
+            "kind": "if_action",
+            "then": [
+              {
+                "kind": "goto_state",
+                "name": "exploding"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "initial": "orbiting",
+    "states": [
+      "orbiting",
+      "chiller_falling",
+      "falling",
+      "exploding"
+    ]
+  },
+  "subject_kind": "pool",
+  "version": 1
+}

@@ -5,11 +5,19 @@ const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T204800Z";
 
 const DEFAULT_CONFIG = {
   micropythonWasmUrl: `./vendor/micropython/micropython.wasm?v=${MICROPYTHON_WASM_VERSION}`,
-  runtimeBundleUrl: "./runtime-bundle.json?v=20260714b",
-  runtimeManifestUrl: "./runtime-manifest.json?v=20260714b",
+  runtimeBundleUrl: "./runtime-bundle.json?v=20260922-yband-prefilter",
+  runtimeManifestUrl: "./runtime-manifest.json?v=20260922-yband-prefilter",
   fsRoot: "/games",
   pystack: 32 * 1024,
-  heapsize: 8 * 1024 * 1024,
+  // The WASM module's total linear memory is fixed at build time with no
+  // runtime growth (see micropython.mjs's loadMicroPython): pushing this
+  // past ~14 MiB risks an unrecoverable "Cannot enlarge memory arrays"
+  // abort once pystack and MicroPython's own static footprint are added
+  // in, and measured play sessions saw no further improvement past 12
+  // MiB anyway (Vyruss VS2's occasional GC-driven runtime.step() stalls
+  // dropped from 500-700ms at the old 8 MiB heap to rare ~100-200ms
+  // outliers here, matching the legacy sprites-API games' stall profile).
+  heapsize: 12 * 1024 * 1024,
   autostartSlug: null,
 };
 const SCENE_STEP_MS = 30;

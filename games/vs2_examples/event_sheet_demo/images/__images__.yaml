@@ -1,0 +1,5 @@
+palettegroups:
+  hud:
+    - strip: font.png
+      frames: 20
+      glyphs: " 0123456789AEGMOPRSV"

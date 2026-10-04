@@ -53,6 +53,13 @@ def get_hall_filter_enabled():
     return _display().get_hall_filter_enabled()
 
 
+def set_gpu_idle(enabled):
+    """T0 gate experiment only: skip the GPU task's own column-serve/render
+    work so a bench script can isolate cross-core contention. Not part of
+    the stable board API."""
+    return _display().set_gpu_idle(enabled)
+
+
 def set_column_offset(offset):
     return _display().set_column_offset(offset)
 

@@ -93,10 +93,19 @@
       if (offset + layerSize > buffer.length) {
         return { version, layers: [], sprites: [], tilemaps: [], drawables: [] };
       }
+      // Reserved bytes 3/4 (see export_scene_payload() in vs2/__init__.py):
+      // camera X (wraps at COLUMNS, so a plain byte already carries the
+      // wrap) and camera Y (clamped 0..255, sprite y's own domain). Folded
+      // straight into each drawable's x/y below -- a layer camera is a
+      // per-frame constant, so this is exactly equivalent to re-adding it
+      // per column and simpler. Byte 5 (curve index) isn't decoded here:
+      // a custom curve's 256 bytes never travel over this wire format.
       layers.push({
         id: buffer[offset],
         mode: buffer[offset + 1],
         visible: Boolean(buffer[offset + 2] & VS2_FLAG_VISIBLE),
+        cameraX: layerSize > 3 ? buffer[offset + 3] : 0,
+        cameraY: layerSize > 4 ? buffer[offset + 4] : 0,
       });
       offset += layerSize;
     }
@@ -127,8 +136,8 @@
       }
       const xFixed = view.getInt32(offset - spriteSize + 10, true);
       const yFixed = view.getInt32(offset - spriteSize + 14, true);
-      const x = xFixed / 256;
-      const y = yFixed / 256;
+      const x = xFixed / 256 + (layer ? layer.cameraX : 0);
+      const y = yFixed / 256 + (layer ? layer.cameraY : 0);
       const sprite = {
         slot,
         x,
@@ -136,14 +145,17 @@
         image_strip: strip,
         frame,
         perspective: mode,
-        vs2: {
-          layer: layerId,
-          x,
-          y,
-          flags,
-          flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
-          flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
-        },
+        // `vs2: true` is a cheap discriminator (see getSourceColumn,
+        // spritePixelY, drawSpriteColumn below) distinguishing this
+        // decoder's sprites from the legacy sprite decoder's, matching the
+        // desktop decode_vs2_scene shape's flat flip_x/flip_y -- this used
+        // to be a whole second per-sprite object (`vs2: {layer, x, y,
+        // flags, flip_x, flip_y}`), doubling this hot per-frame decode
+        // path's allocations for fields (layer/x/y/flags) nothing ever
+        // read back out.
+        vs2: true,
+        flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
+        flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
       };
       sprites.push(sprite);
       spriteBySlot[slot] = sprite;
@@ -168,10 +180,10 @@
         view.getUint16(offset + 16, true),
         view.getUint16(offset + 18, true),
       ];
-      const x = view.getInt32(offset + 20, true) / 256;
-      const y = view.getInt32(offset + 24, true) / 256;
-      const framesOffset = view.getUint32(offset + 28, true);
       const layer = layers[layerId] || null;
+      const x = view.getInt32(offset + 20, true) / 256 + (layer ? layer.cameraX : 0);
+      const y = view.getInt32(offset + 24, true) / 256 + (layer ? layer.cameraY : 0);
+      const framesOffset = view.getUint32(offset + 28, true);
       offset += tilemapSize;
       const cells = mapColumns * mapRows;
       if (framesOffset + cells > buffer.length) {
@@ -200,14 +212,9 @@
         tile_height: tileHeight,
         viewport,
         perspective: mode,
-        vs2: {
-          layer: layerId,
-          x,
-          y,
-          flags,
-          flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
-          flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
-        },
+        vs2: true,
+        flip_x: Boolean(flags & VS2_FLAG_FLIP_X),
+        flip_y: Boolean(flags & VS2_FLAG_FLIP_Y),
       };
       tilemaps.push(tilemap);
       tilemapBySlot[slot] = tilemap;
@@ -253,14 +260,14 @@
     if (spriteColumn === -1) {
       return -1;
     }
-    if (sprite?.vs2?.flip_x) {
+    if (sprite?.flip_x) {
       return spriteWidth - 1 - spriteColumn;
     }
     return spriteColumn;
   }
 
   function getSourceRow(sprite, sourceRow, spriteHeight) {
-    if (sprite?.vs2?.flip_y) {
+    if (sprite?.flip_y) {
       return spriteHeight - 1 - sourceRow;
     }
     return sourceRow;
@@ -367,8 +374,8 @@
     if (delta >= viewportW) {
       return;
     }
-    const flipX = Boolean(tilemap?.vs2 ? tilemap.vs2.flip_x : tilemap.flip_x);
-    const flipY = Boolean(tilemap?.vs2 ? tilemap.vs2.flip_y : tilemap.flip_y);
+    const flipX = Boolean(tilemap.flip_x);
+    const flipY = Boolean(tilemap.flip_y);
     const sourceDelta = flipX ? viewportW - 1 - delta : delta;
     const sx = viewportX + sourceDelta;
     const tileCol = Math.floor(sx / tileWidth);
@@ -430,7 +437,7 @@
     for (let led = 0; led < zleds; led += 1) {
       let sourceRow = Math.floor((led * PIXELS) / zleds);
       if (sourceRow >= height) break;
-      if (!sprite?.vs2?.flip_y) sourceRow = height - 1 - sourceRow;
+      if (!sprite?.flip_y) sourceRow = height - 1 - sourceRow;
       const colorIndex = asset.data[base + sourceRow];
       if (colorIndex !== TRANSPARENT_INDEX) {
         setLedColorFromPalette(pixels, palette, paletteIndex, colorIndex, column, led);

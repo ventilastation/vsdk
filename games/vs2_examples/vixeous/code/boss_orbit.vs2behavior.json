@@ -1,0 +1,180 @@
+{
+  "actions": [],
+  "apply_to_all": [],
+  "class_name": "BossOrbit",
+  "params": [
+    {
+      "default": 192,
+      "label": "Orbit cycle",
+      "max": 1024,
+      "min": 2,
+      "name": "cycle_ticks",
+      "step": 2,
+      "type": "number",
+      "unit": "tick"
+    },
+    {
+      "default": 2,
+      "label": "Theta speed",
+      "max": 16,
+      "min": 0,
+      "name": "theta_speed",
+      "step": 1,
+      "type": "number",
+      "unit": "col/tick"
+    },
+    {
+      "default": 256,
+      "label": "Display width",
+      "max": 512,
+      "min": 1,
+      "name": "width",
+      "step": 1,
+      "type": "number",
+      "unit": "col"
+    },
+    {
+      "default": 107,
+      "label": "Approach stop",
+      "max": 255,
+      "min": 0,
+      "name": "stop_y",
+      "step": 1,
+      "type": "number",
+      "unit": "led"
+    }
+  ],
+  "per_sprite": [
+    {
+      "kind": "set_state",
+      "state": "phase",
+      "value": {
+        "kind": "binary_op",
+        "left": {
+          "kind": "binary_op",
+          "left": {
+            "kind": "state",
+            "name": "phase"
+          },
+          "op": "+",
+          "right": {
+            "kind": "literal",
+            "value": 1
+          }
+        },
+        "op": "%",
+        "right": {
+          "kind": "param",
+          "name": "cycle_ticks"
+        }
+      }
+    },
+    {
+      "condition": {
+        "kind": "compare",
+        "left": {
+          "kind": "state",
+          "name": "phase"
+        },
+        "op": "<",
+        "right": {
+          "kind": "binary_op",
+          "left": {
+            "kind": "param",
+            "name": "cycle_ticks"
+          },
+          "op": "//",
+          "right": {
+            "kind": "literal",
+            "value": 2
+          }
+        }
+      },
+      "else": [
+        {
+          "kind": "set_state",
+          "state": "theta",
+          "value": {
+            "kind": "binary_op",
+            "left": {
+              "kind": "binary_op",
+              "left": {
+                "kind": "state",
+                "name": "theta"
+              },
+              "op": "-",
+              "right": {
+                "kind": "param",
+                "name": "theta_speed"
+              }
+            },
+            "op": "%",
+            "right": {
+              "kind": "param",
+              "name": "width"
+            }
+          }
+        }
+      ],
+      "kind": "if_else",
+      "then": [
+        {
+          "kind": "set_state",
+          "state": "theta",
+          "value": {
+            "kind": "binary_op",
+            "left": {
+              "kind": "binary_op",
+              "left": {
+                "kind": "state",
+                "name": "theta"
+              },
+              "op": "+",
+              "right": {
+                "kind": "param",
+                "name": "theta_speed"
+              }
+            },
+            "op": "%",
+            "right": {
+              "kind": "param",
+              "name": "width"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "condition": {
+        "kind": "compare",
+        "left": {
+          "kind": "state",
+          "name": "y"
+        },
+        "op": ">",
+        "right": {
+          "kind": "param",
+          "name": "stop_y"
+        }
+      },
+      "else": [],
+      "kind": "if_else",
+      "then": [
+        {
+          "amount": {
+            "kind": "literal",
+            "value": -1
+          },
+          "kind": "accumulate",
+          "state": "y"
+        }
+      ]
+    }
+  ],
+  "state": [
+    "theta",
+    "phase"
+  ],
+  "subject_kind": "sprite",
+  "version": 1
+}

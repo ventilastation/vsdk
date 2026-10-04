@@ -2,6 +2,7 @@ import os
 import struct
 import sys
 import time
+import tracemalloc
 import unittest
 from unittest import mock
 
@@ -366,6 +367,8 @@ class Vs2ApiTests(unittest.TestCase):
                 def __init__(self, **_kwargs): pass
                 def set_mode(self, _value): pass
                 def set_visible(self, _value): pass
+                def set_camera(self, _x, _y): pass
+                def set_curve(self, _curve): pass
 
             def Sprite(self):
                 return Record()
@@ -658,6 +661,603 @@ class Vs2ApiTests(unittest.TestCase):
         Sprite()
         with self.assertRaises(ImportError):
             self.vs2.Scene()
+
+    # -- T3: the behaviors init-surface --------------------------------------
+
+    def test_done_sentinel_and_behaviors_limit_exist(self):
+        vs2 = self.vs2
+        self.assertIsNot(vs2.DONE, None)
+        self.assertIs(vs2.DONE, vs2.DONE)
+        self.assertEqual(vs2.limits.behaviors, 32)
+
+    def test_vs2_store_export_is_the_store_module_singleton(self):
+        # `vs2.store` is deliberately rebound (by `from .store import store`
+        # in vs2/__init__.py) to the singleton itself, not the submodule --
+        # so reach the submodule through sys.modules to compare identity.
+        store_submodule = sys.modules["vs2.store"]
+        self.assertIs(self.vs2.store, store_submodule.store)
+
+    def test_sprite_despawn_is_pool_despawn_and_rejects_standalone(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                world = self.layer("world")
+                self.pool = world.sprite_pool("ship.png", count=1)
+                self.lone = world.sprite("ship.png")
+
+        game = self.enter(Game())
+        shot = game.pool.spawn(1, 2)
+        shot.despawn()
+        self.assertEqual(len(game.pool), 0)
+        with self.assertRaises(ValueError):
+            game.lone.despawn()
+
+    def test_dx_dy_accumulate_and_commit_once_per_pool_per_tick(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            idle_timeout = None
+
+            def build(self):
+                self.pool = self.layer("world").sprite_pool("ship.png", count=1)
+
+        game = self.enter(Game())
+        shot = game.pool.spawn(10, 20)
+        shot.dx = 3
+        shot.dy = -1
+        game.scene_step()
+        self.assertEqual((shot.x, shot.y), (13, 19))
+        self.assertEqual((shot.dx, shot.dy), (0, 0))
+        # Untouched dx/dy costs nothing and moves nothing further.
+        game.scene_step()
+        self.assertEqual((shot.x, shot.y), (13, 19))
+
+    def test_pool_var_primes_every_sprite_and_resets_on_spawn(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.pool = self.layer("world").sprite_pool("ship.png", count=2)
+                self.pool.var("hp", 3, min=0, max=9)
+
+        game = self.enter(Game())
+        self.assertEqual([sprite.hp for sprite in game.pool._free], [3, 3])
+        shot = game.pool.spawn(0, 0)
+        self.assertEqual(shot.hp, 3)
+        shot.hp = 0
+        game.pool.despawn(shot)
+        respawned = game.pool.spawn(0, 0)
+        self.assertIs(respawned, shot)
+        self.assertEqual(respawned.hp, 3, "spawn() must reset declared variables")
+
+    def test_pool_var_rejects_duplicate_and_reserved_names(self):
+        vs2 = self.vs2
+
+        class Dup(vs2.Scene):
+            def build(self):
+                pool = self.layer("world").sprite_pool("ship.png", count=1)
+                pool.var("hp", 1)
+                pool.var("hp", 2)
+
+        with self.assertRaises(ValueError):
+            self.enter(Dup())
+
+        class Reserved(vs2.Scene):
+            def build(self):
+                pool = self.layer("world").sprite_pool("ship.png", count=1)
+                pool.var("dx", 0)
+
+        with self.assertRaises(ValueError):
+            self.enter(Reserved())
+
+    def test_pool_kinds_applies_named_row_and_rejects_unknown_kind(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                # A third, unspent slot so the "unknown kind" spawn below
+                # exercises the kind lookup rather than pool exhaustion.
+                self.pool = self.layer("world").sprite_pool("ship.png", count=3)
+                self.pool.var("hp", 1)
+                self.pool.var("score", 10)
+                self.pool.kinds(driller=(3, 75), chiller=(1, 40))
+
+        game = self.enter(Game())
+        driller = game.pool.spawn(0, 0, kind="driller")
+        self.assertEqual((driller.hp, driller.score), (3, 75))
+        chiller = game.pool.spawn(0, 0, kind="chiller")
+        self.assertEqual((chiller.hp, chiller.score), (1, 40))
+        with self.assertRaises(ValueError):
+            game.pool.spawn(0, 0, kind="boss")
+
+    def test_pool_kinds_rejects_bad_arity_and_a_second_call(self):
+        vs2 = self.vs2
+
+        class BadArity(vs2.Scene):
+            def build(self):
+                pool = self.layer("world").sprite_pool("ship.png", count=1)
+                pool.var("hp", 1)
+                pool.kinds(driller=(1, 2))  # hp is the pool's only variable
+
+        with self.assertRaises(ValueError):
+            self.enter(BadArity())
+
+        class CalledTwice(vs2.Scene):
+            def build(self):
+                pool = self.layer("world").sprite_pool("ship.png", count=1)
+                pool.var("hp", 1)
+                pool.kinds(driller=(1,))
+                pool.kinds(chiller=(2,))
+
+        with self.assertRaises(ValueError):
+            self.enter(CalledTwice())
+
+    def test_pool_capacity_is_the_fixed_total_budget(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world")
+                self.pool = self.world.sprite_pool("ship.png", count=3)
+
+        game = self.enter(Game())
+        self.assertEqual(game.pool.capacity, 3)
+        game.pool.spawn(0, 0)
+        self.assertEqual(game.pool.capacity, 3)
+        self.assertIs(game.pool.layer, game.world)
+
+    def test_scene_var_declares_primes_and_resets_on_rebuild(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.var("score", 0, min=0, max=999999)
+                self.layer("world")
+
+        game = self.enter(Game())
+        self.assertEqual(game.score, 0)
+        game.score = 42
+        director.pop()
+        game2 = self.enter(Game())
+        self.assertEqual(game2.score, 0, "var() must reset fresh on every build()")
+
+    def test_scene_var_rejects_duplicate_and_reserved_names(self):
+        vs2 = self.vs2
+
+        class Dup(vs2.Scene):
+            def build(self):
+                self.var("score", 0)
+                self.var("score", 1)
+
+        with self.assertRaises(ValueError):
+            self.enter(Dup())
+
+        class Reserved(vs2.Scene):
+            def build(self):
+                self.var("enabled", True)
+
+        with self.assertRaises(ValueError):
+            self.enter(Reserved())
+
+    def test_family_groups_same_layer_members_and_is_not_iterable(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world")
+                self.enemies = self.world.sprite_pool("ship.png", count=2)
+                self.boss = self.world.sprite("ship.png")
+                self.hostiles = self.family(self.enemies, self.boss)
+
+        game = self.enter(Game())
+        self.assertEqual(game.hostiles.members, (game.enemies, game.boss))
+        self.assertEqual(len(game.hostiles), 2)
+        self.assertIs(game.hostiles.layer, game.world)
+        with self.assertRaises(TypeError):
+            for _ in game.hostiles:
+                pass
+
+    def test_family_rejects_cross_layer_members_and_bad_types(self):
+        vs2 = self.vs2
+
+        class CrossLayer(vs2.Scene):
+            def build(self):
+                a = self.layer("a").sprite_pool("ship.png", count=1)
+                b = self.layer("b").sprite_pool("ship.png", count=1)
+                self.family(a, b)
+
+        with self.assertRaises(ValueError):
+            self.enter(CrossLayer())
+
+        class BadMember(vs2.Scene):
+            def build(self):
+                pool = self.layer("world").sprite_pool("ship.png", count=1)
+                self.family(pool, "not a sprite")
+
+        with self.assertRaises(TypeError):
+            self.enter(BadMember())
+
+    def test_layer_cannot_be_named_scene(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.layer("scene")
+
+        with self.assertRaises(ValueError):
+            self.enter(Game())
+
+    def test_project_var_declares_once_and_wires_persist_to_store(self):
+        vs2 = self.vs2
+        # A module-level singleton outlives one test; scope this test's own
+        # bookkeeping so it never collides with another test or run.
+        vs2.project._vars = {}
+        vs2.project._persisted = set()
+        with mock.patch.object(vs2.store, "get", return_value=55) as get:
+            value = vs2.project.var("hiscore_t3", 0, persist=True)
+        get.assert_called_once_with("hiscore_t3", 0)
+        self.assertEqual(value, 55)
+        self.assertEqual(vs2.project.hiscore_t3, 55)
+        with mock.patch.object(vs2.store, "get") as get_again:
+            self.assertEqual(vs2.project.var("hiscore_t3", 999), 55,
+                             "a second var() call is a no-op returning the current value")
+        get_again.assert_not_called()
+        vs2.project.hiscore_t3 = 77
+        # Special methods are looked up on the type for `obj[k] = v`
+        # syntax, so the mock has to go on the class, not the instance.
+        with mock.patch.object(type(vs2.store), "__setitem__") as setitem, \
+             mock.patch.object(vs2.store, "save") as save:
+            vs2.project.save()
+        setitem.assert_called_once_with("hiscore_t3", 77)
+        save.assert_called_once()
+
+    def test_project_var_rejects_reserved_names(self):
+        vs2 = self.vs2
+        vs2.project._vars = {}
+        vs2.project._persisted = set()
+        with self.assertRaises(ValueError):
+            vs2.project.var("fsm_state", 0)
+
+    def test_layer_camera_defaults_and_is_writable_until_closed(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world")
+
+        game = self.enter(Game())
+        self.assertEqual((game.world.camera_x, game.world.camera_y), (0, 0))
+        game.world.camera_x = 12.5
+        game.world.camera_y = 3
+        self.assertEqual((game.world.camera_x, game.world.camera_y), (12.5, 3))
+        director.pop()
+        with self.assertRaises(vs2.SceneSealedError):
+            game.world.camera_x = 1
+
+    def test_layer_projection_accepts_a_curve_without_changing_the_mode(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.hud = self.layer("hud", projection=vs2.HUD)
+                self.world = self.layer("world", projection=vs2.TUNNEL)
+
+        game = self.enter(Game())
+        custom = vs2.tunnel(gamma=1.0)
+        game.hud.projection = custom
+        # Assigning a curve never changes the wire-format mode: every
+        # native call, payload byte and `== vs2.HUD`-style check must keep
+        # working exactly as it did in revision 2.
+        self.assertEqual(game.hud.projection, vs2.HUD)
+        self.assertEqual(game.hud.to_row(128), custom[128])
+        # Reverting to a classic mode resets the curve to that mode's own
+        # default.
+        game.hud.projection = vs2.HUD
+        self.assertEqual(game.hud.to_row(128), vs2.projection.HUD[128])
+
+        game.world.projection = custom
+        self.assertEqual(game.world.projection, vs2.TUNNEL)
+        self.assertEqual(game.world.to_row(200), custom[200])
+
+        with self.assertRaises(ValueError):
+            game.world.projection = bytes(255)  # not 256 bytes
+
+    def test_layer_to_depth_to_row_agree_with_the_default_curve(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world", projection=vs2.TUNNEL)
+
+        game = self.enter(Game())
+        self.assertEqual(game.world.to_row(0), vs2.VS1_TUNNEL[0])
+        self.assertEqual(game.world.to_row(255), vs2.VS1_TUNNEL[255])
+        for row in (0, 10, 53, 128, 255):
+            depth = game.world.to_depth(row)
+            self.assertEqual(game.world.to_row(depth), game.world.to_row(depth))
+
+    def test_layer_polar_matches_the_disc_angle_convention(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world")
+
+        game = self.enter(Game())
+        width = vs2.display.width
+        for (x, y), expected_angle in (
+            ((0, -1), 0), ((-1, 0), width // 4),
+            ((0, 1), width // 2), ((1, 0), 3 * width // 4),
+        ):
+            angle, depth = game.world.polar(x, y)
+            self.assertAlmostEqual(angle % width, expected_angle, places=3)
+            self.assertAlmostEqual(depth, 1.0, places=6)
+
+    def test_behave_defaults_name_to_snake_case_and_reads_back(self):
+        vs2 = self.vs2
+
+        class Patrolling:
+            pass
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.pool = self.layer("world").sprite_pool("ship.png", count=1)
+                self.attached = self.pool.behave(Patrolling())
+
+        game = self.enter(Game())
+        self.assertIs(game.pool.behavior("patrolling"), game.attached)
+        self.assertIs(game.pool.behavior(Patrolling), game.attached)
+        self.assertEqual(game.pool.behaviors, (game.attached,))
+
+    def test_behave_rejects_name_collision_on_one_subject(self):
+        vs2 = self.vs2
+
+        class Thing:
+            pass
+
+        class Game(vs2.Scene):
+            def build(self):
+                pool = self.layer("world").sprite_pool("ship.png", count=1)
+                pool.behave(Thing())
+                pool.behave(Thing())  # same default name "thing" twice
+
+        with self.assertRaises(ValueError):
+            self.enter(Game())
+
+    def test_behave_is_structural_only_legal_in_build(self):
+        vs2 = self.vs2
+
+        class Thing:
+            pass
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.pool = self.layer("world").sprite_pool("ship.png", count=1)
+
+        game = self.enter(Game())
+        with self.assertRaises(vs2.SceneSealedError):
+            game.pool.behave(Thing())
+
+    def test_behave_on_a_stale_handle_from_a_closed_scene_raises_cleanly(self):
+        # A closed scene nulls a Sprite's own _layer and a Layer's own
+        # .scene; behave() must not crash with a raw AttributeError when a
+        # stale handle is used after the scene has gone away.
+        vs2 = self.vs2
+
+        class Thing:
+            pass
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world")
+                self.pool = self.world.sprite_pool("ship.png", count=1)
+                self.ship = self.world.sprite("ship.png")
+
+        game = self.enter(Game())
+        director.pop()
+        with self.assertRaises(vs2.SceneSealedError):
+            game.ship.behave(Thing())
+        with self.assertRaises(vs2.SceneSealedError):
+            game.pool.behave(Thing())
+
+    def test_scene_behaviors_lists_every_attachment_scene_wide_in_order(self):
+        vs2 = self.vs2
+
+        class A:
+            pass
+
+        class B:
+            pass
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world")
+                self.pool = self.world.sprite_pool("ship.png", count=1)
+                self.ship = self.world.sprite("ship.png")
+                self.a = self.pool.behave(A())
+                self.b = self.ship.behave(B())
+                self.c = self.behave(A(), name="scene_a")
+
+        game = self.enter(Game())
+        self.assertEqual(game.behaviors, (game.a, game.b, game.c))
+        # scene.behaviors is scene-wide; scene.behavior() is scene-owned only.
+        self.assertIs(game.behavior("scene_a"), game.c)
+        self.assertIsNone(game.behavior("a"))
+
+    def test_behavior_pass_dispatches_by_subject_kind_in_attach_order(self):
+        vs2 = self.vs2
+        calls = []
+
+        class PoolBehavior:
+            def step(self, pool):
+                calls.append(("pool", pool))
+
+        class SpriteBehavior:
+            def step_one(self, sprite):
+                calls.append(("sprite", sprite))
+
+        class SceneBehavior:
+            def step_scene(self, scene):
+                calls.append(("scene", scene))
+
+        class FamilyBehavior:
+            def step(self, pool):
+                calls.append(("family-pool", pool))
+
+            def step_one(self, sprite):
+                calls.append(("family-sprite", sprite))
+
+        class Game(vs2.Scene):
+            idle_timeout = None
+
+            def build(self):
+                self.world = self.layer("world")
+                self.pool = self.world.sprite_pool("ship.png", count=1)
+                self.ship = self.world.sprite("ship.png")
+                self.other = self.world.sprite("ship.png")
+                self.pool.behave(PoolBehavior())
+                self.ship.behave(SpriteBehavior())
+                self.family_ = self.family(self.pool, self.other)
+                self.family_.behave(FamilyBehavior())
+                self.behave(SceneBehavior())
+
+        game = self.enter(Game())
+        game.scene_step()
+        self.assertEqual(calls, [
+            ("pool", game.pool),
+            ("sprite", game.ship),
+            ("family-pool", game.pool),
+            ("family-sprite", game.other),
+            ("scene", game),
+        ])
+
+    def test_behavior_pass_skipped_when_update_queues_a_transition(self):
+        vs2 = self.vs2
+        calls = []
+
+        class Loud:
+            def step_scene(self, scene):
+                calls.append("ran")
+
+        class Launcher(LegacyScene):
+            pass
+
+        class Game(vs2.Scene):
+            idle_timeout = None
+
+            def build(self):
+                self.behave(Loud())
+
+            def update(self):
+                self.pop()
+
+        director.push(Launcher())
+        game = self.enter(Game())
+        game.scene_step()
+        self.assertEqual(calls, [], "update()'s queued pop must skip the whole pass")
+
+    def test_behavior_pass_stops_immediately_when_a_behavior_queues_one(self):
+        vs2 = self.vs2
+        calls = []
+
+        class PopsThenScene:
+            def step_scene(self, scene):
+                calls.append("first")
+                scene.pop()
+
+        class NeverRuns:
+            def step_scene(self, scene):
+                calls.append("second")
+
+        class Launcher(LegacyScene):
+            pass
+
+        class Game(vs2.Scene):
+            idle_timeout = None
+
+            def build(self):
+                self.behave(PopsThenScene())
+                self.behave(NeverRuns(), name="second")
+
+        director.push(Launcher())
+        game = self.enter(Game())
+        game.scene_step()
+        self.assertEqual(calls, ["first"])
+
+    def test_tilemap_cell_at_resolves_point_or_returns_none(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.map = self.layer("world").tilemap(
+                    "terrain.png", columns=2, rows=2, x=0, y=0)
+
+        game = self.enter(Game())
+        tile_w, tile_h = game.map.tile_width, game.map.tile_height
+        self.assertEqual(game.map.cell_at(0, 0), (0, 0))
+        self.assertEqual(game.map.cell_at(tile_w, 0), (1, 0))
+        self.assertEqual(game.map.cell_at(0, tile_h), (0, 1))
+        self.assertIsNone(game.map.cell_at(0, -1))
+        self.assertIsNone(game.map.cell_at(0, tile_h * 2))
+        # X wraps circularly, like every other X coordinate in VS2.
+        self.assertEqual(game.map.cell_at(-vs2.display.width, 0), (0, 0))
+
+    def test_payload_layer_record_reserved_bytes_carry_camera_and_curve(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            def build(self):
+                self.world = self.layer("world", projection=vs2.TUNNEL)
+
+        game = self.enter(Game())
+        payload = vs2.export_scene_payload(game)
+        layer_offset = 16
+        # Untouched: byte-identical to revision 2 (index, mode, flags, then
+        # five reserved zero bytes) -- no camera, default curve.
+        self.assertEqual(list(payload[layer_offset:layer_offset + 8]),
+                         [0, vs2.TUNNEL, vs2.FLAG_VISIBLE, 0, 0, 0, 0, 0])
+
+        game.world.camera_x = 12
+        game.world.camera_y = 200
+        game.world.projection = vs2.tunnel(gamma=1.0)
+        payload = vs2.export_scene_payload(game)
+        record = payload[layer_offset:layer_offset + 8]
+        self.assertEqual(record[3], 12)
+        self.assertEqual(record[4], 200)
+        self.assertEqual(record[5], 1, "the first custom curve gets index 1, not 0")
+        self.assertEqual(bytes(record[6:8]), b"\x00\x00")
+
+    def test_scene_step_allocates_nothing_new_for_a_plain_scene(self):
+        vs2 = self.vs2
+
+        class Game(vs2.Scene):
+            idle_timeout = None
+            back_button = False
+
+            def build(self):
+                self.world = self.layer("world")
+                self.pool = self.world.sprite_pool("ship.png", count=4)
+                self.ship = self.world.sprite("ship.png")
+                for _ in range(3):
+                    self.pool.spawn(0, 0)
+
+            def update(self):
+                self.ship.x += 0.5
+
+        game = self.enter(Game())
+        for _ in range(50):
+            game.scene_step()  # warm up any one-time caches
+        tracemalloc.start()
+        try:
+            for _ in range(200):
+                game.scene_step()
+            current, _peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(current, 0,
+                         "a scene using none of the new API must retain no "
+                         "allocation from the commit pass or the Behavior pass")
 
 
 if __name__ == "__main__":

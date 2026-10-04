@@ -7,7 +7,7 @@ import {
   createLedRingGeometry,
   DEFAULT_WEBGL_RESOLUTION_SCALE,
 } from "./app-support.js?v=20260717b";
-import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260729a";
+import { LedSceneWebGLCompositor } from "./scene-webgl-compositor.js?v=20260922a";
 
 const VIDEO_PLANE_GUARD = 2;
 const VIDEO_PLANE_STRIDE = PIXELS + VIDEO_PLANE_GUARD;
@@ -221,9 +221,17 @@ class LedRingWebGLRenderer {
       videoPacked: gl.getUniformLocation(this.program, "u_videoPacked"),
     };
 
+    // Overlapping arxels must take the brighter (per-channel max) of the two
+    // colors, exactly like the desktop pyglet emulator's GL_MAX blend
+    // equation -- anything else (e.g. additive) blows out the overlap into
+    // a visible seam. WebGL2 has MAX as a core blend equation (no extension
+    // needed); WebGL1 needs EXT_blend_minmax, with additive as a last-resort
+    // fallback only when neither is available.
     gl.enable(gl.BLEND);
-    if (this.blendMinMax) {
-      gl.blendFunc(gl.SRC_COLOR, gl.SRC_COLOR);
+    gl.blendFunc(gl.SRC_COLOR, gl.SRC_COLOR);
+    if (this.isWebGL2) {
+      gl.blendEquation(gl.MAX);
+    } else if (this.blendMinMax) {
       gl.blendEquation(this.blendMinMax.MAX_EXT);
     } else {
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE);

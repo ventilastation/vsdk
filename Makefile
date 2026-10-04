@@ -1,4 +1,4 @@
-.PHONY: micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full flash-fs voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision vs2-hardware-test base-monitor list-boards register-rotor register-workbench register-base
+.PHONY: micropython-webassembly chipsynth-wasm web-runtime-bundle vs2-behavior-catalog web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke vsdk initial-flash flash-recovery flash-full flash-fs voom launcher flash-launcher retro-core fmsx run-emulator voom-sounds generate-roms build-fs configure-board configure-board-v2 configure-board-eu wifi-provision workbench-build workbench-flash workbench-monitor workbench-wifi-provision vs2-hardware-test base-monitor list-boards register-rotor register-workbench register-base
 
 PORT ?=
 MAC ?=
@@ -90,7 +90,7 @@ define NL
 endef
 
 IDF_SOURCE_HINT := source ../../esp-idf/esp-5.5.2/export.sh
-NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs vs2-hardware-test vs2-behaviors-gate base-monitor
+NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm web-runtime-bundle vs2-behavior-catalog web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs vs2-hardware-test vs2-behaviors-gate base-monitor
 IDF_GOALS := $(filter-out $(NO_IDF_TARGETS),$(MAKECMDGOALS))
 ifneq ($(strip $(IDF_GOALS)),)
 ifeq ($(strip $(IDF_PATH)),)
@@ -152,6 +152,9 @@ chipsynth-wasm:
 
 web-runtime-bundle:
 	python3 ./tools/generate_web_runtime_bundle.py
+
+vs2-behavior-catalog:
+	python3 ./tools/vs2_behavior_gen/generate_catalog.py
 
 web-emulator-bundle:
 	./tools/build-web-emulator-bundle.sh

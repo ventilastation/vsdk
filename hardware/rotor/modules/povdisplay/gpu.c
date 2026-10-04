@@ -136,8 +136,8 @@ static int wrap_column_delta(int value) {
     return wrapped;
 }
 
-int get_visible_column(int sprite_x, int sprite_width, int render_column) {
-    int sprite_column = sprite_width - 1 - wrap_column_delta(render_column - sprite_x);
+int get_visible_column(int sprite_x, int sprite_width, int render_column, int camera_x) {
+    int sprite_column = sprite_width - 1 - wrap_column_delta(render_column - sprite_x - camera_x);
     if (0 <= sprite_column && sprite_column < sprite_width) {
         return sprite_column;
     } else {
@@ -151,8 +151,8 @@ static int clamp_int(int value, int minimum, int maximum) {
   return value;
 }
 
-static int vs2_project_depth(int y) {
-  return vs2_deepspace[clamp_int(y, 0, ROWS - 1)];
+static int vs2_project_depth(const uint8_t* curve, int y) {
+  return curve[clamp_int(y, 0, ROWS - 1)];
 }
 
 static int fixed_floor_to_int(int32_t value) {
@@ -162,8 +162,8 @@ static int fixed_floor_to_int(int32_t value) {
   return -(((-value) + 255) / 256);
 }
 
-static int get_source_column(int sprite_x, int sprite_width, int render_column, bool flip_x) {
-  int sprite_column = get_visible_column(sprite_x, sprite_width, render_column);
+static int get_source_column(int sprite_x, int sprite_width, int render_column, bool flip_x, int camera_x) {
+  int sprite_column = get_visible_column(sprite_x, sprite_width, render_column, camera_x);
   if (sprite_column == -1) {
     return -1;
   }
@@ -234,6 +234,47 @@ static uint8_t vs2_slot_mode(const vs2_scene_t* scene, uint8_t layer_id, uint8_t
   return layer->mode;
 }
 
+/* Same fallback shape as vs2_slot_mode() above: a drawable with no layer (or
+ * a stale/absent layer slot) gets the values that keep every existing scene
+ * -- built before cameras or curves existed -- byte-identical: no camera
+ * translation, and the shared global TUNNEL curve every V1/V2 game already
+ * rendered through. A drawable that DOES have a layer always reads that
+ * layer's own fields directly; vs2_layer_make_new() (vs2_native.c) seeds a
+ * freshly constructed layer's curve with a copy of vs2_deepspace, so this
+ * never observes a half-initialized table. */
+static int vs2_slot_camera_x(const vs2_scene_t* scene, uint8_t layer_id) {
+  if (layer_id == VS2_NO_LAYER || layer_id >= scene->layer_count || scene->layers == NULL) {
+    return 0;
+  }
+  const vs2_layer_t* layer = scene->layers[layer_id];
+  if (layer == NULL) {
+    return 0;
+  }
+  return fixed_floor_to_int(layer->camera_x);
+}
+
+static int vs2_slot_camera_y(const vs2_scene_t* scene, uint8_t layer_id) {
+  if (layer_id == VS2_NO_LAYER || layer_id >= scene->layer_count || scene->layers == NULL) {
+    return 0;
+  }
+  const vs2_layer_t* layer = scene->layers[layer_id];
+  if (layer == NULL) {
+    return 0;
+  }
+  return fixed_floor_to_int(layer->camera_y);
+}
+
+static const uint8_t* vs2_slot_curve(const vs2_scene_t* scene, uint8_t layer_id) {
+  if (layer_id == VS2_NO_LAYER || layer_id >= scene->layer_count || scene->layers == NULL) {
+    return vs2_deepspace;
+  }
+  const vs2_layer_t* layer = scene->layers[layer_id];
+  if (layer == NULL) {
+    return vs2_deepspace;
+  }
+  return layer->curve;
+}
+
 static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t* scene, const vs2_tilemap_t* t) {
   if ((t->flags & VS2_FLAG_VISIBLE) == 0 || !vs2_slot_visible(scene, t->layer)) {
     return;
@@ -268,7 +309,11 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   int viewport_w = MIN(t->viewport_w, map_w - viewport_x);
   int viewport_h = MIN(t->viewport_h, map_h - viewport_y);
 
-  int delta = wrap_column_delta(column - fixed_floor_to_int(t->x));
+  int camera_x = vs2_slot_camera_x(scene, t->layer);
+  int camera_y = vs2_slot_camera_y(scene, t->layer);
+  const uint8_t* curve = vs2_slot_curve(scene, t->layer);
+
+  int delta = wrap_column_delta(column - fixed_floor_to_int(t->x) - camera_x);
   if (delta >= viewport_w) {
     return;
   }
@@ -279,7 +324,7 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
   int source_column = tile_width - 1 - (sx % tile_width);
 
   uint32_t* current_palette = palette_pal + 256 * is->palette;
-  int y0 = fixed_floor_to_int(t->y);
+  int y0 = fixed_floor_to_int(t->y) + camera_y;
   int desde = MAX(y0, 0);
   int hasta = MIN(y0 + viewport_h, ROWS);
 
@@ -295,7 +340,7 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
           + (frame % total_frames) * tile_width * tile_height;
       uint8_t color = is->data[strip_base + (sy % tile_height)];
       if (color != TRANSPARENT) {
-        int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
+        int px_y = mode == 1 ? vs2_project_depth(curve, y) : PIXELS - 1 - y;
         set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
       }
     }
@@ -322,7 +367,7 @@ static void render_vs2_tilemap(int column, uint32_t* colorbuf, const vs2_scene_t
       for (; y < run_end; y++, source_row++) {
         uint8_t color = is->data[strip_base + source_row];
         if (color != TRANSPARENT) {
-          int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
+          int px_y = mode == 1 ? vs2_project_depth(curve, y) : PIXELS - 1 - y;
           set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
         }
       }
@@ -353,11 +398,13 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
     uint32_t* current_palette = palette_pal + 256 * is->palette;
     int width = is->frame_width;
     if (width == 255) width++;
+    int camera_x = vs2_slot_camera_x(scene, s->layer);
     int visible_column = get_source_column(
       fixed_floor_to_int(s->x),
       width,
       column,
-      (s->flags & VS2_FLAG_FLIP_X) != 0
+      (s->flags & VS2_FLAG_FLIP_X) != 0,
+      camera_x
     );
     if (visible_column == -1) {
       return;
@@ -367,7 +414,9 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
     uint8_t total_frames = is->total_frames ? is->total_frames : 1;
     uint8_t frame = s->frame % total_frames;
     uint8_t mode = vs2_slot_mode(scene, s->layer, s->mode);
-    int sprite_y = fixed_floor_to_int(s->y);
+    int camera_y = vs2_slot_camera_y(scene, s->layer);
+    const uint8_t* curve = vs2_slot_curve(scene, s->layer);
+    int sprite_y = fixed_floor_to_int(s->y) + camera_y;
     int base = visible_column * height + (frame * width * height);
 
     if(mode != VS2_MODE_FULLSCREEN) {
@@ -381,12 +430,12 @@ static void render_vs2_sprite(int column, uint32_t* colorbuf,
         }
         uint8_t color = is->data[base + source_row];
         if (color != TRANSPARENT) {
-          int px_y = mode == 1 ? vs2_project_depth(y) : PIXELS - 1 - y;
+          int px_y = mode == 1 ? vs2_project_depth(curve, y) : PIXELS - 1 - y;
           set_colorbuf_pixel(colorbuf, px_y, current_palette[color]);
         }
       }
     } else {
-      int zleds = vs2_project_depth(sprite_y) + 1;
+      int zleds = vs2_project_depth(curve, sprite_y) + 1;
       for (int led=0; led < zleds; led++) {
         int source_row = led * PIXELS / zleds;
         if (source_row >= height) {
@@ -519,7 +568,7 @@ void render(int column, uint32_t* led_buffer) {
     uint32_t* current_palette = palette_pal + 256 * is->palette;
     int width = is->frame_width;
     if (width == 255) width++; // caso especial, para los planetas
-    int visible_column = get_visible_column(s->x, width, column);
+    int visible_column = get_visible_column(s->x, width, column, 0);
     if (visible_column != -1) {
       uint8_t height = is->frame_height;
       int base = visible_column * height + (s->frame * width * height);

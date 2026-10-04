@@ -482,6 +482,14 @@ static bool project_has_slack() {
 }
 
 
+// T0 gate experiment only (docs/vs2-behaviors-implementation.md, "GPU-idle
+// comparison"): lets a hardware bench isolate whether the behavior-gate's
+// measured avg_us reflects real CPU cost or cross-core contention with this
+// task's own column-serve/render work, by skipping that work entirely while
+// the gate's own MicroPython dispatch loop keeps running on the other core.
+// Defaults off so every existing boot path is unaffected.
+static volatile bool gpu_idle_enabled = false;
+
 void coreTask( void * pvParameters ){
     printf("GPU task running on core %d\n", xPortGetCoreID());
 
@@ -506,6 +514,11 @@ void coreTask( void * pvParameters ){
             // pending, so this costs nothing on every other iteration.
             spiWaitComplete();
             ventilagon_loop();
+        } else if (gpu_idle_enabled) {
+            // Yield instead of busy-spinning so the FreeRTOS IDLE task for
+            // this core still runs (idle-task starvation trips the task
+            // watchdog and reboots the board).
+            vTaskDelay(1);
         } else {
             gpu_serve();
             if (project_has_slack()) {
@@ -663,6 +676,16 @@ static mp_obj_t povdisplay_get_hall_filter_enabled(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(povdisplay_get_hall_filter_enabled_obj, povdisplay_get_hall_filter_enabled);
 
+// ------------------------------
+
+// T0 gate experiment only -- see gpu_idle_enabled's own comment above
+// coreTask(). Not part of the stable board API.
+static mp_obj_t povdisplay_set_gpu_idle(mp_obj_t enabled) {
+    gpu_idle_enabled = mp_obj_is_true(enabled);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(povdisplay_set_gpu_idle_obj, povdisplay_set_gpu_idle);
+
 static void performance_dict_int(mp_obj_t dict, qstr key, mp_int_t value) {
     mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(key), mp_obj_new_int(value));
 }
@@ -780,6 +803,7 @@ static const mp_map_elem_t povdisplay_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_performance_stats), (mp_obj_t)&povdisplay_get_performance_stats_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_hall_filter_enabled), (mp_obj_t)&povdisplay_set_hall_filter_enabled_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_hall_filter_enabled), (mp_obj_t)&povdisplay_get_hall_filter_enabled_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_set_gpu_idle), (mp_obj_t)&povdisplay_set_gpu_idle_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_set_column_offset), (mp_obj_t)&povdisplay_set_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_column_offset), (mp_obj_t)&povdisplay_get_column_offset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_getaddress), (mp_obj_t)&povdisplay_getaddress_obj },

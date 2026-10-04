@@ -305,6 +305,13 @@ int main(void) {
         CHECK_EQ(render_led(&scene, 10, 13), 0, "tilemap on hidden layer");
 
         vs2_layer_t tunnel_layer = { .id = 0, .mode = 1, .flags = 0x01 };
+        /* A bare struct literal has no constructor, so unlike a real layer
+         * built through vs2_native.c (which seeds .curve with vs2_deepspace
+         * the moment it's constructed -- see vs2_layer_make_new()), this one
+         * would otherwise leave .curve all zeros. Populate it the same way,
+         * so vs2_slot_curve() sees the real default table and this stays the
+         * "no camera, default curve" case. */
+        memcpy(tunnel_layer.curve, vs2_deepspace, sizeof(vs2_deepspace));
         layer_records[0] = &tunnel_layer;
         CHECK_EQ(render_led(&scene, 10, vs2_deepspace[40]), 10,
                  "layer mode overrides tilemap mode");
@@ -383,6 +390,127 @@ int main(void) {
                  "FULLSCREEN y=255 reaches center");
         CHECK_EQ(render_led(&scene, 20, 1), 0,
                  "FULLSCREEN y=255 is one center LED");
+    }
+
+    /* Camera X folds into the same modular column subtraction sprite_x
+     * already uses (get_visible_column()), so it wraps at column 0 exactly
+     * like a sprite position does. */
+    {
+        vs2_sprite_t sprite = {
+            .layer = 0, .image_strip = 8, .frame = 0, .mode = 2,
+            .flags = 0x01, .x = 0, .y = 0,
+        };
+        const vs2_sprite_t* sprite_records[] = { &sprite };
+        vs2_layer_t camera_layer = { .id = 0, .mode = 2, .flags = 0x01 };
+        const vs2_layer_t* layer_records[] = { &camera_layer };
+        vs2_scene_t scene = {
+            .layer_count = 1, .sprite_count = 1, .tilemap_count = 0,
+            .layers = layer_records, .sprites = sprite_records, .tilemaps = NULL,
+        };
+        /* Baseline, camera_x=0: sprite (world x=0, width 2) paints columns
+         * 0-1. */
+        CHECK_EQ(render_led(&scene, 0, HUD_LED(0)), 30, "camera x=0 baseline column 0");
+        CHECK_EQ(render_led(&scene, 1, HUD_LED(0)), 10, "camera x=0 baseline column 1");
+        CHECK_EQ(render_led(&scene, 2, HUD_LED(0)), 0, "camera x=0 baseline column 2 is dark");
+
+        /* camera_x = -2 (254 wrapped into 8.8 fixed point) shifts the
+         * visible window backward across column 0, onto columns 254-255. */
+        camera_layer.camera_x = 254 * 256;
+        CHECK_EQ(render_led(&scene, 254, HUD_LED(0)), 30, "camera x=-2 wraps sprite onto column 254");
+        CHECK_EQ(render_led(&scene, 255, HUD_LED(0)), 10, "camera x=-2 wraps sprite onto column 255");
+        CHECK_EQ(render_led(&scene, 0, HUD_LED(0)), 0, "camera x=-2 leaves column 0 dark");
+    }
+
+    /* Camera Y folds into the row range a drawable occupies -- sprite_y is
+     * shifted before desde/hasta are computed, so every downstream row
+     * computation (source_row, the HUD/curve pixel mapping) already sees
+     * the shifted position, the same way camera X shifts sprite_x before
+     * the column arithmetic. */
+    {
+        vs2_sprite_t sprite = {
+            .layer = 0, .image_strip = 8, .frame = 0, .mode = 2,
+            .flags = 0x01, .x = 0, .y = 0,
+        };
+        const vs2_sprite_t* sprite_records[] = { &sprite };
+        vs2_layer_t camera_layer = { .id = 0, .mode = 2, .flags = 0x01 };
+        const vs2_layer_t* layer_records[] = { &camera_layer };
+        vs2_scene_t scene = {
+            .layer_count = 1, .sprite_count = 1, .tilemap_count = 0,
+            .layers = layer_records, .sprites = sprite_records, .tilemaps = NULL,
+        };
+        CHECK_EQ(render_led(&scene, 0, HUD_LED(0)), 30, "camera y=0 baseline row 0");
+        CHECK_EQ(render_led(&scene, 0, HUD_LED(1)), 40, "camera y=0 baseline row 1");
+
+        camera_layer.camera_y = 5 * 256;
+        CHECK_EQ(render_led(&scene, 0, HUD_LED(5)), 30, "camera y=+5 shifts sprite onto row 5");
+        CHECK_EQ(render_led(&scene, 0, HUD_LED(6)), 40, "camera y=+5 shifts sprite onto row 6");
+        CHECK_EQ(render_led(&scene, 0, HUD_LED(0)), 0, "camera y=+5 leaves the original row dark");
+    }
+
+    /* A layer's own curve overrides the global vs2_deepspace table for
+     * TUNNEL (and FULLSCREEN) drawables on that layer -- the whole point of
+     * a per-layer curve, e.g. a tunnel that opens out as a level
+     * progresses. */
+    {
+        vs2_sprite_t sprite = {
+            .layer = 0, .image_strip = 8, .frame = 0, .mode = 1,
+            .flags = 0x01, .x = 0, .y = 0,
+        };
+        const vs2_sprite_t* sprite_records[] = { &sprite };
+        vs2_layer_t curve_layer = { .id = 0, .mode = 1, .flags = 0x01 };
+        memset(curve_layer.curve, 5, sizeof(curve_layer.curve));
+        const vs2_layer_t* layer_records[] = { &curve_layer };
+        vs2_scene_t scene = {
+            .layer_count = 1, .sprite_count = 1, .tilemap_count = 0,
+            .layers = layer_records, .sprites = sprite_records, .tilemaps = NULL,
+        };
+        /* Both source rows (y=0,1) project through the constant curve onto
+         * the same led (5); the second row's write is the one that
+         * survives. Led vs2_deepspace[0] (the row-0 answer under the
+         * global table) must stay untouched -- the per-layer curve fully
+         * replaces it, not adds to it. */
+        CHECK_EQ(render_led(&scene, 0, 5), 40, "custom per-layer curve overrides vs2_deepspace");
+        CHECK_EQ(render_led(&scene, 0, vs2_deepspace[0]), 0,
+                 "custom per-layer curve replaces the global TUNNEL mapping entirely");
+    }
+
+    /* Acceptance: a layer with no camera and the default curve must render
+     * byte-identical to a drawable with no layer at all -- the fallback
+     * path (vs2_slot_camera_x/y and vs2_slot_curve on VS2_NO_LAYER) and a
+     * real layer's own default converge on the same bytes, across a full
+     * revolution. */
+    {
+        vs2_sprite_t sprite_no_layer = {
+            .layer = 255, .image_strip = 8, .frame = 0, .mode = 1,
+            .flags = 0x01, .x = 12 * 256, .y = 30 * 256,
+        };
+        const vs2_sprite_t* no_layer_records[] = { &sprite_no_layer };
+        vs2_scene_t no_layer_scene = {
+            .layer_count = 0, .sprite_count = 1, .tilemap_count = 0,
+            .layers = NULL, .sprites = no_layer_records, .tilemaps = NULL,
+        };
+
+        vs2_sprite_t sprite_with_layer = sprite_no_layer;
+        sprite_with_layer.layer = 0;
+        const vs2_sprite_t* with_layer_records[] = { &sprite_with_layer };
+        vs2_layer_t default_layer = { .id = 0, .mode = 1, .flags = 0x01 };
+        memcpy(default_layer.curve, vs2_deepspace, sizeof(vs2_deepspace));
+        const vs2_layer_t* layer_records[] = { &default_layer };
+        vs2_scene_t with_layer_scene = {
+            .layer_count = 1, .sprite_count = 1, .tilemap_count = 0,
+            .layers = layer_records, .sprites = with_layer_records, .tilemaps = NULL,
+        };
+
+        for (int column = 0; column < VS_DISPLAY_COLUMNS; column += 17) {
+            uint32_t no_layer_buf[PIXELS];
+            uint32_t with_layer_buf[PIXELS];
+            render_vs2(column, no_layer_buf, &no_layer_scene);
+            render_vs2(column, with_layer_buf, &with_layer_scene);
+            if (memcmp(no_layer_buf, with_layer_buf, sizeof(no_layer_buf)) != 0) {
+                printf("FAIL no camera, default curve diverged at column %d\n", column);
+                failures++;
+            }
+        }
     }
 
     if (failures) {

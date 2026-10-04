@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "class_name": "GameOverSceneEvents",
+  "events": [
+    {
+      "kind": "on_start",
+      "conditions": [],
+      "actions": [
+        {
+          "kind": "set_label_text",
+          "label_attr": "title_label",
+          "text": {"kind": "literal", "value": "GAME OVER"}
+        },
+        {
+          "kind": "set_label_text",
+          "label_attr": "score_label",
+          "text": {"kind": "var", "name": "score"}
+        }
+      ]
+    },
+    {
+      "kind": "on_tick",
+      "conditions": [{"kind": "timer_elapsed", "ticks": 90}],
+      "actions": [
+        {
+          "kind": "goto_scene",
+          "module": "games.vs2_examples.event_sheet_demo.code.title_scene",
+          "class_name": "Title"
+        }
+      ]
+    }
+  ]
+}

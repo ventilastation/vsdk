@@ -28,6 +28,7 @@ publish script replaces the symlinks with real copies.
 | `micropython-bridge.js`, `wasm-worker.js`, `wasm-adapter.js` | browser⇄worker⇄WASM bridge (pointer-based frame transport; see ../docs/internals/web-emulator-architecture.md) |
 | `monaco-ide.js`, `piskel-embed.js` | embedded code/sprite editors |
 | `rom-builder-core.js`, `rom-builder-browser.js`, `workspace-rom-builder.js` | in-browser `.rom` building from `__images__.yaml` |
+| `vs2-widgets.js`, `vs2beh-client.js`, `vs2-behavior-panel.js` | VS2 behaviors inspector: generic parameter-widget dispatch, the `vs2beh` protocol client, and DOM mounting (see docs/vs2-behaviors-proposal.md, "The live-tune loop") |
 | `runtime-manifest.json`, `runtime-bundle.json` | generated file list + bundle the worker mounts (`make web-runtime-bundle`) |
 | `vendor/` | pinned MicroPython WASM build, Monaco, Piskel |
 | `smoke-test.html`, `render-parity-test.js` | manual regression checks |

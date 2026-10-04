@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "class_name": "PlayingSceneEvents",
+  "events": [
+    {
+      "kind": "on_start",
+      "conditions": [],
+      "actions": [
+        {"kind": "set_variable", "name": "score", "value": {"kind": "literal", "value": 0}}
+      ]
+    },
+    {
+      "kind": "on_tick",
+      "conditions": [{"kind": "timer_elapsed", "ticks": 20}],
+      "actions": [
+        {"kind": "set_variable", "name": "score", "value": {"kind": "literal", "value": 10}}
+      ]
+    },
+    {
+      "kind": "on_tick",
+      "conditions": [{"kind": "timer_elapsed", "ticks": 60}],
+      "actions": [
+        {
+          "kind": "set_variable",
+          "name": "score",
+          "value": {
+            "kind": "random",
+            "a": {"kind": "literal", "value": 25},
+            "b": {"kind": "literal", "value": 35}
+          }
+        }
+      ]
+    },
+    {
+      "kind": "on_tick",
+      "conditions": [
+        {
+          "kind": "compare",
+          "left": {"kind": "var", "name": "score"},
+          "op": ">=",
+          "right": {"kind": "literal", "value": 25}
+        }
+      ],
+      "actions": [
+        {
+          "kind": "goto_scene",
+          "module": "games.vs2_examples.event_sheet_demo.code.gameover_scene",
+          "class_name": "GameOver"
+        }
+      ]
+    }
+  ]
+}
