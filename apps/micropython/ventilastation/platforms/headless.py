@@ -5,6 +5,7 @@ rendering it, so director and scene logic can be exercised without a
 display, a socket, or hardware.
 """
 
+from ventilastation import romformat
 from ventilastation.platforms.base import Platform
 from ventilastation.runtime import MemoryStorage
 
@@ -94,21 +95,22 @@ class HeadlessSprite:
     def set_y(self, value):
         self._state["y"] = value
 
-    def width(self):
+    def _size(self):
         strip = self.backend.stripes.get(self._state["image_strip"])
         if strip is None:
-            return 0
+            return 0, 0
         if isinstance(strip, dict):
-            return strip["width"]
-        return strip[0]
+            return strip["width"], strip["height"]
+        width, height, _frames, _palette = romformat.decode_header(strip)
+        return width, height
+
+    def width(self):
+        # V1 games have always been told a full-circle (256 wide) image is
+        # 255 wide, as on the console (sprites.c), and lay out with that.
+        return min(self._size()[0], 255)
 
     def height(self):
-        strip = self.backend.stripes.get(self._state["image_strip"])
-        if strip is None:
-            return 0
-        if isinstance(strip, dict):
-            return strip["height"]
-        return strip[1]
+        return self._size()[1]
 
     def set_strip(self, strip_number):
         self._state["image_strip"] = strip_number
@@ -134,8 +136,13 @@ class HeadlessSprite:
 
         for target in targets:
             other = target
-            if (intersects(self.x(), self.width(), other.x(), other.width()) and
-                intersects(self.y(), self.height(), other.y(), other.height())):
+            # Disabled sprites never collide, as on the console (sprites.c).
+            if other.frame() == 255:
+                continue
+            width, height = self._size()
+            other_width, other_height = other._size()
+            if (intersects(self.x(), width, other.x(), other_width) and
+                intersects(self.y(), height, other.y(), other_height)):
                 return target
         return None
 

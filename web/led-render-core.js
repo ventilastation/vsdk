@@ -344,7 +344,7 @@
     if (!asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength) {
       return;
     }
-    const width = asset.width === 255 ? 256 : asset.width;
+    const width = asset.width;
     const height = asset.height || 0;
     const tileWidth = tilemap.tile_width;
     const tileHeight = tilemap.tile_height;
@@ -405,7 +405,7 @@
   function drawSpriteColumn(pixels, sprite, assetIndex, palette, column, renderColumn) {
     const asset = assetIndex.get(sprite.image_strip);
     if (!asset || !(asset.data instanceof Uint8Array) || asset.loadedBytes < asset.dataLength) return;
-    const width = asset.width === 255 ? 256 : asset.width;
+    const width = asset.width;
     const height = asset.height || 0;
     const visibleColumn = getSourceColumn(sprite, width, renderColumn);
     if (visibleColumn === -1 || height <= 0) return;

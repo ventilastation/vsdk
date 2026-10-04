@@ -120,4 +120,64 @@ for (let n = 0; n < stripCount; n += 1) {
   assert(glyphs === expected[name], `${name}: glyphs ${JSON.stringify(glyphs)}`);
 }
 
+// --- strip headers -------------------------------------------------------
+// Width and frame count are stored minus one, so the full circle (256 wide)
+// and a 256-glyph font fit a byte with no special case, the same bytes
+// tools/generate_roms.py writes (docs/internals/rom-format.md).
+async function headerOf(width, height, frames) {
+  const built = await builder.buildRom({
+    stripedefsYaml: `palettegroups:\n  g:\n    - strip: a.png\n      frames: ${frames}\n`,
+    loadImage: async () => solidImage(width * frames, height),
+  });
+  const start = new DataView(built.buffer).getUint32(4, true);
+  const attrs = start + 1 + built[start];
+  return Array.from(built.subarray(attrs, attrs + 4));
+}
+
+const cases = [
+  [[255, 8, 1], [254, 8, 0, 0]],
+  [[256, 8, 1], [255, 8, 0, 0]],
+  [[9, 4, 255], [8, 4, 254, 0]],
+  [[9, 4, 256], [8, 4, 255, 0]],
+  [[1, 255, 1], [0, 255, 0, 0]],
+];
+for (const [[width, height, frames], expectedHeader] of cases) {
+  const header = await headerOf(width, height, frames);
+  assert(JSON.stringify(header) === JSON.stringify(expectedHeader),
+    `${width}x${height}x${frames} header is ${header}, expected ${expectedHeader}`);
+}
+
+// Images no header can describe exactly are errors that name the file.
+async function buildError(yamlText, images) {
+  try {
+    await builder.buildRom({
+      stripedefsYaml: yamlText,
+      loadImage: async (filename) => images[filename],
+    });
+  } catch (error) {
+    return error.message;
+  }
+  return null;
+}
+
+const uneven = await buildError(
+  "palettegroups:\n  g:\n    - strip: pollitos.png\n      frames: 5\n",
+  { "pollitos.png": solidImage(256, 19) });
+assert(uneven && uneven.includes("pollitos.png") && uneven.includes("5 equal frames"),
+  `uneven sheet error: ${uneven}`);
+const tooManyFrames = await buildError(
+  "palettegroups:\n  g:\n    - strip: font.png\n      frames: 257\n",
+  { "font.png": solidImage(257, 4) });
+assert(tooManyFrames && tooManyFrames.includes("font.png") && tooManyFrames.includes("257 frames"),
+  `frame count error: ${tooManyFrames}`);
+const tooTall = await buildError(
+  "palettegroups:\n  g:\n    - strip: tower.png\n",
+  { "tower.png": solidImage(4, 256) });
+assert(tooTall && tooTall.includes("tower.png") && tooTall.includes("256 px tall"),
+  `height error: ${tooTall}`);
+const duplicate = await buildError(
+  "palettegroups:\n  g:\n    - strip: a.png\n    - strip: sub/a.png\n",
+  { "a.png": solidImage(4, 4), "sub/a.png": solidImage(4, 4) });
+assert(duplicate && duplicate.includes("duplicate image id a.png"), `duplicate id error: ${duplicate}`);
+
 console.log("rom builder core tests passed");

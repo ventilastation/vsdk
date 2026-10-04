@@ -1,4 +1,6 @@
 import gzip
+import hashlib
+import json
 import os
 import struct
 import sys
@@ -10,7 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "apps", "micropython"))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 
-from ventilastation import menurom
+from ventilastation import menurom, romformat
 from test_rom_format import parse_rom
 
 
@@ -18,15 +20,25 @@ def build_palette(shade):
     return (bytes([0xFF]) + bytes([shade]) * 3) * 256
 
 
-def build_rom(strips, palettes):
+def build_rom(strips, palettes, glyphs=b""):
     """strips: (name, width, height, frames, palette_index, fill_byte)."""
+    return menurom.serialize(
+        [[name.encode(), palette,
+          romformat.encode_record(name.encode(), width, height, frames, palette,
+                                  bytes([fill]) * (width * height * frames), glyphs)]
+         for name, width, height, frames, palette, fill in strips],
+        palettes)
+
+
+def build_legacy_rom(strips, palettes):
+    """A rom as packages built before the current encoding carry it: width
+    256 stored as 255, frames as is, no glyph trailer."""
     blobs = []
     for name, width, height, frames, palette, fill in strips:
         encoded = name.encode()
-        real_width = 256 if width == 255 else width
-        pixels = bytes([fill]) * (real_width * height * frames)
         blobs.append(bytes([len(encoded)]) + encoded
-                     + bytes([width, height, frames, palette]) + pixels)
+                     + bytes([min(width, 255), height, min(frames, 255), palette])
+                     + bytes([fill]) * (width * height * frames))
     return menurom.serialize(
         [[name.encode(), palette, blob]
          for (name, _w, _h, _f, palette, _fill), blob in zip(strips, blobs)],
@@ -93,6 +105,55 @@ class MergeIconTests(unittest.TestCase):
         added = next(s for s in strips if s["name"] == "alecu/newgame/menu.png")
         pixels = merged[added["pixels_start"]:added["pixels_start"] + added["pixels_len"]]
         self.assertEqual(bytes(pixels), bytes([3]) * added["pixels_len"])
+
+    def test_glyph_trailers_survive_the_merge(self):
+        menu = build_rom([("font.png", 8, 8, 4, 0, 1)], [build_palette(10)], glyphs=b"ABCD")
+        merged = menurom.merge_icon(menu, icon_fixture())
+        strips, _ = parse_rom(merged)
+        self.assertEqual(strips[0]["glyphs"], b"ABCD")
+        self.assertEqual(strips[1]["glyphs"], b"")
+
+    def test_an_icon_from_an_older_package_is_reencoded(self):
+        icon = build_legacy_rom([("alecu/old/menu.png", 32, 30, 2, 0, 4)], [build_palette(33)])
+        merged = menurom.merge_icon(menu_fixture(), icon)
+        strips, _ = parse_rom(merged)  # record-exact: fails on a legacy record
+        added = strips[-1]
+        self.assertEqual((added["name"], added["width"], added["height"], added["frames"]),
+                         ("alecu/old/menu.png", 32, 30, 2))
+        pixels = merged[added["pixels_start"]:added["pixels_start"] + added["pixels_len"]]
+        self.assertEqual(bytes(pixels), bytes([4]) * added["pixels_len"])
+
+    def test_an_older_full_circle_icon_keeps_its_width(self):
+        icon = build_legacy_rom([("alecu/ring/menu.png", 256, 4, 1, 0, 6)], [build_palette(40)])
+        strips, _ = parse_rom(menurom.merge_icon(menu_fixture(), icon))
+        self.assertEqual(strips[-1]["width"], 256)
+
+    def test_an_icon_shorter_than_its_header_is_rejected(self):
+        # It must not splice a neighbour's bytes into the merged menu rom.
+        icon = build_legacy_rom([("alecu/cut/menu.png", 32, 30, 2, 0, 4)], [build_palette(1)])
+        name_len = len("alecu/cut/menu.png")
+        offset = struct.unpack_from("<L", icon, 4)[0]
+        frames_at = offset + 1 + name_len + 2
+        cut = bytearray(icon)
+        cut[frames_at] = 9  # header now claims 9 frames; the record holds 2
+        with self.assertRaises(ValueError):
+            menurom.merge_icon(menu_fixture(), bytes(cut))
+
+    def test_a_real_icon_from_an_older_package_merges(self):
+        # tests/fixtures/romformat/preswitch-menu-icon.rom: a game package's
+        # menu icon as the generator before the current encoding wrote it.
+        fixtures = os.path.join(ROOT, "tests", "fixtures", "romformat")
+        with open(os.path.join(fixtures, "preswitch-menu-icon.rom"), "rb") as f:
+            icon = f.read()
+        with open(os.path.join(fixtures, "expected.json")) as f:
+            (expected,) = json.load(f)["preswitch-menu-icon.rom"]
+        merged = menurom.merge_icon(menu_fixture(), icon)
+        strips, _ = parse_rom(merged)  # record-exact: fails on a legacy record
+        added = strips[-1]
+        self.assertEqual((added["name"], added["width"], added["height"], added["frames"]),
+                         (expected["name"], expected["width"], expected["height"], expected["frames"]))
+        pixels = merged[added["pixels_start"]:added["pixels_start"] + added["pixels_len"]]
+        self.assertEqual(hashlib.sha256(pixels).hexdigest(), expected["pixels_sha256"])
 
     def test_icon_rom_without_strips_is_rejected(self):
         empty = menurom.serialize([], [build_palette(0)])

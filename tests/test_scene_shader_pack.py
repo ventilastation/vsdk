@@ -61,9 +61,12 @@ class SceneShaderPackingTests(unittest.TestCase):
         self.legacy[0:5] = bytes((3, 9, 7, 2, 0))
         self.legacy[15:20] = bytes((255, 4, 9, 1, 255))  # signed -1 -> HUD
         self.vs2 = make_vs2_fixture()
+        # Strip headers store width and frame count minus one
+        # (docs/internals/rom-format.md): a 256x2 full circle and a 4x4
+        # two-frame tileset.
         self.assets = {
-            3: bytes((255, 2, 1, 1)) + bytes(range(256)) * 2,
-            9: bytes((4, 4, 2, 0)) + bytes((1, 2, 3, 255)) * 8,
+            3: bytes((256 - 1, 2, 1 - 1, 1)) + bytes(range(256)) * 2,
+            9: bytes((4 - 1, 4, 2 - 1, 0)) + bytes((1, 2, 3, 255)) * 8,
         }
         self.palette = bytes((255, 3, 2, 1)) * 256 + bytes((255, 30, 20, 10)) * 256
         self.stars = ((2, 3), (255, 240), (300, -1))
@@ -84,7 +87,8 @@ const input = JSON.parse(process.argv[1]);
 const bytes = (encoded) => Uint8Array.from(Buffer.from(encoded, "base64"));
 const assets = new Map(input.assets.map(([slot, encoded]) => {
   const raw = bytes(encoded);
-  return [slot, { width: raw[0], height: raw[1], frames: raw[2], palette: raw[3], data: raw.subarray(4) }];
+  // As web/app-support.js's decodeImageStripPayload() decodes the header.
+  return [slot, { width: raw[0] + 1, height: raw[1], frames: raw[2] + 1, palette: raw[3], data: raw.subarray(4) }];
 }));
 const json = (packed) => Object.fromEntries(Object.entries(packed).map(([key, value]) => [
   key, ArrayBuffer.isView(value) ? Array.from(value) : value,
@@ -127,6 +131,15 @@ console.log(JSON.stringify({
             "deepspace": pack_for_json(scene_shader.pack_deepspace()),
         }
         self.assertEqual(actual, expected)
+
+    def test_packing_strips_keeps_no_reference_to_them(self):
+        # The packer runs on every asset change; a strip it held on to (say,
+        # in povrender's header cache) would outlive its replacement.
+        strip = bytes((256 - 1, 54, 1 - 1, 0)) + bytes(256 * 54)
+        assets = {0: strip}
+        references = sys.getrefcount(strip)
+        scene_shader.pack_strips(assets.items())
+        self.assertEqual(sys.getrefcount(strip), references)
 
     def test_desktop_loads_the_canonical_glsl_source(self):
         vertex = scene_shader.scene_vertex_source()
