@@ -5,7 +5,7 @@ It runs MicroPython in a worker and includes a code editor and sprite editor.
 
 ## Try a small change
 
-1. Open **Files**, choose `demos/tutorial_game`, and open its main Python file.
+1. Open **Games**, choose `demos/tutorial_game`, then use **Files** to open its main Python file.
 2. Change a gameplay constant, such as the enemy speed. The VS2 tutorial explains
    [movement and sprites](../vs2/tutorial/sprites.md).
 3. Click **Save + Run** to save the current file into the workspace and restart
