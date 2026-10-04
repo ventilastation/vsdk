@@ -132,6 +132,15 @@ console.log(JSON.stringify({
         }
         self.assertEqual(actual, expected)
 
+    def test_packing_strips_keeps_no_reference_to_them(self):
+        # The packer runs on every asset change; a strip it held on to (say,
+        # in povrender's header cache) would outlive its replacement.
+        strip = bytes((256 - 1, 54, 1 - 1, 0)) + bytes(256 * 54)
+        assets = {0: strip}
+        references = sys.getrefcount(strip)
+        scene_shader.pack_strips(assets.items())
+        self.assertEqual(sys.getrefcount(strip), references)
+
     def test_desktop_loads_the_canonical_glsl_source(self):
         vertex = scene_shader.scene_vertex_source()
         fragment = scene_shader.scene_fragment_source()

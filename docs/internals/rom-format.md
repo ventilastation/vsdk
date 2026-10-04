@@ -50,8 +50,9 @@ addressing, where a missed `+1` would corrupt every strip instead of
 clipping one column. Readers decode through one helper per runtime:
 `strip_frame_width()` / `strip_total_frames()` in C (the struct fields are
 named `frame_width_minus_1` / `total_frames_minus_1` so a raw read stands
-out), `ventilastation/romformat.py` in MicroPython, `povrender._strip_header`
-in the desktop emulator and `decodeImageStripPayload` in the web emulator.
+out), `ventilastation/romformat.py` in MicroPython,
+`povrender.decode_strip_header` in the desktop emulator and
+`decodeImageStripPayload` in the web emulator.
 
 The builders reject what a header can't describe exactly, naming the file:
 frame counts outside 1..256, frames wider than 256, heights outside 1..255,

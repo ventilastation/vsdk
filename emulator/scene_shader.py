@@ -244,7 +244,7 @@ def pack_scene_vs2_bytes(scene_bytes):
 def pack_strips(raw_assets):
     """Pack ``{slot: ImageStrip wire blob}`` data into a byte atlas + metadata."""
     import numpy as np
-    from povrender import _strip_header
+    from povrender import decode_strip_header
     meta = np.zeros(256 * 4, dtype=np.uint32)
     chunks = []
     offset = 0
@@ -255,7 +255,9 @@ def pack_strips(raw_assets):
             continue
         if len(raw) < 4:
             continue
-        width, height, frames, palette_base, pixels = _strip_header(raw)
+        # Uncached: this runs once per asset change, and the cache would keep
+        # every replaced strip alive.
+        width, height, frames, palette_base, pixels = decode_strip_header(raw)
         pixels = bytes(pixels)
         if not pixels or not height:
             continue

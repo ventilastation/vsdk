@@ -373,6 +373,8 @@ class EmulatorVs2RenderTests(unittest.TestCase):
         # each comes from the id() cache.
         wide = bytes([254, 8, 254, 1]) + bytes(255 * 8 * 255)
         full = bytes([255, 8, 255, 0]) + bytes(256 * 8 * 256)
+        self.assertEqual(povrender.decode_strip_header(wide)[:4], (255, 8, 255, 256))
+        self.assertEqual(povrender.decode_strip_header(full)[:4], (256, 8, 256, 0))
         for _ in range(2):
             self.assertEqual(povrender._strip_header(wide)[:4], (255, 8, 255, 256))
             self.assertEqual(povrender._strip_header(full)[:4], (256, 8, 256, 0))
