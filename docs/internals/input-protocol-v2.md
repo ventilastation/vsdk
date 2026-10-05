@@ -158,6 +158,12 @@ until the first valid frame starter arrives:
 The 256-byte cap on command accumulation prevents a lost connection
 mid-command from blocking the state machine indefinitely.
 
+Commands are ASCII. A command line holding any byte with bit 7 set can
+only be line noise, so the receiver discards the whole line rather than
+decoding it (MicroPython's `decode()` raises on such bytes instead of
+replacing them). The MicroPython parser counts these lines, and the
+overlong ones, in `dropped_nonascii` / `dropped_overlong`.
+
 ---
 
 ## RESYNC / Device Identification

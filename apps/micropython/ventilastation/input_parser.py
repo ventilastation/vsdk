@@ -14,10 +14,15 @@ class InputParser:
         self.joy2  = 0
         self.extra = 0
         self.resync_pending = False
+        # Command lines thrown away as corrupt (see feed()). Cumulative, never
+        # reset: they are link-quality diagnostics (serial stress test).
+        self.dropped_nonascii = 0
+        self.dropped_overlong = 0
         self._state     = self._STATE_SCAN
         self._joy_buf   = bytearray(3)
         self._joy_pos   = 0
         self._cmd_buf   = bytearray()
+        self._cmd_nonascii = False
         self._cmd_queue = []
         self._resync_match = 0
 
@@ -66,6 +71,7 @@ class InputParser:
                 elif 0x30 <= b <= 0x39 or 0x41 <= b <= 0x5A or 0x61 <= b <= 0x7A:
                     self._state   = self._STATE_COMMAND
                     self._cmd_buf = bytearray([b])
+                    self._cmd_nonascii = False
             elif self._state == self._STATE_JOY:
                 self._joy_buf[self._joy_pos] = b
                 self._joy_pos += 1
@@ -76,13 +82,25 @@ class InputParser:
                     self._state = self._STATE_SCAN
             elif self._state == self._STATE_COMMAND:
                 if b == 0x0A:
-                    line = self._cmd_buf.decode("ascii", "replace").strip()
-                    if line:
-                        self._cmd_queue.append(line)
+                    if self._cmd_nonascii:
+                        # Commands are ASCII, so a byte with bit 7 set can
+                        # only be line noise: drop the whole line. Decoding it
+                        # is not an option on MicroPython, whose decode()
+                        # ignores errors="replace" and raises UnicodeError --
+                        # which escaped feed(), the director's main loop and
+                        # main.py, rebooting the rotor over one bad bit.
+                        self.dropped_nonascii += 1
+                    else:
+                        line = self._cmd_buf.decode("ascii").strip()
+                        if line:
+                            self._cmd_queue.append(line)
                     self._state = self._STATE_SCAN
                 elif len(self._cmd_buf) >= self._CMD_MAX:
+                    self.dropped_overlong += 1
                     self._state = self._STATE_SCAN
                 else:
+                    if b & 0x80:
+                        self._cmd_nonascii = True
                     self._cmd_buf.append(b)
 
     def pop_command(self):

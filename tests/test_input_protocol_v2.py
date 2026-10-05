@@ -1,4 +1,4 @@
-"""Input protocol v2 parser checks (runs on CPython)."""
+"""Input protocol v2 parser checks (runs on CPython and MicroPython)."""
 
 import sys
 
@@ -58,6 +58,39 @@ def test_resync_recognized_mid_command():
     # Normal parsing resumes cleanly afterwards.
     parser.feed(b"exit\n")
     assert parser.pop_command() == "exit"
+
+
+def test_command_with_non_ascii_byte_is_dropped_not_raised():
+    # A bit-7 flip on the wire inside a command line. MicroPython's decode()
+    # raises UnicodeError on it; that used to escape feed() and reboot the
+    # rotor. The line must be dropped (and counted) instead.
+    parser = InputParser()
+    parser.feed(b"sound fo\xefo\nexit\n")
+    assert parser.pop_command() == "exit"
+    assert parser.pop_command() is None
+    assert parser.dropped_nonascii == 1
+    assert parser.dropped_overlong == 0
+
+    # The flag is per line: the next clean command goes through.
+    parser.feed(b"*\x01\x02\x03music off\n")
+    assert (parser.joy1, parser.joy2, parser.extra) == (1, 2, 3)
+    assert parser.pop_command() == "music off"
+
+
+def test_overlong_command_is_counted():
+    parser = InputParser()
+    parser.feed(b"x" * 300 + b"\n")
+    assert parser.dropped_overlong == 1
+    # What follows the 256-byte cap is rescanned as fresh input, exactly as
+    # before; the counter only makes the loss visible.
+    parser.feed(b"\nexit\n")
+    commands = []
+    while True:
+        command = parser.pop_command()
+        if command is None:
+            break
+        commands.append(command)
+    assert commands[-1] == "exit"
 
 
 def main():

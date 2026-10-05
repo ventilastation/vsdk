@@ -101,6 +101,7 @@ MICROPYTHON_TESTS = [
     "tests/test_director_headless.py",
     "tests/test_installer_micropython.py",
     "tests/test_romformat.py",
+    "tests/test_input_protocol_v2.py",
 ]
 
 NODE_TESTS = [
