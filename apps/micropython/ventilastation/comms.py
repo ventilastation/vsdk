@@ -66,6 +66,16 @@ def next_joy2():
 def next_extra():
     return _parser.extra
 
+def link_stats(reset=False):
+    """Same shape as serialcomms.link_stats(); a socket has no receive
+    buffer the main loop can overrun, so those fields are None."""
+    return {
+        "rx_hwm": None,
+        "rx_buf": None,
+        "nonascii": _parser.dropped_nonascii,
+        "overlong": _parser.dropped_overlong,
+    }
+
 def _drop_conn(reason):
     global conn
     print("comms: drop connection:", reason)

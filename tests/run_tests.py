@@ -44,6 +44,7 @@ CPYTHON_TESTS = [
     "tests/test_vs2_api.py",
     "tests/test_base_control.py",
     "tests/test_uart_logging.py",
+    "tests/test_serialcomms.py",
     "tests/test_apa102_preview.py",
     "tests/test_color_profile.py",
     "tests/test_color_calibration.py",
