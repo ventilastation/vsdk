@@ -93,6 +93,8 @@ visible; `0x02` and `0x04` are `flip_x` and `flip_y`.
 | `base leds <r> <g> <b>` | — | Set every base RGB-strip LED. Channels are decimal bytes. |
 | `base servo <position>` | — | Set normalized servo position (`0..255`). The Arduino alone maps this to its safe mechanical range. |
 | `base buttons <mask> <blink_ms>` | — | Set button LED mask (`0..3`) and full blink period (`0` for steady, otherwise `100..10000` ms). |
+| `serialtest_up <nbytes> <phase> <seq>` | `<nbytes>` | serial stress test frame; the `serialtest_*` family is in [serial-stress-test.md](serial-stress-test.md#protocol) |
+| `serialtest_hello`, `_phase`, `_end`, `_done` | — | serial stress test control lines (same document) |
 
 ## Transports
 
