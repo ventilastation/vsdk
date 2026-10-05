@@ -44,7 +44,10 @@ def receive(bufsize):
             print("comms: new connection from", addr)
         else:
             try:
-                chunk = obj.read(64)
+                # As much as serialcomms takes per tick on the rotor (three
+                # 64-byte drains), so the desktop runtime keeps up with the
+                # same input rates as the hardware.
+                chunk = obj.read(192)
             except OSError:
                 chunk = None
             if chunk:
