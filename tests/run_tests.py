@@ -94,6 +94,8 @@ CPYTHON_TESTS = [
     "tests/test_workbench_telemetry.py",
     "tests/test_host_protocol.py",
     "tests/test_remote_gateway.py",
+    "tests/test_serial_stress_protocol.py",
+    "tests/test_serial_stress_sim.py",
 ]
 
 MICROPYTHON_TESTS = [
@@ -103,6 +105,8 @@ MICROPYTHON_TESTS = [
     "tests/test_installer_micropython.py",
     "tests/test_romformat.py",
     "tests/test_input_protocol_v2.py",
+    "tests/test_serial_stress_protocol.py",
+    "tests/test_serialstress_app_micropython.py",
 ]
 
 NODE_TESTS = [

@@ -54,6 +54,8 @@ def payload_length(command: str, args: tuple[str, ...]) -> int:
         return _integer(args[1], command) if len(args) > 1 else 0
     if command == "aframe":
         return _integer(args[0] if args else "", command)
+    if command == "serialtest_up":
+        return _integer(args[0] if args else "", command)
     return 0
 
 
