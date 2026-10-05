@@ -192,6 +192,7 @@ class StressHost:
         self.verdict = None
         self.findings = []
         self.hello_count = 0
+        self.version_warned = False
         self.stray = 0
         self._downlink = None
         self._lock = threading.Lock()
@@ -222,10 +223,19 @@ class StressHost:
             record.up_junk += 1
 
     def _on_hello(self, args):
+        version = args[0] if args else "?"
+        if version != str(sst.PROTOCOL_VERSION):
+            # Different test data on each end would read as a broken link.
+            # Leave the app waiting rather than run a meaningless test.
+            if not self.version_warned:
+                self.log("serialtest: the rotor's Serial Stress app speaks protocol %s, this base "
+                         "%d: update both before testing" % (version, sst.PROTOCOL_VERSION))
+                self.version_warned = True
+            return
         self.hello_count += 1
         self.send_line("%s %d" % (sst.READY, sst.PROTOCOL_VERSION))
         if self.hello_count == 1:
-            self.log("serialtest: rotor app connected (protocol %s)" % (args[0] if args else "?"))
+            self.log("serialtest: rotor app connected (protocol %s)" % version)
 
     def _on_up(self, args, payload):
         record = self.current

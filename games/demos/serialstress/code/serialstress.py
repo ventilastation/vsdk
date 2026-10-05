@@ -9,8 +9,8 @@ See docs/internals/serial-stress-test.md.
 
 A: run the plan.  B: repeat the selected phase (soak test, e.g. while the
 rotor spins).  LEFT/RIGHT: select the phase.  Y/BACK: leave.  While a run is
-going, hold A or B for a second to stop it after the current phase: a lossy
-link can fake single presses (see joystick_changes below), never a hold.
+going, hold A or B for a second to stop it after the current phase; single
+presses and Y/BACK are ignored then, since a lossy link can fake a press.
 """
 
 import gc
@@ -183,7 +183,7 @@ class RotorTester:
 
     def abort(self):
         """Leaving mid-run: tell the base so it stops its downlink load."""
-        if self.state in (RUNNING, SETTLING, REPORTING, FINISHING):
+        if self.state in (RUNNING, SETTLING, REPORTING):
             self._send(sst.DONE + " aborted=1")
             self.state = DONE
 
@@ -265,9 +265,10 @@ class RotorTester:
             if gap > self.tick_max:
                 self.tick_max = gap
         self.last_tick = now
-        # The base sends the controllers' state 30 times a second. With
-        # nobody touching them, every change is a corrupted joystick frame:
-        # the phantom presses a player would see.
+        # tools/serial_stress.py repeats an idle joystick frame 30 times a
+        # second: with nobody touching the controls, every change is a
+        # corrupted frame, a phantom press. (The emulator sends a frame only
+        # when the controls change, so through it this counts real presses.)
         joystick = self._joystick()
         if joystick != self.last_joystick:
             self.joystick_changes += 1

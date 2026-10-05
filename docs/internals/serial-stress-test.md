@@ -55,7 +55,7 @@ YET` until the base answers; a base running older software never will.
   e.g. once with the rotor still and once spinning.
 - While running, **hold A or B for a second** to stop after the current
   phase. Single presses are ignored mid-run, and so are Y/BACK: a lossy
-  link can fake a press, never a hold.
+  link can fake a press.
 - **Y/BACK** leaves when idle.
 
 ### 2. Same link, the tool as the base
@@ -131,7 +131,7 @@ serialtest: VERDICT HARDWARE -- errors the wire caused: look at the cables/slip 
 | base adapter `framing` / `parity` / `breaks` | Counted by the USB-serial driver on bytes from the rotor (Linux `TIOCGICOUNT`): electrical trouble. FTDI, PL2303 and the Pi's own UARTs count them; other drivers may report zeros, or nothing (the line is then omitted). |
 | base adapter `overruns` / `tty overruns` | The adapter or the tty buffer filled: the base read too slowly. |
 | `junk` lines | Lines neither end could parse: corrupted headers, or the debris of lost bytes. Any during `idle` is noise on a quiet line. |
-| `joystick changes` (rotor) | The base repeats the controllers' state 30 times a second; with nobody touching them, each change is a corrupted joystick frame -- the phantom presses players would see. |
+| `joystick changes` (rotor) | Changes in the controllers' state. The tool repeats an idle joystick frame 30 times a second, so in step 2 with nobody touching the controls each change is a corrupted frame -- a phantom press. The emulator sends a frame only when the controls change, so in step 1 this mostly counts real presses. |
 | `loop max gap` / `tx blocked` (rotor) | Main-loop stalls, and time spent blocked writing (expected in `up90`/`upmax`: the wire is full). |
 
 Verdicts: `CLEAN`; `HARDWARE` (evidence only the wire produces);
@@ -144,7 +144,7 @@ counters: compare steps 1 and 2).
 
 | Phase | Uplink | Downlink | Purpose |
 |---|---|---|---|
-| `idle` | -- | joystick frames only | baseline: anything here is noise |
+| `idle` | -- | joystick frames only (the tool's; none from the emulator unless the controls move) | baseline: anything here is noise |
 | `up10`, `up50`, `up90` | 10/50/90% of the line, 128-512-byte frames | -- | BER and the base's reading capacity |
 | `upmax` | offered at 150% | -- | the real ceiling; rotor writes block |
 | `down10`, `down20` | -- | 100-char lines | BER rotor-bound |
@@ -174,6 +174,11 @@ to soak it.
   the next frames out of step and realigns only by chance, when some
   payload happens to end in a newline. The test resynchronises on its own
   headers; real binary traffic (`aframe`/`amap` from native apps) does not.
+- **Joystick frames are sent only on change** (`consoleengine.py`,
+  `pygletengine.py`). A corrupted one leaves a phantom state -- a button
+  held, a direction pushed -- until the player next touches the controls.
+  Repeating the state periodically, as the tool does, would bound that to
+  one frame (~33 ms).
 - **A malformed known command** (e.g. `info 1x`) raises inside
   `dispatch_command`; `_receive_loop` then closes and reopens the port, and
   pyserial's open flushes the input buffer: one corrupted byte can cost

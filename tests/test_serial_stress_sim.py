@@ -323,6 +323,19 @@ class SerialStressSimTests(unittest.TestCase):
         self.assertEqual(scene.lines[1][0], "NO BASE ANSWER YET")
 
 
+class HostHandshakeTests(unittest.TestCase):
+    def test_a_rotor_on_another_protocol_version_is_left_waiting(self):
+        sent, log = [], []
+        host = StressHost(sent.append, log=log.append)
+        host.handle("serialtest_hello", ["99"])
+        host.handle("serialtest_hello", ["99"])
+        self.assertEqual(sent, [])
+        self.assertEqual(len(log), 1)
+        self.assertIn("protocol 99", log[0])
+        host.handle("serialtest_hello", [str(rotor_sst.PROTOCOL_VERSION)])
+        self.assertEqual(sent, ["serialtest_ready %d" % rotor_sst.PROTOCOL_VERSION])
+
+
 class StreamParserTests(unittest.TestCase):
     def frame(self, phase, seq, size=64):
         return (rotor_sst.up_header(size, phase, seq) + b"\n"
