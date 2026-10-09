@@ -6,7 +6,23 @@ reusable part: what was actually slow, why, and the general lessons -- and
 now also what happened applying them to the web emulator (see "Applying this
 to the web emulator" at the end).
 
-## Status
+## Desktop scene-renderer comparison
+
+Use this tool when profiling the desktop emulator or checking renderer parity.
+For game development, start with [desktop setup](../guides/desktop.md).
+
+The Pyglet 2 desktop emulator can compose raw `sprites` or `VS2` scene bytes
+in a single OpenGL 3.3 pass instead of the usual CPU/native full-frame path.
+Start directly in that mode with `./vs-emu.sh --scene-renderer shader`, or
+press **F2** in the emulator to switch between **CPU** and **GPU shader**.
+Press **F3** with a game/menu scene visible to measure both complete paths
+(including their texture uploads) and check their rendered RGBA pixels match.
+The result stays in the upper-left status line, making it easy to record the
+same comparison on different machines. Captured `frame_rgb`/`frame_apa102`
+frames remain on the established CPU upload path because they are already
+final LED pixels.
+
+## Earlier profiling results
 
 **Desktop emulator: done.** Five commits on `perf/desktop-emulator-render`:
 

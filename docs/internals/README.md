@@ -11,6 +11,7 @@ shape and the rules that keep biting.
 ## Choose your task
 
 - **Make a game:** [first VS2 game](../vs2/tutorial/first-game.md).
+- **Profile the desktop emulator:** [CPU/GPU scene comparison](emulator-performance.md#desktop-scene-renderer-comparison).
 - **Change the browser/IDE:** [web architecture](web-emulator-architecture.md),
   [workspace contract](web-ide-integration.md), [publishing](deploying-web-emulator.md).
 - **Build or operate hardware:** [on-device architecture](on-device-design.md),
@@ -36,7 +37,7 @@ shape and the rules that keep biting.
 ## Subsystems
 
 - **[vs2-decisions.md](vs2-decisions.md)** — accepted current API decisions.
-- **[emulator-performance.md](emulator-performance.md)** — dated measurements and profiling.
+- **[emulator-performance.md](emulator-performance.md)** — desktop CPU/GPU comparison and earlier profiling results.
 - **[workbench.md](workbench.md)** — the second ESP32-S3 that exercises a
   real board: LED-bus capture, hall simulation, UART bridge, telemetry.
 - **[vs2-hardware-acceptance.md](vs2-hardware-acceptance.md)** — repeatable

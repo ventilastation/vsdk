@@ -96,5 +96,6 @@ entry point and metadata. `--game group.name` uses a dot between group and name.
 
 The Unix launcher tries to build the optional native renderer. The GPU shader
 renderer needs OpenGL 3.3; `./vs-emu.sh --scene-renderer cpu` selects the CPU
-path. **F2** switches CPU/GPU, and **F3** compares both render paths. These are
-emulator tools, not requirements for your first game.
+path. For renderer profiling and parity checks, see the
+[desktop scene-renderer comparison](../internals/emulator-performance.md#desktop-scene-renderer-comparison)
+in the SDK internals.
