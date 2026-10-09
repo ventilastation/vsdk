@@ -49,3 +49,7 @@ Thumbs.db
 dist/*
 apps/micropython/sencom.hi
 apps/micropython/saves/
+
+# Documentation build output and isolated environment
+docs/_build/
+.venv-docs/

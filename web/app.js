@@ -133,7 +133,9 @@ class BrowserHostApp {
       ? DEFAULT_WEBGL_RESOLUTION_SCALE
       : this.webglResolutionScalePreference;
     this.inspectorOpen = this.readInspectorPreference();
-    this.editorOpen = this.readEditorPreference();
+    // Keep the paused editor closed even when a previous visit saved it open.
+    this.editorOpen = document.querySelector("#toggle-editor-button")?.hidden === false
+      && this.readEditorPreference();
     this.lastSceneTickAt = null;
     this.pollRequestId = null;
     this.pollingHalted = false;
@@ -1501,7 +1503,7 @@ class BrowserHostApp {
   }
 
   setEditorOpen(open) {
-    const nextOpen = Boolean(open);
+    const nextOpen = Boolean(open) && this.elements.toggleEditorButton?.hidden === false;
     if (nextOpen && this.inspectorOpen) {
       this.inspectorOpen = false;
       this.writeInspectorPreference(false);

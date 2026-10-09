@@ -32,9 +32,9 @@ const CHROMIUM = process.env.CHROMIUM
 const ART = {
   "ship.png": ["demos/tutorial_game/images/ship.png", 3],
   "enemy.png": ["demos/tutorial_game/images/enemy.png", 6],
-  "numerals.png": ["alecu/vyruss_vs2/images/numerals.png", 12, "0123456789 *"],
+  "numerals.png": ["demos/tutorial_game/images/numerals.png", 12, "0123456789 *"],
   "trench.png": ["demos/tutorial_game/images/trench.png", 8],
-  "steel8x8.png": ["vsjam-may25/vasura_espacial/images/steel8x8.png", 256],
+  "steel8x8.png": ["demos/tutorial_game/images/steel8x8.png", 256],
 };
 // Local art (under tools/vs2_doc_images/art) is written as "local:<file>".
 const FULLSCREEN_ART = { "clouds.png": ["local:clouds.png", 54] };
@@ -125,7 +125,7 @@ const EXAMPLES = {
     steps: [{ wait: 800 }, { shot: "tilemaps.png" }],
   },
   labels: {
-    art: ["ship.png", "trench.png", "numerals.png"],
+    art: ["trench.png", "numerals.png"],
     steps: [{ wait: 800 }, {
       shot: "labels.png",
     }],

@@ -8,8 +8,8 @@ class Legibility(vs2.Scene):
                              x=246, y=1)
         near_centre = hud.label("numerals.png", columns=5,
                                 x=246, y=44)
-        near_rim.set_number(420, width=5, pad="0")
-        near_centre.set_number(420, width=5, pad="0")
+        near_rim.set_number(2615, width=5, pad="0")
+        near_centre.set_number(2615, width=5, pad="0")
 
 
 def main():

@@ -1,3 +1,10 @@
+---
+nosearch: true
+---
+
+> **Historical: implemented/resolved.** These are dated investigation or request
+> records, not current setup instructions. See [current internals](../README.md).
+
 # OTA ring sprite corruption — hand-off
 
 Status as of 2026-07-26: **fixed, verified on hardware.** The GC-lifetime
@@ -8,26 +15,26 @@ the same pattern [menu-sprite-corruption.md](menu-sprite-corruption.md)'s
 own Bug #3 section used: two real, independently-worthwhile fixes that
 turned out not to be the story, kept below for the record. See
 [ota-progress-rings-plan.md](ota-progress-rings-plan.md) for the original
-feature request this was blocking, and [ota.md](ota.md)'s "On-device
+feature request this was blocking, and [ota.md](../ota.md)'s "On-device
 progress display" section for how the finished feature works end to end.
 
 ## The symptom
 
-`vsdk_ota_rings.py` (see [ota.md](ota.md)) renders OTA progress as
+`vsdk_ota_rings.py` (see [ota.md](../ota.md)) renders OTA progress as
 concentric single-LED rings via `vshw_vs2` sprites. On real hardware,
 during an actual partition write, the rings that should be clean
 concentric bands instead show a chaotic patch of random-colored single-LED
 noise speckles — not a coherent ring at all — localized to part of the
 arc, with the rest of the arc showing clean bands. Screenshots from the
 2026-07-26 hardware session (captured via the workbench, see
-[workbench.md](workbench.md) and `tools/pov_screenshot.py`) showed this
+[workbench.md](../workbench.md) and `tools/pov_screenshot.py`) showed this
 consistently across multiple captures during the same partition-write OTA;
 the user independently flagged it from the screenshots without seeing this
 doc first ("the sprites might have been replaced with any other memory
 content") — that description is exactly right, see below.
 
-![Corrupted ring during a partition write — noise speckle at the top of an otherwise clean set of concentric bands](../images/ota-ring-glitch-1.png)
-![A second capture from the same OTA session, same pattern at a different ring radius](../images/ota-ring-glitch-2.png)
+![Corrupted ring during a partition write — noise speckle at the top of an otherwise clean set of concentric bands](../../images/ota-ring-glitch-1.png)
+![A second capture from the same OTA session, same pattern at a different ring radius](../../images/ota-ring-glitch-2.png)
 
 This is very likely **the same bug shape already investigated and fixed
 once before in this codebase**, in a different file:
@@ -135,7 +142,7 @@ it.
 
 ## How to reproduce on hardware
 
-This uses the workbench rig — see [workbench.md](workbench.md) for how it
+This uses the workbench rig — see [workbench.md](../workbench.md) for how it
 taps the DUT's LED bus and re-streams it over Wi-Fi, and
 `tools/pov_screenshot.py --help` for the capture tool itself.
 

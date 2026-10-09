@@ -12,7 +12,7 @@ class Flips(vs2.Scene):
         top_flipped = hud.label("numerals.png", columns=5,
                                 x=118, y=14, flip_x=True, flip_y=True)
         for label in (bottom, top_plain, top_flipped):
-            label.set_number(420, width=5, pad="0")
+            label.set_number(8390, width=5, pad="0")
 
 
 def main():

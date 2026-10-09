@@ -48,7 +48,7 @@ glowing conduit further in, and some windows, vents and lights between them, wit
 a ship on top. The map wraps all the way round the tunnel:
 
 ```{figure} ../images/tilemaps.png
-:alt: A dark tunnel wall of near-black plating with a ring of cyan conduit, orange vents, amber windows and a ring of pipe at the rim, and a ship at the top
+:alt: A dark tunnel wall of near-black plating with a ring of cyan conduit, orange vents, amber windows and a ring of pipe at the rim, and a ship at the bottom
 :width: 60%
 :align: center
 
@@ -63,9 +63,9 @@ not the data, so it costs one write:
 
 ```python
 def update(self):
-    self.ticks += 1
     pattern_height = 6 * self.ground.tile_height     # the wall repeats every 6 rows
-    self.ground.view_y = (self.ticks // 2) % pattern_height
+    self.scroll = (self.scroll + 0.75) % pattern_height   # self.scroll starts at 0
+    self.ground.view_y = self.scroll
 ```
 
 If the picture repeats every 6 rows, the view can wrap back to the top after 6
@@ -147,7 +147,7 @@ mistake.** Nothing is wrong with your string or your font. Add
 A label with both flips, next to one with none, over a small map:
 
 ```{figure} ../images/labels.png
-:alt: A score reading 00420 upright at the top and at the bottom of the disc, over a dark tunnel wall
+:alt: A score reading 07260 upright at the top and at the bottom of the disc, over a dark tunnel wall
 :width: 60%
 :align: center
 
@@ -260,13 +260,16 @@ def build(self):
         view_width=256, view_height=160)
     self.draw_trench()
 
-    self.ship = self.world.sprite("ship.png", x=128, y=0)
+    self.ship = self.world.sprite("ship.png", y=0)
+    self.ship.x = -(self.ship.width // 2)
     # ... the pools, as before ...
 
-    # Bottom of the disc, so the score reads upright.
-    self.score_label = self.hud.label("numerals.png", columns=5, x=246, y=1)
+    # Top of the disc, where x = 128, so the score is flipped to read upright.
+    self.score_label = self.hud.label("numerals.png", columns=5, x=118, y=1,
+                                      flip_x=True, flip_y=True)
 
     self.score = 0
+    self.scroll = 0                     # how far the wall has scrolled
     self.ticks = 0                      # as in chapter 4
     self.show_score()
 
@@ -293,11 +296,19 @@ make sure the map is at least that much taller than the view.
 Scroll the wall toward the ship in `update()`, right after the steering:
 
 ```python
+SPEED = 0.75         # depth units per tick: how fast the wall scrolls and enemies come
+
     # Scroll the wall toward the ship. After one whole pattern the picture
     # is the same again, so the view can wrap without rewriting any cells.
     pattern_height = PATTERN_ROWS * self.ground.tile_height
-    self.ground.view_y = (self.ticks // 2) % pattern_height
+    self.scroll = (self.scroll + SPEED) % pattern_height
+    self.ground.view_y = self.scroll
 ```
+
+The wall moves at `SPEED`, the same number the enemies use, because the enemies
+are part of the trench: they come at you exactly as fast as the wall goes by.
+`view_y` takes whole pixels, so it ignores the fraction, while `self.scroll` keeps
+it, which is how the wall can scroll at three quarters of a pixel a tick.
 
 Score points for every enemy that gets past the ship, in `move_enemies()`:
 
@@ -315,10 +326,12 @@ def move_enemies(self):
 
 `numerals.png` declares its own glyphs in `__images__.yaml`, as in the glyphs
 section above, so `set_number()` knows which frame is which digit. The score sits
-at `x = 246`, the bottom of the disc, so it reads upright without any flips:
+at the top of the disc, centred on `x = 128` (the label is 20 columns wide, so
+`x = 118`), and the ship at the bottom. The score is flipped both ways, exactly as
+in the section above, so that it reads upright:
 
 ```{figure} ../images/game-play.png
-:alt: Trench Run: a dark trench wall with a cyan conduit ring, amber windows and orange vents, a ship at the top, enemies coming down the tunnel, and a score at the bottom
+:alt: Trench Run: a dark trench wall with a cyan conduit ring, amber windows and orange vents, a ship at the bottom, enemies coming down the tunnel, and a score at the top
 :width: 60%
 :align: center
 

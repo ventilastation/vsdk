@@ -1390,6 +1390,7 @@ textarea {
 .stage-display {
   background: var(--panel);
   border-radius: 28px;
+  overflow: hidden;
   box-shadow:
     0 24px 80px rgba(0, 0, 0, 0.38),
     inset 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -1400,9 +1401,24 @@ textarea {
   inset: 4%;
   width: 92%;
   height: 92%;
-  border-radius: 50%;
   background: #000;
-  box-shadow: 0 0 0 1px var(--panel-border);
+}
+
+/* The disc's edge is an overlay above the canvas rather than a border-radius
+   on it: a hardware-accelerated WebGL canvas is not always clipped to its
+   rounded corners, and then its black square covers the panel and the outline.
+   The huge shadow paints the panel colour over everything outside the circle,
+   and the ring is the fan's edge. */
+.stage-display::after {
+  content: "";
+  position: absolute;
+  inset: 4%;
+  z-index: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 2px #394356,
+    0 0 0 100vmax var(--panel);
 }
 
 .stage-fullscreen-toggle {

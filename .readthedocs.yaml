@@ -8,14 +8,14 @@ build:
     python: "3.12"
 
 sphinx:
-  configuration: docs/vs2/conf.py
+  configuration: docs/conf.py
   # Warnings are broken references or orphaned pages; both are invisible to
   # the reader, so fail the build rather than publish them.
   fail_on_warning: true
 
 python:
   install:
-    - requirements: docs/vs2/requirements.txt
+    - requirements: docs/requirements.txt
 
 formats:
   - pdf

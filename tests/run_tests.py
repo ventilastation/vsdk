@@ -55,7 +55,6 @@ CPYTHON_TESTS = [
     "tests/test_tutorial_vs2.py",
     "tests/test_emulator_vs2_render.py",
     "tests/test_scene_shader_pack.py",
-    "tests/test_mapdemo_vs2.py",
     "tests/test_tutorial_game.py",
     "tests/test_launch_flag.py",
     "tests/test_tutorial_steps.py",
@@ -104,6 +103,7 @@ MICROPYTHON_TESTS = [
 ]
 
 NODE_TESTS = [
+    "tests/test_game_starter.mjs",
     "tests/test_web_input_v2.mjs",
     "tests/test_package_builder_zip.mjs",
     "tests/test_remote_adapter.mjs",

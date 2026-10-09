@@ -1,3 +1,10 @@
+---
+nosearch: true
+---
+
+> **Historical: implemented/resolved.** These are dated investigation or request
+> records, not current setup instructions. See [current internals](../README.md).
+
 # OTA progress rings — original request (plan)
 
 Status as of 2026-07-26: **implemented per the spec below, and confirmed
@@ -8,12 +15,12 @@ it actually was (a type-confusion bug, not the GC-lifetime issue first
 suspected) and how it was confirmed. Follow-up requests in the same
 conversation (a WiFi-problem red/retry state, a text label, bounding the
 activity rings' bounce range) extended this beyond the original spec below
-— see [ota.md](ota.md)'s "On-device progress display" section for the
+— see [ota.md](../ota.md)'s "On-device progress display" section for the
 finished, as-built design. This file exists so the original request
 survives independently of any one implementation attempt.
 
 The as-built reference doc (data flow, file list, ring color table) lives
-in [ota.md](ota.md)'s "On-device progress display" section. This file is
+in [ota.md](../ota.md)'s "On-device progress display" section. This file is
 the request as given, kept verbatim so a future rewrite has the real spec
 to work from instead of reverse-engineering it from code or from ota.md's
 description of whatever was actually built.

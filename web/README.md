@@ -15,6 +15,12 @@ relative to the page. The desktop emulator serves it at
 `http://localhost:5653/`, rebuilding the generated files below on each page
 load. The publish script replaces the symlinks with real copies.
 
+The editor entry button, board connection button, local status label, and base
+controls/servo preview are currently hidden to keep the game display clear.
+The editor also ignores a previously saved open preference while its entry
+button is hidden. Keyboard, gamepad, touch controls, Options, and fullscreen
+remain available.
+
 ## Layout
 
 | File | Role |

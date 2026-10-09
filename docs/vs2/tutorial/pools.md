@@ -22,7 +22,8 @@ def build(self):
 
 That is 16 of your 100 sprites, spent in one number you can add up.
 
-Every sprite starts hidden. Nothing after this allocates.
+Every sprite starts hidden. Spawning reuses these reserved sprites instead of
+creating new render objects; unrelated Python expressions can still allocate.
 
 ## Spawning
 
@@ -53,11 +54,11 @@ Iterating a pool yields only the live sprites, and despawning the current one
 mid-loop is supported — which is exactly what the common loop needs:
 
 ```python
-ENEMY_SPEED = 0.5
+SPEED = 0.75
 
 def update(self):
     for enemy in self.enemies:
-        enemy.y -= ENEMY_SPEED                 # toward the player, at the rim
+        enemy.y -= SPEED                       # toward the player, at the rim
         if enemy.y < -enemy.image.height:
             self.enemies.despawn(enemy)        # gone past the rim: retire it
 ```
@@ -67,7 +68,7 @@ counts *down* in Y, and the cutoff is a depth you choose — see
 [the circular display](display.md).
 
 ```{figure} ../images/pools.png
-:alt: Seven enemies spread through the tunnel at different depths and angles, with a ship on the rim at the top
+:alt: Seven enemies spread through the tunnel at different depths and angles, with a ship on the rim at the bottom
 :width: 60%
 :align: center
 
@@ -114,7 +115,7 @@ Time for something to dodge. Add a pool of enemies to `build()`, with a few of
 them already spawned (a timer will spawn them properly in chapter 6):
 
 ```python
-ENEMY_SPEED = 0.5    # depth units per tick, toward the ship
+SPEED = 0.75         # depth units per tick, toward the ship
 ENEMY_START = 160    # depth at which enemies appear
 
 
@@ -136,15 +137,15 @@ def update(self):
 
 def move_enemies(self):
     for enemy in self.enemies:
-        enemy.y -= ENEMY_SPEED
+        enemy.y -= SPEED
         enemy.frame = (self.ticks // 6) % enemy.image.frames
         if enemy.y < -enemy.image.height:
             self.enemies.despawn(enemy)      # flew past the ship
 ```
 
 Enemies move *toward* the ship by counting `y` **down**, because the ship is at
-the rim. Speeds here are per tick, and a tick is about 30 ms, so 0.5 per tick
-means an enemy takes around ten seconds to come down from `y = 160`. That is the
+the rim. Speeds here are per tick, and a tick is about 30 ms, so 0.75 per tick
+means an enemy takes a little over six seconds to come down from `y = 160`. That is the
 arithmetic to do when you tune a speed. The same applies to animation: to change
 frame at a pace you can see, count the ticks and change frame every few of them
 instead of on every one: `self.ticks // 6` stays the same for six ticks in a row,

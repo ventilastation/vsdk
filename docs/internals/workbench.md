@@ -40,7 +40,7 @@ drives a chip-select (`GPIO14` in the default configuration) so the workbench's 
 burst. See ["DUT firmware: one small change"](#dut-firmware-one-small-change).
 
 Firmware for the workbench itself lives in
-[`hardware/workbench/`](hardware/workbench/).
+[`hardware/workbench/`](../../hardware/workbench/).
 
 ## Architecture
 
@@ -170,7 +170,7 @@ between them. The LED strips ignore it (they aren't wired to CS); the
 workbench is. The default Ventilastation III wiring uses `GPIO14` for `led_cs`.
 
 Each burst the master sends is a 444-byte buffer built by
-[`povdisplay.c`](hardware/rotor/modules/povdisplay/povdisplay.c)
+[`povdisplay.c`](../../hardware/rotor/modules/povdisplay/povdisplay.c)
 `init_buffers()`:
 
 ```
@@ -414,7 +414,7 @@ python emulator/emu.py 192.168.1.42 --remote \
 `serial_bridge.c` opens a hardware UART (`UART_NUM_1`) on
 `WB_UART_RX_PIN`/`WB_UART_TX_PIN` at `WB_UART_BAUD` (115200, matching
 `machine.UART(2, ...)` in
-[`apps/micropython/ventilastation/serialcomms.py`](apps/micropython/ventilastation/serialcomms.py))
+[`apps/micropython/ventilastation/serialcomms.py`](../../apps/micropython/ventilastation/serialcomms.py))
 and copies bytes in both directions between that UART and the workbench's
 **native USB-Serial-JTAG** — the interface the PC actually opens as
 `/dev/ttyACM*` / `/dev/cu.usbmodem*`. (The host side is *not* `UART_NUM_0`;
@@ -451,7 +451,7 @@ Everything the workbench does is transparent to the DUT except one addition:
 the LED SPI master now drives its configured chip-select (default `GPIO14`) so the workbench slave
 can frame bursts (see [LED bus capture](#led-bus-capture-chip-select)). That
 is the *only* DUT firmware change — a one-line `spics_io_num` in
-[`minispi.c`](hardware/rotor/modules/povdisplay/minispi.c); it's inert on the
+[`minispi.c`](../../hardware/rotor/modules/povdisplay/minispi.c); it's inert on the
 real rotor since nothing else uses the configured chip-select. Nothing under
 `vsdk/apps/micropython/ventilastation/*` changes.
 
@@ -471,7 +471,7 @@ Otherwise the DUT behaves exactly as in normal operation:
 
 ## Firmware location and build
 
-Workbench firmware: [`hardware/workbench/workbench_esp32s3/`](hardware/workbench/workbench_esp32s3/).
+Workbench firmware: [`hardware/workbench/workbench_esp32s3/`](../../hardware/workbench/workbench_esp32s3/).
 
 It's a plain ESP-IDF project (`idf.py` / CMake, C, no Arduino layer),
 built against the same ESP-IDF release as everything else in this repo —

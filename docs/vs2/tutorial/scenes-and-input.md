@@ -149,7 +149,7 @@ def update(self):
 def move_enemies(self):
     """Advance the enemies. Returns True if one touched the ship."""
     for enemy in self.enemies:
-        enemy.y -= ENEMY_SPEED
+        enemy.y -= SPEED
         enemy.frame = (self.ticks // 6) % enemy.image.frames
         if enemy.overlaps(self.ship):
             return True
@@ -212,29 +212,72 @@ starts there. The title and game-over screens are labels at the bottom of the
 disc, all at low Y, near the rim, where text is crisp; text placed near the centre
 gets squeezed, as chapter 7 shows.
 
-**Getting busier.** The game never changes pace, so a good player can last
-indefinitely. Make the interval between enemies shrink as the score rises, by
-asking a method for the delay instead of using the constant:
+**Getting harder.** The game never changes pace, so a good player can last
+indefinitely. Let the score raise the difficulty, and take turns between two
+ways of doing it: first the trench gets faster, then enemies come more often, then
+faster again, and so on. A step happens every 50 points, which is five enemies
+dodged:
+
+| Score | Step | What changes | Trench speed | Enemy every |
+|---|---|---|---|---|
+| 0 | 0 | the start | 0.75 | 900 ms |
+| 50 | 1 | faster | 0.875 | 900 ms |
+| 100 | 2 | busier | 0.875 | 825 ms |
+| 150 | 3 | faster | 1.0 | 825 ms |
+| 200 | 4 | busier | 1.0 | 750 ms |
+
+and so on, until the speed reaches 1.5 and the gap between enemies 450 ms, after
+which nothing gets harder. Rather than a constant, the speed becomes something
+the game keeps and `get_harder()` works out from the score, together with the time
+to the next enemy:
 
 ```python
-MIN_SPAWN_MS = 650   # the shortest the interval gets
+START_SPEED = 0.75   # replaces SPEED: how fast the wall scrolls and enemies come
+MAX_SPEED = 1.5
+SPEED_STEP = 0.125
 
-def spawn_delay(self):
-    """One millisecond less for every point, down to MIN_SPAWN_MS."""
-    return max(MIN_SPAWN_MS, SPAWN_MS - self.score)
+MIN_SPAWN_MS = 450   # SPAWN_MS, from above, is now the gap at the start
+SPAWN_STEP = 75
+
+STEP_POINTS = 50     # the game gets harder every 50 points
+
+def get_harder(self):
+    """Set the pace from the score. The steps alternate: the first, third,
+    fifth... make the trench faster, the second, fourth... make the enemies
+    come more often, each up to a limit."""
+    step = self.score // STEP_POINTS
+    self.speed = min(MAX_SPEED, START_SPEED + SPEED_STEP * ((step + 1) // 2))
+    self.spawn_ms = max(MIN_SPAWN_MS, SPAWN_MS - SPAWN_STEP * (step // 2))
+```
+
+`(step + 1) // 2` counts the odd steps so far and `step // 2` the even ones, which
+is all the alternating takes. Call `get_harder()` at the end of `build()`, which
+sets the starting pace, and again whenever the score changes, in
+`move_enemies()`. Everything that used `SPEED` now uses `self.speed`, and the
+timer is re-armed with `self.spawn_ms`:
+
+```python
+def move_enemies(self):
+    for enemy in self.enemies:
+        enemy.y -= self.speed
+        # ... as before ...
+        if enemy.y < -enemy.image.height:
+            self.enemies.despawn(enemy)      # flew past the ship
+            self.score += POINTS
+            self.show_score()
+            self.get_harder()
 
 def spawn_enemy(self):
     self.enemies.spawn(x=randrange(vs2.display.width), y=ENEMY_START)
-    self.call_later(self.spawn_delay(), self.spawn_enemy)
+    self.call_later(self.spawn_ms, self.spawn_enemy)
 ```
 
-Use `self.spawn_delay()` in `build()` too, for the first call. A timer can be
-re-armed with any delay, so this is all it takes to change the pace while the
-game runs. The floor is 650 ms because that is as fast as the pool can keep up: an
-enemy takes a little over ten seconds to come down and get past the ship, and 16
-of them in that time is one every 640 ms or so. Spawn faster and `spawn()` would
-only return `None` more often.
-Past that point the pool is the ceiling on how hard the game gets.
+The same lines in `update()`, `self.scroll + self.speed`, make the wall speed up with
+the enemies. The work is done only when the score changes, not every tick. The limits
+keep the pool of 16 enough: an enemy takes at most a little under seven seconds to come down
+and get past the ship, at the start, and at the limits it takes about three and a
+half seconds with one arriving every 450 ms, so there are never more than about eight
+in the tunnel at once.
 
 **Remembering the best score.** `vs2.saves` keeps named values between
 runs, in a small file for your game. Load the record when a screen is built, show

@@ -58,7 +58,7 @@ Notes on specific images:
   renderer. Check each one by eye after a retake: the WebGL LEDs are a little
   larger and softer, and a label must not overlap a drawing.
 - **`first-game-moved.png`** holds the left button for 700 ms, so the ship's
-  position depends on the emulator's frame rate. Anywhere on the upper left of
+  position depends on the emulator's frame rate. Anywhere on the lower left of
   the disc is fine.
 - The **diagrams** are SVG, drawn in the same browser, and do not depend on the
   renderer. They only need regenerating when an SVG changes.

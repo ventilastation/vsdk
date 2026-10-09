@@ -29,7 +29,7 @@ The census names every layer holding sprites, so the oversized one is visible
 without counting by hand.
 
 ```text
-ResourceLimitError: tilemap 17/16 in MapDemo (world: 14, hud: 3);
+ResourceLimitError: tilemap 17/16 in Game (world: 14, hud: 3);
   reduce the tilemap budget
 ```
 
@@ -57,9 +57,9 @@ tile-based background — is one tilemap record however many cells it has.
 ## Keep `update()` free of allocation
 
 Creating a tuple, dict or formatted string every tick adds up to garbage that
-stays on the console's small heap until the next scene change. Everything in this list is allocation-free, so
-it is safe to call every tick (the reasons are in
-[why VS2 works this way](../design-notes.md)):
+stays on the console's small heap until the next scene change. These operations reuse existing render objects. That does not guarantee that
+the surrounding Python expressions allocate nothing; the reasons are in
+[why VS2 works this way](../design-notes.md).
 
 ```python
 sprite.x += 0.5
@@ -67,10 +67,16 @@ sprite.frame = 3
 pool.spawn(x, y)
 pool.despawn(enemy)
 tilemap.view_y = depth % tilemap.tile_height
-tilemap[col, row] = WINDOWS
+tilemap.cells[row * tilemap.columns + col] = WINDOWS
 label.set_number(score, width=5)
 joy1.held(LEFT)
 ```
+
+The convenient `tilemap[col, row]` syntax creates a tuple when the indices are
+computed at runtime. For frequent writes, use the direct `cells` buffer as above;
+validate the row, column and tile value yourself, since it bypasses checked indexing.
+See [direct cell writes](../going-further.md). Sealing limits render-object
+creation, not all Python allocation. Measure heap stability on the target.
 
 ## Moving to the console
 
@@ -126,15 +132,14 @@ disc will tell you whether the colours are comfortable and the text is crisp.
 
 ## Packaging
 
-`tools/package_game.py` builds a `.vs2` package — a zip of your `meta.json`,
-code, ROM, icon and sounds — to share a game as a single file.
+Follow [assets, menu and sharing](../../guides/assets-and-sharing.md) to package
+your game or submit its source folder as a pull request.
 
 ## Where to look next
 
 - The [API reference](../reference/index.md) for the full surface, and the
   [glossary](../glossary.md) for any term you have forgotten.
 - [Going further](../going-further.md) for features this tutorial skipped.
-- Real games in the tree: `games/alecu/mapdemo` is the smallest complete VS2
-  game, `games/demos/input_demo` shows every control, and
+- Real games in the tree: `games/demos/input_demo` shows every control, and
   `games/alecu/vixeous` uses pools, a scrolling terrain map and labels together.
 - `games/demos/povstress` is the stress case, deliberately near the budgets.

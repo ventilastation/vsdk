@@ -1,9 +1,8 @@
 """One sprite per frame of the tutorial game's ship (level, turned left, turned
 right), side by side on the bottom of the disc, with the level ship in the middle.
 
-The renderer draws a sprite mirrored in X, so x counts up from right to left at
-the bottom of the disc: the frame for a left turn goes at a larger x. A gap of 6
-columns separates neighbours. The width comes from the sprite, so a change to
+x counts up from right to left at the bottom of the disc, so the frame for a left
+turn goes at a larger x. A gap of 6 columns separates neighbours. The width comes from the sprite, so a change to
 the art cannot throw the spacing off."""
 
 import vs2

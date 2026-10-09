@@ -37,7 +37,7 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 
 # name: (frame width, height, frames, glyphs), as in the game's __images__.yaml
 STRIPS = {
-    "ship.png": (18, 18, 3, None),
+    "ship.png": (19, 19, 3, None),
     "enemy.png": (14, 11, 6, None),
     "trench.png": (16, 16, 8, None),
     "numerals.png": (4, 5, 12, "0123456789 *"),
@@ -108,13 +108,34 @@ class TutorialGameTests(unittest.TestCase):
         payload = vs2.export_scene_payload(game)
         self.assertEqual(bytes(payload[:3]), b"VS2")
 
+    def test_the_ship_starts_centred_on_the_bottom_of_the_disc(self):
+        game = self.start_game()
+        # x = 0 is the bottom, and a sprite's x is its edge: the ship's centre
+        # column is x + 9 for a 19 pixel wide ship.
+        self.assertEqual((game.ship.x + game.ship.width // 2) % 256, 0)
+        self.assertEqual(game.ship.y, 0)
+
+    def test_the_score_is_at_the_top_of_the_disc_and_flipped_to_read_upright(self):
+        game = self.start_game()
+        label = game.score_label
+        self.assertEqual(label.x + label.columns * label.image.width // 2, 128)
+        self.assertTrue(label.flip_x)
+        self.assertTrue(label.flip_y)
+
     def test_ship_moves_around_the_disc_and_wraps(self):
         game = self.start_game()
-        self.assertEqual(game.ship.x, 128)
+        start = game.ship.x
+        # At the bottom of the disc x counts up toward the left, so the left
+        # button adds to it.
         self.step(director.JOY_LEFT)
-        self.assertEqual(game.ship.x, 127)
-        game.ship.x = 0
+        self.assertEqual(game.ship.x, start + 1)
+        self.step(director.JOY_RIGHT)
+        self.step(director.JOY_RIGHT)
+        self.assertEqual(game.ship.x, start - 1)
+        game.ship.x = 255
         self.step(director.JOY_LEFT)
+        self.assertEqual(game.ship.x, 0)
+        self.step(director.JOY_RIGHT)
         self.assertEqual(game.ship.x, 255)
 
     def test_the_ship_leans_into_a_turn(self):
@@ -131,10 +152,10 @@ class TutorialGameTests(unittest.TestCase):
         self.assertEqual(game.ship.frame, LEVEL)
 
     def test_the_turned_frames_point_their_nose_the_way_the_ship_travels(self):
-        # The renderer draws a sprite's image mirrored in X, so moving left
-        # (x - 1) moves the ship toward its image's right edge: the left-turn
-        # frame must have its nose on the image's right, and the right-turn
-        # frame on its left. (See tools/vs2_doc_images/make_ship_art.py.)
+        # At the bottom of the disc, where the ship flies, a sprite looks just
+        # like its PNG: the left-turn frame must have its nose on the image's
+        # left, and the right-turn frame on its right.
+        # (See tools/vs2_doc_images/make_ship_art.py.)
         try:
             from PIL import Image
         except ImportError:
@@ -154,16 +175,38 @@ class TutorialGameTests(unittest.TestCase):
             xs = [x for x in range(width) if pixels.getpixel((x, top))[3]]
             return sum(xs) / len(xs) - (width - 1) / 2
 
-        self.assertAlmostEqual(nose_offset(LEVEL), 0, delta=1)
-        self.assertGreater(nose_offset(TURN_LEFT), 1)
-        self.assertLess(nose_offset(TURN_RIGHT), -1)
+        self.assertEqual(nose_offset(LEVEL), 0)
+        self.assertLess(nose_offset(TURN_LEFT), -1)
+        self.assertGreater(nose_offset(TURN_RIGHT), 1)
+
+    def test_the_level_ship_is_symmetric_and_ends_in_a_single_pixel_point(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+        from games.demos.tutorial_game.code.tutorial_game import LEVEL
+
+        strip = Image.open(os.path.join(
+            ROOT, "games", "demos", "tutorial_game", "images", "ship.png")).convert("RGBA")
+        width = strip.width // 3
+        self.assertEqual(width % 2, 1)          # a centre column for the point
+        ship = strip.crop((LEVEL * width, 0, (LEVEL + 1) * width, strip.height))
+        for y in range(ship.height):
+            for x in range(width):
+                self.assertEqual(ship.getpixel((x, y)), ship.getpixel((width - 1 - x, y)),
+                                 "row %d is not symmetric" % y)
+        top = next(y for y in range(ship.height)
+                   if any(ship.getpixel((x, y))[3] for x in range(width)))
+        lit = [x for x in range(width) if ship.getpixel((x, top))[3]]
+        self.assertEqual(lit, [width // 2])
 
     def test_both_directions_held_cancel_out(self):
         from games.demos.tutorial_game.code.tutorial_game import LEVEL
 
         game = self.start_game()
+        start = game.ship.x
         self.step(director.JOY_LEFT | director.JOY_RIGHT)
-        self.assertEqual(game.ship.x, 128)
+        self.assertEqual(game.ship.x, start)
         self.assertEqual(game.ship.frame, LEVEL)
 
     def test_the_trench_wall_scrolls_and_wraps_seamlessly(self):
@@ -171,7 +214,11 @@ class TutorialGameTests(unittest.TestCase):
         pattern_height = 6 * game.ground.tile_height
         seen = set()
         for _ in range(2 * pattern_height + 4):
+            before = game.scroll
             self.step(0)
+            # The wall moves at the speed of the trench, a bit less than a
+            # depth unit per tick at the start, so no row of the view is skipped.
+            self.assertAlmostEqual((game.scroll - before) % pattern_height, game.speed)
             seen.add(game.ground.view_y)
             self.assertLess(game.ground.view_y, pattern_height)
         self.assertEqual(seen, set(range(pattern_height)))
@@ -216,16 +263,62 @@ class TutorialGameTests(unittest.TestCase):
         self.assertEqual(len(game.enemies), 0)
         self.assertEqual(game.score, 10)
 
-    def test_the_spawn_interval_shrinks_as_the_score_rises(self):
+    def test_enemies_come_down_at_the_speed_the_wall_scrolls(self):
+        game = self.start_game()
+        enemy = game.enemies.spawn(x=100, y=100)
+        self.step(0)
+        self.assertAlmostEqual(enemy.y, 100 - game.speed)
+
+    def pace(self, game, score):
+        game.score = score
+        game.get_harder()
+        return game.speed, game.spawn_ms
+
+    def test_the_game_alternates_between_getting_faster_and_getting_busier(self):
         from games.demos.tutorial_game.code.tutorial_game import (
-            MIN_SPAWN_MS, SPAWN_MS)
+            MAX_SPEED, MIN_SPAWN_MS, SPAWN_MS, SPAWN_STEP, SPEED_STEP, START_SPEED,
+            STEP_POINTS)
 
         game = self.start_game()
-        self.assertEqual(game.spawn_delay(), SPAWN_MS)
-        game.score = 100
-        self.assertEqual(game.spawn_delay(), SPAWN_MS - 100)
-        game.score = 10 ** 6
-        self.assertEqual(game.spawn_delay(), MIN_SPAWN_MS)
+        self.assertEqual(self.pace(game, 0), (START_SPEED, SPAWN_MS))
+        # Nothing changes between steps.
+        self.assertEqual(self.pace(game, STEP_POINTS - 10), (START_SPEED, SPAWN_MS))
+        # Step 1: a faster trench.
+        self.assertEqual(self.pace(game, STEP_POINTS),
+                         (START_SPEED + SPEED_STEP, SPAWN_MS))
+        # Step 2: more enemies.
+        self.assertEqual(self.pace(game, 2 * STEP_POINTS),
+                         (START_SPEED + SPEED_STEP, SPAWN_MS - SPAWN_STEP))
+        # Step 3: faster again. Step 4: more enemies again.
+        self.assertEqual(self.pace(game, 3 * STEP_POINTS),
+                         (START_SPEED + 2 * SPEED_STEP, SPAWN_MS - SPAWN_STEP))
+        self.assertEqual(self.pace(game, 4 * STEP_POINTS),
+                         (START_SPEED + 2 * SPEED_STEP, SPAWN_MS - 2 * SPAWN_STEP))
+        # Neither goes past its limit, however long you last.
+        self.assertEqual(self.pace(game, 10 ** 6), (MAX_SPEED, MIN_SPAWN_MS))
+
+    def test_each_step_changes_only_one_thing_and_never_makes_the_game_easier(self):
+        from games.demos.tutorial_game.code.tutorial_game import STEP_POINTS
+
+        game = self.start_game()
+        previous = self.pace(game, 0)
+        for step in range(1, 30):
+            current = self.pace(game, step * STEP_POINTS)
+            self.assertGreaterEqual(current[0], previous[0])
+            self.assertLessEqual(current[1], previous[1])
+            if previous[0] < 1.5 and previous[1] > 450:     # before either limit
+                self.assertEqual((current[0] != previous[0]) + (current[1] != previous[1]), 1)
+            previous = current
+
+    def test_the_limits_are_reached_with_room_in_the_pool(self):
+        from games.demos.tutorial_game.code.tutorial_game import (
+            ENEMY_START, MIN_SPAWN_MS, START_SPEED)
+
+        # The worst case for the pool is the slowest trench with the fastest
+        # spawning: each enemy lives for ENEMY_START / speed ticks of 30 ms.
+        game = self.start_game()
+        lifetime_ms = ENEMY_START / START_SPEED * 30
+        self.assertLess(lifetime_ms / MIN_SPAWN_MS, game.enemies.free + len(game.enemies))
 
     def crash(self, game, score):
         game.score = score

@@ -159,9 +159,9 @@ NVS (`make wifi-provision`), repo on `feature/game-packages` with `.venv`.
      install_error mentions rename, that's risk #5 from the plan — fall
      back to per-file extract+rename in `installer.install_from_file`.
 3. **Fresh-install path.** Package a slug that is *not* in the tree (e.g.
-   copy `games/alecu/mapdemo` to `games/alecu/mapdemo2`, `package_game
-   alecu/mapdemo2`, delete the copy) and install it: a brand-new
-   `/games/alecu/mapdemo2` must appear in the menu with its icon.
+   copy `games/demos/input_demo` to `games/demos/input_demo2`, `package_game
+   demos/input_demo2`, delete the copy) and install it: a brand-new
+   `/games/demos/input_demo2` must appear in the menu with its icon.
 4. **OTA re-merge.** Ctrl-U again (tree OTA restores `roms/menu.romz`).
    After the post-OTA reboot the console must print
    `main: menu rom re-merged from installed packages` and installed icons

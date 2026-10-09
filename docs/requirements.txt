@@ -1,0 +1,5 @@
+# Documentation toolchain for the unified Ventilastation documentation.
+# Used by .readthedocs.yaml and by `make -C docs html` locally.
+sphinx>=8,<10
+myst-parser>=4,<5
+furo>=2024.8

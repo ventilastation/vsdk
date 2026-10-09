@@ -2,7 +2,8 @@
 
 Trench Run: fly the ship around the rim and dodge the enemies that come down the
 tunnel at you. Every enemy that gets past scores; one that touches the ship ends
-the game. The best score is kept between runs. See docs/vs2/tutorial/.
+the game. The best score is kept between runs, and the game speeds up (and gets
+busier, in turn) as the score rises. See docs/vs2/tutorial/.
 """
 
 from urandom import randrange
@@ -11,12 +12,23 @@ import vs2
 from vs2.controls import *
 
 LEVEL, TURN_LEFT, TURN_RIGHT = range(3)      # the frames of ship.png
-ENEMY_SPEED = 0.5    # depth units per tick, toward the ship
 ENEMY_START = 160    # depth at which enemies appear
-SPAWN_MS = 900       # time between enemies at the start
-MIN_SPAWN_MS = 650   # ...and the shortest: 16 enemies, ten seconds each, is the
-                     # fastest the pool can keep up with
 POINTS = 10
+
+# How fast the wall scrolls past, in depth units per tick. Enemies sit still in
+# the trench, so they come at the ship at the same speed.
+START_SPEED = 0.75
+MAX_SPEED = 1.5
+SPEED_STEP = 0.125
+
+# Milliseconds between enemies.
+SPAWN_MS = 900
+MIN_SPAWN_MS = 450
+SPAWN_STEP = 75
+
+# The game gets harder every STEP_POINTS points, alternately by speeding the
+# trench up and by sending enemies more often.
+STEP_POINTS = 50
 BEST = "best"        # the name the best score is saved under
 
 # The trench's tiles, in the order they appear in trench.png.
@@ -57,16 +69,23 @@ class Game(vs2.Scene):
             view_width=256, view_height=160)
         self.draw_trench()
 
-        self.ship = self.world.sprite("ship.png", x=128, y=0)
+        # x = 0 is the bottom of the disc. A sprite's x is its edge, so back up
+        # by half its width to put the ship's centre there.
+        self.ship = self.world.sprite("ship.png", y=0)
+        self.ship.x = -(self.ship.width // 2)
         self.enemies = self.world.sprite_pool("enemy.png", count=16)
 
-        # Bottom of the disc, so the score reads upright.
-        self.score_label = self.hud.label("numerals.png", columns=5, x=246, y=1)
+        # Top of the disc, where x = 128. Text up there is upside-down unless it
+        # is flipped both ways.
+        self.score_label = self.hud.label("numerals.png", columns=5, x=118, y=1,
+                                          flip_x=True, flip_y=True)
 
         self.score = 0
+        self.scroll = 0                 # how far the wall has scrolled
         self.ticks = 0
         self.show_score()
-        self.call_later(self.spawn_delay(), self.spawn_enemy)
+        self.get_harder()
+        self.call_later(self.spawn_ms, self.spawn_enemy)
 
     def draw_trench(self):
         for row in range(TRENCH_ROWS):
@@ -79,12 +98,13 @@ class Game(vs2.Scene):
     def update(self):
         self.ticks += 1
 
-        # -1 for left, +1 for right, 0 for neither (or both held: they cancel).
-        steer = joy1.held(RIGHT) - joy1.held(LEFT)
+        # +1 for left, -1 for right, 0 for neither (or both held: they cancel).
+        # At the bottom of the disc x counts up toward the left.
+        steer = joy1.held(LEFT) - joy1.held(RIGHT)
         self.ship.x = (self.ship.x + steer) % vs2.display.width
-        if steer < 0:
+        if steer > 0:
             self.ship.frame = TURN_LEFT
-        elif steer > 0:
+        elif steer < 0:
             self.ship.frame = TURN_RIGHT
         else:
             self.ship.frame = LEVEL
@@ -92,7 +112,8 @@ class Game(vs2.Scene):
         # Scroll the wall toward the ship. After one whole pattern the picture
         # is the same again, so the view can wrap without rewriting any cells.
         pattern_height = PATTERN_ROWS * self.ground.tile_height
-        self.ground.view_y = (self.ticks // 2) % pattern_height
+        self.scroll = (self.scroll + self.speed) % pattern_height
+        self.ground.view_y = self.scroll
 
         if self.move_enemies():
             vs2.audio.sound("boom")
@@ -101,7 +122,7 @@ class Game(vs2.Scene):
     def move_enemies(self):
         """Advance the enemies. Returns True if one touched the ship."""
         for enemy in self.enemies:
-            enemy.y -= ENEMY_SPEED
+            enemy.y -= self.speed
             enemy.frame = (self.ticks // 6) % enemy.image.frames
             if enemy.overlaps(self.ship):
                 return True
@@ -109,16 +130,20 @@ class Game(vs2.Scene):
                 self.enemies.despawn(enemy)      # flew past the ship
                 self.score += POINTS
                 self.show_score()
+                self.get_harder()
         return False
 
-    def spawn_delay(self):
-        """Milliseconds until the next enemy: one less for every point, so the
-        game gets busier the longer you last, down to MIN_SPAWN_MS."""
-        return max(MIN_SPAWN_MS, SPAWN_MS - self.score)
+    def get_harder(self):
+        """Set the pace from the score. The steps alternate: the first, third,
+        fifth... make the trench faster, the second, fourth... make the enemies
+        come more often, each up to a limit."""
+        step = self.score // STEP_POINTS
+        self.speed = min(MAX_SPEED, START_SPEED + SPEED_STEP * ((step + 1) // 2))
+        self.spawn_ms = max(MIN_SPAWN_MS, SPAWN_MS - SPAWN_STEP * (step // 2))
 
     def spawn_enemy(self):
         self.enemies.spawn(x=randrange(vs2.display.width), y=ENEMY_START)
-        self.call_later(self.spawn_delay(), self.spawn_enemy)
+        self.call_later(self.spawn_ms, self.spawn_enemy)
 
 
 def centred_label(layer, text, y):

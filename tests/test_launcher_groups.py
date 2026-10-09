@@ -8,7 +8,7 @@ plain attributes (self.entries, self.group_id, self.slug, self.selected_index)
 and vs2.Scene.push()/pop(), which just record a pending transition rather
 than touching any drawable or rom. That keeps these tests fast and immune to
 asset-pack faking. One end-to-end test exercises setup()'s real
-director.push() chain, following tests/test_mapdemo_vs2.py's pattern for a
+director.push() chain, following tests/test_input_demo.py's pattern for a
 vs2.Scene under the headless platform.
 """
 
@@ -250,7 +250,7 @@ class MainRestoreTests(unittest.TestCase):
 
 class SetupIntegrationTests(unittest.TestCase):
     """One end-to-end check that setup() really reconstructs a multi-level
-    stack via real director.push() calls, following test_mapdemo_vs2.py's
+    stack via real director.push() calls, following test_input_demo.py's
     pattern for exercising a vs2.Scene under the headless platform."""
 
     def setUp(self):

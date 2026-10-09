@@ -1,18 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 370" width="760" height="370" font-family="system-ui,sans-serif">
-  <rect width="760" height="370" fill="#0b0f14"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 370" width="800" height="370" font-family="system-ui,sans-serif">
+  <rect width="800" height="370" fill="#0b0f14"/>
   <text x="40" y="44" fill="#e6edf3" font-size="24" font-weight="600">ship.png: one strip, three frames</text>
-  <!-- 54x18 px image scaled x12 -->
-  <rect x="55" y="77" width="654" height="222" fill="#111a24"/>
-  <image x="58" y="80" width="648" height="216" href="{{art:demos/tutorial_game/images/ship.png}}" style="image-rendering:pixelated"/>
+  <!-- 57x19 px image scaled x12 -->
+  <rect x="55" y="77" width="690" height="234" fill="#111a24"/>
+  <image x="58" y="80" width="684" height="228" href="{{art:demos/tutorial_game/images/ship.png}}" style="image-rendering:pixelated"/>
   <g stroke="#f5b800" stroke-width="2" stroke-dasharray="6 5">
-    <line x1="58" y1="70" x2="58" y2="306"/><line x1="274" y1="70" x2="274" y2="306"/>
-    <line x1="490" y1="70" x2="490" y2="306"/><line x1="706" y1="70" x2="706" y2="306"/>
+    <line x1="58" y1="70" x2="58" y2="318"/><line x1="286" y1="70" x2="286" y2="318"/>
+    <line x1="514" y1="70" x2="514" y2="318"/><line x1="742" y1="70" x2="742" y2="318"/>
   </g>
   <g fill="#e6edf3" font-size="22" font-weight="600" text-anchor="middle">
-    <text x="166" y="332">frame 0: level</text><text x="382" y="332">frame 1: left</text>
-    <text x="598" y="332">frame 2: right</text>
+    <text x="172" y="340">frame 0: level</text><text x="400" y="340">frame 1: left</text>
+    <text x="628" y="340">frame 2: right</text>
   </g>
   <g fill="#8aa0b5" font-size="17" text-anchor="middle">
-    <text x="382" y="358">54 px wide in all: three frames side by side, each 18 x 18 px</text>
+    <text x="400" y="362">57 px wide in all: three frames side by side, each 19 x 19 px</text>
   </g>
 </svg>

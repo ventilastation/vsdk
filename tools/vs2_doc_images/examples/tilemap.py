@@ -18,7 +18,8 @@ class Tilemap(vs2.Scene):
         for col in range(2, 16, 8):
             self.ground[col, 5] = LIGHTS
             self.ground[col + 4, 5] = HAZARD
-        self.ship = world.sprite("ship.png", x=128, y=0)
+        self.ship = world.sprite("ship.png", y=0)
+        self.ship.x = -(self.ship.width // 2)
 
 
 def main():

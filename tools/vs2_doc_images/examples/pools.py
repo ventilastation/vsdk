@@ -7,10 +7,11 @@ import vs2
 class Pools(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
-        self.ship = self.world.sprite("ship.png", x=128, y=0)
+        self.ship = self.world.sprite("ship.png", y=0)
+        self.ship.x = -(self.ship.width // 2)     # centred on the bottom of the disc
         self.enemies = self.world.sprite_pool("enemy.png", count=16)
         for i in range(7):
-            self.enemies.spawn(x=128 + (i - 3) * 20, y=20 + abs(i - 3) * 16)
+            self.enemies.spawn(x=(i - 3) * 20, y=20 + abs(i - 3) * 16)
 
 
 def main():
