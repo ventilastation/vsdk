@@ -27,7 +27,10 @@ Existing runtime CI continues to exercise tutorial steps and the finished game.
   website and documentation. The former browser guide redirects to desktop setup;
   engineering references remain under internals for maintenance.
 - Update exact API behavior in docstrings and its teaching page together.
-- Keep operational/engineering details under internals, outside the tutorial.
+- Keep operational/engineering details and this maintenance guide as repository
+  Markdown only, excluded from Sphinx publication and search.
+- Keep browser editing controls and the unused VS2 prototype migration notes
+  out of the published documentation.
 - Mark obsolete API prose at its entrance and keep it out of search results.
 - Delete superseded proposals after extracting unique decisions, requirements,
   or pending work. Git history retains their full text. Keep useful incident
@@ -50,11 +53,11 @@ without an `/en/latest/` prefix; redirects preserve those observed URLs.
 
 This change deletes `vs2-api-rework-proposal.md`, `internals/vs2-api-plan.md`,
 and `ota-upgrade-plan.md`; their replacements are the current reference,
-[migration guide](../vs2/migration.md), [accepted decisions](../internals/vs2-decisions.md),
+[accepted decisions](../internals/vs2-decisions.md),
 and [OTA reference](../internals/ota.md). It corrects teaching claims about the
 framebuffer, scene sealing, dynamic tuple indexing and geometry provenance.
 
 The proposal's larger hardware/audio/OTA runbook audit remains separate work.
-Publishing those existing pages makes their scope visible; it does not certify
-all of their old commands or hardware claims. Historical investigations remain
-available with status labels, outside the new-game route.
+Those engineering pages remain repository Markdown only; they are not published
+by Sphinx. Historical investigations remain available in the repository with
+status labels.

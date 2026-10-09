@@ -1,4 +1,4 @@
-# Ventilastation documentation
+# Ventilastation API
 
 Make circular games in MicroPython with **VS2, API revision 2**.
 You can start on a computer; no console or electronics are needed.
@@ -18,7 +18,6 @@ can keep in Git.
 - [VS2 API reference](vs2/reference/index.md): generated from the runtime source.
 - [Glossary](vs2/glossary.md): the circular display and API vocabulary.
 - [Going further](vs2/going-further.md): advanced patterns after the tutorial.
-- [SDK and hardware internals](internals/README.md): for contributors and console builders.
 
 The website introduces the console and links to desktop development. These
 documentation sources live in `ventilastation/vsdk/docs/` and are built for both the website's
@@ -36,10 +35,8 @@ guides/assets-and-sharing
 
 ```{toctree}
 :hidden:
-:caption: Maintain the project
+:caption: Older games
 :maxdepth: 1
 
-internals/README
-guides/documentation
 legacy/index
 ```

@@ -39,7 +39,7 @@ if "utime" not in sys.modules:
     sys.modules["utime"] = _Utime
 
 
-project = "Ventilastation"
+project = "Ventilastation API"
 author = "The Ventilastation project"
 copyright = "%s, the Ventilastation project" % time.strftime("%Y")
 
@@ -51,7 +51,11 @@ extensions = [
     "sphinx.ext.intersphinx",
 ]
 
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+# Engineering and publication guides are repository Markdown, not public docs.
+exclude_patterns = [
+    "_build", "Thumbs.db", ".DS_Store",
+    "internals/**", "guides/documentation.md", "README.md",
+]
 root_doc = "index"
 
 source_suffix = {".md": "markdown", ".rst": "restructuredtext"}
@@ -76,13 +80,14 @@ napoleon_numpy_docstring = False
 napoleon_use_rtype = False
 
 html_theme = "furo"
-html_title = "Ventilastation"
+html_title = "Ventilastation API"
 # No html_static_path or templates_path on purpose: there are no custom assets
 # or template overrides yet, and git does not track empty directories -- so
 # naming one here builds fine locally and then fails the Read the Docs build
 # (which runs with fail_on_warning) on its clean checkout. Add the directory
 # and the setting together, in the same commit, if assets are ever needed.
 html_theme_options = {
+    "top_of_page_buttons": ["view"],
     "source_repository": "https://github.com/ventilastation/vsdk/",
     "source_branch": "main",
     "source_directory": "docs/",

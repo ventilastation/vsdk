@@ -21,7 +21,6 @@ and runtime source define exact behavior.
 
 The superseded rollout/rework proposals described a prototype API and obsolete
 milestones. Their complete text remains in Git history before this change.
-Migration mappings are retained in [the migration guide](../vs2/migration.md).
 The early OTA A/B proposal is also deleted; [OTA](ota.md) describes the current
 single-MicroPython-partition architecture.
 

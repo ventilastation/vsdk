@@ -1,4 +1,4 @@
-# Ventilastation VS2
+# Ventilastation API
 
 VS2 is the API for writing Ventilastation games in MicroPython. A game
 creates what it wants to draw once, in `build()`, and then moves those things
@@ -102,5 +102,4 @@ reference/index
 glossary
 going-further
 design-notes
-migration
 ```

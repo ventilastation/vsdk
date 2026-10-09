@@ -15,21 +15,14 @@ VS2_PAGES = (
     'reference/services', 'reference/errors',
 )
 REDIRECTS = {name: 'vs2/' + name for name in VS2_PAGES}
-REDIRECTS.update({
-    'guides/browser': 'guides/desktop',
-    'vs2-api-rework-proposal': 'internals/vs2-decisions',
-    'internals/vs2-api-plan': 'internals/vs2-decisions',
-    'ota-upgrade-plan': 'internals/ota',
-    **{'internals/' + name: 'internals/history/' + name for name in (
-        'menu-sprite-corruption', 'ota-ring-sprite-corruption', 'ota-progress-rings-plan')},
-})
+REDIRECTS['guides/browser'] = 'guides/desktop'
 
 
 def source_links(app, docname, source):
     """Link repo files outside the Sphinx root to their actual GitHub source.
 
-    Markdown paths remain relative for GitHub readers. Documents within docs/
-    remain local and are checked by Sphinx/the generated-link checker.
+    Markdown paths remain relative for GitHub readers. Published documents remain
+    local; repository-only documents link to their Markdown on GitHub.
     """
     docs = Path(app.srcdir).resolve()
     repo = docs.parent
@@ -48,9 +41,12 @@ def source_links(app, docname, source):
             if path.is_dir():
                 for index in ('README.md', 'index.md'):
                     if (path / index).is_file():
-                        relative = posixpath.relpath(path / index, parent)
-                        return '](' + relative + ('#' + parsed.fragment if parsed.fragment else '') + ')'
-            return match.group(0)
+                        path = path / index
+                        break
+            docname = path.relative_to(docs).with_suffix('').as_posix()
+            if docname in app.env.found_docs:
+                relative = posixpath.relpath(path, parent)
+                return '](' + relative + ('#' + parsed.fragment if parsed.fragment else '') + ')'
         if not path.is_relative_to(repo):
             return match.group(0)
         kind = 'tree' if path.is_dir() else 'blob'
@@ -62,12 +58,12 @@ def source_links(app, docname, source):
 
 def exclude_obsolete_search(app, env):
     for docname in env.found_docs:
-        if docname.startswith(('legacy/', 'internals/history/')):
+        if docname.startswith('legacy/'):
             env.metadata[docname]['nosearch'] = True
 
 
 def obsolete_robots(app, pagename, templatename, context, doctree):
-    if pagename.startswith(('legacy/', 'internals/history/')):
+    if pagename.startswith('legacy/'):
         context['metatags'] += '<meta name="robots" content="noindex">'
 
 

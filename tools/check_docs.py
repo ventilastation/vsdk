@@ -15,10 +15,14 @@ class Page(HTMLParser):
         self.ids = set()
         self.links = []
         self.noindex = False
+        self.text = []
+        self.edit_control = False
         self.feed(path.read_text())
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if 'edit-this-page' in attrs.get('class', '').split():
+            self.edit_control = True
         if 'id' in attrs:
             self.ids.add(attrs['id'])
         if tag == 'meta' and attrs.get('name') == 'robots':
@@ -27,12 +31,24 @@ class Page(HTMLParser):
             if attrs.get(name):
                 self.links.append(attrs[name])
 
+    def handle_data(self, text):
+        self.text.append(text)
+
 
 def check(output):
     output = output.resolve()
     pages = {path: Page(path) for path in output.rglob('*.html')}
     errors = []
     for path, page in pages.items():
+        name = path.relative_to(output).as_posix()
+        if name.startswith('internals/') or name in ('README.html', 'guides/documentation.html', 'vs2/migration.html'):
+            errors.append('Repository-only or removed document was published: ' + name)
+        if page.edit_control:
+            errors.append('Browser editing control was published: ' + name)
+        text = ' '.join(page.text)
+        for phrase in ('Ventilastation VS2', 'Removed VS2 prototype', 'Migrating older games'):
+            if phrase in text:
+                errors.append(f'{name}: obsolete public content {phrase}')
         for link in page.links:
             parsed = urlsplit(link)
             if parsed.path == '/emulator/' or parsed.path.endswith('/guides/browser.html'):
@@ -54,11 +70,16 @@ def check(output):
     index = (output / 'searchindex.js').read_text()
     data = json.loads(index.removeprefix('Search.setIndex(').removesuffix(')'))
     for i, name in enumerate(data['docnames']):
-        if name.startswith(('legacy/', 'internals/history/')):
+        if name.startswith('internals/') or name in ('README', 'guides/documentation', 'vs2/migration'):
+            errors.append('Repository-only or removed document remains in search: ' + name)
+        if name.startswith('legacy/'):
             if data['titles'][i]:
                 errors.append('Obsolete document remains searchable: ' + name)
             if not pages[output / (name + '.html')].noindex:
                 errors.append('Missing noindex on obsolete document: ' + name)
+    for name in ('index.html', 'vs2/index.html'):
+        if 'Ventilastation API' not in ' '.join(pages[output / name].text):
+            errors.append('Missing public API title: ' + name)
     if errors:
         raise SystemExit('\n'.join(sorted(set(errors))))
     print(f'Checked {len(pages)} HTML pages, local links/anchors, {len(REDIRECTS)} redirects and obsolete search exclusion.')
