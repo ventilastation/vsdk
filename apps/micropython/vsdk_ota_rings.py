@@ -83,8 +83,13 @@ _VS2_FLAG_FLIP_Y = 0x04  # 0x02 (FLIP_X) also works -- see _set_label()'s own co
 
 PIXELS = 54  # must match gpu.h's PIXELS -- the physical LED count per arm.
 
-_WIDTH_BYTE = 255  # "actually 256" -- see gpu.c's `if (width == 255) width++`.
+# Strip headers store width and frame count minus one (see
+# ventilastation/romformat.py and docs/internals/rom-format.md). This module
+# must work with an empty filesystem, so it writes those bytes itself
+# instead of importing romformat; keep them in step with encode_header().
 WIDTH = 256
+_WIDTH_MINUS_1 = WIDTH - 1
+_ONE_FRAME = 0  # frames - 1
 TRANSPARENT = 0xFF
 _LIT = 1
 
@@ -234,7 +239,7 @@ def _build_ring_strip(name, row):
     bytes -- see _build_palette()'s comment; the same memoryview_data()
     constraint applies to set_imagestrip(). Callers must wrap this in
     memoryview(...) before handing it to set_imagestrip() -- see _set_ring()."""
-    header = bytearray([_WIDTH_BYTE, PIXELS, 1, _PALETTE_GROUP[name]])
+    header = bytearray([_WIDTH_MINUS_1, PIXELS, _ONE_FRAME, _PALETTE_GROUP[name]])
     body = bytearray(b"\xff" * (WIDTH * PIXELS))
     if row is not None:
         for col in range(WIDTH):
@@ -265,7 +270,10 @@ def _build_label_strip(text):
     right-side-up for someone viewing the fan from its usual side --
     confirmed against a real capture, not a guess."""
     width = len(text) * _CHAR_STEP
-    header = bytearray([width, _GLYPH_HEIGHT, 1, _PALETTE_GROUP[_LABEL]])
+    if not 1 <= width <= WIDTH:
+        raise ValueError("label %r needs %d columns; a strip is 1 to %d wide"
+                         % (text, width, WIDTH))
+    header = bytearray([width - 1, _GLYPH_HEIGHT, _ONE_FRAME, _PALETTE_GROUP[_LABEL]])
     body = bytearray(b"\xff" * (width * _GLYPH_HEIGHT))
     for index, character in enumerate(text):
         bits_per_row = _TINY_FONT.get(character, _TINY_FONT[" "])

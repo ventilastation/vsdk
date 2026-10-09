@@ -14,8 +14,8 @@
 //   aframe <wire-len> <nsamples>      -> args=[wireLen, nsamples], data=register log
 //   astop
 
-// Bump this whenever tools/build-chipsynth-wasm.sh output changes, same
-// discipline as the other ?v= cache-busting tags in this directory (see
+// Publishing replaces this with a hash of the published files, like every
+// other ?v= version here (tools/stamp_web_versions.py,
 // docs/internals/deploying-web-emulator.md).
 const CHIPSYNTH_VERSION = "20260727b";
 

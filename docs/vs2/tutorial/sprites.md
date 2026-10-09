@@ -116,7 +116,7 @@ def update(self):
 line, and pressing both directions at once cancels out as it did in chapter 2. The
 names for the frames make the code say what it means, and they are the same
 three numbers the strip is laid out in. Setting a frame is a single write, so
-doing it every tick costs nothing.
+it reuses the existing sprite record.
 
 :::{note}
 At the bottom of the disc, where the ship flies, a sprite looks just like its PNG,

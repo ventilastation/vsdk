@@ -37,7 +37,7 @@ Pass `--max-skip-pct 0` when diagnosing a strict zero-skip target.
 
 ## Prepare the boards
 
-Use the `impl/vs2-api-rework` checkout and initialize the MicroPython and
+Use a current `main` checkout with VS2 API revision 2 and initialize the MicroPython and
 Retro-Go sources as described in [building.md](building.md). Both boards must
 already be registered (`make list-boards`) and wired as described in
 [workbench.md](workbench.md).

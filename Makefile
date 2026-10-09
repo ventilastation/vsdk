@@ -10,6 +10,10 @@ BAUD ?= 2000000
 # the target. An explicit PORT always wins, which is useful when several
 # boards of one type are attached or when a particular board must be forced.
 PYTHON ?= python3
+# ROMs and the web runtime bundle need numpy, Pillow and PyYAML: use the
+# emulator's virtualenv when there is one, since the ESP-IDF Python that
+# export.sh puts first on PATH doesn't have them.
+ASSET_PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,$(PYTHON))
 BOARD_DETECTOR := $(abspath tools/find_board.py)
 ROTOR_PORT_TARGETS := initial-flash flash-recovery flash-full flash-launcher configure-board configure-board-v2 configure-board-eu wifi-provision
 WORKBENCH_PORT_TARGETS := workbench-flash workbench-monitor workbench-wifi-provision
@@ -150,8 +154,11 @@ micropython-webassembly:
 chipsynth-wasm:
 	./tools/build-chipsynth-wasm.sh
 
+# Brings the ROMs, web/runtime-manifest.json and web/runtime-bundle.json up
+# to date. Rarely needed by hand: the desktop emulator's web server and
+# publishing run it themselves.
 web-runtime-bundle:
-	python3 ./tools/generate_web_runtime_bundle.py
+	$(ASSET_PYTHON) ./tools/generate_web_runtime_bundle.py
 
 web-emulator-bundle:
 	./tools/build-web-emulator-bundle.sh
@@ -211,7 +218,7 @@ flash-recovery: vsdk
 # verifies content instead of re-downloading it. WiFi/board-wiring NVS is
 # untouched -- run wifi-provision / configure-board separately, same as
 # after flash-recovery.
-flash-full: vsdk voom retro-core fmsx
+flash-full: vsdk voom retro-core fmsx generate-roms
 	$(SERIAL_LOCK) bash -c '$(wait-port) && python3 ./hardware/rotor/flash_full_image.py --port "$(PORT)" --baud "$(BAUD)" --board "$(VSDK_BOARD)" --board-variant "$(VSDK_BOARD_VARIANT)"'
 
 voom:
@@ -245,10 +252,11 @@ run-emulator:
 voom-sounds:
 	cd emulator && python build_voom_sounds.py
 
+# FORCE=1 rebuilds every ROM instead of only those whose inputs changed.
 generate-roms:
-	python3 tools/generate_roms.py
+	$(ASSET_PYTHON) tools/generate_roms.py $(if $(FORCE),--force,)
 
-build-fs:
+build-fs: generate-roms
 	python3 hardware/rotor/build_micropython_fs.py
 
 # --- Main-board wiring configuration ---

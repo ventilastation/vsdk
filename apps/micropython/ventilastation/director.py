@@ -7,6 +7,7 @@ import utime
 
 from ventilastation import settings
 from ventilastation import api_guard
+from ventilastation import romformat
 from ventilastation.display_geometry import DISPLAY_HEIGHT
 from ventilastation.platforms import create_platform
 from ventilastation.runtime import (
@@ -476,10 +477,17 @@ class Director:
                 metadata_view = memoryview(metadata)[:filename_len + 4]
                 romfile.readinto(metadata_view)
                 filename_bytes = bytes(metadata_view[:filename_len])
-                w = metadata_view[filename_len]
-                h = metadata_view[filename_len + 1]
-                frames = metadata_view[filename_len + 2]
-                width = 256 if w == 255 else w
+                record_end = (stripes_offsets[n + 1] if n + 1 < num_stripes
+                              else palette_offsets[0])
+                body_start = off + 1 + filename_len + 4
+
+                def read_u16(offset):
+                    romfile.seek(body_start + offset)
+                    return struct.unpack("<H", romfile.read(2))[0]
+
+                width, h, frames, pal, glyph_length = self._resolve_strip(
+                    filename_bytes, metadata_view[filename_len:filename_len + 4],
+                    record_end - body_start, read_u16)
                 # memoryview() over a bytearray we build directly, not the
                 # plain bytes `+` concatenation used to produce: both because
                 # of the readinto win above, and because
@@ -493,24 +501,22 @@ class Director:
                 # without this wrapper the native side adds that hash in as a
                 # bogus byte offset and reads pixel/header data from the wrong
                 # address entirely.
-                strip_buf = bytearray(4 + width * h * frames)
-                strip_buf[0:4] = metadata_view[filename_len:filename_len + 4]
+                pixels = romformat.pixel_length(width, h, frames)
+                strip_buf = bytearray(4 + pixels)
+                strip_buf[0:4] = romformat.encode_header(width, h, frames, pal)
+                romfile.seek(body_start)
                 romfile.readinto(memoryview(strip_buf)[4:])
                 stripmap = memoryview(strip_buf)
-                record_end = (stripes_offsets[n + 1] if n + 1 < num_stripes
-                              else palette_offsets[0])
-                trailer_size = record_end - (off + 1 + filename_len + 4 + width * h * frames)
                 glyphs = None
-                if trailer_size >= 2:
-                    glyph_length = struct.unpack("<H", romfile.read(2))[0]
-                    if glyph_length <= trailer_size - 2:
-                        glyphs = romfile.read(glyph_length).decode("utf-8")
+                if glyph_length is not None:
+                    romfile.seek(body_start + pixels + romformat.TRAILER_SIZE)
+                    glyphs = romfile.read(glyph_length).decode("utf-8")
                 self._stripe_buffers[n] = stripmap
                 self.platform.sprites.set_imagestrip(n, stripmap)
                 stripes[filename_bytes.decode("utf-8")] = n
                 self.image_metadata[n] = {
-                    "width": width, "height": int(h), "frames": int(frames),
-                    "palette": int(metadata_view[filename_len + 3]),
+                    "width": width, "height": h, "frames": frames,
+                    "palette": pal,
                     "glyphs": glyphs,
                 }
         finally:
@@ -521,7 +527,7 @@ class Director:
         # memoryview), wiring its palettes and image strips into the display.
         stripes.clear()
         self.image_metadata.clear()
-        num_stripes, num_palettes = struct.unpack("<HH", self.romdata)
+        num_stripes, num_palettes = struct.unpack_from("<HH", self.romdata, 0)
         offsets = struct.unpack_from("<%dL%dL" % (num_stripes, num_palettes), self.romdata, 4)
         stripes_offsets = offsets[:num_stripes]
         palette_offsets = offsets[num_stripes:]
@@ -529,31 +535,51 @@ class Director:
         self.palette_data = self.romdata[palette_offsets[0]:]
         self.platform.display.set_palettes(self.palette_data)
 
+        romdata = self.romdata
         for n, off in enumerate(stripes_offsets):
-            filename_len = struct.unpack_from("B", self.romdata, off)[0]
-            filename, w, h, frames, pal = struct.unpack_from("%dsBBBB" % filename_len, self.romdata, off + 1)
-
-            if w == 255:
-                w = 256
-
-            image_data = off + 1 + filename_len
-            strip = self.romdata[image_data:image_data + w * h * frames + 4]
+            filename_len = romdata[off]
+            filename = bytes(romdata[off + 1:off + 1 + filename_len])
+            header_start = off + 1 + filename_len
+            body_start = header_start + 4
             record_end = (stripes_offsets[n + 1] if n + 1 < num_stripes
                           else palette_offsets[0])
-            trailer_start = image_data + 4 + w * h * frames
+
+            def read_u16(offset):
+                return struct.unpack_from("<H", romdata, body_start + offset)[0]
+
+            width, h, frames, pal, glyph_length = self._resolve_strip(
+                filename, romdata[header_start:body_start],
+                record_end - body_start, read_u16)
+            pixels = romformat.pixel_length(width, h, frames)
+            header = romformat.encode_header(width, h, frames, pal)
+            if bytes(romdata[header_start:body_start]) == header:
+                strip = romdata[header_start:body_start + pixels]
+            else:
+                # A ROM built before the current encoding: hand the
+                # renderers a copy with the current header.
+                copy = bytearray(4 + pixels)
+                copy[0:4] = header
+                copy[4:] = romdata[body_start:body_start + pixels]
+                strip = memoryview(copy)
+            trailer_start = body_start + pixels + romformat.TRAILER_SIZE
             glyphs = None
-            if record_end - trailer_start >= 2:
-                glyph_length = struct.unpack_from("<H", self.romdata, trailer_start)[0]
-                if glyph_length <= record_end - trailer_start - 2:
-                    glyphs = bytes(self.romdata[trailer_start + 2:trailer_start + 2 + glyph_length]).decode("utf-8")
+            if glyph_length is not None:
+                glyphs = bytes(romdata[trailer_start:trailer_start + glyph_length]).decode("utf-8")
             self._stripe_buffers[n] = strip
             self.platform.sprites.set_imagestrip(n, strip)
             stripes[filename.decode("utf-8")] = n
             self.image_metadata[n] = {
-                "width": int(w), "height": int(h), "frames": int(frames),
-                "palette": int(pal),
+                "width": width, "height": h, "frames": frames,
+                "palette": pal,
                 "glyphs": glyphs,
             }
+
+    def _resolve_strip(self, name, header, body_length, read_u16):
+        try:
+            return romformat.resolve(header, body_length, read_u16)
+        except ValueError as error:
+            raise ValueError("%s, strip %s: %s; rebuild the ROM" % (
+                getattr(self, "_loading_rom", "ROM"), bytes(name).decode("utf-8"), error))
 
     def load_rom(self, filename):
         # Forget the old name first: a load that fails part-way leaves the
@@ -563,6 +589,7 @@ class Director:
         self.loaded_rom = filename
 
     def _load_rom_file(self, filename):
+        self._loading_rom = filename
         # On the board, ROMs are stored gzip-compressed as "<name>.romz" in the
         # LittleFS image to save flash (see build_micropython_fs.py): a
         # little-endian uint32 uncompressed size followed by the gzip data.

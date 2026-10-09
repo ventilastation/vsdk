@@ -382,20 +382,27 @@ def set_pixel(pixels, led, color):
     if 0 <= led < led_count:
         pixels[led] = color
 
+def decode_strip_header(strip):
+    """(width, height, frames, palette base, pixel data) of a strip. Width
+    and frame count are stored minus one (docs/internals/rom-format.md)."""
+    width_minus_1, h, frames_minus_1, pal = unpack("BBBB", strip[0:4])
+    return width_minus_1 + 1, h, frames_minus_1 + 1, 256 * pal, memoryview(strip)[4:]
+
 # Every strip's 4-byte header (w, h, total_frames, pal_base) is immutable for
 # as long as the strip's bytes object lives -- comms.py always installs a new
 # bytes object on reload, so caching by identity needs no manual invalidation.
 # Without this, render()/render_tilemap() re-ran struct.unpack on the same
 # static header for every column (256x/frame) for every visible sprite/tile.
+# Entries keep their strip alive, so only those per-column renderers use it;
+# code that decodes a strip once per load calls decode_strip_header().
 _strip_header_cache = {}
 
 def _strip_header(strip):
+    """decode_strip_header(), cached by strip identity."""
     cached = _strip_header_cache.get(id(strip))
     if cached is not None and cached[0] is strip:
         return cached[1:]
-    w, h, total_frames, pal = unpack("BBBB", strip[0:4])
-    if w == 255: w = 256 # special case for the planet backdrops
-    header = (w, h, total_frames, 256 * pal, memoryview(strip)[4:])
+    header = decode_strip_header(strip)
     _strip_header_cache[id(strip)] = (strip,) + header
     return header
 
@@ -412,7 +419,6 @@ def render_tilemap(pixels, column, tilemap):
     tile_h = tilemap["tile_height"]
     if w != tile_w or h != tile_h:
         return
-    total_frames = total_frames or 1
 
     map_columns = tilemap["columns"]
     map_w = map_columns * tile_w

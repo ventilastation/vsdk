@@ -14,6 +14,10 @@ hardware/rotor/micropython
 
 # Generated artifacts
 apps/micropython/roms/*.rom
+# Built by tools/generate_web_runtime_bundle.py on every run and publish
+web/runtime-bundle.json
+web/runtime-manifest.json
+web/runtime-*.json.tmp
 *.mp3.wav
 
 # Game packages pushed from the editor (see emulator/package_manager.py)
@@ -45,3 +49,7 @@ Thumbs.db
 dist/*
 apps/micropython/sencom.hi
 apps/micropython/saves/
+
+# Documentation build output and isolated environment
+docs/_build/
+.venv-docs/

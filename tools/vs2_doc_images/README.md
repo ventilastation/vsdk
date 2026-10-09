@@ -70,11 +70,10 @@ desktop browser install does), and a checkout of this repository.
 
 1. **Build what the browser runs.** The emulator runs the Python in
    `web/runtime-bundle.json`, and the ROMs it contains were built from the games'
-   PNGs, so regenerate both from the current tree first:
+   PNGs, so bring both up to date with the current tree first:
 
    ```sh
-   make generate-roms        # needs Python 3.12+ with Pillow, numpy and PyYAML
-   make web-runtime-bundle
+   make web-runtime-bundle   # needs Pillow, numpy and PyYAML
    ```
 
    Skipping this shows the old runtime. The tutorial game, in particular, needs the

@@ -29,11 +29,10 @@ time:
 The finished game is in `games/demos/tutorial_game/`, and it shows up in the
 **Tech Demos** menu. If you get stuck, compare your file with it.
 
-You need the emulator installed — see the setup guide for
-[Linux](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.Linux.md),
-[macOS](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.macOS.md) or
-[Windows](https://github.com/ventilastation/vsdk/blob/main/docs/emulator-setup.Windows.md)
-— and no hardware at all until the last chapter.
+[Set up the desktop emulator](../../guides/desktop.md) before chapter 1.
+No hardware is needed to create and test the game; chapter 7 explains what
+must be checked on the real disc. Keep your game files in a local SDK checkout
+and run them with the desktop emulator as you work through the tutorial.
 
 ```{toctree}
 :hidden:
@@ -80,9 +79,10 @@ smooth there can still stutter on the disc. Chapter 7 says what to watch for.
 ## What you are writing for
 
 The Ventilastation display is a bar of 54 {term}`LEDs <LED>` on a spinning arm.
-There is no framebuffer: the renderer is asked, 256 times per {term}`rotation`,
-"what colour is each of these 54 LEDs at this angle?" and it answers by walking
-your scene.
+The physical output serves 256 LED columns per {term}`rotation`. The current
+renderer projects the scene into two polar framebuffers and serves the ready
+columns independently of game updates. Your game works in circular coordinates,
+not with the physical LED timing.
 
 That means the display is a **disc**, not a rectangle: X is an angle that
 wraps around, and Y is a distance inward from the rim that does not. Chapter 2

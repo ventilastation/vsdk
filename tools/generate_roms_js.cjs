@@ -9,7 +9,13 @@ const ROOT_DIR = path.resolve(__dirname, "..");
 const GAMES_ROOT = path.join(ROOT_DIR, "games");
 const SYSTEM_ROOT = path.join(ROOT_DIR, "system");
 const SEARCH_ROOTS = [GAMES_ROOT, SYSTEM_ROOT];
-const ROMS_FOLDER = path.join(ROOT_DIR, "apps", "micropython", "roms");
+// Usage: generate_roms_js.cjs [--force] [--out DIR] [IMAGES_FOLDER]
+// --out writes the ROMs somewhere other than apps/micropython/roms (the
+// builder parity test uses it).
+const OUT_INDEX = process.argv.indexOf("--out");
+const ROMS_FOLDER = OUT_INDEX >= 0
+  ? path.resolve(process.cwd(), process.argv[OUT_INDEX + 1])
+  : path.join(ROOT_DIR, "apps", "micropython", "roms");
 const STRIPEDEF_FILENAME = "__images__.yaml";
 
 function walkDirectories(rootFolder) {
@@ -94,6 +100,11 @@ function expandGameMenuStrips(folder) {
   return items;
 }
 
+// The builder's own sources are inputs too: a change to the format they
+// write must rebuild every ROM, or the old bytes stay on disk looking current.
+const GENERATOR_SOURCES = [__filename, require.resolve("../web/rom-builder-core.js")];
+const FORCE = process.argv.includes("--force");
+
 async function generateRomForFolder(folder) {
   const stripedefPath = path.join(folder, STRIPEDEF_FILENAME);
   const romName = romNameForFolder(folder);
@@ -101,7 +112,7 @@ async function generateRomForFolder(folder) {
   const stripedefsYaml = fs.readFileSync(stripedefPath, "utf8");
   const palettegroups = romBuilder.parseStripedefsYaml(stripedefsYaml);
 
-  const inputFilenames = [stripedefPath];
+  const inputFilenames = [stripedefPath, ...GENERATOR_SOURCES];
   for (const group of palettegroups) {
     for (const item of group.items) {
       if (item.kind === "game_menu_strips") {
@@ -114,7 +125,7 @@ async function generateRomForFolder(folder) {
     }
   }
 
-  if (fs.existsSync(romFilename)) {
+  if (!FORCE && fs.existsSync(romFilename)) {
     const romTimestamp = fs.statSync(romFilename).mtimeMs;
     const needsRebuild = inputFilenames.some((filename) => fs.statSync(filename).mtimeMs > romTimestamp);
     if (!needsRebuild) {
@@ -134,8 +145,10 @@ async function generateRomForFolder(folder) {
 }
 
 async function main() {
-  const targetFolder = process.argv[2]
-    ? path.resolve(process.cwd(), process.argv[2])
+  const folderArgument = process.argv.slice(2).find(
+    (arg, index, args) => arg !== "--force" && arg !== "--out" && args[index - 1] !== "--out");
+  const targetFolder = folderArgument
+    ? path.resolve(process.cwd(), folderArgument)
     : null;
 
   if (targetFolder) {

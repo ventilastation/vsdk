@@ -1,0 +1,138 @@
+{
+  "preglyph.rom": [
+    {
+      "name": "warning.png",
+      "source_rom": "vsjam-oct25.2bam_sencom.rom",
+      "exercises": "width byte 255 that means 255",
+      "width": 255,
+      "height": 8,
+      "frames": 1,
+      "glyphs": "",
+      "pixels_sha256": "6a108749b73ebc6e33e93c37275347b2d591bc772aa3e8b3276986694250af72"
+    },
+    {
+      "name": "limite.png",
+      "source_rom": "vsjam-may25.vailableextreme.rom",
+      "exercises": "width byte 255 that means 256 (full circle)",
+      "width": 256,
+      "height": 3,
+      "frames": 1,
+      "glyphs": "",
+      "pixels_sha256": "588d18594b9b7ea27cde3b7d9f146add24bdd796037b11944b22d354ab7a9777"
+    },
+    {
+      "name": "horizon8x8.png",
+      "source_rom": "vsjam-may25.vasura_espacial.rom",
+      "exercises": "256-glyph font clamped to frames byte 255",
+      "width": 8,
+      "height": 8,
+      "frames": 256,
+      "glyphs": "",
+      "pixels_sha256": "94ac86396da839da06d74f002398f0ec82779e5242176930b8578151af44c0a6"
+    },
+    {
+      "name": "tinyfont_menu.png",
+      "source_rom": "menu.rom",
+      "exercises": "genuine 255 frames",
+      "width": 4,
+      "height": 6,
+      "frames": 255,
+      "glyphs": "",
+      "pixels_sha256": "9fac06c194fa9a32724970b083f055ffe655df55043b9a79d30e3387c9a7b2ea"
+    },
+    {
+      "name": "red_numerals.png",
+      "source_rom": "vsjam-may25.vs.rom",
+      "exercises": "sheet with leftover columns",
+      "width": 4,
+      "height": 5,
+      "frames": 10,
+      "glyphs": "",
+      "pixels_sha256": "d24433a3349681b12c6fbebb33ce5f926193ad8f7163f424550ad678b3b6da9e"
+    },
+    {
+      "name": "misil.png",
+      "source_rom": "vsjam-oct25.dome_defander.rom",
+      "exercises": "plain strip",
+      "width": 1,
+      "height": 4,
+      "frames": 1,
+      "glyphs": "",
+      "pixels_sha256": "fa5d25dc3527f778c1dfcf8911161ce8ecef31c1d08a6df57f90fe96783e19f7"
+    }
+  ],
+  "preswitch.rom": [
+    {
+      "name": "warning.png",
+      "source_rom": "vsjam-oct25.2bam_sencom.rom",
+      "exercises": "width byte 255 that means 255",
+      "width": 255,
+      "height": 8,
+      "frames": 1,
+      "glyphs": "",
+      "pixels_sha256": "6a108749b73ebc6e33e93c37275347b2d591bc772aa3e8b3276986694250af72"
+    },
+    {
+      "name": "limite.png",
+      "source_rom": "vsjam-may25.vailableextreme.rom",
+      "exercises": "width byte 255 that means 256 (full circle)",
+      "width": 256,
+      "height": 3,
+      "frames": 1,
+      "glyphs": "",
+      "pixels_sha256": "588d18594b9b7ea27cde3b7d9f146add24bdd796037b11944b22d354ab7a9777"
+    },
+    {
+      "name": "tinyfont_red.png",
+      "source_rom": "other.rom",
+      "exercises": "256-glyph font clamped to frames byte 255",
+      "width": 4,
+      "height": 6,
+      "frames": 256,
+      "glyphs": "",
+      "pixels_sha256": "28047086ddaac71f748ef34c282f41d935fdeb9b3a2b14a4d8a47c705e7614b2"
+    },
+    {
+      "name": "tinyfont_menu.png",
+      "source_rom": "menu.rom",
+      "exercises": "genuine 255 frames",
+      "width": 4,
+      "height": 6,
+      "frames": 255,
+      "glyphs": "",
+      "pixels_sha256": "9fac06c194fa9a32724970b083f055ffe655df55043b9a79d30e3387c9a7b2ea"
+    },
+    {
+      "name": "numerals.png",
+      "source_rom": "alecu.vyruss_vs2.rom",
+      "exercises": "glyph table",
+      "width": 4,
+      "height": 5,
+      "frames": 12,
+      "glyphs": "0123456789 *",
+      "pixels_sha256": "98ce43779a8588c250f8637d5d134769e70b92a35e0075073447bfb6fd579a0b"
+    },
+    {
+      "name": "misil.png",
+      "source_rom": "vsjam-oct25.dome_defander.rom",
+      "exercises": "plain strip",
+      "width": 1,
+      "height": 4,
+      "frames": 1,
+      "glyphs": "",
+      "pixels_sha256": "fa5d25dc3527f778c1dfcf8911161ce8ecef31c1d08a6df57f90fe96783e19f7"
+    }
+  ],
+  "preswitch-menu-icon.rom": [
+    {
+      "name": "demos/tutorial_game/menu.png",
+      "source_rom": "generate_menu_icon_rom(games/demos/tutorial_game)",
+      "exercises": "a game package's menu icon",
+      "width": 64,
+      "height": 30,
+      "frames": 1,
+      "glyphs": "",
+      "pixels_sha256": "fcb67183926de4cdb58a112034e6208df29d168b09522f206bf065fdb8d56d11"
+    }
+  ]
+}

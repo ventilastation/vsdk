@@ -13,11 +13,11 @@ palettegroups:
     - strip: sdren.png
       frames: 10
     - strip: red_numerals.png
-      frames: 10
+      frames: 12
     - strip: yellow_numerals.png
-      frames: 10
+      frames: 12
     - strip: white_numerals.png
-      frames: 10
+      frames: 12
     - strip: levels.png
       frames: 4
     - strip: road.png

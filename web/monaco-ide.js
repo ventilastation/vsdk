@@ -1,3 +1,4 @@
+import { createGameFiles } from "./game-starter.js?v=dev";
 import { EmbeddedPiskelEditor } from "./piskel-embed.js?v=20260622d";
 import {
   buildPackageForGame,
@@ -1206,26 +1207,10 @@ class WorkspaceIde {
       throw new Error(`Game ${info.key} already exists.`);
     }
     const mainPath = `${info.key}/code/${info.slug}.py`;
-    const imagesManifestPath = `${info.key}/images/__images__.yaml`;
     const className = slugToIdentifier(info.slug);
-    const gameSource = [
-      "from ventilastation.scene import Scene",
-      "",
-      "",
-      `class ${className}(Scene):`,
-      `    stripes_rom = "${info.group}.${info.slug}"`,
-      "",
-      "    def step(self):",
-      "        pass",
-      "",
-      "",
-      "def main():",
-      `    return ${className}()`,
-      "",
-    ].join("\n");
-    await this.api.writeProjectFile(mainPath, gameSource, "utf8");
-    await this.api.writeProjectFile(imagesManifestPath, "palettegroups:\n  palette1: []\n", "utf8");
-    await this.api.writeProjectFile(`${info.key}/sounds/.gitkeep`, "", "utf8");
+    for (const [path, content] of Object.entries(createGameFiles(info, className))) {
+      await this.api.writeProjectFile(path, content, "utf8");
+    }
     this.currentGameKey = info.key;
     await this.refreshFiles();
     await this.openFile(mainPath);

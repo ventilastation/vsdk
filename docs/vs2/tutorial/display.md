@@ -107,8 +107,7 @@ hud_label.y = 1                      # near the rim, where text is legible
 ```
 
 {py:data}`vs2.display.width` and {py:data}`vs2.display.height` come from the
-same generated target definition the renderer, the emulator and the tests all
-use. Writing `% 256` works today but silently breaks on any future display.
+paired Python and C geometry definitions, maintained together in the SDK. Writing `% 256` works today but silently breaks on any future display.
 
 ## Draw order
 

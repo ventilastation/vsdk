@@ -10,6 +10,38 @@
   const MAX_COLORS = 255;
   const TRANSPARENT_INDEX = 255;
   const ANGLES = 256;
+  // Strip header limits, as in apps/micropython/ventilastation/romformat.py.
+  const MAX_FRAME_WIDTH = 256;
+  const MAX_FRAMES = 256;
+  const MAX_IMAGE_STRIPS = 100;
+
+  // A strip's 4 header bytes: width and frame count run 1..256 and are
+  // stored minus one; height is stored as is (docs/internals/rom-format.md).
+  function encodeStripHeader(width, height, frames, palette) {
+    return Uint8Array.from([width - 1, height, frames - 1, palette]);
+  }
+
+  // The width of one frame, or an error naming the file for an image no
+  // strip header can describe exactly. Mirrors frame_width() in
+  // tools/generate_roms.py.
+  function frameWidth(item, image) {
+    const where = item.filename;
+    const frames = item.frames;
+    if (!Number.isInteger(frames) || frames < 1 || frames > MAX_FRAMES) {
+      throw new Error(`${where} declares ${frames} frames; a strip holds 1 to ${MAX_FRAMES}`);
+    }
+    if (image.width % frames !== 0) {
+      throw new Error(`${where} is ${image.width} px wide, which doesn't divide into ${frames} equal frames`);
+    }
+    const width = image.width / frames;
+    if (width > MAX_FRAME_WIDTH) {
+      throw new Error(`${where} has ${width} px wide frames; at most ${MAX_FRAME_WIDTH} fit around the display`);
+    }
+    if (image.height < 1 || image.height > 255) {
+      throw new Error(`${where} is ${image.height} px tall; strips are 1 to 255 px tall`);
+    }
+    return width;
+  }
 
   function countIndentation(line) {
     let count = 0;
@@ -614,6 +646,7 @@
 
     const romStrips = [];
     const palettes = [];
+    const stripIds = new Set();
 
     for (let paletteIndex = 0; paletteIndex < palettegroups.length; paletteIndex += 1) {
       const group = palettegroups[paletteIndex];
@@ -682,10 +715,16 @@
       palettes.push(encodePaletteBytes(quantized.palette));
 
       for (const entry of loadedImages) {
-        const frames = Math.min(entry.item.frames, 255);
-        const stripWidth = Math.trunc(entry.image.width / frames);
-        const encodedWidth = Math.min(stripWidth, 255);
-        const encodedHeight = Math.min(entry.image.height, 255);
+        const frames = entry.item.frames;
+        const width = frameWidth(entry.item, entry.image);
+        const filename = entry.item.id || entry.item.filename.split("/").pop();
+        if (stripIds.has(filename)) {
+          throw new Error(`duplicate image id ${filename}`);
+        }
+        stripIds.add(filename);
+        if (romStrips.length >= MAX_IMAGE_STRIPS) {
+          throw new Error(`${romStrips.length + 1} images; a ROM holds at most ${MAX_IMAGE_STRIPS}`);
+        }
         const crop = extractPalettedCrop(
           quantized.indices,
           workspaceWidth,
@@ -696,15 +735,9 @@
         );
         applyTransparencyMask(crop, entry.image);
         const rotated = rotate270Paletted(crop, entry.image.width, entry.image.height);
-        const attrs = Uint8Array.from([
-          encodedWidth,
-          encodedHeight,
-          frames,
-          paletteIndex,
-        ]);
-        const filename = entry.item.id || entry.item.filename.split("/").pop();
-        // The optional glyph table trails the pixel data: a little-endian
-        // u16 length and that many UTF-8 bytes, zero-length when the strip
+        const attrs = encodeStripHeader(width, entry.image.height, frames, paletteIndex);
+        // Every record ends with the glyph table: a little-endian u16
+        // length and that many UTF-8 bytes, zero-length when the strip
         // declares none. tools/generate_roms.py writes the same trailer.
         const glyphBytes = new TextEncoder().encode(entry.item.glyphs || "");
         const glyphLength = new Uint8Array(2);
@@ -758,8 +791,12 @@
     ANGLES,
     DEFAULT_FULLSCREEN_RADIUS,
     MAX_COLORS,
+    MAX_FRAMES,
+    MAX_FRAME_WIDTH,
+    MAX_IMAGE_STRIPS,
     TRANSPARENT_INDEX,
     buildRom,
+    encodeStripHeader,
     cloneRgbaImage,
     parseStripedefsYaml,
     quantizeRgbaImage,

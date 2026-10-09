@@ -65,8 +65,9 @@ in `~/.config/vsdk/remote-workbench/logs/`.
 
 ## Outcome and constraints
 
-- GitHub Pages hosts the existing static client at
-  `https://ventilastation.protocultura.net/emulator/?remote=1`.
+- The existing static client selects remote-workbench mode with `?remote=1`.
+  Public browser onboarding is currently paused; new game developers should
+  [use the desktop emulator](../guides/desktop.md).
 - The workbench gateway owns USB serial and is the sole UDP telemetry client
   for the board on port 5005.
 - A small Google Cloud VPS terminates HTTPS and Google OAuth. FRP exposes only

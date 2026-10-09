@@ -1,4 +1,4 @@
-# Ventilastation VS2
+# Ventilastation API
 
 VS2 is the API for writing Ventilastation games in MicroPython. A game
 creates what it wants to draw once, in `build()`, and then moves those things
@@ -41,6 +41,11 @@ The back button and the idle timeout return to the launcher on their own, so
 the game needs no exit code.
 
 ## Start here
+
+First, [set up the desktop emulator](../guides/desktop.md). The
+[assets and sharing guide](../guides/assets-and-sharing.md) covers menu metadata
+and contributing your game.
+
 
 **[Tutorial](tutorial/index.md)** — seven short chapters that build a game from
 an empty folder: the circular display, sprites and pools, tilemaps and text,

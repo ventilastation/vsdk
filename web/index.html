@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ventilastation Emulator</title>
   <link rel="icon" type="image/png" href="./logo.png">
-  <link rel="stylesheet" href="./styles.css?v=20261005a">
+  <link rel="stylesheet" href="./styles.css?v=20261003b">
 </head>
 <body>
   <main class="app-shell">
@@ -44,7 +44,8 @@
               <button type="button" id="editor-new-stripe-button" disabled>New Image Stripe</button>
             </div>
             <div class="editor-create-help" id="editor-create-help" aria-live="polite">
-              Select a game to add files and image strips.
+              Select a game to add files and image strips. New games use VS2.
+              <a href="https://ventilastation.protocultura.net/docs/vs2/tutorial/first-game.html" target="_blank" rel="noopener">First-game tutorial</a>
             </div>
           </section>
         </div>
@@ -82,19 +83,19 @@
     <section class="stage-panel">
       <div class="stage-toolbar">
         <div class="stage-primary-actions">
-          <button type="button" class="stage-control-button" id="toggle-editor-button" aria-pressed="false">Editor</button>
+          <button type="button" class="stage-control-button" id="toggle-editor-button" aria-pressed="false" hidden>Editor</button>
           <button type="button" class="stage-control-button" id="toggle-inspector-button" aria-expanded="false">Options</button>
-          <button type="button" class="stage-control-button" id="remote-connect-button">Connect board</button>
+          <button type="button" class="stage-control-button" id="remote-connect-button" hidden>Connect board</button>
           <button type="button" class="stage-control-button" id="remote-control-button" hidden>Request control</button>
           <button type="button" class="stage-control-button" id="remote-reset-button" hidden>Reset board</button>
           <label class="remote-rpm-control" id="remote-rpm-control" hidden>RPM <input type="range" id="remote-rpm" min="0" max="700" value="600"></label>
-          <span class="remote-status" id="remote-status" aria-live="polite">Local emulator</span>
+          <span class="remote-status" id="remote-status" aria-live="polite" hidden>Local emulator</span>
         </div>
       </div>
       <div class="stage-display">
         <canvas id="frame-canvas-gl" width="768" height="768"></canvas>
         <canvas id="frame-canvas-2d" width="768" height="768" hidden></canvas>
-        <aside class="base-preview" id="base-preview" aria-label="Base controls preview">
+        <aside class="base-preview" id="base-preview" aria-label="Base controls preview" hidden>
           <span class="base-preview-strip" id="base-preview-strip" aria-hidden="true"></span>
           <span class="base-preview-dial" id="base-preview-dial" aria-hidden="true">
             <span class="base-preview-dial-copy">SUPER<br>VENTILAGON</span>
