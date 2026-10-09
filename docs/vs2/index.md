@@ -42,8 +42,7 @@ the game needs no exit code.
 
 ## Start here
 
-First, [set up the desktop emulator](../guides/desktop.md), or
-[try editing in the browser](../guides/browser.md). The
+First, [set up the desktop emulator](../guides/desktop.md). The
 [assets and sharing guide](../guides/assets-and-sharing.md) covers menu metadata
 and contributing your game.
 

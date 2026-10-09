@@ -31,8 +31,8 @@ The finished game is in `games/demos/tutorial_game/`, and it shows up in the
 
 [Set up the desktop emulator](../../guides/desktop.md) before chapter 1.
 No hardware is needed to create and test the game; chapter 7 explains what
-must be checked on the real disc. You can also [try the browser](../../guides/browser.md)
-first, with its session-only workspace.
+must be checked on the real disc. Keep your game files in a local SDK checkout
+and run them with the desktop emulator as you work through the tutorial.
 
 ```{toctree}
 :hidden:

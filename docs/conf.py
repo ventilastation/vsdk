@@ -105,5 +105,4 @@ from sphinx_support import setup
 html_baseurl = os.environ.get("VSDK_DOCS_BASEURL", "")
 html_theme_options["footer_icons"] = [
     {"name": "Website", "url": "https://ventilastation.protocultura.net/", "html": "Website", "class": ""},
-    {"name": "Browser emulator", "url": "https://ventilastation.protocultura.net/emulator/", "html": "Play", "class": ""},
 ]

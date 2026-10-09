@@ -22,7 +22,10 @@ Existing runtime CI continues to exercise tutorial steps and the finished game.
 
 ## Keep one clear route
 
-- Start new developers at setup and the VS2 first-game chapter.
+- Start new developers at desktop setup and the VS2 first-game chapter.
+- Browser onboarding is currently hidden: keep its launch links out of the
+  website and documentation. The former browser guide redirects to desktop setup;
+  engineering references remain under internals for maintenance.
 - Update exact API behavior in docstrings and its teaching page together.
 - Keep operational/engineering details under internals, outside the tutorial.
 - Mark obsolete API prose at its entrance and keep it out of search results.

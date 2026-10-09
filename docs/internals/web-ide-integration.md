@@ -2,7 +2,8 @@
 
 **Status:** implemented browser workspace/editor integration. The source of truth
 is `web/app.js`, `web/micropython-bridge.js`, and `web/wasm-worker.js`.
-For visitors, use the [browser guide](../guides/browser.md).
+Public browser onboarding is currently paused. New game developers should
+[set up the desktop emulator](../guides/desktop.md).
 
 ## Host API
 

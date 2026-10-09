@@ -7,7 +7,7 @@ Ventilastation is an open source electromechanical console for circular games, b
 
 ## Start here
 
-- **[Play and edit in the browser](https://ventilastation.protocultura.net/emulator/)** — no installation.
+- **[Set up the desktop emulator](docs/guides/desktop.md)** — develop and test games on your computer.
 - **[Make your first VS2 game](https://ventilastation.protocultura.net/docs/vs2/tutorial/first-game.html)** — start with [desktop setup](docs/guides/desktop.md), then build a game through seven chapters.
 - **[API reference](https://ventilastation.protocultura.net/docs/vs2/reference/index.html)** — current VS2, generated from code.
 - **[SDK and hardware internals](docs/internals/README.md)** — runtime, emulators, firmware and protocols; see [AGENTS.md](AGENTS.md) for working rules.

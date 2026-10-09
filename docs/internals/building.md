@@ -1,8 +1,8 @@
 # Building Ventilastation firmware
 
 This covers building and flashing the ESP32-S3 firmware images. For the
-desktop/web emulators (no hardware needed) see the setup guides in
-[documentation](../README.md) instead.
+desktop emulator (no hardware needed), see
+[desktop setup](../guides/desktop.md) instead.
 
 ## Prerequisites
 

@@ -35,9 +35,13 @@ def check(output):
     for path, page in pages.items():
         for link in page.links:
             parsed = urlsplit(link)
+            if parsed.path == '/emulator/' or parsed.path.endswith('/guides/browser.html'):
+                errors.append(f'{path.relative_to(output)}: hidden browser launch link {link}')
             if parsed.scheme or parsed.netloc:
                 continue
             target = (path.parent / unquote(parsed.path)).resolve() if parsed.path else path
+            if target == output / 'guides/browser.html':
+                errors.append(f'{path.relative_to(output)}: hidden browser guide link {link}')
             if target.is_dir():
                 target /= 'index.html'
             if not target.is_file():

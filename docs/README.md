@@ -9,7 +9,6 @@ nosearch: true
 
 - [Published documentation](https://ventilastation.protocultura.net/docs/)
 - [Documentation home source](index.md)
-- [Browser emulator](https://ventilastation.protocultura.net/emulator/)
 - [VS2 tutorial source](vs2/tutorial/index.md) and [API reference source](vs2/reference/index.md)
 - [Assets, menu and sharing](guides/assets-and-sharing.md)
 - [SDK/hardware internals](internals/README.md)

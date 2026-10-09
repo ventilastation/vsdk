@@ -16,6 +16,7 @@ VS2_PAGES = (
 )
 REDIRECTS = {name: 'vs2/' + name for name in VS2_PAGES}
 REDIRECTS.update({
+    'guides/browser': 'guides/desktop',
     'vs2-api-rework-proposal': 'internals/vs2-decisions',
     'internals/vs2-api-plan': 'internals/vs2-decisions',
     'ota-upgrade-plan': 'internals/ota',
