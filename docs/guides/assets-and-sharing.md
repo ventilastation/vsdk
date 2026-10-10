@@ -63,5 +63,7 @@ request against `ventilastation/vsdk`. Preserve asset credits. If the game needs
 an SDK change, discuss it in an issue or submit that change separately.
 
 Current examples: `games/demos/tutorial_game` follows the tutorial;
+`games/demos/dream_garden` demonstrates shared slow time and cooperative play
+with bounded seed and flower pools;
 `games/demos/input_demo` demonstrates controls; `games/alecu/vyruss_vs2` is a
 larger game. The similarly named `games/alecu/vyruss` uses the obsolete V1 API.
