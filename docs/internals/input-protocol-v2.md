@@ -158,6 +158,12 @@ until the first valid frame starter arrives:
 The 256-byte cap on command accumulation prevents a lost connection
 mid-command from blocking the state machine indefinitely.
 
+Commands are ASCII. A command line holding any byte with bit 7 set can
+only be line noise, so the receiver discards the whole line rather than
+decoding it (MicroPython's `decode()` raises on such bytes instead of
+replacing them). The MicroPython parser counts these lines, and the
+overlong ones, in `dropped_nonascii` / `dropped_overlong`.
+
 ---
 
 ## RESYNC / Device Identification
@@ -252,6 +258,7 @@ registry.
 | `povperf status` | — | Report the opt-in GPU-task profiler's current scene, encoder, timing, deadline, and skipped-column counters. |
 | `povperf start` / `stop` / `reset` | — | Begin a fresh timing window, stop collection, or discard the current samples. Profiling state is RAM-only. |
 | `povperf mode` | `legacy\|calibrated` | Select the legacy intensity-table or calibrated color encoder for an A/B timing run, then reset the timing window. This does not alter NVS or the saved profile. |
+| `serialtest_*` | see [serial-stress-test.md](serial-stress-test.md#protocol) | Serial stress test traffic. Not handled by the director: it reaches the Serial Stress app through the scene `on_command` hook, and is logged as unknown anywhere else. |
 
 Wire examples:
 

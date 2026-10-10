@@ -44,7 +44,10 @@ def receive(bufsize):
             print("comms: new connection from", addr)
         else:
             try:
-                chunk = obj.read(64)
+                # As much as serialcomms takes per tick on the rotor (three
+                # 64-byte drains), so the desktop runtime keeps up with the
+                # same input rates as the hardware.
+                chunk = obj.read(192)
             except OSError:
                 chunk = None
             if chunk:
@@ -65,6 +68,16 @@ def next_joy2():
 
 def next_extra():
     return _parser.extra
+
+def link_stats(reset=False):
+    """Same shape as serialcomms.link_stats(); a socket has no receive
+    buffer the main loop can overrun, so those fields are None."""
+    return {
+        "rx_hwm": None,
+        "rx_buf": None,
+        "nonascii": _parser.dropped_nonascii,
+        "overlong": _parser.dropped_overlong,
+    }
 
 def _drop_conn(reason):
     global conn

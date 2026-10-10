@@ -50,6 +50,9 @@ shape and the rules that keep biting.
   protocol for MicroPython, Retro-Go, the workbench, and the desktop preview.
 - **[emulator-audio.md](emulator-audio.md)** — streaming console
   sound-chip register writes to the host synth (`emulator/chipsynth`).
+- **[serial-stress-test.md](serial-stress-test.md)** — measuring the
+  base↔rotor serial link: the Serial Stress app, `tools/serial_stress.py`,
+  loopback tests, and how to tell wire errors from software overruns.
 - **[ota.md](ota.md)** — the three-tier OTA update system.
 - **[game-packages.md](game-packages.md)** — .vs2 game packages: editor/CLI
   build, push to the base, single-file board install, menu rom merging.
