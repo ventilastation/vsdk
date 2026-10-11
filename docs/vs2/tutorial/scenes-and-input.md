@@ -81,30 +81,10 @@ Pending timers are discarded when the scene is popped or suspended under a
 `push`, because the drawables they would touch are gone. Use timers for
 occasional events — menus, respawn delays, wave timers — not every tick.
 
-## Back button and idle timeout
+## Return to the launcher
 
-Every scene handles both by default. Set these class attributes to change
-that:
-
-```python
-class MyGame(vs2.Scene):
-    idle_timeout = 30      # seconds without input; None disables
-    back_button = True     # Y or BACK pops the scene
-```
-
-**The back button.** `Y` or `BACK` pops the scene. A game that wants those
-buttons for play sets `back_button = False` and stays exitable through the idle
-timeout and the console's home command.
-
-**The idle timeout.** After `idle_timeout` seconds with no input from *either*
-controller, {py:meth}`~vs2.Scene.on_idle` fires. Its default pops the scene, so
-an unattended machine walks back out to the attract loop on its own. Override it
-for something better:
-
-```python
-def on_idle(self):
-    self.push(AttractSlideshow())
-```
+By default, `Y` or `BACK` on either controller pops the scene. Keep this
+standard exit available to players.
 
 ## In the game
 

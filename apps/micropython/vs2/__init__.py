@@ -853,7 +853,9 @@ class Scene(_Scene):
         if self._pending_transition is not None:
             return
         if self.back_button and (controls.joy1.just_pressed(controls.Y)
-                                 or controls.joy1.just_pressed(controls.BACK)):
+                                 or controls.joy1.just_pressed(controls.BACK)
+                                 or controls.joy2.just_pressed(controls.Y)
+                                 or controls.joy2.just_pressed(controls.BACK)):
             self.pop()
             return
         if (self.idle_timeout is not None
@@ -1459,7 +1461,12 @@ class SpritePool:
         self._free = sprites
         self._live = []
         self._on_empty = on_empty
+        self._oldest = None
+        self._newest = None
         for sprite in sprites:
+            if on_empty is RECYCLE:
+                sprite._pool_older = None
+                sprite._pool_newer = None
             sprite._pool = self
 
     @property
@@ -1493,7 +1500,7 @@ class SpritePool:
         if not self._free:
             if self._on_empty is not RECYCLE:
                 return None
-            self.despawn(self._live[0])
+            self.despawn(self._oldest)
         sprite = self._free.pop()
         sprite.x = x
         sprite.y = y
@@ -1503,6 +1510,14 @@ class SpritePool:
         sprite.visible = True
         sprite._pool_live_index = len(self._live)
         self._live.append(sprite)
+        if self._on_empty is RECYCLE:
+            sprite._pool_older = self._newest
+            sprite._pool_newer = None
+            if self._newest is not None:
+                self._newest._pool_newer = sprite
+            else:
+                self._oldest = sprite
+            self._newest = sprite
         return sprite
 
     def despawn(self, sprite):
@@ -1514,6 +1529,17 @@ class SpritePool:
         """
         if getattr(sprite, "_pool", None) is not self or sprite._pool_live_index < 0:
             raise ValueError("sprite is not live in this pool")
+        if self._on_empty is RECYCLE:
+            older, newer = sprite._pool_older, sprite._pool_newer
+            if older is None:
+                self._oldest = newer
+            else:
+                older._pool_newer = newer
+            if newer is None:
+                self._newest = older
+            else:
+                newer._pool_older = older
+            sprite._pool_older = sprite._pool_newer = None
         index = sprite._pool_live_index
         tail = self._live.pop()
         if tail is not sprite:

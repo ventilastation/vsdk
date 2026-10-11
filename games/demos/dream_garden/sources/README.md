@@ -2,8 +2,10 @@
 
 The built-in image generation tool created `source-atlas.png` for this game.
 `prepare-atlas.cjs` crops its cells, swaps the two leaning poses, resizes with
-nearest-neighbour sampling and packs horizontal strips. It does not draw the
+nearest-neighbour sampling, snaps alpha to a binary mask and packs horizontal strips. It does not draw the
 artwork. Run it with Node.js and the optional `sharp` asset-preparation package.
+Install sharp at the SDK root with `npm install --no-save --package-lock=false sharp`,
+then run `node games/demos/dream_garden/sources/prepare-atlas.cjs`.
 Neither Node nor sharp is a game runtime dependency.
 
 The generated sheet contains two dream creatures, golden seeds, four flower

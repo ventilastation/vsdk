@@ -1,17 +1,19 @@
 // Asset packing only: the artwork itself comes from source-atlas.png.
-// Install sharp, then run this file from any working directory.
+// At the SDK root: npm install --no-save --package-lock=false sharp
+// Then run this file from any working directory.
 const sharp = require('sharp');
 const path = require('node:path');
 const directory = path.resolve(__dirname, '..');
 const source = path.join(__dirname, 'source-atlas.png');
 
+let atlas;
 async function frame(row, column, size, padding) {
-  const metadata = await sharp(source).metadata();
+  const metadata = atlas.info;
   const left = Math.round(column * metadata.width / 8);
   const top = Math.round(row * metadata.height / 4);
   const width = Math.round((column + 1) * metadata.width / 8) - left;
   const height = Math.round((row + 1) * metadata.height / 4) - top;
-  const { data, info } = await sharp(source).extract({left, top, width, height})
+  const { data, info } = await sharp(atlas.data, {raw: atlas.info}).extract({left, top, width, height})
     .ensureAlpha().raw().toBuffer({resolveWithObject: true});
   let x0 = width, y0 = height, x1 = 0, y1 = 0;
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -20,7 +22,8 @@ async function frame(row, column, size, padding) {
       x1 = Math.max(x1, x); y1 = Math.max(y1, y);
     }
   }
-  return sharp(source).extract({left:left+x0, top:top+y0,
+  for (let i = 3; i < data.length; i += 4) data[i] = data[i] > 96 ? 255 : 0;
+  return sharp(data, {raw: info}).extract({left:x0, top:y0,
     width:x1-x0+1, height:y1-y0+1})
     .resize(size-padding*2, size-padding*2, {fit:'contain',
       kernel:'nearest', background:'#00000000'})
@@ -37,6 +40,7 @@ async function strip(name, row, columns, size, padding=1) {
 }
 
 (async()=>{
+  atlas = await sharp(source).ensureAlpha().raw().toBuffer({resolveWithObject: true});
   // Generated lean poses face right then left, so swap them in each set.
   await strip('dreamer.png',0,[0,2,1,3,4,6,5,7],19);
   await strip('seed.png',1,[0,1,2,3],12);

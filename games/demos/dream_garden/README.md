@@ -30,9 +30,7 @@ Either player can slow seed movement, the drifting background and flower
 animation. New spawn intervals also lengthen, after the pending seed deadline.
 Flowers gradually replace the oldest ones when the garden fills up.
 
-There is no death, score, countdown or difficulty ramp. Garden and Rest scenes
-have no idle timeout, so watching is welcome. Y/Back remains available. Sound
-starts off. B stops the music and keeps the current flowers in a still garden.
+There is no death, score, countdown or difficulty ramp. Watching is welcome. Sound starts off. B stops the music and keeps the current flowers in a still garden.
 A starts a new garden from the Rest scene.
 
 ## How the example works
@@ -46,12 +44,12 @@ The second player costs one reserved sprite even before joining.
 The Garden graph uses **42 sprites, 2 tilemaps, 2 layers and 5 image strips**.
 The flower pool counts toward that cost even when its slots are hidden. The
 ground uses sparse, mostly transparent 16-pixel tiles. The HUD says DRIFT or
-REST near the top rim, with both flips so the letters read upright.
+SLOW near the top rim, with both flips so the letters read upright.
 
 The full CP437 font comes from the existing tutorial example. PNGs and YAML
 compile into a generated image ROM. MP3s stay on the emulator host or console
 base and never go into the rotor ROM. The sample follows the repository's GPLv3
-license. [Artwork sources and rebuilding](art/README.md) record the new art and
+license. [Artwork sources and rebuilding](sources/README.md) record the new art and
 original sound synthesis. The general SDK tutorial remains a separate example.
 
 ## Checks

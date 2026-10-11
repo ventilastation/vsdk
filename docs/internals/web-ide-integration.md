@@ -2,7 +2,8 @@
 
 **Status:** implemented browser workspace/editor integration. The source of truth
 is `web/app.js`, `web/micropython-bridge.js`, and `web/wasm-worker.js`.
-Public browser onboarding is currently paused. New game developers should
+The web emulator is available for playing games and presentation checkpoints.
+The editor entry remains hidden. To develop games,
 [set up the desktop emulator](../guides/desktop.md).
 
 ## Host API

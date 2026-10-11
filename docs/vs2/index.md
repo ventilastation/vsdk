@@ -37,8 +37,7 @@ def main():
     return MyGame()
 ```
 
-The back button and the idle timeout return to the launcher on their own, so
-the game needs no exit code.
+The standard back button returns to the launcher, so the game needs no exit code.
 
 ## Start here
 

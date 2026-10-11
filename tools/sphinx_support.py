@@ -15,7 +15,6 @@ VS2_PAGES = (
     'reference/services', 'reference/errors',
 )
 REDIRECTS = {name: 'vs2/' + name for name in VS2_PAGES}
-REDIRECTS['guides/browser'] = 'guides/desktop'
 
 
 def source_links(app, docname, source):
