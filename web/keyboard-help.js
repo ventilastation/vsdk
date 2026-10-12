@@ -16,7 +16,7 @@ export class KeyboardHelp {
       this.held.clear();
       this.resetKeyboard();
       button.setAttribute("aria-expanded", "false");
-      document.querySelector("#frame-canvas-gl").focus({preventScroll: true});
+      document.querySelector("#frame-canvas-gl:not([hidden]), #frame-canvas-2d:not([hidden])")?.focus({preventScroll: true});
     });
   }
 
