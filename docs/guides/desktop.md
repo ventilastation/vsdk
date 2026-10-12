@@ -87,6 +87,9 @@ Press **F1** to see the keyboard layout. Select is `BACK` in the game API;
 C and D are `X` and `Y`. Player 2 uses the numeric keypad, including its Enter
 key; the main Enter key is unassigned. The keypad works with Num Lock on or off.
 
+Either player can navigate the launcher with Up/Down and select with A.
+Select or D returns from a submenu.
+
 A USB gamepad also works. The terminal that launched the emulator shows Python
 tracebacks: keep it open when debugging. A missing PNG usually means
 `images/__images__.yaml` names a file you have not copied.

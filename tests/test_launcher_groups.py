@@ -305,6 +305,91 @@ class SetupIntegrationTests(unittest.TestCase):
 
         return patched()
 
+    def _input_tick(self, player1=0, player2=0, extra=0):
+        self.runtime_director.buttons = player1
+        self.runtime_director.buttons2 = player2
+        self.runtime_director.extra_buttons = extra
+        director.step_once()
+
+    def test_either_player_can_navigate_without_repeating_held_keys(self):
+        from vs2.controls import UP, DOWN
+        menu = self._build(HighlightsMenu(selected_index=2))
+        for player in ("player1", "player2"):
+            self._input_tick(**{player: UP})
+            self.assertEqual(menu.selected_index, 3)
+            self._input_tick(**{player: UP})
+            self.assertEqual(menu.selected_index, 3)
+            self._input_tick()
+            self._input_tick(**{player: DOWN})
+            self.assertEqual(menu.selected_index, 2)
+            self._input_tick()
+
+    def test_shared_direction_moves_once_but_each_player_has_their_own_edge(self):
+        from vs2.controls import UP
+        menu = self._build(HighlightsMenu(selected_index=2))
+        self._input_tick(player1=UP, player2=UP)
+        self.assertEqual(menu.selected_index, 3)
+        self._input_tick()
+        self._input_tick(player1=UP)
+        self.assertEqual(menu.selected_index, 4)
+        self._input_tick(player1=UP, player2=UP)
+        self.assertEqual(menu.selected_index, 5)
+        self._input_tick(player1=UP, player2=UP)
+        self.assertEqual(menu.selected_index, 5)
+
+    def test_player2_can_open_more_apps_and_a_group(self):
+        from vs2.controls import A
+        index = [entry[0] for entry in MAIN_MENU_OPTIONS].index(MORE_APPS_ID)
+        self._build(HighlightsMenu(index))
+        self._input_tick(player2=A)
+        groups = director.scene_stack[-1]
+        self.assertIsInstance(groups, GroupsMenu)
+        self._input_tick(player2=A)
+        self.assertIs(director.scene_stack[-1], groups)
+        self._input_tick()
+        group_id = group_tile_id("alecu")
+        groups.selected_index = [entry[0] for entry in groups.entries].index(group_id)
+        self._input_tick(player2=A)
+        self.assertIsInstance(director.scene_stack[-1], GroupMenu)
+        self.assertEqual(director.scene_stack[-1].group_id, group_id)
+
+    def test_player2_can_launch_a_game(self):
+        from unittest.mock import patch
+        from vs2.controls import A
+        menu = self._build(GroupMenu(group_tile_id("alecu"), "alecu.vyruss"))
+        with patch("system.launcher.code.load_app") as load:
+            self._input_tick(player2=A)
+            load.assert_called_once_with("alecu.vyruss")
+        self.assertEqual(native_apps.read_launcher_state()["slug"], "alecu.vyruss")
+
+    def test_player2_back_and_y_pop_submenus_and_clear_saved_group(self):
+        self._build(HighlightsMenu())
+        groups = self._build(GroupsMenu())
+        for extra in (0x02, 0x20):  # Player 2 Y and Back.
+            self._build(GroupMenu(group_tile_id("alecu")))
+            native_apps.write_launcher_state({"group_id": group_tile_id("alecu"),
+                                              "slug": "alecu.vyruss", "rom_path": None})
+            self._input_tick(extra=extra)
+            self.assertIs(director.scene_stack[-1], groups)
+            self.assertIsNone(native_apps.read_launcher_state()["group_id"])
+            self._input_tick()
+
+    def test_player2_back_and_y_keep_the_root_open(self):
+        root = self._build(HighlightsMenu())
+        for extra in (0x02, 0x20):
+            self._input_tick(extra=extra)
+            self.assertIs(director.scene_stack[-1], root)
+            self._input_tick()
+
+    def test_either_player_can_open_debug_without_combining_players_chords(self):
+        from vs2.controls import UP, LEFT, RIGHT, A
+        root = self._build(HighlightsMenu())
+        self.runtime_director.buttons = UP
+        self.runtime_director.buttons2 = LEFT | RIGHT | A
+        self.assertFalse(root._check_debug_combo())
+        self._input_tick(player2=UP | LEFT | RIGHT | A)
+        self.assertIsInstance(director.scene_stack[-1], DebugMenu)
+
     def test_root_menu_draws_its_backdrop_wordmark_and_byline(self):
         # Lost in the vs2 port and restored: the disc should not come up as a
         # bare list of tiles. Now HighlightsMenu's job -- GroupsMenu ("Más
