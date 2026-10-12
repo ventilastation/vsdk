@@ -162,15 +162,19 @@ The code asks a controller for its buttons: `joy1.held(LEFT)` is true while the
 left button is down. On the console players use the game controllers. In the
 desktop emulator the keyboard stands in for them:
 
-| Keys | Controller 1 |
-|---|---|
-| Arrow keys, or `W` `A` `S` `D` | `LEFT` `RIGHT` `UP` `DOWN` |
-| `Space` `O` `P` `Y` | `A` `B` `X` `Y` |
-| `Page Up` / `Page Down` | `START` / `BACK` |
+| Control | Player 1 | Player 2 |
+|---|---|---|
+| Up / Down / Left / Right | W / S / A / D | Arrow keys |
+| A / B / C / D | Space / B / N / M | Numpad 0 / 1 / 2 / 3 |
+| Select / Start | 1 / 2 | Numpad + / Enter |
 
-A USB gamepad works too. `joy2` is the second controller, on `H` `J` `K` `L`,
-`Z` `X` `C` `V`, `Home` and `End`. Chapter 6 explains how `held()` differs from
-`just_pressed()`; until then every button in the tutorial is `held()`.
+Press **F1** to see the keyboard layout. Select is `BACK` in the game API;
+C and D are `X` and `Y`. Player 2 uses the numeric keypad, including its Enter
+key; the main Enter key is unassigned. The keypad works with Num Lock on or off.
+
+A USB gamepad works too. `joy2` is the second controller. Chapter 6 explains
+how `held()` differs from `just_pressed()`; until then every button in the
+tutorial is `held()`.
 
 ## When something goes wrong
 

@@ -45,9 +45,10 @@ the emulator starts.
 ### Running
 
 `./vs-emu.sh` (or `vs-emu.bat`) regenerates ROMs and starts the desktop
-emulator. Arrow keys (or W/A/S/D) move Joy1; Space/O/P/Y are Joy1 A/B/X/Y;
-Page Up and Page Down are Start and Back. H/J/K/L plus Z/X/C/V provide Joy2,
-and Home/End are Joy2 Start/Back. A USB gamepad works too.
+emulator. W/A/S/D move Joy1; Space/B/N/M are Joy1 A/B/X/Y;
+1/2 are Back/Start. Arrows plus numpad 0/1/2/3 provide Joy2,
+and numpad +/Enter are Joy2 Back/Start. F1 shows a keyboard diagram.
+A USB gamepad works too.
 
 To start one game straight away instead of walking the menu, name it:
 `./vs-emu.sh --game myname.mygame` (group and folder, joined with a dot).

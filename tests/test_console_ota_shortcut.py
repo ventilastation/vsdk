@@ -16,6 +16,9 @@ fake_key = types.SimpleNamespace(
     PAGEUP=21, PAGEDOWN=22, HOME=23, END=24, ESCAPE=25,
     U=26, LCTRL=27, RCTRL=28, LCOMMAND=29, RCOMMAND=30, LMETA=31, RMETA=32,
     MOD_CTRL=0x100, MOD_COMMAND=0x200,
+    B=33, N=34, M=35, _1=36, _2=37,
+    NUM_0=38, NUM_1=39, NUM_2=40, NUM_3=41, NUM_ADD=42, NUM_ENTER=43,
+    NUM_INSERT=44, NUM_END=45, NUM_DOWN=46, NUM_NEXT=47,
 )
 
 _KEY_NAMES = [
@@ -24,6 +27,8 @@ _KEY_NAMES = [
     "KEY_Z", "KEY_X", "KEY_C", "KEY_V", "KEY_Y", "KEY_PAGEUP", "KEY_PAGEDOWN",
     "KEY_HOME", "KEY_END", "KEY_ESC",
     "KEY_U", "KEY_LEFTCTRL", "KEY_RIGHTCTRL", "KEY_LEFTMETA", "KEY_RIGHTMETA",
+    "KEY_B", "KEY_N", "KEY_M", "KEY_1", "KEY_2", "KEY_KP0", "KEY_KP1",
+    "KEY_KP2", "KEY_KP3", "KEY_KPPLUS", "KEY_KPENTER",
 ]
 # Real evdev keeps KEY_* below BTN_JOYSTICK (0x120); preserve that ordering so
 # evdev_keys._is_joystick_like() keeps its real meaning under the stub.
@@ -100,6 +105,23 @@ def test_evdev_table_translates_the_ota_chord():
     assert _EVDEV_TO_PYGLET[fake_ecodes.KEY_U] == fake_key.U
     assert _EVDEV_TO_PYGLET[fake_ecodes.KEY_LEFTCTRL] == fake_key.LCTRL
     assert _EVDEV_TO_PYGLET[fake_ecodes.KEY_RIGHTCTRL] == fake_key.RCTRL
+
+
+def test_evdev_gameplay_keys_reach_both_players():
+    from keyboard_layout import KEYS
+    from inputs_common import keyboard_state, keyboard_v2_state, pack_controllers
+    device = FakeDevice()
+    keys = _keyboard_with(device)
+    for entry in KEYS:
+        code = getattr(fake_ecodes, entry["evdev"])
+        device.pending = [FakeEvent(code, _DOWN)]
+        keys.poll()
+        expected = tuple(entry["bit"] if entry["channel"] == channel else 0
+                         for channel in ("joy1", "joy2", "extra"))
+        assert pack_controllers(None, None, keyboard_state(keys), keyboard_v2_state(keys))[:3] == expected, entry
+        device.pending = [FakeEvent(code, _UP)]
+        keys.poll()
+        assert pack_controllers(None, None, keyboard_state(keys), keyboard_v2_state(keys))[:3] == (0, 0, 0)
 
 
 def test_ota_chord_does_not_loosen_keyboard_detection():

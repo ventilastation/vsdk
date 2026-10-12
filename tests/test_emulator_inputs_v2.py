@@ -14,6 +14,10 @@ fake_window.key = types.SimpleNamespace(
     LCTRL="LCTRL", RCTRL="RCTRL", LCOMMAND="LCOMMAND", RCOMMAND="RCOMMAND",
     LMETA="LMETA", RMETA="RMETA",
     MOD_CTRL=0x100, MOD_COMMAND=0x200,
+    B="B", N="N", M="M", _1="_1", _2="_2",
+    NUM_0="NUM_0", NUM_1="NUM_1", NUM_2="NUM_2", NUM_3="NUM_3",
+    NUM_ADD="NUM_ADD", NUM_ENTER="NUM_ENTER", NUM_INSERT="NUM_INSERT",
+    NUM_END="NUM_END", NUM_DOWN="NUM_DOWN", NUM_NEXT="NUM_NEXT",
 )
 fake_pyglet.window = fake_window
 sys.modules.setdefault("pyglet", fake_pyglet)
@@ -29,6 +33,7 @@ from inputs_common import (  # noqa: E402
     EXTRA_JOY2_Y,
     keyboard_state,
     keyboard_v2_state,
+    KeyboardHelpGate,
     ota_shortcut_held,
     ota_shortcut_pressed,
     pack_controllers,
@@ -102,22 +107,45 @@ def test_two_controllers_give_joy2_its_own_dpad_and_faces():
 
 
 def test_keyboard_maps_all_protocol_v2_controls():
-    pressed = {
-        "LEFT", "O", "P", "Y", "PAGEUP", "PAGEDOWN",
-        "H", "J", "K", "L", "Z", "X", "C", "V", "HOME", "END",
+    expected = {
+        "W": (4, 0, 0), "S": (8, 0, 0), "A": (1, 0, 0), "D": (2, 0, 0),
+        "SPACE": (16, 0, 0), "B": (32, 0, 0), "N": (64, 0, 0), "M": (0, 0, 1),
+        "_1": (0, 0, 8), "_2": (0, 0, 4),
+        "UP": (0, 4, 0), "DOWN": (0, 8, 0), "LEFT": (0, 1, 0), "RIGHT": (0, 2, 0),
+        "NUM_0": (0, 16, 0), "NUM_1": (0, 32, 0), "NUM_2": (0, 64, 0), "NUM_3": (0, 0, 2),
+        "NUM_ADD": (0, 0, 32), "NUM_ENTER": (0, 0, 16),
+        "NUM_INSERT": (0, 16, 0), "NUM_END": (0, 32, 0),
+        "NUM_DOWN": (0, 64, 0), "NUM_NEXT": (0, 0, 2),
     }
-
     class Keys:
+        pressed = set()
         def __getitem__(self, symbol):
-            return symbol in pressed
+            return symbol in self.pressed
+    keys = Keys()
+    for symbol, wanted in expected.items():
+        keys.pressed = {symbol}
+        joy2, extra = keyboard_v2_state(keys)
+        assert pack_controllers(None, keyboard=keyboard_state(keys), keyboard_v2=(joy2, extra))[:3] == wanted, symbol
+    keys.pressed = set(expected)
+    assert pack_controllers(None, keyboard=keyboard_state(keys), keyboard_v2=keyboard_v2_state(keys))[:3] == (127, 127, 63)
+    keys.pressed = {"O", "P", "Y", "PAGEUP", "PAGEDOWN", "H", "J", "K", "L", "Z", "X", "C", "V", "HOME", "END"}
+    assert pack_controllers(None, keyboard=keyboard_state(keys), keyboard_v2=keyboard_v2_state(keys))[:3] == (0, 0, 0)
 
-    joy1 = keyboard_state(Keys())
-    joy2, extra = keyboard_v2_state(Keys())
 
-    assert joy1 == (True, False, False, False, False, True, True)
-    assert joy2 == 0x7F
-    assert extra == (EXTRA_JOY1_Y | EXTRA_JOY1_START | EXTRA_JOY1_BACK |
-                     EXTRA_JOY2_Y | EXTRA_JOY2_START | EXTRA_JOY2_BACK)
+def test_help_preview_does_not_leak_held_keys_into_gameplay():
+    class Keys:
+        pressed = {"SPACE", "NUM_ADD"}
+        def __getitem__(self, symbol):
+            return symbol in self.pressed
+    keys = Keys()
+    gate = KeyboardHelpGate()
+    assert gate.read(keys, True) == ((False,) * 7, (0, 0))
+    assert gate.read(keys, False) == ((False,) * 7, (0, 0))
+    keys.pressed = set()
+    gate.read(keys, False)
+    keys.pressed = {"SPACE", "NUM_ADD"}
+    keyboard, v2 = gate.read(keys, False)
+    assert pack_controllers(None, keyboard=keyboard, keyboard_v2=v2)[:3] == (16, 0, 32)
 
 
 def test_ota_shortcut_requires_ctrl_or_command():

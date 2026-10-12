@@ -4,13 +4,18 @@
 It runs the console’s MicroPython games in your browser, with keyboard, gamepad
 and touch controls. Pick a game from the launcher and press A to begin.
 
-| Action | Player 1 | Player 2 |
-| --- | --- | --- |
-| Left / Right | Arrow keys | H / L |
-| A | Space | Z |
-| B | O | X |
-| X | P | C |
-| Y / Back | Y / Page Down | V / End |
+| Control | Player 1 | Player 2 |
+|---|---|---|
+| Up / Down / Left / Right | W / S / A / D | Arrow keys |
+| A / B / C / D | Space / B / N / M | Numpad 0 / 1 / 2 / 3 |
+| Select / Start | 1 / 2 | Numpad + / Enter |
+
+Press **F1** to see the keyboard layout. Select is `BACK` in the game API;
+C and D are `X` and `Y`. Player 2 uses the numeric keypad, including its Enter
+key; the main Enter key is unassigned. The keypad works with Num Lock on or off.
+
+The **Keyboard · F1** button also opens help. Try keys in the overlay to light
+them up without controlling the game; press Escape or F1 to close it.
 
 The [Making games presentation](https://ventilastation.protocultura.net/presentations/making-games/)
 includes **Run this checkpoint** buttons. Each opens a complete runnable version

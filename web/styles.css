@@ -1592,3 +1592,42 @@ textarea {
     width: 100%;
   }
 }
+.keyboard-help {
+  width: min(960px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  box-sizing: border-box;
+  padding: 28px;
+  border: 1px solid #3d555a;
+  border-radius: 20px;
+  background: #101a20;
+  color: #ecf4f6;
+  overflow: auto;
+  box-shadow: 0 24px 100px #0009;
+}
+.keyboard-help::backdrop { background: #03070ccc; }
+.keyboard-help-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.keyboard-help h1 { margin: 0; font-size: 26px; }
+.keyboard-help-header p { margin: 8px 0 24px; color: #aebfc5; }
+.keyboard-help-header button { white-space: nowrap; padding: 8px 12px; }
+.keyboard-help-players { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.keyboard-player { --player-color: #87ddc4; min-width: 0; container-type: inline-size; }
+.keyboard-player-2 { --player-color: #f5afc3; }
+.keyboard-player h2 { margin: 0 0 12px; color: var(--player-color); font-size: 20px; }
+.keyboard-player small { display: block; margin-top: 6px; color: #aebfc5; font-size: 13px; font-weight: normal; }
+.keyboard-diagram { position: relative; width: 100%; }
+.keyboard-key { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; border: 1px solid var(--player-color); border-bottom-width: 3px; border-radius: 7px; background: #213039; color: #fff; }
+.keyboard-key kbd { font-family: inherit; font-size: clamp(12px, 4.2cqw, 20px); font-weight: 700; }
+.keyboard-key span { color: var(--player-color); font-size: clamp(7px, 2.3cqw, 11px); }
+.keyboard-key-long kbd { font-size: clamp(9px, 2.8cqw, 14px); }
+
+.keyboard-key-context { border-color: #40505a; color: #6f828b; background: #17232b; }
+.keyboard-key.is-held { background: var(--player-color); color: #0c1c23; box-shadow: 0 0 18px #ffffff40; }
+.keyboard-key.is-held span { color: #0c1c23; }
+.keyboard-help-footer { margin-top: 22px; font-size: 13px; line-height: 1.6; color: #aebfc5; }
+.keyboard-help-footer p { margin: 8px 0 0; }
+.keyboard-help-footer kbd { color: #ecf4f6; font-family: inherit; }
+@media (max-width: 700px) {
+  .keyboard-help { padding: 20px; }
+  .keyboard-help h1 { font-size: 22px; }
+  .keyboard-help-players { grid-template-columns: 1fr; gap: 20px; }
+}

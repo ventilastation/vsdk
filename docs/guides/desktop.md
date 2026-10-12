@@ -69,22 +69,23 @@ On Windows, with the virtual environment still active:
 vs-emu.bat --game demos.tutorial_game
 ```
 
-You should see Trench Run. Left/right arrows steer; Space is A and Page Down
-is Back. Without `--game`, the emulator opens the launcher; the finished tutorial
+You should see Trench Run. A/D steer; Space is A and 1
+is Select (Back). Without `--game`, the emulator opens the launcher; the finished tutorial
 is in **Tech Demos**. ROM generation happens automatically when sources change.
 
 **Next: [create your own game and steer a ship](../vs2/tutorial/first-game.md).**
 
 ## Controls and troubleshooting
 
-| Control | Keyboard |
-|---|---|
-| Joy1 directions | Arrow keys or W/A/S/D |
-| Joy1 A/B/X/Y | Space/O/P/Y |
-| Joy1 Start/Back | Page Up/Page Down |
-| Joy2 directions | H/J/K/L |
-| Joy2 A/B/X/Y | Z/X/C/V |
-| Joy2 Start/Back | Home/End |
+| Control | Player 1 | Player 2 |
+|---|---|---|
+| Up / Down / Left / Right | W / S / A / D | Arrow keys |
+| A / B / C / D | Space / B / N / M | Numpad 0 / 1 / 2 / 3 |
+| Select / Start | 1 / 2 | Numpad + / Enter |
+
+Press **F1** to see the keyboard layout. Select is `BACK` in the game API;
+C and D are `X` and `Y`. Player 2 uses the numeric keypad, including its Enter
+key; the main Enter key is unassigned. The keypad works with Num Lock on or off.
 
 A USB gamepad also works. The terminal that launched the emulator shows Python
 tracebacks: keep it open when debugging. A missing PNG usually means

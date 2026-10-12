@@ -6,6 +6,21 @@ final joy1/joy2/extra bitmasks (bit layout matches Director.JOY_*/BUTTON_*).
 """
 
 from pyglet.window import key
+from keyboard_layout import KEYS
+
+KEYBOARD_BINDINGS = [
+    (tuple(getattr(key, name) for name in [entry["symbol"]] + entry.get("aliases", [])),
+     entry["channel"], entry["bit"])
+    for entry in KEYS
+]
+
+
+def _keyboard_channel(keys, channel):
+    value = 0
+    for symbols, target, bit in KEYBOARD_BINDINGS:
+        if target == channel and any(keys[symbol] for symbol in symbols):
+            value |= bit
+    return value
 
 try:
     # Physical buttons on the Super Ventilagon base (Raspberry Pi GPIO).
@@ -30,18 +45,12 @@ except ImportError:
 def keyboard_state(keys):
     """Return Joy1's first seven input bits from the keyboard and base GPIO.
 
-    Page Up and Page Down deliberately do not appear here: protocol v2 uses
-    them for Joy1 Start and Back in ``keyboard_v2_state()``.
+    D, Select and Start live in the extra byte in ``keyboard_v2_state()``.
     """
-    return (
-        keys[key.LEFT] or keys[key.A] or base_button_left(),
-        keys[key.RIGHT] or keys[key.D] or base_button_right(),
-        keys[key.UP] or keys[key.W],
-        keys[key.DOWN] or keys[key.S],
-        keys[key.SPACE],
-        keys[key.O],
-        keys[key.P],
-    )
+    joy1 = _keyboard_channel(keys, "joy1")
+    return (bool(joy1 & 1) or base_button_left(),
+            bool(joy1 & 2) or base_button_right(),
+            *(bool(joy1 & bit) for bit in (4, 8, 16, 32, 64)))
 
 
 def pack_input(left, right, up, down, boton, accel, decel, reset):
@@ -65,24 +74,26 @@ EXTRA_JOY2_BACK  = 0x20
 def keyboard_v2_state(keys):
     """Return (joy2, extra) for keyboard-only Input Protocol v2 controls.
 
-    The layout keeps Joy1 close to the existing desktop controls while using
-    the familiar H/J/K/L cursor cluster and Z/X/C/V face-button cluster for
-    Joy2. Home/End provide Joy2 Start/Back without colliding with Joy1's
-    Page Up/Page Down controls.
+    Joy1 uses WASD and Space/B/N/M with 1/2 for Select/Start. Joy2 uses
+    arrows and numpad 0/1/2/3 with numpad +/Enter for Select/Start.
     """
-    joy2 = pack_directions(
-        keys[key.H], keys[key.L], keys[key.K], keys[key.J],
-    )
-    joy2 |= (bool(keys[key.Z]) << 4 |
-             bool(keys[key.X]) << 5 |
-             bool(keys[key.C]) << 6)
-    extra = (bool(keys[key.Y]) * EXTRA_JOY1_Y |
-             bool(keys[key.V]) * EXTRA_JOY2_Y |
-             bool(keys[key.PAGEUP]) * EXTRA_JOY1_START |
-             bool(keys[key.PAGEDOWN]) * EXTRA_JOY1_BACK |
-             bool(keys[key.HOME]) * EXTRA_JOY2_START |
-             bool(keys[key.END]) * EXTRA_JOY2_BACK)
-    return joy2, extra
+    return _keyboard_channel(keys, "joy2"), _keyboard_channel(keys, "extra")
+
+
+class KeyboardHelpGate:
+    """Keep help-preview keys out of gameplay until they have been released."""
+    def __init__(self):
+        self.blocked = set()
+
+    def read(self, keys, help_open):
+        held = {symbol for symbols, _, _ in KEYBOARD_BINDINGS for symbol in symbols if keys[symbol]}
+        self.blocked.intersection_update(held)
+        if help_open:
+            self.blocked.update(held)
+            return (False,) * 7, (0, 0)
+        state = {symbol: symbol in held and symbol not in self.blocked
+                 for symbols, _, _ in KEYBOARD_BINDINGS for symbol in symbols}
+        return keyboard_state(state), keyboard_v2_state(state)
 
 
 def ota_shortcut_pressed(symbol, modifiers):

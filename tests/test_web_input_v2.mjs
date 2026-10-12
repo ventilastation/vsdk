@@ -1,4 +1,5 @@
 // Browser Gamepad API → Input Protocol v2 mapping tests.
+import { readFileSync } from "node:fs";
 
 globalThis.window = { location: { href: "https://example.test/web/index.html" } };
 globalThis.VentilastationLedRenderCore = {};
@@ -65,23 +66,38 @@ function testInvertedYAxis() {
 }
 
 function testKeyboardMapsAllProtocolV2Controls() {
-  assert(keyboardInputForCode("PageUp").extra === INPUT_EXTRA.JOY1_START);
-  assert(keyboardInputForCode("PageDown").extra === INPUT_EXTRA.JOY1_BACK);
-  assert(keyboardInputForCode("KeyH").joy2 === BUTTONS.JOY_LEFT);
-  assert(keyboardInputForCode("KeyJ").joy2 === BUTTONS.JOY_DOWN);
-  assert(keyboardInputForCode("KeyK").joy2 === BUTTONS.JOY_UP);
-  assert(keyboardInputForCode("KeyL").joy2 === BUTTONS.JOY_RIGHT);
-  assert(keyboardInputForCode("KeyZ").joy2 === BUTTONS.BUTTON_A);
-  assert(keyboardInputForCode("KeyX").joy2 === BUTTONS.BUTTON_B);
-  assert(keyboardInputForCode("KeyC").joy2 === BUTTONS.BUTTON_C);
-  assert(keyboardInputForCode("KeyV").extra === INPUT_EXTRA.JOY2_Y);
-  assert(keyboardInputForCode("Home").extra === INPUT_EXTRA.JOY2_START);
-  assert(keyboardInputForCode("End").extra === INPUT_EXTRA.JOY2_BACK);
+  const expected = {
+    KeyW: [4, 0, 0], KeyS: [8, 0, 0], KeyA: [1, 0, 0], KeyD: [2, 0, 0],
+    Space: [16, 0, 0], KeyB: [32, 0, 0], KeyN: [64, 0, 0], KeyM: [0, 0, 1],
+    Digit1: [0, 0, 8], Digit2: [0, 0, 4],
+    ArrowUp: [0, 4, 0], ArrowDown: [0, 8, 0], ArrowLeft: [0, 1, 0], ArrowRight: [0, 2, 0],
+    Numpad0: [0, 16, 0], Numpad1: [0, 32, 0], Numpad2: [0, 64, 0], Numpad3: [0, 0, 2],
+    NumpadAdd: [0, 0, 32], NumpadEnter: [0, 0, 16],
+  };
+  for (const [code, wanted] of Object.entries(expected)) {
+    const input = keyboardInputForCodes([code]);
+    assert([input.joy1, input.joy2, input.extra].every((value, i) => value === wanted[i]), code);
+  }
+  const combined = keyboardInputForCodes(Object.keys(expected));
+  assert(combined.joy1 === 127 && combined.joy2 === 127 && combined.extra === 63);
+  for (const code of ["Enter", "Digit0", "Digit3", "KeyO", "KeyP", "KeyY", "KeyH", "KeyJ",
+    "KeyK", "KeyL", "KeyZ", "KeyX", "KeyC", "KeyV", "PageUp", "PageDown", "Home", "End"]) {
+    assert(keyboardInputForCode(code) === null, `unassigned main keyboard key: ${code}`);
+  }
+}
 
-  const combined = keyboardInputForCodes(["ArrowLeft", "KeyA", "KeyZ", "PageUp"]);
-  assert(combined.joy1 === BUTTONS.JOY_LEFT);
-  assert(combined.joy2 === BUTTONS.BUTTON_A);
-  assert(combined.extra === INPUT_EXTRA.JOY1_START);
+function testHelpDiagramMatchesActualBindings() {
+  const layout = JSON.parse(readFileSync(new URL("../web/keyboard-layout.json", import.meta.url)));
+  assert(layout.keys.length === 20);
+  assert(new Set(layout.keys.map(key => key.code)).size === 20);
+  for (const key of layout.keys) {
+    const input = keyboardInputForCode(key.code);
+    assert(input && input[key.channel] === key.bit, `diagram disagrees with mapping: ${key.code}`);
+  }
+  for (const cap of [...layout.keys, ...layout.context]) {
+    assert(cap.x >= 0 && cap.y >= 0 && cap.x + (cap.w || 1) <= layout.width
+      && cap.y + (cap.h || 1) <= layout.height, `cap outside diagram: ${cap.key}`);
+  }
 }
 
 function assert(value, message = "assertion failed") {
@@ -91,7 +107,7 @@ function assert(value, message = "assertion failed") {
 }
 
 const tests = [testSingleControllerMapping, testSecondControllerOwnsJoy2, testInvertedYAxis,
-  testKeyboardMapsAllProtocolV2Controls];
+  testKeyboardMapsAllProtocolV2Controls, testHelpDiagramMatchesActualBindings];
 for (const test of tests) {
   test();
   console.log("ok", test.name);

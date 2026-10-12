@@ -85,6 +85,7 @@
         <div class="stage-primary-actions">
           <button type="button" class="stage-control-button" id="toggle-editor-button" aria-pressed="false" hidden>Editor</button>
           <button type="button" class="stage-control-button" id="toggle-inspector-button" aria-expanded="false">Options</button>
+          <button type="button" class="stage-control-button" id="keyboard-help-button" aria-haspopup="dialog" aria-expanded="false">Keyboard · F1</button>
           <button type="button" class="stage-control-button" id="remote-connect-button" hidden>Connect board</button>
           <button type="button" class="stage-control-button" id="remote-control-button" hidden>Request control</button>
           <button type="button" class="stage-control-button" id="remote-reset-button" hidden>Reset board</button>
@@ -93,8 +94,8 @@
         </div>
       </div>
       <div class="stage-display">
-        <canvas id="frame-canvas-gl" width="768" height="768"></canvas>
-        <canvas id="frame-canvas-2d" width="768" height="768" hidden></canvas>
+        <canvas id="frame-canvas-gl" width="768" height="768" tabindex="-1"></canvas>
+        <canvas id="frame-canvas-2d" width="768" height="768" tabindex="-1" hidden></canvas>
         <aside class="base-preview" id="base-preview" aria-label="Base controls preview" hidden>
           <span class="base-preview-strip" id="base-preview-strip" aria-hidden="true"></span>
           <span class="base-preview-dial" id="base-preview-dial" aria-hidden="true">
@@ -236,6 +237,23 @@
         </div>
     </section>
   </main>
+
+  <dialog id="keyboard-help" class="keyboard-help" aria-labelledby="keyboard-help-title">
+    <header class="keyboard-help-header">
+      <div><h1 id="keyboard-help-title">Keyboard controls</h1><p>Key labels above. Game controls below.</p></div>
+      <button type="button" data-close-help autofocus aria-label="Close keyboard help">Close ×</button>
+    </header>
+    <p class="keyboard-help-status" role="status">Loading keyboard layout…</p>
+    <div class="keyboard-help-players">
+      <section class="keyboard-player keyboard-player-1"><h2>Player 1 <small>Letter keys</small></h2><div class="keyboard-diagram" role="group" data-keyboard-player="1" aria-label="Player 1 keyboard layout"></div></section>
+      <section class="keyboard-player keyboard-player-2"><h2>Player 2 <small>Arrows + numpad</small></h2><div class="keyboard-diagram" role="group" data-keyboard-player="2" aria-label="Player 2 keyboard layout"></div></section>
+    </div>
+    <footer class="keyboard-help-footer">
+      <p>Try the keys here: they light up without controlling the game.</p>
+      <p><kbd>F1</kbd> help · <kbd>Esc</kbd> close help, or return to the launcher during play.</p>
+      <p>A USB gamepad also works. Select is Back; buttons C and D are X and Y in the game API.</p>
+    </footer>
+  </dialog>
 
   <script type="module" src="./micropython-bridge.js?v=20260714b"></script>
   <script type="module" src="./wasm-adapter.js?v=20260714b"></script>

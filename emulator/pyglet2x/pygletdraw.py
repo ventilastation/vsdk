@@ -40,6 +40,7 @@ from povrender import (
     COLUMNS, render_frame, snapshot_scene_shader_input, snapshot_vs2_scene,
 )
 from scene_shader import DesktopSceneCompositor
+from pyglet2x.keyboard_help import KeyboardDiagram
 
 display_enabled = config.DISPLAY_ENABLED
 pyglet.options['vsync'] = display_enabled
@@ -251,26 +252,7 @@ overlay_close_label = pyglet.text.Label(
     color=(255, 242, 242, 255),
 )
 
-_HELP_TEXT = """Player 1
-  Arrows or WASD — move
-  Space — A/action     O — B     P — X     Y — Y
-  Page Up — Start      Page Down — Back
-
-Player 2
-  H J K L — left/down/up/right
-  Z — A     X — B     C — X     V — Y
-  Home — Start         End — Back
-
-Gamepads
-  One pad: left stick/D-pad is Player 1; right stick and shoulders are Player 2.
-  Two pads: the second pad controls Player 2.
-
-Emulator
-  F1 — keyboard help   F4 — settings
-  F2 — CPU/GPU renderer   F3 — renderer comparison
-  F5 — toggle POV hall-pulse filter (board)
-  Ctrl/⌘-U — send an OTA upgrade   Q — quit
-  Esc — close this panel, or send the extra game button"""
+keyboard_diagram = KeyboardDiagram()
 
 
 def _point_in_circle(x, y, center_x, center_y, radius):
@@ -300,8 +282,8 @@ def _draw_toolbar():
 def _overlay_bounds(kind):
     max_width = max(280, window.width - 40)
     max_height = max(220, window.height - 40)
-    desired_height = 390 if kind == OVERLAY_HELP else 300 + _CAL_DARK_GROWTH
-    width = min(580, max_width)
+    desired_height = 480 if kind == OVERLAY_HELP else 300 + _CAL_DARK_GROWTH
+    width = min(960 if kind == OVERLAY_HELP else 580, max_width)
     height = min(desired_height, max_height)
     return ((window.width - width) / 2, (window.height - height) / 2, width, height)
 
@@ -351,14 +333,16 @@ def _draw_overlay():
     overlay_header.draw()
     overlay_close_button.draw()
     if active_overlay == OVERLAY_HELP:
-        overlay_title_label.text = "Keyboard shortcuts"
-        overlay_body_label.text = _HELP_TEXT
+        overlay_title_label.text = "Keyboard controls"
     else:
         overlay_title_label.text = "Settings & workbench"
         overlay_body_label.text = "Rotation, board reset and upgrade, colour calibration, and POV timing tools."
         _layout_settings_controls(left, bottom, width, height)
     overlay_title_label.draw()
-    overlay_body_label.draw()
+    if active_overlay == OVERLAY_HELP:
+        keyboard_diagram.draw(left, bottom, width, height)
+    else:
+        overlay_body_label.draw()
     overlay_close_label.draw()
     if active_overlay == OVERLAY_SETTINGS:
         draw_workbench_controls()
