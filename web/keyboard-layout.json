@@ -1,0 +1,34 @@
+{
+  "width": 8.4,
+  "height": 5.5,
+  "keys": [
+    {"player":1,"key":"1","code":"Digit1","symbol":"_1","evdev":"KEY_1","control":"SELECT","channel":"extra","bit":8,"x":0.3,"y":0.2},
+    {"player":1,"key":"2","code":"Digit2","symbol":"_2","evdev":"KEY_2","control":"START","channel":"extra","bit":4,"x":1.35,"y":0.2},
+    {"player":1,"key":"W","code":"KeyW","symbol":"W","evdev":"KEY_W","control":"UP","channel":"joy1","bit":4,"x":1.6,"y":1.25},
+    {"player":1,"key":"A","code":"KeyA","symbol":"A","evdev":"KEY_A","control":"LEFT","channel":"joy1","bit":1,"x":0.8,"y":2.3},
+    {"player":1,"key":"S","code":"KeyS","symbol":"S","evdev":"KEY_S","control":"DOWN","channel":"joy1","bit":8,"x":1.85,"y":2.3},
+    {"player":1,"key":"D","code":"KeyD","symbol":"D","evdev":"KEY_D","control":"RIGHT","channel":"joy1","bit":2,"x":2.9,"y":2.3},
+    {"player":1,"key":"B","code":"KeyB","symbol":"B","evdev":"KEY_B","control":"B","channel":"joy1","bit":32,"x":4.2,"y":3.35},
+    {"player":1,"key":"N","code":"KeyN","symbol":"N","evdev":"KEY_N","control":"C","channel":"joy1","bit":64,"x":5.25,"y":3.35},
+    {"player":1,"key":"M","code":"KeyM","symbol":"M","evdev":"KEY_M","control":"D","channel":"extra","bit":1,"x":6.3,"y":3.35},
+    {"player":1,"key":"SPACE","code":"Space","symbol":"SPACE","evdev":"KEY_SPACE","control":"A","channel":"joy1","bit":16,"x":1.6,"y":4.4,"w":4.1},
+    {"player":2,"key":"↑","code":"ArrowUp","symbol":"UP","evdev":"KEY_UP","control":"UP","channel":"joy2","bit":4,"x":1.1,"y":2.3},
+    {"player":2,"key":"←","code":"ArrowLeft","symbol":"LEFT","evdev":"KEY_LEFT","control":"LEFT","channel":"joy2","bit":1,"x":0.05,"y":3.35},
+    {"player":2,"key":"↓","code":"ArrowDown","symbol":"DOWN","evdev":"KEY_DOWN","control":"DOWN","channel":"joy2","bit":8,"x":1.1,"y":3.35},
+    {"player":2,"key":"→","code":"ArrowRight","symbol":"RIGHT","evdev":"KEY_RIGHT","control":"RIGHT","channel":"joy2","bit":2,"x":2.15,"y":3.35},
+    {"player":2,"key":"1","code":"Numpad1","symbol":"NUM_1","aliases":["NUM_END"],"evdev":"KEY_KP1","control":"B","channel":"joy2","bit":32,"x":4.15,"y":3.35},
+    {"player":2,"key":"2","code":"Numpad2","symbol":"NUM_2","aliases":["NUM_DOWN"],"evdev":"KEY_KP2","control":"C","channel":"joy2","bit":64,"x":5.2,"y":3.35},
+    {"player":2,"key":"3","code":"Numpad3","symbol":"NUM_3","aliases":["NUM_NEXT"],"evdev":"KEY_KP3","control":"D","channel":"extra","bit":2,"x":6.25,"y":3.35},
+    {"player":2,"key":"0","code":"Numpad0","symbol":"NUM_0","aliases":["NUM_INSERT"],"evdev":"KEY_KP0","control":"A","channel":"joy2","bit":16,"x":4.15,"y":4.4,"w":2.05},
+    {"player":2,"key":"+","code":"NumpadAdd","symbol":"NUM_ADD","evdev":"KEY_KPPLUS","control":"SELECT","channel":"extra","bit":32,"x":7.3,"y":1.25,"h":2.05},
+    {"player":2,"key":"ENTER","code":"NumpadEnter","symbol":"NUM_ENTER","evdev":"KEY_KPENTER","control":"START","channel":"extra","bit":16,"x":7.3,"y":3.35,"h":2.05}
+  ],
+  "context": [
+    {"player":2,"key":"7","x":4.15,"y":1.25},
+    {"player":2,"key":"8","x":5.2,"y":1.25},
+    {"player":2,"key":"9","x":6.25,"y":1.25},
+    {"player":2,"key":"4","x":4.15,"y":2.3},
+    {"player":2,"key":"5","x":5.2,"y":2.3},
+    {"player":2,"key":"6","x":6.25,"y":2.3}
+  ]
+}

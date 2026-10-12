@@ -34,37 +34,16 @@ except ImportError:
     ecodes = None
 
 from pyglet.window import key as pygkey
+from keyboard_layout import KEYS
 
 _EVDEV_TO_PYGLET = {}
 _DETECTION_KEYS = frozenset()
 if evdev is not None:
     _EVDEV_TO_PYGLET = {
-        ecodes.KEY_LEFT: pygkey.LEFT,
-        ecodes.KEY_RIGHT: pygkey.RIGHT,
-        ecodes.KEY_UP: pygkey.UP,
-        ecodes.KEY_DOWN: pygkey.DOWN,
-        ecodes.KEY_A: pygkey.A,
-        ecodes.KEY_D: pygkey.D,
-        ecodes.KEY_W: pygkey.W,
-        ecodes.KEY_S: pygkey.S,
-        ecodes.KEY_SPACE: pygkey.SPACE,
-        ecodes.KEY_O: pygkey.O,
-        ecodes.KEY_P: pygkey.P,
-        ecodes.KEY_H: pygkey.H,
-        ecodes.KEY_J: pygkey.J,
-        ecodes.KEY_K: pygkey.K,
-        ecodes.KEY_L: pygkey.L,
-        ecodes.KEY_Z: pygkey.Z,
-        ecodes.KEY_X: pygkey.X,
-        ecodes.KEY_C: pygkey.C,
-        ecodes.KEY_V: pygkey.V,
-        ecodes.KEY_Y: pygkey.Y,
-        ecodes.KEY_PAGEUP: pygkey.PAGEUP,
-        ecodes.KEY_PAGEDOWN: pygkey.PAGEDOWN,
-        ecodes.KEY_HOME: pygkey.HOME,
-        ecodes.KEY_END: pygkey.END,
-        ecodes.KEY_ESC: pygkey.ESCAPE,
+        getattr(ecodes, entry["evdev"]): getattr(pygkey, entry["symbol"])
+        for entry in KEYS
     }
+    _EVDEV_TO_PYGLET[ecodes.KEY_ESC] = pygkey.ESCAPE
     # Auto-detect below scores a candidate device on the gameplay keys only.
     _DETECTION_KEYS = frozenset(_EVDEV_TO_PYGLET)
     # The OTA shortcut chord (Ctrl-U, see inputs_common.ota_shortcut_held).

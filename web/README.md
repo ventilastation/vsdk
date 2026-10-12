@@ -21,6 +21,24 @@ The editor also ignores a previously saved open preference while its entry
 button is hidden. Keyboard, gamepad, touch controls, Options, and fullscreen
 remain available.
 
+## Keyboard controls
+
+| Control | Player 1 | Player 2 |
+|---|---|---|
+| Up / Down / Left / Right | W / S / A / D | Arrow keys |
+| A / B / C / D | Space / B / N / M | Numpad 0 / 1 / 2 / 3 |
+| Select / Start | 1 / 2 | Numpad + / Enter |
+
+Press **F1** to see the keyboard layout. Select is `BACK` in the game API;
+C and D are `X` and `Y`. Player 2 uses the numeric keypad, including its Enter
+key; the main Enter key is unassigned. The keypad works with Num Lock on or off.
+
+The Keyboard button or F1 opens a modal diagram with keys placed as on a
+keyboard. Pressing them lights up the keycaps without sending game input.
+Escape or F1 closes help; held keys must be released before controlling play.
+`keyboard-layout.json` supplies both help diagrams and desktop bindings.
+`test_web_input_v2.mjs` checks that its keys match the browser input map.
+
 ## Direct game and presentation links
 
 `?game=demos.dream_garden` starts that game. Add

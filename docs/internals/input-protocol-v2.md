@@ -110,15 +110,19 @@ with `is_extra()` / `was_extra_pressed()`.
 The desktop and web emulators share the following keyboard layout. Keys may
 be held together, just like controller controls.
 
-| Input | Keys |
-|-------|------|
-| Joy1 directions | Arrow keys or W/A/S/D |
-| Joy1 A / B / X / Y | Space / O / P / Y |
-| Joy1 Start / Back | Page Up / Page Down |
-| Joy2 directions | H / J / K / L (left / down / up / right) |
-| Joy2 A / B / X / Y | Z / X / C / V |
-| Joy2 Start / Back | Home / End |
-| Exit | Escape |
+| Control | Player 1 | Player 2 |
+|---|---|---|
+| Up / Down / Left / Right | W / S / A / D | Arrow keys |
+| A / B / C / D | Space / B / N / M | Numpad 0 / 1 / 2 / 3 |
+| Select / Start | 1 / 2 | Numpad + / Enter |
+
+Press **F1** to see the keyboard layout. Select is `BACK` in the game API;
+C and D are `X` and `Y`. Player 2 uses the numeric keypad, including its Enter
+key; the main Enter key is unassigned. The keypad works with Num Lock on or off.
+
+Escape returns to the launcher, or closes an open overlay. The shared diagram
+and desktop bindings live in `web/keyboard-layout.json`; browser binding tests
+check that every diagram key sends the matching protocol field and bit.
 
 ### 2. Command frame  (ASCII alphanumeric + `\n`)
 

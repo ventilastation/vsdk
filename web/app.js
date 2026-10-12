@@ -44,6 +44,7 @@ import { BrowserAudioHost } from "./audio-host.js?v=20260709a";
 import { ChipAudioHost } from "./chip-audio-host.js?v=20260727b";
 import { LedRingWebGLRenderer, LedRingCanvasRenderer } from "./led-ring-renderers.js?v=20261004a";
 import { RemoteWorkbenchAdapter, isRemoteMode } from "./remote-adapter.js?v=20260722e";
+import { KeyboardHelp } from "./keyboard-help.js?v=source";
 
 
 class FailedRuntimeAdapter {
@@ -709,12 +710,25 @@ class BrowserHostApp {
   }
 
   bindInput() {
+    this.keyboardHelp = new KeyboardHelp(
+      document.querySelector("#keyboard-help"),
+      document.querySelector("#keyboard-help-button"),
+      () => {
+        const held = [...this.keyboardCodes];
+        this.keyboardCodes.clear();
+        this.keyboardInput = { joy1: 0, joy2: 0, extra: 0 };
+        this.keyboardExitPressed = false;
+        this.syncButtons();
+        return held;
+      },
+    );
     window.addEventListener("pointerdown", () => {
       this.audio.enable();
       void this.chipAudio.resume();
     }, { once: true });
 
     window.addEventListener("keydown", (event) => {
+      if (this.keyboardHelp.keydown(event)) return;
       if (isEditableEventTarget(event.target)) {
         return;
       }
@@ -740,6 +754,7 @@ class BrowserHostApp {
     });
 
     window.addEventListener("keyup", (event) => {
+      if (this.keyboardHelp.keyup(event)) return;
       if (EXIT_KEY_CODES.has(event.code)) {
         const wasPressed = this.keyboardExitPressed;
         this.keyboardExitPressed = false;
@@ -771,6 +786,7 @@ class BrowserHostApp {
     });
 
     window.addEventListener("blur", () => {
+      this.keyboardHelp.releaseAll();
       this.keyboardInput = { joy1: 0, joy2: 0, extra: 0 };
       this.keyboardCodes.clear();
       this.touchButtons = 0;
