@@ -15,6 +15,7 @@ Runs, from the repo root:
 Exits non-zero on the first category that fails.
 """
 
+import os
 import pathlib
 import shutil
 import subprocess
@@ -104,6 +105,7 @@ MICROPYTHON_TESTS = [
 ]
 
 NODE_TESTS = [
+    "tests/test_wasm_startup.mjs",
     "tests/test_launch_options.mjs",
     "tests/test_game_starter.mjs",
     "tests/test_web_input_v2.mjs",
@@ -218,6 +220,7 @@ def run_native_tests():
 
 
 def main():
+    os.environ["VSDK_TEST_PYTHON"] = sys.executable
     ok = check_mpy_compile()
     ok = run_scripts(sys.executable, CPYTHON_TESTS, "CPython") and ok
     ok = run_scripts("node", NODE_TESTS, "Node") and ok

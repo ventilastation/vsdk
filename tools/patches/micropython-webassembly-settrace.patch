@@ -12,7 +12,7 @@ index fdd8ec5..637d0ea 100644
  
  // Emscripten defaults to a 64k C-stack, so our limit should be less than that.
  #define CSTACK_SIZE (32 * 1024)
-@@ -57,13 +59,15 @@ static void gc_collect_top_level(mp_obj_t root_obj);
+@@ -57,14 +59,16 @@ static void gc_collect_top_level(mp_obj_t root_obj);
  #endif
  
  void external_call_depth_inc(void) {
@@ -34,7 +34,7 @@ diff --git a/ports/webassembly/api.js b/ports/webassembly/api.js
 index 4ef858f..383e294 100644
 --- a/ports/webassembly/api.js
 +++ b/ports/webassembly/api.js
-@@ -152,15 +152,20 @@ const loadMicroPython = async ({
+@@ -152,17 +152,23 @@ const loadMicroPython = async ({
              const len = Module.lengthBytesUTF8(code);
              const buf = Module._malloc(len + 1);
              Module.stringToUTF8(code, buf, len + 1);
@@ -70,7 +70,7 @@ diff --git a/ports/webassembly/library.js b/ports/webassembly/library.js
 index 1c390c5..4c0d172 100644
 --- a/ports/webassembly/library.js
 +++ b/ports/webassembly/library.js
-@@ -34,8 +34,8 @@ mergeInto(LibraryManager.library, {
+@@ -34,7 +34,7 @@ mergeInto(LibraryManager.library, {
              const mp_interrupt_char = Module.ccall(
                  "mp_hal_get_interrupt_char",
                  "number",

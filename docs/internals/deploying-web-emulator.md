@@ -99,6 +99,14 @@ VERSION_TAG=20260618T160000Z make micropython-webassembly
 BUILD_JOBS=8 make micropython-webassembly
 ```
 
+The variant enables `MICROPY_STACKLESS`: Python-to-Python calls use the
+Python stack rather than adding native WebAssembly/Asyncify call frames.
+Without it, scene construction can exceed mobile browsers' native stack
+limit before the emulator finishes initializing. `tests/test_wasm_startup.mjs`
+boots the shipped runtime, enters Dream Garden and each presentation
+checkpoint, and runs gameplay with Node's native stack limited to 256 KiB.
+It also checks tracing, nested exception handling and garbage collection.
+
 ## Post-deploy check
 
 Load the published emulator, let the menu idle 30–60 s, and confirm
