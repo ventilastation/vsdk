@@ -1,5 +1,5 @@
 import vs2
-from vs2.controls import A, BACK, DOWN, LEFT, RIGHT, UP, Y, joy1
+from vs2.controls import A, BACK, DOWN, LEFT, RIGHT, UP, Y, joy1, joy2
 
 from ventilastation import catalog
 from ventilastation import native_apps
@@ -477,15 +477,16 @@ class ListMenu(vs2.Scene):
         self._animate_sprite(self.selected_sprite)
 
     def update(self):
-        if joy1.just_pressed(A):
+        if joy1.just_pressed(A) or joy2.just_pressed(A):
             self._select()
             return
-        if self.enable_back and (joy1.just_pressed(Y) or joy1.just_pressed(BACK)):
+        if self.enable_back and (joy1.just_pressed(Y) or joy1.just_pressed(BACK)
+                                 or joy2.just_pressed(Y) or joy2.just_pressed(BACK)):
             self.on_back()
             return self.pop()
-        if joy1.just_pressed(UP):
+        if joy1.just_pressed(UP) or joy2.just_pressed(UP):
             self._move(1)
-        if joy1.just_pressed(DOWN):
+        if joy1.just_pressed(DOWN) or joy2.just_pressed(DOWN):
             self._move(-1)
         self._update_positions()
         self._animate_icons()
@@ -555,9 +556,8 @@ class HighlightsMenu(ListMenu):
         super().update()
 
     def _check_debug_combo(self):
-        if (
-            joy1.held(UP) and joy1.held(LEFT) and joy1.held(RIGHT) and joy1.held(A)
-        ):
+        if ((joy1.held(UP) and joy1.held(LEFT) and joy1.held(RIGHT) and joy1.held(A))
+                or (joy2.held(UP) and joy2.held(LEFT) and joy2.held(RIGHT) and joy2.held(A))):
             vs2.audio.sound("ventilagon/audio/es/superventilagon")
             self.push(DebugMenu())
             return True

@@ -14,6 +14,9 @@ Press **F1** to see the keyboard layout. Select is `BACK` in the game API;
 C and D are `X` and `Y`. Player 2 uses the numeric keypad, including its Enter
 key; the main Enter key is unassigned. The keypad works with Num Lock on or off.
 
+Either player can navigate the launcher with Up/Down and select with A.
+Select or D returns from a submenu.
+
 The **Keyboard · F1** button also opens help. Try keys in the overlay to light
 them up without controlling the game; press Escape or F1 to close it.
 
