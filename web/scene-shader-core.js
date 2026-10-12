@@ -392,9 +392,6 @@
       offset += tilemapSize;
       const flags = bytes[recordOffset + 2];
       const layer = layers[bytes[recordOffset]] || null;
-      if (!(flags & 1) || (layer && !layer.visible)) {
-        continue;
-      }
       const columns = view.getUint16(recordOffset + 4, true);
       const rows = view.getUint16(recordOffset + 6, true);
       const cellsLength = columns * rows;
@@ -402,7 +399,11 @@
       if (framesOffset + cellsLength > bytes.length) {
         continue;
       }
+      // Hidden maps still have cells before the v3 draw-order table.
       framesEnd = Math.max(framesEnd, framesOffset + cellsLength);
+      if (!(flags & 1) || (layer && !layer.visible)) {
+        continue;
+      }
       const mode = layer ? layer.mode : bytes[recordOffset + 3];
       if (canonicalMode(mode) === MODE_PLANET) {
         continue; // FULLSCREEN tilemaps are unsupported in every renderer.
@@ -458,10 +459,11 @@
 
   // scene: a decoded VS2 scene -- led-render-core.js decodeVs2SceneBuffer's
   // shape ({sprites: [{slot, x, y, image_strip, frame, perspective, vs2:
-  // {flip_x, flip_y}}], tilemaps: [...]}) or the desktop decode_vs2_scene
-  // shape ({sprites: [{slot, x, y, image, frame, perspective, flip_x,
-  // flip_y}], tilemaps: [...]}). Both list only visible entities in slot
-  // order with layer modes already resolved.
+  // true, flip_x, flip_y}], tilemaps: [...]}) or the desktop
+  // decode_vs2_scene shape ({sprites: [{slot, x, y, image, frame,
+  // perspective, flip_x, flip_y}], tilemaps: [...]}) -- both keep flip_x/
+  // flip_y flat on the entity itself. Both list only visible entities in
+  // slot order with layer modes already resolved.
   function packSceneVs2(scene) {
     if (scene instanceof Uint8Array) {
       return packSceneVs2Bytes(scene);
@@ -474,8 +476,8 @@
         strip: value.image_strip ?? value.image,
         frame: value.frame || 0,
         mode: value.perspective,
-        flipX: Boolean(value.vs2 ? value.vs2.flip_x : value.flip_x),
-        flipY: Boolean(value.vs2 ? value.vs2.flip_y : value.flip_y),
+        flipX: Boolean(value.flip_x),
+        flipY: Boolean(value.flip_y),
         vs2Coordinates: true,
       });
     };
@@ -492,8 +494,8 @@
         tileHeight: value.tile_height,
         viewport: value.viewport,
         frames: value.frames,
-        flipX: Boolean(value.vs2 ? value.vs2.flip_x : value.flip_x),
-        flipY: Boolean(value.vs2 ? value.vs2.flip_y : value.flip_y),
+        flipX: Boolean(value.flip_x),
+        flipY: Boolean(value.flip_y),
         vs2Coordinates: true,
       });
     };

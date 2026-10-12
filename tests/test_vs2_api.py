@@ -217,6 +217,27 @@ class Vs2ApiTests(unittest.TestCase):
         recycling.pool.despawn_all()
         self.assertEqual((len(recycling.pool), recycling.pool.free), (0, 1))
 
+    def test_recycle_preserves_spawn_age_after_swapped_despawns(self):
+        vs2 = self.vs2
+        class Game(vs2.Scene):
+            def build(self):
+                self.pool = self.layer("world").sprite_pool("ship.png", count=3, on_empty=vs2.RECYCLE)
+        pool = self.enter(Game()).pool
+        first, second, third = [pool.spawn(x, 0) for x in range(3)]
+        self.assertIs(pool.spawn(3, 0), first)
+        self.assertIs(pool.spawn(4, 0), second)
+        pool.despawn(third)  # live list swaps a newer sprite into its place
+        self.assertIs(pool.spawn(5, 0), third)
+        self.assertIs(pool.spawn(6, 0), first)
+        self.assertIs(pool.spawn(7, 0), second)
+        self.assertIs(pool.spawn(8, 0), third)
+        for sprite in pool:
+            pool.despawn(sprite)
+        self.assertEqual((len(pool), pool.free, pool._oldest, pool._newest), (0, 3, None, None))
+        pool.spawn(9, 0)
+        pool.despawn_all()
+        self.assertEqual((pool._oldest, pool._newest), (None, None))
+
     def test_image_metadata_validates_frames_and_tile_dimensions(self):
         vs2 = self.vs2
 

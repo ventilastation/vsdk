@@ -87,6 +87,9 @@ class WorkerBridge {
 
   initialize(config = {}) {
     if (!this.initializePromise) {
+      if (config.workspaceFiles) {
+        this.workspaceFiles = new Map(config.workspaceFiles.map(file => [file.path, file]));
+      }
       this.initializePromise = this.request("initialize", {
         config: {
           workspaceFiles: Array.from(this.workspaceFiles.values()),

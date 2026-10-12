@@ -11,7 +11,7 @@ You can start on a computer; no console or electronics are needed.
 4. [Add your own assets and share the game](guides/assets-and-sharing.md).
 
 Use the desktop emulator to develop and test your games, with local files you
-can keep in Git.
+can keep in Git. You can also [play games in the web emulator](guides/browser.md).
 
 ## Find a specific answer
 
@@ -29,6 +29,7 @@ documentation sources live in `ventilastation/vsdk/docs/` and are built for both
 :maxdepth: 2
 
 guides/desktop
+guides/browser
 vs2/index
 guides/assets-and-sharing
 ```

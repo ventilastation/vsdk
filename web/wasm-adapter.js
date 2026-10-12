@@ -1,3 +1,5 @@
+import { launchConfiguration } from "./launch-options.js?v=20261011a";
+
 class VentilastationWasmAdapter {
   constructor(bridge, options = {}) {
     this.bridge = bridge;
@@ -18,7 +20,7 @@ class VentilastationWasmAdapter {
 
     this.initPromise = (async () => {
       if (typeof this.bridge.initialize === "function") {
-        await this.bridge.initialize();
+        await this.bridge.initialize(await launchConfiguration(window.location.href));
       }
 
       this.bootstrapped = true;

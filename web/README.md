@@ -21,6 +21,14 @@ The editor also ignores a previously saved open preference while its entry
 button is hidden. Keyboard, gamepad, touch controls, Options, and fullscreen
 remain available.
 
+## Direct game and presentation links
+
+`?game=demos.dream_garden` starts that game. Add
+`&checkpoint=01-steering` to load `code/checkpoints/01-steering.py` over its
+main module for this page only. Checkpoint code comes from the emulator’s own
+published tree and uses the game’s existing assets. Reloading the link restores
+that checkpoint; ordinary launcher links do not change game source.
+
 ## Layout
 
 | File | Role |
