@@ -113,6 +113,8 @@ NODE_TESTS = [
     "tests/test_remote_adapter.mjs",
     "tests/test_rom_builder_core.mjs",
     "tests/test_app_support.mjs",
+    "tests/test_led_ring_blending.mjs",
+    "web/render-parity-test.js",
     "tests/test_scene_shader_core.mjs",
     "tests/test_starfield_flag.mjs",
 ]
