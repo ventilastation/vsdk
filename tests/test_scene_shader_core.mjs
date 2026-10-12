@@ -421,6 +421,32 @@ function blankFrame(overrides = {}) {
   });
 }
 
+for (const hiddenByLayer of [false, true]) {
+  // Hidden tilemaps still contribute cell bytes before the v3 draw-order
+  // table. Skipping those bytes makes the shader read cells as draw refs.
+  const payload = makeVs2ScenePayload({
+    layers: hiddenByLayer ? [{ mode: 2, visible: false }] : [],
+    sprites: [{ image_strip: 1, mode: 2, x: 4, y: 53 }],
+    tilemaps: [{
+      layer: hiddenByLayer ? 0 : 255,
+      image_strip: 2, flags: hiddenByLayer ? 1 : 0,
+      frames: [3], columns: 1, rows: 1, tile_width: 1, tile_height: 1,
+      viewport: [0, 0, 1, 1], mode: 2, x: 4, y: 53,
+    }],
+    drawOrder: [[0, 0], [1, 0]],
+  });
+  const decoded = decodeVs2SceneBuffer(payload);
+  assert.equal(decoded.tilemaps.length, 0);
+  const sceneData = core.packSceneVs2(payload);
+  assert.equal(sceneData.drawableCount, 1, "hidden cells must not corrupt the draw table");
+  compareScene(`vs2 v3 tilemap hidden by ${hiddenByLayer ? "layer" : "flag"}`, {
+    assets: new Map([[1, makeAsset({ width: 1, height: 1, data: [1] })]]),
+    paletteBytes: PALETTE,
+    frame: blankFrame({ sprites: decoded.sprites, tilemaps: decoded.tilemaps, drawables: decoded.drawables }),
+    sceneData,
+  });
+}
+
 {
   // Full-density stress: 100 legacy sprites over the whole ring.
   const sprites = [];

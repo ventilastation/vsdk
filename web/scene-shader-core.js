@@ -392,9 +392,6 @@
       offset += tilemapSize;
       const flags = bytes[recordOffset + 2];
       const layer = layers[bytes[recordOffset]] || null;
-      if (!(flags & 1) || (layer && !layer.visible)) {
-        continue;
-      }
       const columns = view.getUint16(recordOffset + 4, true);
       const rows = view.getUint16(recordOffset + 6, true);
       const cellsLength = columns * rows;
@@ -402,7 +399,11 @@
       if (framesOffset + cellsLength > bytes.length) {
         continue;
       }
+      // Hidden maps still have cells before the v3 draw-order table.
       framesEnd = Math.max(framesEnd, framesOffset + cellsLength);
+      if (!(flags & 1) || (layer && !layer.visible)) {
+        continue;
+      }
       const mode = layer ? layer.mode : bytes[recordOffset + 3];
       if (canonicalMode(mode) === MODE_PLANET) {
         continue; // FULLSCREEN tilemaps are unsupported in every renderer.
