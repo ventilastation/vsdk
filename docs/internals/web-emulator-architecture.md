@@ -120,8 +120,8 @@ and `extra`. The WASM worker stores those fields as primitive values exposed
 through `__vs_host`; `BrowserComms` reads them without allocating per-frame
 input objects.
 
-Keyboard input uses the same allocation as the desktop emulator: WASD,
-Space/B/N/M and 1/2 for Player 1; arrows, numpad 0/1/2/3 and numpad +/Enter
+Keyboard input uses the same allocation as the desktop emulator: arrows,
+numpad 0/1/2/3 and numpad +/Enter for Player 1; WASD, Space/B/N/M and 1/2
 for Player 2. The full table lives in `input-protocol-v2.md`.
 F1 or the Keyboard button opens a modal diagram from `keyboard-layout.json`.
 Mapped keys light up in help without reaching the game; keys held while help

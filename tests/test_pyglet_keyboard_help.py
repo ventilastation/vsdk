@@ -67,8 +67,8 @@ inputs.keys[key.ESCAPE] = False
 inputs.keys[key.SPACE] = False
 inputs.encode_input_val()
 inputs.keys[key.SPACE] = True
-assert inputs.encode_input_val() == (16, 0, 0, False)
+assert inputs.encode_input_val() == (0, 16, 0, False)
 inputs.keys[key.ESCAPE] = True
 inputs.on_key_press(key.ESCAPE, 0)
-assert inputs.encode_input_val() == (16, 0, 0, True)
+assert inputs.encode_input_val() == (0, 16, 0, True)
 print('Native help previews keys, quarantines held input and consumes closing Escape/autorepeat')

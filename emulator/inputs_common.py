@@ -74,8 +74,8 @@ EXTRA_JOY2_BACK  = 0x20
 def keyboard_v2_state(keys):
     """Return (joy2, extra) for keyboard-only Input Protocol v2 controls.
 
-    Joy1 uses WASD and Space/B/N/M with 1/2 for Select/Start. Joy2 uses
-    arrows and numpad 0/1/2/3 with numpad +/Enter for Select/Start.
+    Joy1 uses arrows and numpad 0/1/2/3 with numpad +/Enter for
+    Select/Start. Joy2 uses WASD and Space/B/N/M with 1/2 for Select/Start.
     """
     return _keyboard_channel(keys, "joy2"), _keyboard_channel(keys, "extra")
 

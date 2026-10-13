@@ -67,12 +67,12 @@ function testInvertedYAxis() {
 
 function testKeyboardMapsAllProtocolV2Controls() {
   const expected = {
-    KeyW: [4, 0, 0], KeyS: [8, 0, 0], KeyA: [1, 0, 0], KeyD: [2, 0, 0],
-    Space: [16, 0, 0], KeyB: [32, 0, 0], KeyN: [64, 0, 0], KeyM: [0, 0, 1],
-    Digit1: [0, 0, 8], Digit2: [0, 0, 4],
-    ArrowUp: [0, 4, 0], ArrowDown: [0, 8, 0], ArrowLeft: [0, 1, 0], ArrowRight: [0, 2, 0],
-    Numpad0: [0, 16, 0], Numpad1: [0, 32, 0], Numpad2: [0, 64, 0], Numpad3: [0, 0, 2],
-    NumpadAdd: [0, 0, 32], NumpadEnter: [0, 0, 16],
+    KeyW: [0, 4, 0], KeyS: [0, 8, 0], KeyA: [0, 1, 0], KeyD: [0, 2, 0],
+    Space: [0, 16, 0], KeyB: [0, 32, 0], KeyN: [0, 64, 0], KeyM: [0, 0, 2],
+    Digit1: [0, 0, 32], Digit2: [0, 0, 16],
+    ArrowUp: [4, 0, 0], ArrowDown: [8, 0, 0], ArrowLeft: [1, 0, 0], ArrowRight: [2, 0, 0],
+    Numpad0: [16, 0, 0], Numpad1: [32, 0, 0], Numpad2: [64, 0, 0], Numpad3: [0, 0, 1],
+    NumpadAdd: [0, 0, 8], NumpadEnter: [0, 0, 4],
   };
   for (const [code, wanted] of Object.entries(expected)) {
     const input = keyboardInputForCodes([code]);
