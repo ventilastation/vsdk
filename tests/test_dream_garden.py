@@ -175,15 +175,53 @@ class DreamGardenTests(unittest.TestCase):
             now[0] = 2500
             self.step()
             self.step(0, X)
-            self.assertEqual(garden.sound_notice.text, "SOUND ON")
+            self.assertEqual(garden.sound_notice.text, "NOISY")
             self.assertEqual(garden.sound_notice_until, 4500)
             now[0] = 4499
             self.step()
             self.assertTrue(garden.sound_notice.visible)
             now[0] = 4500
             self.step()
-            self.assertFalse(garden.sound_notice.visible)
+            self.assertTrue(garden.sound_notice.visible)
             self.assertIsNone(garden.sound_notice_until)
+            self.assertEqual(garden.sound_notice.y, 11)
+            now[0] = 4725
+            self.step()
+            self.assertAlmostEqual(garden.sound_notice.y, 1.5)
+            now[0] = 4800
+            self.step(X)
+            self.assertEqual(garden.sound_notice.text, "QUIET")
+            self.assertEqual(garden.sound_notice.y, 11)
+            self.assertIsNone(garden.sound_notice_exit)
+            now[0] = 7025
+            self.step()
+            self.assertAlmostEqual(garden.sound_notice.y, 1.5)
+            now[0] = 7250
+            self.step()
+            self.assertFalse(garden.sound_notice.visible)
+            self.assertIsNone(garden.sound_notice_exit)
+
+    def test_relax_slides_out_and_a_new_request_cancels_the_exit(self):
+        from unittest.mock import patch
+        garden = self.start()
+        now = [1000]
+        with patch.dict(garden.update.__globals__, {"ticks_ms": lambda: now[0]}):
+            self.step(A)
+            self.step()
+            self.assertTrue(garden.mood.visible)
+            now[0] = 1225
+            self.step()
+            self.assertAlmostEqual(garden.mood.y, -3.5)
+            self.assertTrue(garden.mood.visible)
+            self.step(0, A)
+            self.assertEqual(garden.mood.y, 1)
+            self.assertIsNone(garden.mood_exit)
+            self.step()
+            now[0] = 1675
+            self.step()
+            self.assertFalse(garden.mood.visible)
+            self.assertIsNone(garden.mood_exit)
+
     def test_second_player_joins_and_moves_independently(self):
         garden = self.start()
         self.assertFalse(garden.friend.visible)
@@ -213,7 +251,8 @@ class DreamGardenTests(unittest.TestCase):
         self.assertTrue(garden.mood.visible)
         self.assertEqual(garden.friend.frame, 7)
         self.step()
-        self.assertFalse(garden.mood.visible)
+        self.assertTrue(garden.mood.visible)
+        self.assertIsNotNone(garden.mood_exit)
         self.step(A)
         self.assertTrue(garden.slow)
         self.assertEqual(garden.dreamer.frame, 3)
@@ -376,12 +415,12 @@ class DreamGardenTests(unittest.TestCase):
         self.assertTrue(any(b"bloom" in line for line, _ in director.platform.comms.sent))
         self.step(0, X)
         self.assertFalse(garden.sound_on)
-        self.assertEqual(garden.sound_notice.text, "SOUND OFF")
+        self.assertEqual(garden.sound_notice.text, "QUIET")
         self.assertEqual(director.platform.comms.sent[-1][0], b"music off")
         self.step()
         self.step(X)
         self.assertTrue(garden.sound_on)
-        self.assertEqual(garden.sound_notice.text, "SOUND ON")
+        self.assertEqual(garden.sound_notice.text, "NOISY")
         self.step(B)
         self.assertEqual(director.platform.comms.sent[-1][0], b"music off")
 

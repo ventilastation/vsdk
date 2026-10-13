@@ -34,8 +34,9 @@ Either player can slow seed movement, the drifting background and flower
 animation. New spawn intervals also lengthen, after the pending seed deadline.
 Flowers gradually replace the oldest ones when the garden fills up.
 
-There is no death, score, countdown or difficulty ramp. Watching is welcome. Music and bloom sounds start on. X toggles both, showing SOUND ON or SOUND OFF
-for two seconds; another toggle restarts that notice. B stops the music and keeps the current flowers in a still garden.
+There is no death, score, countdown or difficulty ramp. Watching is welcome. Music and bloom sounds start on. X toggles both, showing NOISY or QUIET
+for two seconds before the text slides outward past the rim over 450 ms.
+Another toggle resets the position and restarts the notice. B stops the music and keeps the current flowers in a still garden.
 A starts a new garden from the Rest scene.
 
 ## How the example works
@@ -50,7 +51,8 @@ The Garden graph uses **42 sprites, 3 tilemaps, 3 layers and 5 image strips**.
 The flower pool counts toward that cost even when its slots are hidden. The
 lower layer draws flowers first and players above them. The middle layer draws
 smaller, darker flying accents in 16-pixel tiles, followed by 9-pixel seeds.
-The top HUD shows RELAX only while A is held, plus temporary audio feedback.
+The top HUD shows RELAX while A is held, then slides it out on release,
+plus temporary audio feedback.
 Both flips keep the top text upright.
 
 The full CP437 font comes from the existing tutorial example. PNGs and YAML

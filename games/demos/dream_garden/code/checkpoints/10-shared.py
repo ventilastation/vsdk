@@ -5,6 +5,7 @@ A second controller can join at any time. Watching is also a way to play.
 """
 
 from urandom import randrange
+from utime import ticks_ms, ticks_diff
 
 import vs2
 from vs2.controls import A, B, LEFT, RIGHT, joy1, joy2
@@ -21,6 +22,17 @@ FLOWER_DRIFT_RATIO = 0.08
 FLOWER_DEPTH = 255
 GLOW_FRAMES = (1, 2, 3, 2, 1, 0)
 GLOW_FRAME_TICKS = 6
+HUD_EXIT_MS = 450
+
+
+def slide_text_out(label, start_y, started):
+    elapsed = ticks_diff(ticks_ms(), started)
+    if elapsed >= HUD_EXIT_MS:
+        label.hide()
+        return None
+    label.y = start_y - (start_y + label.tile_height) * elapsed / HUD_EXIT_MS
+    return started
+
 
 
 def garden_tiles(world):
@@ -62,6 +74,7 @@ class Garden(vs2.Scene):
                                         frame=4, visible=self.joined)
         self.mood = self.hud.label("steel8x8.png", columns=5, x=108, y=1,
                                    flip_x=True, flip_y=True, text="RELAX", visible=False)
+        self.mood_exit = None
         self.flower_half = self.image("flowers.png").width // 2
         self.flower_phase = 0
         self.scroll = 0
@@ -104,7 +117,14 @@ class Garden(vs2.Scene):
         slow = slow1 or slow2
         if slow != self.slow:
             self.slow = slow
-            self.mood.visible = slow
+            if slow:
+                self.mood.y = 1
+                self.mood.show()
+                self.mood_exit = None
+            else:
+                self.mood_exit = ticks_ms()
+        if self.mood_exit is not None:
+            self.mood_exit = slide_text_out(self.mood, 1, self.mood_exit)
         self.speed = SLOW_SPEED if slow else DRIFT_SPEED
         self.spawn_ms = SLOW_SPAWN_MS if slow else DRIFT_SPAWN_MS
         self.dream_time = (self.dream_time + self.speed) % 96

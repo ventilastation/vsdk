@@ -22,6 +22,16 @@ FLOWER_DRIFT_RATIO = 0.08
 FLOWER_DEPTH = 255
 GLOW_FRAMES = (1, 2, 3, 2, 1, 0)
 GLOW_FRAME_TICKS = 6
+HUD_EXIT_MS = 450
+
+
+def slide_text_out(label, start_y, started):
+    elapsed = ticks_diff(ticks_ms(), started)
+    if elapsed >= HUD_EXIT_MS:
+        label.hide()
+        return None
+    label.y = start_y - (start_y + label.tile_height) * elapsed / HUD_EXIT_MS
+    return started
 
 
 def garden_tiles(world):
@@ -63,9 +73,11 @@ class Garden(vs2.Scene):
                                         frame=4, visible=self.joined)
         self.mood = self.hud.label("steel8x8.png", columns=5, x=108, y=1,
                                    flip_x=True, flip_y=True, text="RELAX", visible=False)
-        self.sound_notice = self.hud.label("steel8x8.png", columns=9, x=92, y=11,
+        self.mood_exit = None
+        self.sound_notice = self.hud.label("steel8x8.png", columns=5, x=108, y=11,
                                            flip_x=True, flip_y=True, visible=False)
         self.sound_notice_until = None
+        self.sound_notice_exit = None
         self.flower_half = self.image("flowers.png").width // 2
         self.flower_phase = 0
         self.scroll = 0
@@ -111,7 +123,14 @@ class Garden(vs2.Scene):
         slow = slow1 or slow2
         if slow != self.slow:
             self.slow = slow
-            self.mood.visible = slow
+            if slow:
+                self.mood.y = 1
+                self.mood.show()
+                self.mood_exit = None
+            else:
+                self.mood_exit = ticks_ms()
+        if self.mood_exit is not None:
+            self.mood_exit = slide_text_out(self.mood, 1, self.mood_exit)
         self.speed = SLOW_SPEED if slow else DRIFT_SPEED
         self.spawn_ms = SLOW_SPAWN_MS if slow else DRIFT_SPAWN_MS
         self.dream_time = (self.dream_time + self.speed) % 96
@@ -131,16 +150,21 @@ class Garden(vs2.Scene):
 
         if (self.sound_notice_until is not None
                 and ticks_diff(ticks_ms(), self.sound_notice_until) >= 0):
-            self.sound_notice.hide()
+            self.sound_notice_exit = self.sound_notice_until
             self.sound_notice_until = None
+        if self.sound_notice_exit is not None:
+            self.sound_notice_exit = slide_text_out(self.sound_notice, 11,
+                                                     self.sound_notice_exit)
         if joy1.just_pressed(X) or joy2.just_pressed(X):
             self.sound_on = not self.sound_on
             if self.sound_on:
                 vs2.audio.music("lullaby", loop=True)
             else:
                 vs2.audio.stop_music()
-            self.sound_notice.text = "SOUND ON" if self.sound_on else "SOUND OFF"
+            self.sound_notice.text = "NOISY" if self.sound_on else "QUIET"
+            self.sound_notice.y = 11
             self.sound_notice.show()
+            self.sound_notice_exit = None
             self.sound_notice_until = ticks_add(ticks_ms(), 2000)
 
     def bloom(self, seed, player):

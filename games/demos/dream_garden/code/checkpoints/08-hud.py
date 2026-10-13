@@ -2,6 +2,19 @@
 import vs2
 from vs2.controls import A, B, LEFT, RIGHT, joy1
 from urandom import randrange
+from utime import ticks_ms, ticks_diff
+
+HUD_EXIT_MS = 450
+
+
+def slide_text_out(label, start_y, started):
+    elapsed = ticks_diff(ticks_ms(), started)
+    if elapsed >= HUD_EXIT_MS:
+        label.hide()
+        return None
+    label.y = start_y - (start_y + label.tile_height) * elapsed / HUD_EXIT_MS
+    return started
+
 
 class Game(vs2.Scene):
     def build(self):
@@ -27,6 +40,7 @@ class Game(vs2.Scene):
         hud = self.layer("hud", projection=vs2.HUD)
         self.mood = hud.label("steel8x8.png", columns=5, x=108, y=1,
                               flip_x=True, flip_y=True, text="RELAX", visible=False)
+        self.mood_exit = None
         self.slow = False
         self.slow_ready = not joy1.held(A)
 
@@ -36,7 +50,14 @@ class Game(vs2.Scene):
         slow = self.slow_ready and joy1.held(A)
         if slow != self.slow:
             self.slow = slow
-            self.mood.visible = slow
+            if slow:
+                self.mood.y = 1
+                self.mood.show()
+                self.mood_exit = None
+            else:
+                self.mood_exit = ticks_ms()
+        if self.mood_exit is not None:
+            self.mood_exit = slide_text_out(self.mood, 1, self.mood_exit)
         self.speed = 0.12 if slow else 0.45
         self.spawn_ms = 4000 if slow else 1800
         steer = joy1.held(LEFT) - joy1.held(RIGHT)
