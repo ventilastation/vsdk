@@ -95,6 +95,9 @@ class BrowserComms:
     def next_extra(self):
         return self.extra_buttons
 
+    def ventilagon_is_idle(self):
+        return bool(self.worker_host.ventilagon_is_idle()) if self.worker_host else False
+
     def next_command(self):
         if self.exit_pending:
             self.exit_pending = False
@@ -170,6 +173,7 @@ class BrowserDisplay(NullDisplay):
         self.assets = {}
         self.dirty_asset_slots = set()
         self.vs2_scene_data = None
+        self.raw_frame = False
         self.starfield_enabled = True
         self._starfield_dirty = True
         self._vs2_scene_line = None
@@ -394,6 +398,7 @@ class BrowserDisplay(NullDisplay):
         self.dirty_asset_slots.add(number)
 
     def prepare_frame(self, scene):
+        self.raw_frame = bool(getattr(scene, "raw_frame", False))
         if getattr(scene, "_vs_declared_api", None) != "vs2":
             self.vs2_scene_data = None
             return
@@ -422,7 +427,11 @@ class BrowserDisplay(NullDisplay):
                 stripmap = self.asset_data.get(slot)
                 if stripmap is not None:
                     self._post_command("imagestrip %d %d" % (slot, len(stripmap)), stripmap)
-        if (
+        if self.raw_frame:
+            # The native worker queued the RGB frame. Post only metadata;
+            # leave out the unrelated legacy sprite table.
+            self._post_frame(full)
+        elif (
             self._worker_post_present_ptr is not None or
             self._worker_post_present is not None
         ):

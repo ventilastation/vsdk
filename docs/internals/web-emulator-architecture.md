@@ -82,6 +82,14 @@ honor it.
 
 ## Web Emulator Overview
 
+Super Ventilagon uses the same original rotor C core in a small standalone
+WASM module alongside MicroPython, loaded by `ventilagon-native.js`. Its
+Python scene sends primitive elapsed-time/input values; the worker copies
+RGB bytes from native WASM memory directly into a `frame_rgb` event. It does
+not move pixels through MicroPython's heap. Raw scenes post frame metadata
+without the legacy sprite table. The [native adapter documentation](../../emulator/ventilagon/README.md)
+describes the desktop library, shared simulation clock, builds and parity checks.
+
 The browser-based emulator is split into four main layers:
 
 1. `vsdk/web/app.js`

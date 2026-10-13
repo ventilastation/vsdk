@@ -1,11 +1,10 @@
 try:
     import ventilagon
 except ImportError:
-    # Emulators (desktop + web) have no native module: use the MicroPython port.
-    from . import ventilagon_emu as ventilagon
+    # Emulators run the original C in their host instead of translating it.
+    from ventilastation import ventilagon_host as ventilagon
 
-# The native C module loops on the rotor display task; the emulator port has no such
-# task, so the Scene pumps it once per frame. Absent on hardware (getattr -> None).
+# The rotor loops on its display task; emulator hosts advance their own C clock.
 _ventilagon_tick = getattr(ventilagon, "tick", None)
 from ventilastation.director import director, comms, stripes
 from ventilastation.scene import Scene
@@ -13,6 +12,7 @@ from ventilastation.sprites import Sprite
 
 class VentilagonGame(Scene):
     stripes_rom = "other"
+    raw_frame = True
 
     def on_enter(self):
         super(VentilagonGame, self).on_enter()

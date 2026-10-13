@@ -39,13 +39,16 @@ if (!checkpoint) {
     // A file import avoids spending the constrained stack decoding a data URL.
     const vendor = pathToFileURL(join(root, "web/vendor/micropython/micropython.mjs")).href;
     const source = readFileSync(join(root, "web/wasm-worker.js"), "utf8")
-      .replace(/from "\.\/vendor\/micropython\/micropython\.mjs[^"]*"/u, `from ${JSON.stringify(vendor)}`);
+      .replace(/from "\.\/vendor\/micropython\/micropython\.mjs[^"]*"/u, `from ${JSON.stringify(vendor)}`)
+      .replace('"./ventilagon-native.js"', JSON.stringify(pathToFileURL(join(root, "web/ventilagon-native.js")).href));
     const fixture = join(temp, "worker.mjs");
     writeFileSync(fixture, `${source}\nexport { MicroPythonRuntime, workerHostState };\n`);
     const { MicroPythonRuntime, workerHostState } = await import(pathToFileURL(fixture).href);
     const runtime = new MicroPythonRuntime({
       fsRoot: "/games", pystack: 32 * 1024, heapsize: 8 * 1024 * 1024,
       micropythonWasmUrl: join(root, "web/vendor/micropython/micropython.wasm"),
+      ventilagonModuleUrl: pathToFileURL(join(root, "web/vendor/ventilagon/ventilagon.mjs")).href,
+      ventilagonWasmUrl: join(root, "web/vendor/ventilagon/ventilagon.wasm"),
       runtimeManifestUrl: "./runtime-manifest.json", runtimeBundleUrl: "./runtime-bundle.json",
       autostartSlug: "demos.dream_garden",
       workspaceFiles: checkpoint === "finished" ? [] : [{

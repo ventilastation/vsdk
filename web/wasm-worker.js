@@ -1,4 +1,5 @@
 import { loadMicroPython } from "./vendor/micropython/micropython.mjs?v=bridge-debug-20260622T204800Z";
+import { loadVentilagon } from "./ventilagon-native.js";
 
 const WORKER_BUILD_VERSION = "worker-debug-20260714-input-v2b";
 const MICROPYTHON_WASM_VERSION = "bridge-debug-20260622T204800Z";
@@ -217,6 +218,7 @@ class MicroPythonRuntime {
     this.config = config;
     this.initialized = false;
     this.mp = null;
+    this.ventilagon = null;
     this.workspaceFilePaths = new Set();
     this.deletedWorkspacePaths = new Set();
     this.runtimeManifestFiles = [];
@@ -276,7 +278,31 @@ class MicroPythonRuntime {
       stderr: (line) => console.error("[mp]", line),
     });
 
+    const nativeUrl = this.config.ventilagonModuleUrl || new URL(
+      `./vendor/ventilagon/ventilagon.mjs?v=${MICROPYTHON_WASM_VERSION}`, self.location.href).href;
+    const nativeWasmUrl = this.config.ventilagonWasmUrl || new URL(
+      `./vendor/ventilagon/ventilagon.wasm?v=${MICROPYTHON_WASM_VERSION}`, self.location.href).href;
+    this.ventilagon = await loadVentilagon(nativeUrl, nativeWasmUrl);
+    const drainVentilagon = () => this.ventilagon.drainCommands(line => handleRuntimeCommand(line, null));
+
     this.mp.registerJsModule("__vs_host", {
+      ventilagon_enter: seed => {
+        this.ventilagon.enter(seed);
+        drainVentilagon();
+        return null;
+      },
+      ventilagon_exit: () => {
+        this.ventilagon.exit();
+        drainVentilagon();
+        return null;
+      },
+      ventilagon_tick: (elapsedUs, buttons) => {
+        const pixels = this.ventilagon.update(elapsedUs, buttons);
+        handleRuntimeCommand("frame_rgb", pixels);
+        drainVentilagon();
+        return null;
+      },
+      ventilagon_is_idle: () => this.ventilagon.isIdle() ? 1 : 0,
       // get_buttons remains for older browser bundles; the v2 accessors below
       // keep the bridge primitive-only and avoid per-frame object allocation.
       get_buttons: () => workerHostState.joy1,

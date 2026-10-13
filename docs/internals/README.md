@@ -38,6 +38,7 @@ shape and the rules that keep biting.
 
 - **[vs2-decisions.md](vs2-decisions.md)** — accepted current API decisions.
 - **[emulator-performance.md](emulator-performance.md)** — desktop CPU/GPU comparison and earlier profiling results.
+- **[ventilagon-emulator-assessment.md](ventilagon-emulator-assessment.md)** — Super Ventilagon timing/rendering investigation and shared C recommendation.
 - **[workbench.md](workbench.md)** — the second ESP32-S3 that exercises a
   real board: LED-bus capture, hall simulation, UART bridge, telemetry.
 - **[vs2-hardware-acceptance.md](vs2-hardware-acceptance.md)** — repeatable
@@ -94,6 +95,7 @@ building
 deploying-web-emulator
 emulator-audio
 emulator-performance
+ventilagon-emulator-assessment
 game-packages
 host-protocol
 input-protocol-v2

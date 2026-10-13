@@ -14,6 +14,8 @@ class InputParser:
         self.joy2  = 0
         self.extra = 0
         self.resync_pending = False
+        self.ventilagon_idle = False
+        self.ventilagon_error = None
         self._state     = self._STATE_SCAN
         self._joy_buf   = bytearray(3)
         self._joy_pos   = 0
@@ -25,6 +27,8 @@ class InputParser:
         self.joy1  = 0
         self.joy2  = 0
         self.extra = 0
+        self.ventilagon_idle = False
+        self.ventilagon_error = None
         self._state = self._STATE_SCAN
         self._cmd_buf = bytearray()
         self._cmd_queue = []
@@ -77,7 +81,11 @@ class InputParser:
             elif self._state == self._STATE_COMMAND:
                 if b == 0x0A:
                     line = self._cmd_buf.decode("ascii", "replace").strip()
-                    if line:
+                    if line in ("ventilagon_idle 0", "ventilagon_idle 1"):
+                        self.ventilagon_idle = line.endswith("1")
+                    elif line.startswith("ventilagon_error "):
+                        self.ventilagon_error = line[17:]
+                    elif line:
                         self._cmd_queue.append(line)
                     self._state = self._STATE_SCAN
                 elif len(self._cmd_buf) >= self._CMD_MAX:

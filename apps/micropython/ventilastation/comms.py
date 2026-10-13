@@ -66,6 +66,14 @@ def next_joy2():
 def next_extra():
     return _parser.extra
 
+
+def ventilagon_is_idle():
+    return _parser.ventilagon_idle
+
+
+def ventilagon_error():
+    return _parser.ventilagon_error
+
 def _drop_conn(reason):
     global conn
     print("comms: drop connection:", reason)
@@ -75,6 +83,9 @@ def _drop_conn(reason):
 
 def send(line, data=b""):
     global conn
+    if line.startswith(b"ventilagon enter "):
+        _parser.ventilagon_idle = False
+        _parser.ventilagon_error = None
     if conn:
         msg = line + b"\n" + data
         view = memoryview(msg)

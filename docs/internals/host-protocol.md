@@ -32,7 +32,10 @@ are logged and ignored — hosts must tolerate commands they don't handle.
 | `vs2_scene <nbytes>` | `<nbytes>` | v2 scene/layer payload; currently decoded by the desktop and web emulators into the sprite renderer shape |
 | `imagestrip <slot> <nbytes>` | `<nbytes>` | one image strip: 4-byte header (w, h, frames, palette) + pixels, same encoding as a ROM strip entry |
 | `palette <n> <version>` | `n × 1024` bytes | palette block, `n` palettes of 256 × 4-byte entries ([rom-format.md](rom-format.md)) |
-| `frame_rgb` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED); used by full-frame renderers such as the Ventilagon port |
+| `frame_rgb` | 256 × 54 × 3 bytes | full RGB POV frame (R, G, B per LED); the native Ventilagon worker emits this event directly from C memory |
+| `ventilagon enter <seed>` | — | desktop only: start the shared C game with a 32-bit seed |
+| `ventilagon tick <us> <buttons>` | — | desktop only: advance C by elapsed microseconds (0..250000) with the v1 button mask, then present its RGB frame locally |
+| `ventilagon exit` | — | desktop only: stop the C game and drain its base/audio commands |
 | `frame_apa102` † | 256 × 54 × 4 bytes | raw spatial APA102 POV frame. Every cell is the unmodified LED datum `[0xe0 \| GB, B, G, R]`; the desktop emulator decodes its light output. |
 
 † `frame_apa102` is the one exception to the framing described above: the
@@ -42,6 +45,15 @@ protocol instead, specifically so a lost network packet can't stall or
 desync the rest of the stream the way it could over TCP — see
 [workbench.md#why-udp-not-tcp](workbench.md#why-udp-not-tcp) for the wire
 format and reasoning.
+
+The desktop native host sends `ventilagon_idle 0|1` back over the input link
+on presentation. It sends `ventilagon_error <message>` if native loading or
+execution fails; the scene raises through the normal director error path.
+These status lines are consumed by the desktop input parser. Native pixels
+do not travel through MicroPython or its TCP/named-pipe connection. A scene
+with `raw_frame = True` owns presentation until exit, suppressing legacy
+sprite packets that would otherwise clear the frame. See the
+[native adapter](../../emulator/ventilagon/README.md) for timing and builds.
 
 `vs2_scene` is intentionally separate from the legacy 500-byte `sprites`
 command. The first payload version has this little-endian layout:

@@ -41,10 +41,11 @@ void display_reset() {
   drift_speed = 0;
 }
 
+// Host adapters reset this counter when starting a deterministic replay.
+unsigned int display_drift_counter = 0;
 void display_adjust_drift() {
-  static int n = 0;
-  n = (n+1) & 0x3FF;
-  if (n == 0) {
+  display_drift_counter = (display_drift_counter+1) & 0x3FF;
+  if (display_drift_counter == 0) {
     drift_speed = level_new_drift(drift_speed);
   }
 }

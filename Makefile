@@ -94,7 +94,7 @@ define NL
 endef
 
 IDF_SOURCE_HINT := source ../../esp-idf/esp-5.5.2/export.sh
-NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs vs2-hardware-test base-monitor
+NO_IDF_TARGETS := list-boards register-rotor register-workbench register-base micropython-webassembly chipsynth-wasm ventilagon-native ventilagon-wasm web-runtime-bundle web-emulator-bundle remote-workbench-install remote-workbench-setup remote-workbench-doctor remote-workbench-run remote-workbench-smoke run-emulator voom-sounds generate-roms build-fs vs2-hardware-test base-monitor
 IDF_GOALS := $(filter-out $(NO_IDF_TARGETS),$(MAKECMDGOALS))
 ifneq ($(strip $(IDF_GOALS)),)
 ifeq ($(strip $(IDF_PATH)),)
@@ -153,6 +153,13 @@ micropython-webassembly:
 
 chipsynth-wasm:
 	./tools/build-chipsynth-wasm.sh
+
+.PHONY: ventilagon-native ventilagon-wasm
+ventilagon-native:
+	$(PYTHON) ./tools/build_ventilagon.py
+
+ventilagon-wasm:
+	$(PYTHON) ./tools/build_ventilagon.py --wasm
 
 # Brings the ROMs, web/runtime-manifest.json and web/runtime-bundle.json up
 # to date. Rarely needed by hand: the desktop emulator's web server and
