@@ -1,6 +1,6 @@
 """Dream Garden: a shared, unhurried circular garden for Overkill 2026.
 
-LEFT/RIGHT drift, hold A to slow the whole garden, B rests, X toggles audio.
+LEFT/RIGHT drift, hold A to slow the seeds, B rests, X toggles audio.
 A second controller can join at any time. Watching is also a way to play.
 """
 
@@ -13,6 +13,7 @@ from vs2.controls import A, B, X, LEFT, RIGHT, joy1, joy2
 AWAKE, LEFT_POSE, RIGHT_POSE, ASLEEP = range(4)
 DRIFT_SPEED = 0.45
 SLOW_SPEED = 0.12
+CLOUD_SPEED = DRIFT_SPEED
 DRIFT_SPAWN_MS = 1800
 SLOW_SPAWN_MS = 4000
 SEED_DEPTH = 160
@@ -90,9 +91,13 @@ class Garden(vs2.Scene):
         self.slow = False
         self.sound_on = True
         vs2.audio.music("lullaby", loop=True)
-        # Start toward LEFT; stopping keeps each player’s last steering direction.
+        # Idle catches alternate; movement resets the first idle planting side.
         self.last_direction1 = 1
         self.last_direction2 = 1
+        self.plant_side1 = 1
+        self.plant_side2 = 1
+        self.moving1 = False
+        self.moving2 = False
         self.seed_glows = {}
         self.speed = DRIFT_SPEED
         self.spawn_ms = DRIFT_SPAWN_MS
@@ -101,11 +106,16 @@ class Garden(vs2.Scene):
     def steer(self, dreamer, controller, base_frame, sleeping):
         direction = controller.held(LEFT) - controller.held(RIGHT)
         dreamer.x = (dreamer.x + direction) % vs2.display.width
-        if direction:
-            if dreamer is self.friend:
+        if dreamer is self.friend:
+            self.moving2 = bool(direction)
+            if direction:
                 self.last_direction2 = direction
-            else:
+                self.plant_side2 = direction
+        else:
+            self.moving1 = bool(direction)
+            if direction:
                 self.last_direction1 = direction
+                self.plant_side1 = direction
         pose = (ASLEEP if sleeping else
                 LEFT_POSE if direction > 0 else
                 RIGHT_POSE if direction < 0 else AWAKE)
@@ -144,8 +154,8 @@ class Garden(vs2.Scene):
             self.mood_exit = slide_text_out(self.mood, 1, self.mood_exit)
         self.speed = SLOW_SPEED if slow else DRIFT_SPEED
         self.spawn_ms = SLOW_SPAWN_MS if slow else DRIFT_SPAWN_MS
-        self.dream_time = (self.dream_time + self.speed) % 96
-        self.scroll = (self.scroll + self.speed) % (
+        self.dream_time = (self.dream_time + CLOUD_SPEED) % 96
+        self.scroll = (self.scroll + CLOUD_SPEED) % (
             PATTERN_ROWS * self.ground.tile_height)
         self.ground.view_y = self.scroll
         phase = int(self.dream_time // 6) % 2
@@ -154,7 +164,7 @@ class Garden(vs2.Scene):
             for flower in self.flowers:
                 flower.frame = (flower.frame // 2) * 2 + phase
         for flower in self.flowers:
-            flower.y += self.speed * SEED_SPEED_RATIO * FLOWER_DRIFT_RATIO
+            flower.y += CLOUD_SPEED * SEED_SPEED_RATIO * FLOWER_DRIFT_RATIO
             if flower.y >= FLOWER_DEPTH:
                 self.flowers.despawn(flower)
         self.move_seeds()
@@ -179,11 +189,16 @@ class Garden(vs2.Scene):
             self.sound_notice_until = ticks_add(ticks_ms(), 2000)
 
     def bloom(self, seed, player):
-        side = self.last_direction2 if player is self.friend else self.last_direction1
+        side = self.plant_side2 if player is self.friend else self.plant_side1
         centre = player.x + player.width // 2
         self.flowers.spawn(x=(centre + side * player.width * 0.75
                               - self.flower_half) % vs2.display.width, y=player.y,
                            frame=randrange(4) * 2 + self.flower_phase)
+        if player is self.friend:
+            if not self.moving2:
+                self.plant_side2 = -side
+        elif not self.moving1:
+            self.plant_side1 = -side
         self.retire_seed(seed)
         if self.sound_on:
             vs2.audio.sound("bloom")
