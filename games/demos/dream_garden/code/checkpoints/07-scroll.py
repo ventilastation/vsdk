@@ -3,17 +3,31 @@ import vs2
 from vs2.controls import A, B, LEFT, RIGHT, joy1
 from urandom import randrange
 
+PATTERN_ROWS = 12
+SEED_SPEED_RATIO = 0.85
+# (column, row, first tile, width in cells, height in cells)
+CLOUD_PATCHES = ((1, 0, 0, 1, 1), (7, 1, 1, 2, 1), (11, 4, 3, 3, 2),
+                 (5, 6, 9, 1, 1), (13, 8, 10, 2, 1), (1, 9, 12, 3, 2))
+
+
+def cloud_tiles(air):
+    ground = air.tilemap("clouds.png", columns=16, rows=22,
+                         view_width=256, view_height=160)
+    for base_row in range(0, ground.rows, PATTERN_ROWS):
+        for col, row, first, width, height in CLOUD_PATCHES:
+            for dy in range(height):
+                target_row = base_row + row + dy
+                if target_row < ground.rows:
+                    for dx in range(width):
+                        ground[col + dx, target_row] = first + dy * width + dx
+    return ground
+
+
 class Game(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.air = self.layer("air", projection=vs2.TUNNEL)
-        self.ground = self.air.tilemap("garden.png", columns=16, rows=16,
-                                         view_width=256, view_height=160)
-        for row in range(16):
-            for col in range(16):
-                band = row % 6
-                self.ground[col, row] = ((col + band) % 8 if (col + band * 3) % 5 == 0
-                                         else vs2.EMPTY_TILE)
+        self.ground = cloud_tiles(self.air)
         self.seeds = self.air.sprite_pool("seed.png", count=16)
         self.flowers = self.world.sprite_pool("flowers.png", count=24, on_empty=vs2.RECYCLE)
         self.dreamer = self.world.sprite("dreamer.png", y=0)
@@ -34,14 +48,14 @@ class Game(vs2.Scene):
                               2 if steer < 0 else 0)
         self.dream_time = (self.dream_time + self.speed) % 96
         frame = int(self.dream_time // 3) % self.image("seed.png").frames
-        self.scroll = (self.scroll + self.speed) % (6 * self.ground.tile_height)
+        self.scroll = (self.scroll + self.speed) % (PATTERN_ROWS * self.ground.tile_height)
         self.ground.view_y = self.scroll
         for flower in self.flowers:
-            flower.y += self.speed * 0.08
+            flower.y += self.speed * SEED_SPEED_RATIO * 0.08
             if flower.y >= 255:
                 self.flowers.despawn(flower)
         for seed in self.seeds:
-            seed.y -= self.speed
+            seed.y -= self.speed * SEED_SPEED_RATIO
             seed.frame = frame
             if seed.overlaps(self.dreamer):
                 self.bloom(seed)

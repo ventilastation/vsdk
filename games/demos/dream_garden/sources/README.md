@@ -10,9 +10,8 @@ Neither Node nor sharp is a game runtime dependency.
 
 The generated sheet contains two dream creatures, golden seeds, four flower
 species and sparse garden accents. Dreamers have four poses each. Flowers have
-two frames each. Seeds are packed at 9 × 9 pixels: a subdued idle frame and
-three brighter glow frames. Flying accents are shrunk inside their 16-pixel
-tiles and darkened so the planted flowers remain distinct. `images/steel8x8.png` is copied unchanged from the SDK's
+two frames each. The original fourth row is unused in this cloud experiment. Seeds are packed at 9 × 9 pixels: a subdued idle frame and
+three brighter glow frames. Flying accents now use the separate cloud atlas described below. `images/steel8x8.png` is copied unchanged from the SDK's
 `games/demos/tutorial_game/images/steel8x8.png`.
 
 `make_audio.py` synthesizes the original bloom chime and a 32-second soft loop
@@ -24,3 +23,19 @@ used.
 ## Generation prompt
 
 Create a production-ready transparent pixel-art SPRITE ATLAS for an experimental circular arcade game called Dream Garden. Exact layout: EIGHT equal columns and FOUR equal rows, a 2:1 horizontal image. Each cell contains one separate centered sprite with generous transparent padding. No visible grid lines, letters, numbers, labels, background, shadow beneath objects, or scene. Strict low resolution pixel art: chunky crisp square pixels, limited pastel mint/lavender/pink/amber palette with deep navy outlines, no antialiasing style or gradients. Intended to read at 19x19 pixels. ROW ONE all 8 cells: a tiny rounded dream creature with two eyes and soft leafy antennae. Cells 1-4 pink creature, neutral face, leaning left, leaning right, sleeping with closed eyes. Cells 5-8 same creature in mint blue, same four poses. ROW TWO cells 1-4: one floating golden seed/wisp in four subtle animation phases, simple bright core and a little tail; cells 5-8 entirely empty transparent. ROW THREE all 8 cells: four distinct dream flowers, TWO frames per flower with petals open slightly differently. Flower species: pink star blossom, mint fern blossom, lavender moon flower, amber glowing mushroom flower. ROW FOUR all 8 cells: eight tiny sparse dream garden accents on transparency: a mint root curl, a pink petal pair, a lavender crescent, three tiny amber stars, a blue sprout, a mint leaf, lavender bubbles, a single pink curl. All objects completely contained within their individual cells, exact consistent spacing. Cozy strange playful dream imagery for a festival about dreaming and rest. No spacecraft, weapons, robots, metal, UI, logos, or text. Export on genuine transparent background.
+
+## Cloud experiment
+
+The built-in imagegen tool generated `cloud-atlas.png` with the exact prompt in
+[cloud-prompt.txt](cloud-prompt.txt). Six fluffy silhouettes are packed at
+16 × 16, 32 × 16 and 48 × 32 pixels: two variants per size. Run
+`node games/demos/dream_garden/sources/prepare-clouds.cjs` with the same sharp
+installation to rebuild `images/clouds.png`.
+
+The script crops each source cell, resizes with nearest-neighbour sampling,
+snaps alpha at 200 to remove faint surrounding glow, and dims the cloud colours
+to 70%. It cuts whole clouds into adjoining 16 × 16 tiles, reversing the source cell
+order to match the polar renderer’s tile orientation. The map places frames in
+row-major order, without padding between tiles. The resulting strip has 18 frames. Clouds have
+a separate palette group so their colours do not consume the characters' palette.
+Clouds replace the original floating garden accents; golden seeds remain catchable.

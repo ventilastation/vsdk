@@ -3,6 +3,8 @@ import vs2
 from vs2.controls import A, B, LEFT, RIGHT, joy1
 from urandom import randrange
 
+SEED_SPEED_RATIO = 0.85
+
 class Game(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
@@ -23,7 +25,7 @@ class Game(vs2.Scene):
         self.dream_time = (self.dream_time + self.speed) % 96
         frame = int(self.dream_time // 3) % self.image("seed.png").frames
         for seed in self.seeds:
-            seed.y -= self.speed
+            seed.y -= self.speed * SEED_SPEED_RATIO
             seed.frame = frame
             if seed.y < -seed.image.height:
                 self.seeds.despawn(seed)

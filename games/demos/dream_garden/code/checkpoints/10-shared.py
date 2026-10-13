@@ -17,7 +17,11 @@ DRIFT_SPAWN_MS = 1800
 SLOW_SPAWN_MS = 4000
 SEED_DEPTH = 160
 FLOWER_COUNT = 24
-PATTERN_ROWS = 6
+PATTERN_ROWS = 12
+SEED_SPEED_RATIO = 0.85
+# (column, row, first tile, width in cells, height in cells)
+CLOUD_PATCHES = ((1, 0, 0, 1, 1), (7, 1, 1, 2, 1), (11, 4, 3, 3, 2),
+                 (5, 6, 9, 1, 1), (13, 8, 10, 2, 1), (1, 9, 12, 3, 2))
 FLOWER_DRIFT_RATIO = 0.08
 FLOWER_DEPTH = 255
 GLOW_FRAMES = (1, 2, 3, 2, 1, 0)
@@ -35,15 +39,16 @@ def slide_text_out(label, start_y, started):
 
 
 
-def garden_tiles(world):
-    ground = world.tilemap("garden.png", columns=16, rows=16,
-                           view_width=256, view_height=160)
-    for row in range(16):
-        for col in range(16):
-            band = row % PATTERN_ROWS
-            ground[col, row] = ((col + band) % 8
-                                if (col + band * 3) % 5 == 0
-                                else vs2.EMPTY_TILE)
+def cloud_tiles(air):
+    ground = air.tilemap("clouds.png", columns=16, rows=22,
+                         view_width=256, view_height=160)
+    for base_row in range(0, ground.rows, PATTERN_ROWS):
+        for col, row, first, width, height in CLOUD_PATCHES:
+            for dy in range(height):
+                target_row = base_row + row + dy
+                if target_row < ground.rows:
+                    for dx in range(width):
+                        ground[col + dx, target_row] = first + dy * width + dx
     return ground
 
 
@@ -64,7 +69,7 @@ class Garden(vs2.Scene):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.air = self.layer("air", projection=vs2.TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
-        self.ground = garden_tiles(self.air)
+        self.ground = cloud_tiles(self.air)
         self.flowers = self.world.sprite_pool(
             "flowers.png", count=FLOWER_COUNT, on_empty=vs2.RECYCLE)
         self.seeds = self.air.sprite_pool("seed.png", count=16)
@@ -143,7 +148,7 @@ class Garden(vs2.Scene):
             for flower in self.flowers:
                 flower.frame = (flower.frame // 2) * 2 + phase
         for flower in self.flowers:
-            flower.y += self.speed * FLOWER_DRIFT_RATIO
+            flower.y += self.speed * SEED_SPEED_RATIO * FLOWER_DRIFT_RATIO
             if flower.y >= FLOWER_DEPTH:
                 self.flowers.despawn(flower)
         self.move_seeds()
@@ -158,7 +163,7 @@ class Garden(vs2.Scene):
 
     def move_seeds(self):
         for seed in self.seeds:
-            seed.y -= self.speed
+            seed.y -= self.speed * SEED_SPEED_RATIO
             self.glow_seed(seed)
             if seed.overlaps(self.dreamer):
                 self.bloom(seed, self.dreamer)
