@@ -24,7 +24,7 @@ class KeyboardDiagram:
         self.titles = [pyglet.text.Label("Player %d  ·  %s" % (player, description),
                                        font_name="Arial", weight="bold", anchor_y="top",
                                        batch=self.batch, group=text)
-                       for player, description in [(1, "letter keys"), (2, "arrows + numpad")]]
+                       for player, description in [(1, "arrows + numpad"), (2, "letter keys")]]
         self.footer = pyglet.text.Label(
             "Try keys here: they light up without controlling the game.\n"
             "F1 help · F4 settings · F2 CPU/GPU · F3 compare · F5 hall filter\n"

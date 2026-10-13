@@ -108,14 +108,14 @@ def test_two_controllers_give_joy2_its_own_dpad_and_faces():
 
 def test_keyboard_maps_all_protocol_v2_controls():
     expected = {
-        "W": (4, 0, 0), "S": (8, 0, 0), "A": (1, 0, 0), "D": (2, 0, 0),
-        "SPACE": (16, 0, 0), "B": (32, 0, 0), "N": (64, 0, 0), "M": (0, 0, 1),
-        "_1": (0, 0, 8), "_2": (0, 0, 4),
-        "UP": (0, 4, 0), "DOWN": (0, 8, 0), "LEFT": (0, 1, 0), "RIGHT": (0, 2, 0),
-        "NUM_0": (0, 16, 0), "NUM_1": (0, 32, 0), "NUM_2": (0, 64, 0), "NUM_3": (0, 0, 2),
-        "NUM_ADD": (0, 0, 32), "NUM_ENTER": (0, 0, 16),
-        "NUM_INSERT": (0, 16, 0), "NUM_END": (0, 32, 0),
-        "NUM_DOWN": (0, 64, 0), "NUM_NEXT": (0, 0, 2),
+        "W": (0, 4, 0), "S": (0, 8, 0), "A": (0, 1, 0), "D": (0, 2, 0),
+        "SPACE": (0, 16, 0), "B": (0, 32, 0), "N": (0, 64, 0), "M": (0, 0, 2),
+        "_1": (0, 0, 32), "_2": (0, 0, 16),
+        "UP": (4, 0, 0), "DOWN": (8, 0, 0), "LEFT": (1, 0, 0), "RIGHT": (2, 0, 0),
+        "NUM_0": (16, 0, 0), "NUM_1": (32, 0, 0), "NUM_2": (64, 0, 0), "NUM_3": (0, 0, 1),
+        "NUM_ADD": (0, 0, 8), "NUM_ENTER": (0, 0, 4),
+        "NUM_INSERT": (16, 0, 0), "NUM_END": (32, 0, 0),
+        "NUM_DOWN": (64, 0, 0), "NUM_NEXT": (0, 0, 1),
     }
     class Keys:
         pressed = set()
@@ -145,7 +145,7 @@ def test_help_preview_does_not_leak_held_keys_into_gameplay():
     gate.read(keys, False)
     keys.pressed = {"SPACE", "NUM_ADD"}
     keyboard, v2 = gate.read(keys, False)
-    assert pack_controllers(None, keyboard=keyboard, keyboard_v2=v2)[:3] == (16, 0, 32)
+    assert pack_controllers(None, keyboard=keyboard, keyboard_v2=v2)[:3] == (0, 16, 8)
 
 
 def test_ota_shortcut_requires_ctrl_or_command():

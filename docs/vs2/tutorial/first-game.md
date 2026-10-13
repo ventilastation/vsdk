@@ -164,12 +164,12 @@ desktop emulator the keyboard stands in for them:
 
 | Control | Player 1 | Player 2 |
 |---|---|---|
-| Up / Down / Left / Right | W / S / A / D | Arrow keys |
-| A / B / C / D | Space / B / N / M | Numpad 0 / 1 / 2 / 3 |
-| Select / Start | 1 / 2 | Numpad + / Enter |
+| Up / Down / Left / Right | Arrow keys | W / S / A / D |
+| A / B / C / D | Numpad 0 / 1 / 2 / 3 | Space / B / N / M |
+| Select / Start | Numpad + / Enter | 1 / 2 |
 
 Press **F1** to see the keyboard layout. Select is `BACK` in the game API;
-C and D are `X` and `Y`. Player 2 uses the numeric keypad, including its Enter
+C and D are `X` and `Y`. Player 1 uses the numeric keypad, including its Enter
 key; the main Enter key is unassigned. The keypad works with Num Lock on or off.
 
 A USB gamepad works too. `joy2` is the second controller. Chapter 6 explains
