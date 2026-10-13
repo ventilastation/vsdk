@@ -255,6 +255,62 @@ def test_call_later_ordering():
     assert calls == ["now"], calls
 
 
+def test_scene_claims_unknown_commands():
+    runtime = fresh_runtime()
+    comms = runtime.platform.comms
+    commands = []
+    comms.next_command = lambda: commands.pop(0) if commands else None
+    claimed = []
+
+    class Listener(Scene):
+        def on_command(self, cmd_line):
+            claimed.append(cmd_line)
+            return cmd_line.startswith("probe_")
+
+        def step(self):
+            pass
+
+    menu = Scene()
+    listener = Listener()
+    director.push(menu)
+    director.push(listener)
+
+    commands.append("probe_data 1 2")
+    director.step_once()
+    assert claimed == ["probe_data 1 2"], claimed
+
+    # Known commands never reach the scene, however it answers.
+    commands.append("exit")
+    director.step_once()
+    assert claimed == ["probe_data 1 2"], claimed
+    assert runtime.scene_stack == [menu]
+
+    # A scene without the hook keeps the old behavior (logged, ignored).
+    commands.append("probe_data 3 4")
+    director.step_once()
+    assert runtime.scene_stack == [menu]
+
+
+def test_on_command_errors_are_reported():
+    runtime = fresh_runtime()
+    comms = runtime.platform.comms
+    comms.next_command = lambda: "boom"
+
+    class Broken(Scene):
+        def on_command(self, cmd_line):
+            raise ValueError("bad " + cmd_line)
+
+    director.push(Broken())
+    try:
+        director.step_once()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("on_command errors must propagate")
+    tracebacks = [line for line, _data in comms.sent if line.startswith(b"traceback")]
+    assert len(tracebacks) == 1, comms.sent
+
+
 def test_runtime_reset():
     fresh_runtime()
     reset_runtime()

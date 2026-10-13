@@ -517,8 +517,39 @@ def dispatch_command(conn, command, args):
             avg_fps = avg_rpm / 30
             print("average %.2f rpm %.2f fps" % (avg_rpm, avg_fps))
 
+    elif command.startswith(b"serialtest_"):
+        _dispatch_serial_stress(conn, command, args)
+
     else:
+        if _serial_stress is not None and _serial_stress_junk(conn, command, args):
+            return
         print(command, *args)
+
+
+# --- Serial stress test (docs/internals/serial-stress-test.md) ---
+# Created when the rotor's Serial Stress app first speaks, so a normal session
+# never starts its downlink thread.
+_serial_stress = None
+
+
+def _dispatch_serial_stress(conn, command, args):
+    global _serial_stress
+    import serial_stress_host
+
+    if _serial_stress is None:
+        _serial_stress = serial_stress_host.StressHost(send_command)
+        _serial_stress.start_pump_thread()
+    if command in (b"serialtest_hello", b"serialtest_phase"):
+        # Line-error counters of whichever port carries the rotor's traffic
+        # (None over TCP or a named pipe).
+        _serial_stress.icount = serial_stress_host.icount_reader(getattr(conn, "sock", None))
+    if not serial_stress_host.dispatch_line(_serial_stress, conn.read, command, args):
+        print(command, *args)
+
+
+def _serial_stress_junk(conn, command, args):
+    import serial_stress_host
+    return serial_stress_host.recover_line(_serial_stress, conn.read, command, args)
 
 
 def _request_povcal_profile(conn, label):

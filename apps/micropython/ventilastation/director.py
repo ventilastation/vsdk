@@ -280,7 +280,20 @@ class Director:
             import machine
             machine.reset()
         else:
-            print("director: unknown control command:", cmd_line)
+            # The top scene may claim commands the director doesn't know
+            # (e.g. the serial stress test's own traffic) by defining
+            # on_command(cmd_line) and returning True.
+            scene = self.scene_stack[-1] if self.scene_stack else None
+            on_command = getattr(scene, "on_command", None)
+            handled = False
+            if on_command is not None:
+                try:
+                    handled = on_command(cmd_line)
+                except Exception as error:
+                    self._report_exception(error, "on_command", scene)
+                    raise
+            if not handled:
+                print("director: unknown control command:", cmd_line)
         return False
 
     def _enter_scene(self, scene):

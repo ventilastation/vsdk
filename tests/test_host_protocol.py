@@ -35,6 +35,14 @@ class HostProtocolParserTests(unittest.TestCase):
         event, = parser.feed(b"future hello world\n")
         self.assertEqual((event.command, event.args, event.payload), ("future", ("hello", "world"), b""))
 
+    def test_serial_stress_frames_carry_their_payload(self):
+        parser = HostProtocolParser()
+        events = parser.feed(b"serialtest_up 3 1 7\n\n\x00\xffserialtest_end 1 frames=1\n")
+        self.assertEqual([(e.command, e.args, e.payload) for e in events], [
+            ("serialtest_up", ("3", "1", "7"), b"\n\x00\xff"),
+            ("serialtest_end", ("1", "frames=1"), b""),
+        ])
+
     def test_invalid_length_is_rejected(self):
         parser = HostProtocolParser()
         with self.assertRaises(HostProtocolError):

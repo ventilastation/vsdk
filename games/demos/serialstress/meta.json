@@ -1,0 +1,8 @@
+{
+  "api": "vs2",
+  "api_revision": 2,
+  "title": "Serial Stress",
+  "menu_strip": "menu.png",
+  "menu_frame": 9,
+  "order": 50
+}
