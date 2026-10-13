@@ -156,6 +156,7 @@ for n in range(150):
             stream = conn.makefile('rb')
             entered = exited = False
             ticks = 0
+            buttons = []
             pixels, lines = [], []
             for _ in range(2000):
                 line = stream.readline()
@@ -170,6 +171,7 @@ for n in range(150):
                     if args[0] == b'exit': exited = True
                     if args[0] == b'tick':
                         ticks += 1
+                        buttons.append(int(args[2]))
                         if ticks == 1: conn.sendall(bytes((42, 2, 0, 0)))
                         if ticks == 10: conn.sendall(bytes((42, 0, 0, 1)))
                 elif command == b'sprites':
@@ -179,7 +181,13 @@ for n in range(150):
                         self.assertTrue(exited, 'legacy sprites overwrote the active game')
                         break
             self.assertTrue(entered and exited)
-            self.assertEqual(ticks, 10)
+            # Exit input crosses an asynchronous TCP connection. Linux can
+            # deliver it after another presentation frame (e.g. delayed ACKs),
+            # so require a prompt exit without assuming same-frame delivery.
+            self.assertGreaterEqual(ticks, 10)
+            self.assertLessEqual(ticks, 12)
+            self.assertIn(2, buttons, 'right input never reached the native game')
+            self.assertEqual(len(pixels), ticks)
             self.assertEqual(len(pixels[-1]), 256 * 54 * 3)
             self.assertTrue(any(pixels[-1]))
             self.assertIn((b'arduino', [b'stop']), lines)
