@@ -81,6 +81,14 @@ class StampTests(unittest.TestCase):
         stamp_web_versions.stamp(self.out)
         self.assertIn("?v=upstream", (self.out / "vendor" / "lib.js").read_text())
 
+    def test_new_local_imports_get_versions_only_in_the_published_copy(self):
+        with open(self.out / "app.js", "a") as app:
+            app.write('import { load } from "./native.js";\nimport "./setup.mjs";\n')
+        version = stamp_web_versions.stamp(self.out)
+        text = (self.out / "app.js").read_text()
+        self.assertIn('./native.js?v=' + version, text)
+        self.assertIn('./setup.mjs?v=' + version, text)
+
     def test_an_unknown_interpolated_constant_fails(self):
         with open(self.out / "app.js", "a") as app:
             app.write("const other = `./x.js?v=${SOME_NEW_VERSION}`;\n")

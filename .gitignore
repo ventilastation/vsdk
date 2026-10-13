@@ -35,6 +35,9 @@ emulator/ffmpeg-win/*.exe
 emulator/native/*.so
 emulator/native/*.dll
 emulator/native/*.dylib
+emulator/ventilagon/*.so
+emulator/ventilagon/*.dll
+emulator/ventilagon/*.dylib
 
 # Node
 node_modules/

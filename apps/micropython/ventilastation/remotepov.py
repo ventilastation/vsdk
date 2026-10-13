@@ -7,6 +7,7 @@ sprite_data = bytearray(b"\0\0\0\xff\xff" * 100)
 stripes = {}
 _palette = None
 vs2_scene_data = None
+_raw_frame = False
 _starfield = True
 
 def init(num_pixels, *hw_config):
@@ -48,7 +49,8 @@ def set_starfield(enabled):
     comms.send(b"starfield 1" if _starfield else b"starfield 0")
 
 def prepare_frame(scene):
-    global vs2_scene_data
+    global vs2_scene_data, _raw_frame
+    _raw_frame = bool(getattr(scene, "raw_frame", False))
     if getattr(scene, "_vs_declared_api", None) != "vs2":
         vs2_scene_data = None
         return
@@ -70,6 +72,10 @@ def update():
     if comms.was_new_connection():
         print("remotepov: new connection detected, resending all")
         _resend_all()
+    if _raw_frame:
+        # The scene's native host already presented its complete RGB frame.
+        # A sprites packet here would immediately clear it on the desktop.
+        return
     if vs2_scene_data is not None:
         comms.send(b"vs2_scene %d" % len(vs2_scene_data), vs2_scene_data)
     else:

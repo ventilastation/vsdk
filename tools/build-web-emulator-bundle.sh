@@ -8,6 +8,7 @@ PYTHON="${PYTHON:-$(if [ -x "$ROOT_DIR/.venv/bin/python" ]; then echo "$ROOT_DIR
 
 # A publish rebuilds every sprite ROM from scratch rather than trusting the
 # incremental check, then the runtime manifest and bundle that embed them.
+"$PYTHON" "$ROOT_DIR/tools/build_ventilagon.py" --wasm
 rm -f "$ROOT_DIR"/apps/micropython/roms/*.rom
 "$PYTHON" "$ROOT_DIR/tools/generate_web_runtime_bundle.py" --force
 

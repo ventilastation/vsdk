@@ -41,6 +41,7 @@ MPY_SOURCE_ROOTS = [
 CPYTHON_TESTS = [
     "tests/test_shuffler.py",
     "tests/test_ventilagon_parity.py",
+    "tests/test_ventilagon_host.py",
     "tests/test_rom_format.py",
     "tests/test_vs2_api.py",
     "tests/test_base_control.py",
@@ -107,6 +108,7 @@ MICROPYTHON_TESTS = [
 
 NODE_TESTS = [
     "tests/test_wasm_startup.mjs",
+    "tests/test_ventilagon_wasm.mjs",
     "tests/test_launch_options.mjs",
     "tests/test_game_starter.mjs",
     "tests/test_web_input_v2.mjs",

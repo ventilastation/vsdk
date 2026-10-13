@@ -29,6 +29,9 @@ WEB_SOURCE_DIR = Path(__file__).resolve().parent.parent / "web"
 STAMPED_SUFFIXES = {".html", ".js", ".mjs", ".css"}
 LITERAL_VERSION = re.compile(r"(\?v=)[A-Za-z0-9._-]+")
 INTERPOLATED_VERSION = re.compile(r"\?v=\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+# New local modules need cache busting too, without hand-written versions in
+# the source tree. Existing query strings are handled by LITERAL_VERSION.
+UNVERSIONED_MODULE = re.compile(r'''((?:\bfrom\s+|\bimport\s+)(["']))(\./[^"'?#]+\.(?:js|mjs))\2''')
 
 
 def constant_pattern(name):
@@ -60,6 +63,8 @@ def stamp(root):
                     f"stamp_web_versions: {path.name} builds ?v= from {name}, which "
                     "this tool does not stamp; add it to VERSION_CONSTANTS")
         new_text = LITERAL_VERSION.sub(lambda match: match.group(1) + version, text)
+        new_text = UNVERSIONED_MODULE.sub(
+            lambda match: match.group(1) + match.group(3) + "?v=" + version + match.group(2), new_text)
         for name in VERSION_CONSTANTS:
             new_text, count = constant_pattern(name).subn(lambda match: match.group(1) + version + match.group(2), new_text)
             if count:

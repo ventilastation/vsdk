@@ -343,7 +343,19 @@ def dispatch_command(conn, command, args):
     docs/internals/workbench.md)."""
     global last_time_seen
 
-    if command == b"frame_rgb":
+    if command == b"ventilagon":
+        from ventilagon_native import handle
+        try:
+            handle(args, set_voom_frame_rgb,
+                   lambda cmd, cmd_args: dispatch_command(conn, cmd, cmd_args), send)
+        except Exception as error:
+            # Preserve the host traceback and let the actual scene raise via
+            # its normal director lifecycle reporting, rather than go blank.
+            print(traceback.format_exc())
+            message = str(error).replace("\n", " ")[:220].encode("ascii", "replace")
+            send(b"ventilagon_error " + message + b"\n")
+
+    elif command == b"frame_rgb":
         data = conn.read(256 * 54 * 3)
         set_voom_frame_rgb(data)
 
