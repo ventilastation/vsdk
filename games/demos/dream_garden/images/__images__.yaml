@@ -6,8 +6,9 @@ palettegroups:
       frames: 4
     - strip: flowers.png
       frames: 8
-    - strip: garden.png
-      frames: 8
+  clouds:
+    - strip: clouds.png
+      frames: 18
   text:
     - strip: steel8x8.png
       frames: 256

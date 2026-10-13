@@ -49,8 +49,6 @@ async function strip(name, row, columns, size, padding=1, brightness=1) {
   // Subdued at rest; the game occasionally plays a brightening pulse.
   await strip('seed.png',1,[0,1,2,3],9,1,[0.85,1,1.15,1.3]);
   await strip('flowers.png',2,[0,1,2,3,4,5,6,7],17);
-  // Keep 16-pixel tile spacing while shrinking and dimming the flying accents.
-  await strip('garden.png',3,[0,1,2,3,4,5,6,7],16,4,0.85);
   const icon = await frame(0,0,29,1);
   await sharp({create:{width:64,height:30,channels:4,background:'#00000000'}})
     .composite([{input:icon,left:18,top:0}]).png()

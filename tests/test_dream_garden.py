@@ -29,7 +29,7 @@ STRIPS = {
     "dreamer.png": (19, 19, 8, None),
     "seed.png": (9, 9, 4, None),
     "flowers.png": (17, 17, 8, None),
-    "garden.png": (16, 16, 8, None),
+    "clouds.png": (16, 16, 18, None),
     "steel8x8.png": (8, 8, 256, None),
 }
 
@@ -106,27 +106,29 @@ class DreamGardenTests(unittest.TestCase):
         self.assertTrue(all(sprite.layer is garden.world for sprite in garden.flowers._free))
         self.assertIs(garden.ground.layer, garden.air)
         self.assertTrue(all(sprite.layer is garden.air for sprite in garden.seeds._free))
+        self.assertIs(garden.air._drawables[0], garden.ground)
+        self.assertEqual(garden.air._drawables[1:], garden.seeds._free)
         # All reserved flowers precede both dreamers in the lower layer.
         self.assertEqual(garden.world.sprites[-2:], [garden.dreamer, garden.friend])
         self.assertEqual(garden.hud.tilemaps, [garden.mood, garden.sound_notice])
         self.assertFalse(garden.mood.visible)
         self.assertFalse(garden.sound_notice.visible)
 
-    def test_planting_follows_last_motion_per_player_at_their_depth_and_wraps(self):
+    def test_moving_catches_follow_direction_and_stopped_catches_alternate(self):
         garden = self.start(player2=A)
         garden.dreamer.y = 12
         garden.friend.y = 20
-        for first, second, directions in (
-                (0, 0, (1, 1)),
-                (LEFT, RIGHT, (1, -1)),
-                (0, 0, (1, -1)),
-                (LEFT | RIGHT, LEFT | RIGHT, (1, -1)),
-                (RIGHT | A, LEFT | A, (-1, 1)),
-                (0, 0, (-1, 1))):
+        for first, second, sides1, sides2 in (
+                (LEFT, RIGHT, (1, 1, 1), (-1, -1, -1)),
+                (0, 0, (1, -1, 1), (-1, 1, -1)),
+                (0, 0, (-1, 1), (1, -1)),
+                (RIGHT | A, LEFT | A, (-1, -1, -1), (1, 1, 1)),
+                (0, LEFT, (-1, 1), (1, 1)),
+                (LEFT | RIGHT, 0, (-1, 1), (1, -1)),
+                (LEFT, RIGHT, (1, 1), (-1, -1))):
             self.step(first, second)
-            self.assertEqual((garden.last_direction1, garden.last_direction2), directions)
-            for player, side in zip((garden.dreamer, garden.friend), directions):
-                for _ in range(2):
+            for player, sides in ((garden.dreamer, sides1), (garden.friend, sides2)):
+                for side in sides:
                     seed = garden.seeds.spawn(x=100, y=100)
                     garden.bloom(seed, player)
                     flower = garden.flowers._newest
@@ -134,7 +136,6 @@ class DreamGardenTests(unittest.TestCase):
                     expected = (player.x + player.width // 2 + side * player.width * 0.75
                                 - garden.flower_half) % vs2.display.width
                     self.assertAlmostEqual(flower.x, expected)
-                self.assertEqual((garden.last_direction1, garden.last_direction2), directions)
 
     def test_catch_after_stopping_uses_heading_across_the_angular_seam(self):
         garden = self.start()
@@ -148,6 +149,7 @@ class DreamGardenTests(unittest.TestCase):
         expected = (garden.dreamer.x + garden.dreamer.width // 2
                     + garden.dreamer.width * 0.75 - garden.flower_half) % 256
         self.assertAlmostEqual(flower.x, expected)
+
         self.assertEqual(flower.y, garden.dreamer.y)
         self.step(RIGHT, count=2)
         self.assertEqual(garden.dreamer.x, 255)
@@ -159,16 +161,36 @@ class DreamGardenTests(unittest.TestCase):
                     - garden.dreamer.width * 0.75 - garden.flower_half) % 256
         self.assertAlmostEqual(flower.x, expected)
 
+    def test_stationary_catches_alternate_across_ticks_and_resume_resets_the_side(self):
+        garden = self.start()
+        self.step(RIGHT)
+        self.step()
+        for side in (-1, 1, -1):
+            garden.seeds.spawn(x=garden.dreamer.x, y=10)
+            self.step()
+            expected = (garden.dreamer.x + garden.dreamer.width // 2
+                        + side * garden.dreamer.width * 0.75 - garden.flower_half) % 256
+            self.assertAlmostEqual(garden.flowers._newest.x, expected)
+        # Same-direction movement restarts the first stopped planting side.
+        self.step(RIGHT)
+        self.step()
+        garden.seeds.spawn(x=garden.dreamer.x, y=10)
+        self.step()
+        expected = (garden.dreamer.x + garden.dreamer.width // 2
+                    - garden.dreamer.width * 0.75 - garden.flower_half) % 256
+        self.assertAlmostEqual(garden.flowers._newest.x, expected)
+
     def test_flowers_drift_inward_much_slower_than_seeds_and_retire(self):
-        from games.demos.dream_garden.code.dream_garden import FLOWER_DRIFT_RATIO
+        from games.demos.dream_garden.code.dream_garden import FLOWER_DRIFT_RATIO, SEED_SPEED_RATIO, CLOUD_SPEED
         garden = self.start()
         flower = garden.flowers.spawn(x=100, y=20)
         seed = garden.seeds.spawn(x=150, y=100)
         for buttons in (0, A):
             before_flower, before_seed = flower.y, seed.y
             self.step(buttons)
-            self.assertAlmostEqual(flower.y - before_flower, garden.speed * FLOWER_DRIFT_RATIO)
-            self.assertAlmostEqual(before_seed - seed.y, garden.speed)
+            self.assertAlmostEqual(flower.y - before_flower,
+                                   CLOUD_SPEED * SEED_SPEED_RATIO * FLOWER_DRIFT_RATIO)
+            self.assertAlmostEqual(before_seed - seed.y, garden.speed * SEED_SPEED_RATIO)
         flower.y = 254.999
         self.step()
         self.assertEqual(len(garden.flowers), 0)
@@ -195,6 +217,135 @@ class DreamGardenTests(unittest.TestCase):
         second.y = -10
         self.step()
         self.assertEqual(garden.seed_glows, {})
+
+    def test_clouds_span_cells_without_gaps_at_the_scroll_repeat(self):
+        from games.demos.dream_garden.code.dream_garden import CLOUD_PATCHES, PATTERN_ROWS
+        garden = self.start()
+        ground = garden.ground
+        self.assertEqual((ground.columns, ground.rows, ground.tile_width, ground.tile_height),
+                         (16, 22, 16, 16))
+        self.assertEqual(ground.image.name, "clouds.png")
+        for col, row, first, width, height in CLOUD_PATCHES:
+            for dy in range(height):
+                for dx in range(width):
+                    self.assertEqual(ground[col + dx, row + dy], first + dy * width + dx)
+        for row in range(ground.rows - PATTERN_ROWS):
+            for col in range(ground.columns):
+                self.assertEqual(ground[col, row], ground[col, row + PATTERN_ROWS])
+        self.assertEqual(ground[0, 0], vs2.EMPTY_TILE)
+        garden.scroll = PATTERN_ROWS * ground.tile_height - garden.speed / 2
+        self.step()
+        self.assertAlmostEqual(garden.scroll, garden.speed / 2)
+        self.assertLess(ground.view_y + ground.view_height, ground.rows * ground.tile_height)
+
+    def test_seeds_move_slower_than_clouds_in_normal_and_relaxed_modes(self):
+        from games.demos.dream_garden.code.dream_garden import SEED_SPEED_RATIO, CLOUD_SPEED
+        garden = self.start()
+        seed = garden.seeds.spawn(x=100, y=100)
+        for one, two in ((0, 0), (A, 0), (0, A)):
+            seed_y, cloud_scroll = seed.y, garden.scroll
+            self.step(one, two)
+            cloud_delta = garden.scroll - cloud_scroll
+            seed_delta = seed_y - seed.y
+            self.assertGreater(cloud_delta, seed_delta)
+            self.assertAlmostEqual(cloud_delta, CLOUD_SPEED)
+            self.assertAlmostEqual(seed_delta, garden.speed * SEED_SPEED_RATIO)
+
+    def test_relax_does_not_change_clouds_or_flower_drift_or_animation(self):
+        from games.demos.dream_garden.code.dream_garden import CLOUD_SPEED, SEED_SPEED_RATIO, FLOWER_DRIFT_RATIO
+        garden = self.start()
+        flower = garden.flowers.spawn(x=100, y=20, frame=0)
+        garden.dream_time = 5.8
+        scroll, flower_y = garden.scroll, flower.y
+        self.step(A)
+        self.assertAlmostEqual(garden.scroll - scroll, CLOUD_SPEED)
+        self.assertAlmostEqual(flower.y - flower_y, CLOUD_SPEED * SEED_SPEED_RATIO * FLOWER_DRIFT_RATIO)
+        self.assertEqual(flower.frame, 1)
+        self.assertEqual(garden.ground.view_y, int(garden.scroll))
+
+    def test_multi_cell_clouds_render_as_connected_silhouettes(self):
+        from pathlib import Path
+        import tempfile
+        from tools.generate_roms import generate_rom, load_palettegroups
+        sys.path.insert(0, os.path.join(ROOT, "emulator"))
+        import povrender
+        images = Path(ROOT) / "games/demos/dream_garden/images"
+        definitions = images / "__images__.yaml"
+        old_stars = povrender.starfield_enabled
+        with tempfile.TemporaryDirectory() as temporary:
+            rom = Path(temporary) / "clouds.rom"
+            generate_rom(images, load_palettegroups(definitions), definitions,
+                         rom_filename=rom, force=True)
+            director.load_rom = lambda _name: self.real_load_rom(str(rom))
+            self.start()
+            povrender.set_palettes(director.palette_data)
+            for index, data in director._stripe_buffers.items():
+                povrender.set_image_strip(index, data)
+            povrender.set_starfield_enabled(False)
+            try:
+                for first, width, height in ((0, 1, 1), (1, 2, 1), (3, 3, 2),
+                                              (9, 1, 1), (10, 2, 1), (12, 3, 2)):
+                    class CloudProbe(vs2.Scene):
+                        def build(probe):
+                            hud = probe.layer("hud", projection=vs2.HUD)
+                            tiles = hud.tilemap("clouds.png", columns=width, rows=height)
+                            for row in range(height):
+                                for col in range(width):
+                                    tiles[col, row] = first + row * width + col
+                    probe = CloudProbe()
+                    director.scene_stack[-1].switch(probe)
+                    self.step()
+                    povrender.set_vs2_scene(vs2.export_scene_payload(probe))
+                    pixels = povrender.render_frame(povrender.snapshot_vs2_scene()).reshape(256, 54)
+                    opaque = {(x, y) for x in range(width * 16) for y in range(height * 16)
+                              if pixels[x, 53 - y] & 0xFFFFFF}
+                    total = len(opaque)
+                    self.assertGreater(total, 0)
+                    largest = 0
+                    while opaque:
+                        pending = [opaque.pop()]
+                        size = 0
+                        while pending:
+                            x, y = pending.pop()
+                            size += 1
+                            for dx in (-1, 0, 1):
+                                for dy in (-1, 0, 1):
+                                    neighbour = (x + dx, y + dy)
+                                    if neighbour in opaque:
+                                        opaque.remove(neighbour)
+                                        pending.append(neighbour)
+                        largest = max(largest, size)
+                    self.assertGreaterEqual(largest / total, 0.98, (first, width, height))
+                # Exercise the real flying-layer compositor with an overlap.
+                class SeedOverlay(vs2.Scene):
+                    def __init__(probe, clouds, seeds):
+                        vs2.Scene.__init__(probe)
+                        probe.clouds, probe.seeds = clouds, seeds
+
+                    def build(probe):
+                        air = probe.layer("air", projection=vs2.TUNNEL)
+                        if probe.clouds:
+                            tiles = air.tilemap("clouds.png", columns=3, rows=2)
+                            for row in range(2):
+                                for col in range(3):
+                                    tiles[col, row] = 12 + row * 3 + col
+                        if probe.seeds:
+                            seeds = air.sprite_pool("seed.png", count=1)
+                            seeds.spawn(x=16, y=8)
+
+                renders = []
+                for clouds, seeds in ((False, True), (True, False), (True, True)):
+                    probe = SeedOverlay(clouds, seeds)
+                    director.scene_stack[-1].switch(probe)
+                    self.step()
+                    povrender.set_vs2_scene(vs2.export_scene_payload(probe))
+                    renders.append(povrender.render_frame(povrender.snapshot_vs2_scene()).copy())
+                seed_only, cloud_only, combined = renders
+                seed_mask = (seed_only & 0xFFFFFF) != 0
+                self.assertTrue(((cloud_only & 0xFFFFFF)[seed_mask] != 0).any())
+                self.assertTrue((combined[seed_mask] == seed_only[seed_mask]).all())
+            finally:
+                povrender.set_starfield_enabled(old_stars)
 
     def test_sound_toggle_notice_lasts_two_seconds_and_restarts_on_retoggling(self):
         from unittest.mock import patch
@@ -270,14 +421,14 @@ class DreamGardenTests(unittest.TestCase):
         garden = director.scene_stack[-1]
         self.assertTrue(garden.joined)
 
-    def test_either_player_slows_every_seed_and_the_background(self):
-        from games.demos.dream_garden.code.dream_garden import SLOW_SPEED, SLOW_SPAWN_MS
+    def test_either_player_slows_only_seeds(self):
+        from games.demos.dream_garden.code.dream_garden import SLOW_SPEED, SLOW_SPAWN_MS, SEED_SPEED_RATIO, CLOUD_SPEED
         garden = self.start()
         seed = garden.seeds.spawn(x=100, y=100)
         previous_scroll = garden.scroll
         self.step(0, A)
-        self.assertAlmostEqual(seed.y, 100 - SLOW_SPEED, places=2)
-        self.assertAlmostEqual(garden.scroll - previous_scroll, SLOW_SPEED, places=2)
+        self.assertAlmostEqual(seed.y, 100 - SLOW_SPEED * SEED_SPEED_RATIO, places=2)
+        self.assertAlmostEqual(garden.scroll - previous_scroll, CLOUD_SPEED, places=2)
         self.assertEqual(garden.spawn_ms, SLOW_SPAWN_MS)
         self.assertEqual(garden.mood.text, "RELAX")
         self.assertTrue(garden.mood.visible)
@@ -440,7 +591,7 @@ class DreamGardenTests(unittest.TestCase):
         self.assertFalse(any("dream_garden/sources/" in str(job) for job in jobs))
         source = "games/demos/dream_garden/sources/make_audio.py"
         self.assertFalse(is_runtime_source(source))
-        for name in ("dreamer.png", "seed.png", "flowers.png", "garden.png"):
+        for name in ("dreamer.png", "seed.png", "flowers.png", "clouds.png"):
             with Image.open(Path(ROOT) / "games/demos/dream_garden/images" / name) as image:
                 self.assertLessEqual(set(image.convert("RGBA").getchannel("A").tobytes()), {0, 255})
 
@@ -477,7 +628,7 @@ class DreamGardenTests(unittest.TestCase):
         self.assertLessEqual(len(garden.seed_glows), 16)
         self.assertTrue(all(seed in list(garden.seeds) for seed in garden.seed_glows))
         self.assertLess(garden.dream_time, 96)
-        self.assertLess(garden.scroll, 96)
+        self.assertLess(garden.scroll, 192)
         vs2.export_scene_payload(garden)
 
     def test_real_asset_pack_builds_the_game_and_rest_scene(self):

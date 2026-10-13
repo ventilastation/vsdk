@@ -1,6 +1,6 @@
 """Dream Garden: a shared, unhurried circular garden for Overkill 2026.
 
-LEFT/RIGHT drift, hold A to relax the whole garden, B rests.
+LEFT/RIGHT drift, hold A to slow the seeds, B rests.
 A second controller can join at any time. Watching is also a way to play.
 """
 
@@ -13,11 +13,16 @@ from vs2.controls import A, B, LEFT, RIGHT, joy1, joy2
 AWAKE, LEFT_POSE, RIGHT_POSE, ASLEEP = range(4)
 DRIFT_SPEED = 0.45
 SLOW_SPEED = 0.12
+CLOUD_SPEED = DRIFT_SPEED
 DRIFT_SPAWN_MS = 1800
 SLOW_SPAWN_MS = 4000
 SEED_DEPTH = 160
 FLOWER_COUNT = 24
-PATTERN_ROWS = 6
+PATTERN_ROWS = 12
+SEED_SPEED_RATIO = 0.85
+# (column, row, first tile, width in cells, height in cells)
+CLOUD_PATCHES = ((1, 0, 0, 1, 1), (7, 1, 1, 2, 1), (11, 4, 3, 3, 2),
+                 (5, 6, 9, 1, 1), (13, 8, 10, 2, 1), (1, 9, 12, 3, 2))
 FLOWER_DRIFT_RATIO = 0.08
 FLOWER_DEPTH = 255
 GLOW_FRAMES = (1, 2, 3, 2, 1, 0)
@@ -35,15 +40,16 @@ def slide_text_out(label, start_y, started):
 
 
 
-def garden_tiles(world):
-    ground = world.tilemap("garden.png", columns=16, rows=16,
-                           view_width=256, view_height=160)
-    for row in range(16):
-        for col in range(16):
-            band = row % PATTERN_ROWS
-            ground[col, row] = ((col + band) % 8
-                                if (col + band * 3) % 5 == 0
-                                else vs2.EMPTY_TILE)
+def cloud_tiles(air):
+    ground = air.tilemap("clouds.png", columns=16, rows=22,
+                         view_width=256, view_height=160)
+    for base_row in range(0, ground.rows, PATTERN_ROWS):
+        for col, row, first, width, height in CLOUD_PATCHES:
+            for dy in range(height):
+                target_row = base_row + row + dy
+                if target_row < ground.rows:
+                    for dx in range(width):
+                        ground[col + dx, target_row] = first + dy * width + dx
     return ground
 
 
@@ -64,7 +70,7 @@ class Garden(vs2.Scene):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.air = self.layer("air", projection=vs2.TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
-        self.ground = garden_tiles(self.air)
+        self.ground = cloud_tiles(self.air)
         self.flowers = self.world.sprite_pool(
             "flowers.png", count=FLOWER_COUNT, on_empty=vs2.RECYCLE)
         self.seeds = self.air.sprite_pool("seed.png", count=16)
@@ -80,9 +86,13 @@ class Garden(vs2.Scene):
         self.scroll = 0
         self.dream_time = 0
         self.slow = False
-        # Start toward LEFT; stopping keeps each player’s last steering direction.
+        # Idle catches alternate; movement resets the first idle planting side.
         self.last_direction1 = 1
         self.last_direction2 = 1
+        self.plant_side1 = 1
+        self.plant_side2 = 1
+        self.moving1 = False
+        self.moving2 = False
         self.seed_glows = {}
         self.speed = DRIFT_SPEED
         self.spawn_ms = DRIFT_SPAWN_MS
@@ -91,11 +101,16 @@ class Garden(vs2.Scene):
     def steer(self, dreamer, controller, base_frame, sleeping):
         direction = controller.held(LEFT) - controller.held(RIGHT)
         dreamer.x = (dreamer.x + direction) % vs2.display.width
-        if direction:
-            if dreamer is self.friend:
+        if dreamer is self.friend:
+            self.moving2 = bool(direction)
+            if direction:
                 self.last_direction2 = direction
-            else:
+                self.plant_side2 = direction
+        else:
+            self.moving1 = bool(direction)
+            if direction:
                 self.last_direction1 = direction
+                self.plant_side1 = direction
         pose = (ASLEEP if sleeping else
                 LEFT_POSE if direction > 0 else
                 RIGHT_POSE if direction < 0 else AWAKE)
@@ -133,8 +148,8 @@ class Garden(vs2.Scene):
             self.mood_exit = slide_text_out(self.mood, 1, self.mood_exit)
         self.speed = SLOW_SPEED if slow else DRIFT_SPEED
         self.spawn_ms = SLOW_SPAWN_MS if slow else DRIFT_SPAWN_MS
-        self.dream_time = (self.dream_time + self.speed) % 96
-        self.scroll = (self.scroll + self.speed) % (
+        self.dream_time = (self.dream_time + CLOUD_SPEED) % 96
+        self.scroll = (self.scroll + CLOUD_SPEED) % (
             PATTERN_ROWS * self.ground.tile_height)
         self.ground.view_y = self.scroll
         phase = int(self.dream_time // 6) % 2
@@ -143,22 +158,27 @@ class Garden(vs2.Scene):
             for flower in self.flowers:
                 flower.frame = (flower.frame // 2) * 2 + phase
         for flower in self.flowers:
-            flower.y += self.speed * FLOWER_DRIFT_RATIO
+            flower.y += CLOUD_SPEED * SEED_SPEED_RATIO * FLOWER_DRIFT_RATIO
             if flower.y >= FLOWER_DEPTH:
                 self.flowers.despawn(flower)
         self.move_seeds()
 
     def bloom(self, seed, player):
-        side = self.last_direction2 if player is self.friend else self.last_direction1
+        side = self.plant_side2 if player is self.friend else self.plant_side1
         centre = player.x + player.width // 2
         self.flowers.spawn(x=(centre + side * player.width * 0.75
                               - self.flower_half) % vs2.display.width, y=player.y,
                            frame=randrange(4) * 2 + self.flower_phase)
+        if player is self.friend:
+            if not self.moving2:
+                self.plant_side2 = -side
+        elif not self.moving1:
+            self.plant_side1 = -side
         self.retire_seed(seed)
 
     def move_seeds(self):
         for seed in self.seeds:
-            seed.y -= self.speed
+            seed.y -= self.speed * SEED_SPEED_RATIO
             self.glow_seed(seed)
             if seed.overlaps(self.dreamer):
                 self.bloom(seed, self.dreamer)
