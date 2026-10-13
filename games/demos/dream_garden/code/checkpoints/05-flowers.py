@@ -6,10 +6,12 @@ from urandom import randrange
 class Game(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
-        self.seeds = self.world.sprite_pool("seed.png", count=16)
+        self.air = self.layer("air", projection=vs2.TUNNEL)
+        self.seeds = self.air.sprite_pool("seed.png", count=16)
         self.flowers = self.world.sprite_pool("flowers.png", count=24, on_empty=vs2.RECYCLE)
         self.dreamer = self.world.sprite("dreamer.png", y=0)
         self.dreamer.x = -(self.dreamer.width // 2)
+        self.plant_side = 1
         self.speed = 0.45
         self.spawn_ms = 1800
         self.dream_time = 0
@@ -22,6 +24,10 @@ class Game(vs2.Scene):
                               2 if steer < 0 else 0)
         self.dream_time = (self.dream_time + self.speed) % 96
         frame = int(self.dream_time // 3) % self.image("seed.png").frames
+        for flower in self.flowers:
+            flower.y += self.speed * 0.08
+            if flower.y >= 255:
+                self.flowers.despawn(flower)
         for seed in self.seeds:
             seed.y -= self.speed
             seed.frame = frame
@@ -35,9 +41,11 @@ class Game(vs2.Scene):
         self.call_later(self.spawn_ms, self.spawn_seed)
 
     def bloom(self, seed):
-        centre = seed.x + seed.width // 2
-        self.flowers.spawn(x=centre - self.image("flowers.png").width // 2,
-                           y=24, frame=randrange(4) * 2)
+        centre = self.dreamer.x + self.dreamer.width // 2
+        centre += self.plant_side * self.dreamer.width * 0.75
+        self.plant_side = -self.plant_side
+        self.flowers.spawn(x=(centre - self.image("flowers.png").width // 2) % vs2.display.width,
+                           y=self.dreamer.y, frame=randrange(4) * 2)
         self.seeds.despawn(seed)
 
 def main():

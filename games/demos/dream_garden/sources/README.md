@@ -10,7 +10,9 @@ Neither Node nor sharp is a game runtime dependency.
 
 The generated sheet contains two dream creatures, golden seeds, four flower
 species and sparse garden accents. Dreamers have four poses each. Flowers have
-two frames each. `images/steel8x8.png` is copied unchanged from the SDK's
+two frames each. Seeds are packed at 9 × 9 pixels: a subdued idle frame and
+three brighter glow frames. Flying accents are shrunk inside their 16-pixel
+tiles and darkened so the planted flowers remain distinct. `images/steel8x8.png` is copied unchanged from the SDK's
 `games/demos/tutorial_game/images/steel8x8.png`.
 
 `make_audio.py` synthesizes the original bloom chime and a 32-second soft loop

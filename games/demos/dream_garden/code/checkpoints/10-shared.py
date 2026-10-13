@@ -1,13 +1,13 @@
 """Dream Garden: a shared, unhurried circular garden for Overkill 2026.
 
-LEFT/RIGHT drift, hold A to slow the whole garden, B rests, X toggles audio.
+LEFT/RIGHT drift, hold A to relax the whole garden, B rests.
 A second controller can join at any time. Watching is also a way to play.
 """
 
 from urandom import randrange
 
 import vs2
-from vs2.controls import A, B, X, LEFT, RIGHT, joy1, joy2
+from vs2.controls import A, B, LEFT, RIGHT, joy1, joy2
 
 AWAKE, LEFT_POSE, RIGHT_POSE, ASLEEP = range(4)
 DRIFT_SPEED = 0.45
@@ -17,6 +17,10 @@ SLOW_SPAWN_MS = 4000
 SEED_DEPTH = 160
 FLOWER_COUNT = 24
 PATTERN_ROWS = 6
+FLOWER_DRIFT_RATIO = 0.08
+FLOWER_DEPTH = 255
+GLOW_FRAMES = (1, 2, 3, 2, 1, 0)
+GLOW_FRAME_TICKS = 6
 
 
 def garden_tiles(world):
@@ -46,26 +50,28 @@ class Garden(vs2.Scene):
 
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
+        self.air = self.layer("air", projection=vs2.TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
-        self.ground = garden_tiles(self.world)
+        self.ground = garden_tiles(self.air)
         self.flowers = self.world.sprite_pool(
             "flowers.png", count=FLOWER_COUNT, on_empty=vs2.RECYCLE)
-        self.seeds = self.world.sprite_pool("seed.png", count=16)
+        self.seeds = self.air.sprite_pool("seed.png", count=16)
         self.dreamer = self.world.sprite("dreamer.png", y=0)
         self.dreamer.x = -(self.dreamer.width // 2)
         self.friend = self.world.sprite("dreamer.png", x=64 - self.dreamer.width // 2, y=0,
                                         frame=4, visible=self.joined)
         self.mood = self.hud.label("steel8x8.png", columns=5, x=108, y=1,
-                                   flip_x=True, flip_y=True, text="DRIFT")
+                                   flip_x=True, flip_y=True, text="RELAX", visible=False)
         self.flower_half = self.image("flowers.png").width // 2
         self.flower_phase = 0
         self.scroll = 0
         self.dream_time = 0
         self.slow = False
+        self.plant_side1 = 1
+        self.plant_side2 = 1
+        self.seed_glows = {}
         self.speed = DRIFT_SPEED
         self.spawn_ms = DRIFT_SPAWN_MS
-        for index in range(4):
-            self.flowers.spawn(x=32 + index * 64 - self.flower_half, y=24, frame=index * 2)
         self.call_later(self.spawn_ms, self.spawn_seed)
 
     def steer(self, dreamer, controller, base_frame, sleeping):
@@ -78,7 +84,7 @@ class Garden(vs2.Scene):
 
     def update(self):
         if joy1.just_pressed(B) or joy2.just_pressed(B):
-            flowers = [(flower.x, flower.frame) for flower in self.flowers]
+            flowers = [(flower.x, flower.y, flower.frame) for flower in self.flowers]
             return self.switch(Rest(flowers))
 
         if not self.joined and (joy2.held(LEFT) or joy2.held(RIGHT)
@@ -98,7 +104,7 @@ class Garden(vs2.Scene):
         slow = slow1 or slow2
         if slow != self.slow:
             self.slow = slow
-            self.mood.text = "SLOW" if slow else "DRIFT"
+            self.mood.visible = slow
         self.speed = SLOW_SPEED if slow else DRIFT_SPEED
         self.spawn_ms = SLOW_SPAWN_MS if slow else DRIFT_SPAWN_MS
         self.dream_time = (self.dream_time + self.speed) % 96
@@ -110,25 +116,53 @@ class Garden(vs2.Scene):
             self.flower_phase = phase
             for flower in self.flowers:
                 flower.frame = (flower.frame // 2) * 2 + phase
+        for flower in self.flowers:
+            flower.y += self.speed * FLOWER_DRIFT_RATIO
+            if flower.y >= FLOWER_DEPTH:
+                self.flowers.despawn(flower)
         self.move_seeds()
 
-
-    def bloom(self, seed):
-        centre = seed.x + seed.width // 2
-        self.flowers.spawn(x=centre - self.flower_half, y=24,
+    def bloom(self, seed, player):
+        side = self.plant_side2 if player is self.friend else self.plant_side1
+        centre = player.x + player.width // 2
+        self.flowers.spawn(x=(centre + side * player.width * 0.75
+                              - self.flower_half) % vs2.display.width, y=player.y,
                            frame=randrange(4) * 2 + self.flower_phase)
-        self.seeds.despawn(seed)
+        if player is self.friend:
+            self.plant_side2 = -side
+        else:
+            self.plant_side1 = -side
+        self.retire_seed(seed)
 
     def move_seeds(self):
-        frame = int(self.dream_time // 3) % self.image("seed.png").frames
         for seed in self.seeds:
             seed.y -= self.speed
-            seed.frame = frame
-            if (seed.overlaps(self.dreamer)
-                    or (self.joined and seed.overlaps(self.friend))):
-                self.bloom(seed)
+            self.glow_seed(seed)
+            if seed.overlaps(self.dreamer):
+                self.bloom(seed, self.dreamer)
+            elif self.joined and seed.overlaps(self.friend):
+                self.bloom(seed, self.friend)
             elif seed.y < -seed.image.height:
-                self.seeds.despawn(seed)  # passing seeds cause no harm
+                self.retire_seed(seed)  # passing seeds cause no harm
+
+    def glow_seed(self, seed):
+        state = self.seed_glows.get(seed)
+        if state is None:
+            state = [randrange(90, 241), 0]
+            self.seed_glows[seed] = state
+        if state[0] > 0:
+            state[0] -= 1
+            seed.frame = 0
+            return
+        seed.frame = GLOW_FRAMES[state[1] // GLOW_FRAME_TICKS]
+        state[1] += 1
+        if state[1] == len(GLOW_FRAMES) * GLOW_FRAME_TICKS:
+            state[0] = randrange(90, 241)
+            state[1] = 0
+
+    def retire_seed(self, seed):
+        self.seed_glows.pop(seed, None)
+        self.seeds.despawn(seed)
 
     def spawn_seed(self):
         self.seeds.spawn(x=randrange(vs2.display.width), y=SEED_DEPTH)
@@ -140,8 +174,8 @@ class Title(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
         centred_label(hud, "DREAM GARDEN", y=1)
-        centred_label(hud, "A TO DRIFT", y=13)
-        centred_label(hud, "HOLD A: SLOW", y=25)
+        centred_label(hud, "A TO BEGIN", y=13)
+        centred_label(hud, "HOLD A: RELAX", y=25)
 
     def update(self):
         if joy1.just_pressed(A) or joy2.just_pressed(A):
@@ -156,9 +190,8 @@ class Rest(vs2.Scene):
     def build(self):
         world = self.layer("world", projection=vs2.TUNNEL)
         flowers = world.sprite_pool("flowers.png", count=FLOWER_COUNT)
-        for x, frame in self.saved_flowers:
-            # Settle inward, leaving the rim clear for the invitation.
-            flowers.spawn(x=x, y=48, frame=frame)
+        for x, y, frame in self.saved_flowers:
+            flowers.spawn(x=x, y=y, frame=frame)
         hud = self.layer("hud", projection=vs2.HUD)
         centred_label(hud, "REST A WHILE", y=1)
         centred_label(hud, "A: NEW DREAM", y=14)
