@@ -25,7 +25,10 @@ Windows uses `vs-emu.bat --game demos.dream_garden`.
 | Return to the launcher | Y / Back / Home | M / 1 / Escape | Numpad 3 / + / Escape |
 
 The garden starts empty. Catch a golden seed to plant a flower at the catching
-player’s depth, alternating sides at a centre offset of 75% of the player’s width.
+player’s depth, on the side they last moved toward, with a centre offset of
+75% of the player’s width. Each player remembers their own direction while
+stopped; opposite inputs cancel without changing it. Before the first movement,
+planting defaults to the left.
 Flowers drift inward at 8% of seed speed and disappear at the centre.
 Smaller, subdued golden seeds occasionally pulse with a randomly triggered glow.
 Missing a seed has no penalty. A second

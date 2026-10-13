@@ -31,7 +31,7 @@ class Game(vs2.Scene):
         self.flowers = self.world.sprite_pool("flowers.png", count=24, on_empty=vs2.RECYCLE)
         self.dreamer = self.world.sprite("dreamer.png", y=0)
         self.dreamer.x = -(self.dreamer.width // 2)
-        self.plant_side = 1
+        self.last_direction = 1
         self.speed = 0.45
         self.spawn_ms = 1800
         self.dream_time = 0
@@ -62,6 +62,8 @@ class Game(vs2.Scene):
         self.spawn_ms = 4000 if slow else 1800
         steer = joy1.held(LEFT) - joy1.held(RIGHT)
         self.dreamer.x = (self.dreamer.x + steer) % vs2.display.width
+        if steer:
+            self.last_direction = steer
         self.dreamer.frame = (3 if slow else 1 if steer > 0 else
                               2 if steer < 0 else 0)
         self.dream_time = (self.dream_time + self.speed) % 96
@@ -86,8 +88,7 @@ class Game(vs2.Scene):
 
     def bloom(self, seed):
         centre = self.dreamer.x + self.dreamer.width // 2
-        centre += self.plant_side * self.dreamer.width * 0.75
-        self.plant_side = -self.plant_side
+        centre += self.last_direction * self.dreamer.width * 0.75
         self.flowers.spawn(x=(centre - self.image("flowers.png").width // 2) % vs2.display.width,
                            y=self.dreamer.y, frame=randrange(4) * 2)
         self.seeds.despawn(seed)

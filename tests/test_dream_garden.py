@@ -112,20 +112,52 @@ class DreamGardenTests(unittest.TestCase):
         self.assertFalse(garden.mood.visible)
         self.assertFalse(garden.sound_notice.visible)
 
-    def test_planting_alternates_per_player_at_their_depth_and_wraps(self):
+    def test_planting_follows_last_motion_per_player_at_their_depth_and_wraps(self):
         garden = self.start(player2=A)
         garden.dreamer.y = 12
         garden.friend.y = 20
-        for player in (garden.dreamer, garden.friend, garden.dreamer, garden.friend):
-            side = garden.plant_side2 if player is garden.friend else garden.plant_side1
-            seed = garden.seeds.spawn(x=100, y=100)
-            garden.bloom(seed, player)
-            flower = garden.flowers._newest
-            self.assertEqual(flower.y, player.y)
-            expected = (player.x + player.width // 2 + side * player.width * 0.75
-                        - garden.flower_half) % vs2.display.width
-            self.assertAlmostEqual(flower.x, expected)
-        self.assertEqual((garden.plant_side1, garden.plant_side2), (1, 1))
+        for first, second, directions in (
+                (0, 0, (1, 1)),
+                (LEFT, RIGHT, (1, -1)),
+                (0, 0, (1, -1)),
+                (LEFT | RIGHT, LEFT | RIGHT, (1, -1)),
+                (RIGHT | A, LEFT | A, (-1, 1)),
+                (0, 0, (-1, 1))):
+            self.step(first, second)
+            self.assertEqual((garden.last_direction1, garden.last_direction2), directions)
+            for player, side in zip((garden.dreamer, garden.friend), directions):
+                for _ in range(2):
+                    seed = garden.seeds.spawn(x=100, y=100)
+                    garden.bloom(seed, player)
+                    flower = garden.flowers._newest
+                    self.assertEqual(flower.y, player.y)
+                    expected = (player.x + player.width // 2 + side * player.width * 0.75
+                                - garden.flower_half) % vs2.display.width
+                    self.assertAlmostEqual(flower.x, expected)
+                self.assertEqual((garden.last_direction1, garden.last_direction2), directions)
+
+    def test_catch_after_stopping_uses_heading_across_the_angular_seam(self):
+        garden = self.start()
+        self.assertEqual(garden.last_direction1, 1)
+        self.step(LEFT, count=10)
+        self.assertEqual(garden.dreamer.x, 1)
+        self.step()
+        garden.seeds.spawn(x=254, y=10)
+        self.step()
+        flower = garden.flowers._newest
+        expected = (garden.dreamer.x + garden.dreamer.width // 2
+                    + garden.dreamer.width * 0.75 - garden.flower_half) % 256
+        self.assertAlmostEqual(flower.x, expected)
+        self.assertEqual(flower.y, garden.dreamer.y)
+        self.step(RIGHT, count=2)
+        self.assertEqual(garden.dreamer.x, 255)
+        self.step()
+        garden.seeds.spawn(x=254, y=10)
+        self.step()
+        flower = garden.flowers._newest
+        expected = (garden.dreamer.x + garden.dreamer.width // 2
+                    - garden.dreamer.width * 0.75 - garden.flower_half) % 256
+        self.assertAlmostEqual(flower.x, expected)
 
     def test_flowers_drift_inward_much_slower_than_seeds_and_retire(self):
         from games.demos.dream_garden.code.dream_garden import FLOWER_DRIFT_RATIO
@@ -388,6 +420,11 @@ class DreamGardenTests(unittest.TestCase):
                     scene.seeds.spawn(x=scene.dreamer.x, y=10)
                     self.step()
                     self.assertGreater(len(scene.flowers), 0)
+                    flower = scene.flowers._newest
+                    expected = (scene.dreamer.x + scene.dreamer.width // 2
+                                + scene.dreamer.width * 0.75
+                                - scene.image("flowers.png").width // 2) % 256
+                    self.assertAlmostEqual(flower.x, expected)
                 vs2.export_scene_payload(scene)
                 self.step(extra=8)
                 self.step()

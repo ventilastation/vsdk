@@ -85,8 +85,9 @@ class Garden(vs2.Scene):
         self.slow = False
         self.sound_on = True
         vs2.audio.music("lullaby", loop=True)
-        self.plant_side1 = 1
-        self.plant_side2 = 1
+        # Start toward LEFT; stopping keeps each player’s last steering direction.
+        self.last_direction1 = 1
+        self.last_direction2 = 1
         self.seed_glows = {}
         self.speed = DRIFT_SPEED
         self.spawn_ms = DRIFT_SPAWN_MS
@@ -95,6 +96,11 @@ class Garden(vs2.Scene):
     def steer(self, dreamer, controller, base_frame, sleeping):
         direction = controller.held(LEFT) - controller.held(RIGHT)
         dreamer.x = (dreamer.x + direction) % vs2.display.width
+        if direction:
+            if dreamer is self.friend:
+                self.last_direction2 = direction
+            else:
+                self.last_direction1 = direction
         pose = (ASLEEP if sleeping else
                 LEFT_POSE if direction > 0 else
                 RIGHT_POSE if direction < 0 else AWAKE)
@@ -168,15 +174,11 @@ class Garden(vs2.Scene):
             self.sound_notice_until = ticks_add(ticks_ms(), 2000)
 
     def bloom(self, seed, player):
-        side = self.plant_side2 if player is self.friend else self.plant_side1
+        side = self.last_direction2 if player is self.friend else self.last_direction1
         centre = player.x + player.width // 2
         self.flowers.spawn(x=(centre + side * player.width * 0.75
                               - self.flower_half) % vs2.display.width, y=player.y,
                            frame=randrange(4) * 2 + self.flower_phase)
-        if player is self.friend:
-            self.plant_side2 = -side
-        else:
-            self.plant_side1 = -side
         self.retire_seed(seed)
         if self.sound_on:
             vs2.audio.sound("bloom")
