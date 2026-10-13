@@ -2,21 +2,36 @@
 import vs2
 from vs2.controls import A, B, LEFT, RIGHT, joy1
 from urandom import randrange
+from utime import ticks_ms, ticks_diff
+
+HUD_EXIT_MS = 450
+
+
+def slide_text_out(label, start_y, started):
+    elapsed = ticks_diff(ticks_ms(), started)
+    if elapsed >= HUD_EXIT_MS:
+        label.hide()
+        return None
+    label.y = start_y - (start_y + label.tile_height) * elapsed / HUD_EXIT_MS
+    return started
+
 
 class Game(vs2.Scene):
     def build(self):
         self.world = self.layer("world", projection=vs2.TUNNEL)
-        self.ground = self.world.tilemap("garden.png", columns=16, rows=16,
+        self.air = self.layer("air", projection=vs2.TUNNEL)
+        self.ground = self.air.tilemap("garden.png", columns=16, rows=16,
                                          view_width=256, view_height=160)
         for row in range(16):
             for col in range(16):
                 band = row % 6
                 self.ground[col, row] = ((col + band) % 8 if (col + band * 3) % 5 == 0
                                          else vs2.EMPTY_TILE)
-        self.seeds = self.world.sprite_pool("seed.png", count=16)
+        self.seeds = self.air.sprite_pool("seed.png", count=16)
         self.flowers = self.world.sprite_pool("flowers.png", count=24, on_empty=vs2.RECYCLE)
         self.dreamer = self.world.sprite("dreamer.png", y=0)
         self.dreamer.x = -(self.dreamer.width // 2)
+        self.last_direction = 1
         self.speed = 0.45
         self.spawn_ms = 1800
         self.dream_time = 0
@@ -24,29 +39,43 @@ class Game(vs2.Scene):
         self.scroll = 0
         hud = self.layer("hud", projection=vs2.HUD)
         self.mood = hud.label("steel8x8.png", columns=5, x=108, y=1,
-                              flip_x=True, flip_y=True, text="DRIFT")
+                              flip_x=True, flip_y=True, text="RELAX", visible=False)
+        self.mood_exit = None
         self.slow = False
         self.slow_ready = not joy1.held(A)
 
     def update(self):
         if joy1.just_pressed(B):
-            return self.switch(Rest([(flower.x, flower.frame) for flower in self.flowers]))
+            return self.switch(Rest([(flower.x, flower.y, flower.frame) for flower in self.flowers]))
         if not joy1.held(A):
             self.slow_ready = True
         slow = self.slow_ready and joy1.held(A)
         if slow != self.slow:
             self.slow = slow
-            self.mood.text = "SLOW" if slow else "DRIFT"
+            if slow:
+                self.mood.y = 1
+                self.mood.show()
+                self.mood_exit = None
+            else:
+                self.mood_exit = ticks_ms()
+        if self.mood_exit is not None:
+            self.mood_exit = slide_text_out(self.mood, 1, self.mood_exit)
         self.speed = 0.12 if slow else 0.45
         self.spawn_ms = 4000 if slow else 1800
         steer = joy1.held(LEFT) - joy1.held(RIGHT)
         self.dreamer.x = (self.dreamer.x + steer) % vs2.display.width
+        if steer:
+            self.last_direction = steer
         self.dreamer.frame = (3 if slow else 1 if steer > 0 else
                               2 if steer < 0 else 0)
         self.dream_time = (self.dream_time + self.speed) % 96
         frame = int(self.dream_time // 3) % self.image("seed.png").frames
         self.scroll = (self.scroll + self.speed) % (6 * self.ground.tile_height)
         self.ground.view_y = self.scroll
+        for flower in self.flowers:
+            flower.y += self.speed * 0.08
+            if flower.y >= 255:
+                self.flowers.despawn(flower)
         for seed in self.seeds:
             seed.y -= self.speed
             seed.frame = frame
@@ -60,9 +89,10 @@ class Game(vs2.Scene):
         self.call_later(self.spawn_ms, self.spawn_seed)
 
     def bloom(self, seed):
-        centre = seed.x + seed.width // 2
-        self.flowers.spawn(x=centre - self.image("flowers.png").width // 2,
-                           y=24, frame=randrange(4) * 2)
+        centre = self.dreamer.x + self.dreamer.width // 2
+        centre += self.last_direction * self.dreamer.width * 0.75
+        self.flowers.spawn(x=(centre - self.image("flowers.png").width // 2) % vs2.display.width,
+                           y=self.dreamer.y, frame=randrange(4) * 2)
         self.seeds.despawn(seed)
 
 def label(hud, text, y):
@@ -73,7 +103,7 @@ class Title(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
         label(hud, "DREAM GARDEN", 1)
-        label(hud, "A TO DRIFT", 13)
+        label(hud, "A TO BEGIN", 13)
 
     def update(self):
         if joy1.just_pressed(A):
@@ -87,8 +117,8 @@ class Rest(vs2.Scene):
     def build(self):
         world = self.layer("world", projection=vs2.TUNNEL)
         flowers = world.sprite_pool("flowers.png", count=24)
-        for x, frame in self.saved_flowers:
-            flowers.spawn(x=x, y=48, frame=frame)
+        for x, y, frame in self.saved_flowers:
+            flowers.spawn(x=x, y=y, frame=frame)
         hud = self.layer("hud", projection=vs2.HUD)
         label(hud, "REST A WHILE", 1)
         label(hud, "A: NEW DREAM", 14)

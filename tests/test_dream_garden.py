@@ -27,7 +27,7 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 
 STRIPS = {
     "dreamer.png": (19, 19, 8, None),
-    "seed.png": (12, 12, 4, None),
+    "seed.png": (9, 9, 4, None),
     "flowers.png": (17, 17, 8, None),
     "garden.png": (16, 16, 8, None),
     "steel8x8.png": (8, 8, 256, None),
@@ -97,6 +97,163 @@ class DreamGardenTests(unittest.TestCase):
         self.step(LEFT | RIGHT)
         self.assertEqual(garden.dreamer.x, 255)
 
+    def test_empty_garden_and_three_ordered_layers(self):
+        garden = self.start()
+        self.assertEqual(len(garden.flowers), 0)
+        self.assertEqual([layer.name for layer in garden.layers], ["world", "air", "hud"])
+        self.assertIs(garden.dreamer.layer, garden.world)
+        self.assertIs(garden.friend.layer, garden.world)
+        self.assertTrue(all(sprite.layer is garden.world for sprite in garden.flowers._free))
+        self.assertIs(garden.ground.layer, garden.air)
+        self.assertTrue(all(sprite.layer is garden.air for sprite in garden.seeds._free))
+        # All reserved flowers precede both dreamers in the lower layer.
+        self.assertEqual(garden.world.sprites[-2:], [garden.dreamer, garden.friend])
+        self.assertEqual(garden.hud.tilemaps, [garden.mood, garden.sound_notice])
+        self.assertFalse(garden.mood.visible)
+        self.assertFalse(garden.sound_notice.visible)
+
+    def test_planting_follows_last_motion_per_player_at_their_depth_and_wraps(self):
+        garden = self.start(player2=A)
+        garden.dreamer.y = 12
+        garden.friend.y = 20
+        for first, second, directions in (
+                (0, 0, (1, 1)),
+                (LEFT, RIGHT, (1, -1)),
+                (0, 0, (1, -1)),
+                (LEFT | RIGHT, LEFT | RIGHT, (1, -1)),
+                (RIGHT | A, LEFT | A, (-1, 1)),
+                (0, 0, (-1, 1))):
+            self.step(first, second)
+            self.assertEqual((garden.last_direction1, garden.last_direction2), directions)
+            for player, side in zip((garden.dreamer, garden.friend), directions):
+                for _ in range(2):
+                    seed = garden.seeds.spawn(x=100, y=100)
+                    garden.bloom(seed, player)
+                    flower = garden.flowers._newest
+                    self.assertEqual(flower.y, player.y)
+                    expected = (player.x + player.width // 2 + side * player.width * 0.75
+                                - garden.flower_half) % vs2.display.width
+                    self.assertAlmostEqual(flower.x, expected)
+                self.assertEqual((garden.last_direction1, garden.last_direction2), directions)
+
+    def test_catch_after_stopping_uses_heading_across_the_angular_seam(self):
+        garden = self.start()
+        self.assertEqual(garden.last_direction1, 1)
+        self.step(LEFT, count=10)
+        self.assertEqual(garden.dreamer.x, 1)
+        self.step()
+        garden.seeds.spawn(x=254, y=10)
+        self.step()
+        flower = garden.flowers._newest
+        expected = (garden.dreamer.x + garden.dreamer.width // 2
+                    + garden.dreamer.width * 0.75 - garden.flower_half) % 256
+        self.assertAlmostEqual(flower.x, expected)
+        self.assertEqual(flower.y, garden.dreamer.y)
+        self.step(RIGHT, count=2)
+        self.assertEqual(garden.dreamer.x, 255)
+        self.step()
+        garden.seeds.spawn(x=254, y=10)
+        self.step()
+        flower = garden.flowers._newest
+        expected = (garden.dreamer.x + garden.dreamer.width // 2
+                    - garden.dreamer.width * 0.75 - garden.flower_half) % 256
+        self.assertAlmostEqual(flower.x, expected)
+
+    def test_flowers_drift_inward_much_slower_than_seeds_and_retire(self):
+        from games.demos.dream_garden.code.dream_garden import FLOWER_DRIFT_RATIO
+        garden = self.start()
+        flower = garden.flowers.spawn(x=100, y=20)
+        seed = garden.seeds.spawn(x=150, y=100)
+        for buttons in (0, A):
+            before_flower, before_seed = flower.y, seed.y
+            self.step(buttons)
+            self.assertAlmostEqual(flower.y - before_flower, garden.speed * FLOWER_DRIFT_RATIO)
+            self.assertAlmostEqual(before_seed - seed.y, garden.speed)
+        flower.y = 254.999
+        self.step()
+        self.assertEqual(len(garden.flowers), 0)
+
+    def test_seed_glow_is_random_independent_and_cleared_on_retirement(self):
+        from unittest.mock import patch
+        garden = self.start()
+        first = garden.seeds.spawn(x=100, y=100)
+        second = garden.seeds.spawn(x=150, y=100)
+        with patch.dict(garden.glow_seed.__globals__, {"randrange": lambda *args: 90}):
+            garden.glow_seed(first)
+            garden.glow_seed(second)
+            self.assertEqual(first.frame, 0)
+            garden.seed_glows[first][0] = 0
+            frames = []
+            for _ in range(36):
+                garden.glow_seed(first)
+                garden.glow_seed(second)
+                frames.append(first.frame)
+                self.assertEqual(second.frame, 0)
+            self.assertEqual(frames, [frame for frame in (1, 2, 3, 2, 1, 0) for _ in range(6)])
+            self.assertEqual(garden.seed_glows[first], [90, 0])
+        garden.retire_seed(first)
+        second.y = -10
+        self.step()
+        self.assertEqual(garden.seed_glows, {})
+
+    def test_sound_toggle_notice_lasts_two_seconds_and_restarts_on_retoggling(self):
+        from unittest.mock import patch
+        garden = self.start()
+        now = [1000]
+        with patch.dict(garden.update.__globals__, {"ticks_ms": lambda: now[0]}):
+            self.step(X)
+            self.assertTrue(garden.sound_notice.visible)
+            self.assertEqual(garden.sound_notice_until, 3000)
+            now[0] = 2500
+            self.step()
+            self.step(0, X)
+            self.assertEqual(garden.sound_notice.text, "NOISY")
+            self.assertEqual(garden.sound_notice_until, 4500)
+            now[0] = 4499
+            self.step()
+            self.assertTrue(garden.sound_notice.visible)
+            now[0] = 4500
+            self.step()
+            self.assertTrue(garden.sound_notice.visible)
+            self.assertIsNone(garden.sound_notice_until)
+            self.assertEqual(garden.sound_notice.y, 11)
+            now[0] = 4725
+            self.step()
+            self.assertAlmostEqual(garden.sound_notice.y, 1.5)
+            now[0] = 4800
+            self.step(X)
+            self.assertEqual(garden.sound_notice.text, "QUIET")
+            self.assertEqual(garden.sound_notice.y, 11)
+            self.assertIsNone(garden.sound_notice_exit)
+            now[0] = 7025
+            self.step()
+            self.assertAlmostEqual(garden.sound_notice.y, 1.5)
+            now[0] = 7250
+            self.step()
+            self.assertFalse(garden.sound_notice.visible)
+            self.assertIsNone(garden.sound_notice_exit)
+
+    def test_relax_slides_out_and_a_new_request_cancels_the_exit(self):
+        from unittest.mock import patch
+        garden = self.start()
+        now = [1000]
+        with patch.dict(garden.update.__globals__, {"ticks_ms": lambda: now[0]}):
+            self.step(A)
+            self.step()
+            self.assertTrue(garden.mood.visible)
+            now[0] = 1225
+            self.step()
+            self.assertAlmostEqual(garden.mood.y, -3.5)
+            self.assertTrue(garden.mood.visible)
+            self.step(0, A)
+            self.assertEqual(garden.mood.y, 1)
+            self.assertIsNone(garden.mood_exit)
+            self.step()
+            now[0] = 1675
+            self.step()
+            self.assertFalse(garden.mood.visible)
+            self.assertIsNone(garden.mood_exit)
+
     def test_second_player_joins_and_moves_independently(self):
         garden = self.start()
         self.assertFalse(garden.friend.visible)
@@ -122,10 +279,12 @@ class DreamGardenTests(unittest.TestCase):
         self.assertAlmostEqual(seed.y, 100 - SLOW_SPEED, places=2)
         self.assertAlmostEqual(garden.scroll - previous_scroll, SLOW_SPEED, places=2)
         self.assertEqual(garden.spawn_ms, SLOW_SPAWN_MS)
-        self.assertEqual(garden.mood.text, "SLOW")
+        self.assertEqual(garden.mood.text, "RELAX")
+        self.assertTrue(garden.mood.visible)
         self.assertEqual(garden.friend.frame, 7)
         self.step()
-        self.assertEqual(garden.mood.text, "DRIFT")
+        self.assertTrue(garden.mood.visible)
+        self.assertIsNotNone(garden.mood_exit)
         self.step(A)
         self.assertTrue(garden.slow)
         self.assertEqual(garden.dreamer.frame, 3)
@@ -149,7 +308,7 @@ class DreamGardenTests(unittest.TestCase):
     def test_missing_a_seed_has_no_penalty(self):
         garden = self.start()
         before = len(list(garden.flowers))
-        garden.seeds.spawn(x=100, y=-12)
+        garden.seeds.spawn(x=100, y=-9)
         self.step()
         self.assertEqual(len(list(garden.seeds)), 0)
         self.assertEqual(len(list(garden.flowers)), before)
@@ -166,22 +325,26 @@ class DreamGardenTests(unittest.TestCase):
         garden.seeds.despawn_all()
         starting = [(flower.x, flower.frame) for flower in garden.flowers]
         for index in range(80):
-            garden.bloom(garden.seeds.spawn(x=130, y=10))
+            garden.bloom(garden.seeds.spawn(x=130, y=10), garden.dreamer)
         self.assertTrue(all((flower.x, flower.frame) not in starting for flower in garden.flowers))
         self.assertEqual(len(list(garden.flowers)), 24)
         self.assertEqual(garden._sprite_count, 42)
-        self.assertEqual(garden._tilemap_count, 2)
+        self.assertEqual(garden._tilemap_count, 3)
         vs2.export_scene_payload(garden)
 
     def test_rest_preserves_the_garden_and_a_begins_a_new_dream(self):
         from games.demos.dream_garden.code.dream_garden import Garden, Rest
         garden = self.start(keep_timer=True)
         self.assertEqual(len(garden.pending_calls), 1)
-        flowers = [(flower.x, flower.frame) for flower in garden.flowers]
+        garden.bloom(garden.seeds.spawn(x=130, y=10), garden.dreamer)
+        self.step(LEFT, count=10)
+        flowers = [(flower.x, flower.y, flower.frame) for flower in garden.flowers]
         self.step(B)
         rest = director.scene_stack[-1]
         self.assertIsInstance(rest, Rest)
         self.assertEqual(rest.saved_flowers, flowers)
+        self.assertEqual([(flower.x, flower.y, flower.frame)
+                          for flower in rest.layers[0].sprites if flower.visible], flowers)
         self.assertEqual(garden.pending_calls, [])
         self.step()
         self.step(0, A)
@@ -257,6 +420,11 @@ class DreamGardenTests(unittest.TestCase):
                     scene.seeds.spawn(x=scene.dreamer.x, y=10)
                     self.step()
                     self.assertGreater(len(scene.flowers), 0)
+                    flower = scene.flowers._newest
+                    expected = (scene.dreamer.x + scene.dreamer.width // 2
+                                + scene.dreamer.width * 0.75
+                                - scene.image("flowers.png").width // 2) % 256
+                    self.assertAlmostEqual(flower.x, expected)
                 vs2.export_scene_payload(scene)
                 self.step(extra=8)
                 self.step()
@@ -276,17 +444,20 @@ class DreamGardenTests(unittest.TestCase):
             with Image.open(Path(ROOT) / "games/demos/dream_garden/images" / name) as image:
                 self.assertLessEqual(set(image.convert("RGBA").getchannel("A").tobytes()), {0, 255})
 
-    def test_audio_is_opt_in_and_stops_on_rest(self):
+    def test_audio_starts_on_toggles_and_stops_on_rest(self):
         garden = self.start()
-        self.assertFalse(garden.sound_on)
-        self.step(X)
         self.assertTrue(garden.sound_on)
         self.assertTrue(any(b"lullaby" in line for line, _ in director.platform.comms.sent))
-        self.step()
-        self.step(X)
+        garden.bloom(garden.seeds.spawn(x=130, y=10), garden.dreamer)
+        self.assertTrue(any(b"bloom" in line for line, _ in director.platform.comms.sent))
+        self.step(0, X)
         self.assertFalse(garden.sound_on)
+        self.assertEqual(garden.sound_notice.text, "QUIET")
+        self.assertEqual(director.platform.comms.sent[-1][0], b"music off")
         self.step()
         self.step(X)
+        self.assertTrue(garden.sound_on)
+        self.assertEqual(garden.sound_notice.text, "NOISY")
         self.step(B)
         self.assertEqual(director.platform.comms.sent[-1][0], b"music off")
 
@@ -300,9 +471,11 @@ class DreamGardenTests(unittest.TestCase):
                       RIGHT if tick % 50 < 25 else 0)
         self.assertIs(director.scene_stack[-1], garden)
         self.assertEqual(garden._sprite_count, 42)
-        self.assertEqual(garden._tilemap_count, 2)
+        self.assertEqual(garden._tilemap_count, 3)
         self.assertLessEqual(len(list(garden.seeds)), 16)
         self.assertLessEqual(len(list(garden.flowers)), 24)
+        self.assertLessEqual(len(garden.seed_glows), 16)
+        self.assertTrue(all(seed in list(garden.seeds) for seed in garden.seed_glows))
         self.assertLess(garden.dream_time, 96)
         self.assertLess(garden.scroll, 96)
         vs2.export_scene_payload(garden)
