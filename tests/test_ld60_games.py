@@ -295,6 +295,17 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         self.assertEqual(game.walls.view_y, 30 * 8 - 5 * 8)
         self.assertEqual(game.ship.y, 5 * 8)
 
+    def test_the_ship_stays_halfway_out_even_at_the_end_of_the_tunnel(self):
+        from games.ld60.spiral_tunnel.code.spiral_tunnel import ROWS
+
+        game = self.start_game()
+        row = ROWS - 5
+        game.wy = row * 8.0
+        game.wx = next(c for c in range(32) if not game.solid[row * 32 + c]) * 8 + 1
+        self.step(0)
+        self.assertEqual(game.walls.view_y, row * 8 - 5 * 8)
+        self.assertEqual(game.ship.y, 5 * 8)
+
 
 class DodgeEmTests(GameTests, unittest.TestCase):
     slug = "ld60.dodge_em"
