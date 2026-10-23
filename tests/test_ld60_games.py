@@ -473,8 +473,41 @@ class RimRunnerTests(GameTests, unittest.TestCase):
         game = self.start_game()
         self.run_ticks(3)
         self.assertTrue(game.grounded)
-        self.assertEqual(game.runner.x, -4)
-        self.assertEqual(game.runner.y, 3 * 8)
+        self.assertEqual(game.runner.x % 256, 252)
+        self.assertEqual(game.runner.y, 5)       # four LEDs in from the rim
+
+    def test_the_view_scrolls_inward_with_the_runner_to_keep_it_near_the_rim(self):
+        game = self.start_game()
+        self.run_ticks(2)
+        self.assertEqual(game.rim.view_y, 24 - 5)
+        # Up on a platform the whole view has moved with the runner.
+        game.wy = 13 * 8.0
+        game.vy = 0.0
+        game.grounded = False
+        self.step(0)
+        self.assertAlmostEqual(game.runner.y, 5, delta=1)
+        self.assertAlmostEqual(game.rim.view_y, game.wy - 5, delta=1)
+
+    def test_the_view_stops_scrolling_where_the_level_ends(self):
+        from games.ld60.rim_runner.code.rim_runner import ROWS, VIEW_H
+
+        game = self.start_game()
+        game.wy = (ROWS - 2) * 8.0
+        game.vy = 0.0
+        game.grounded = False
+        self.step(0)
+        self.assertEqual(game.rim.view_y, ROWS * 8 - VIEW_H)
+        self.assertGreater(game.runner.y, 5)
+
+    def test_birds_are_drawn_relative_to_the_scrolled_view(self):
+        game = self.start_game()
+        bird = game.birds[0]
+        bird.vx = bird.vy = 0
+        bird.turn = 99
+        bird.wx, bird.wy = game.wx + 40, 10 * 8.0
+        self.step(0)
+        self.assertTrue(bird.visible)
+        self.assertAlmostEqual(bird.y, 10 * 8 - game.rim.view_y, delta=1)
 
     def test_left_and_right_run_round_the_rim(self):
         game = self.start_game()

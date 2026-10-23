@@ -18,7 +18,15 @@ from vs2.controls import *
 W = vs2.display.width      # 256 columns round the disc
 TILE = 8
 COLS = W // TILE
-ROWS = 22                  # tiles from the rim to the middle of the disc
+ROWS = 40                  # tiles from the rim inward; the level is much taller than the view
+VIEW_ROWS = 18             # how many rows of it are drawn at a time
+VIEW_H = VIEW_ROWS * TILE
+# The camera scrolls inward with the runner, keeping the runner's feet this deep.
+# Depth 5 is about four LEDs in from the rim, where things are big and clear.
+# Things near the middle of the disc are hard to read, so the view only stops
+# following when the level runs out above you.
+PLAYER_DEPTH = 5
+BIRD_TOP = 16              # birds fly between this row and row 5
 ANCHOR = -TILE // 2        # the player is drawn at the bottom of the disc
 BIRDS = 16
 # Platforms float this many tiles above the rim, and the small ones above those.
@@ -62,7 +70,7 @@ class Game(vs2.Scene):
         self.cells = bytearray([NO_TILE] * (COLS * ROWS))
         self.rim = self.world.tilemap(
             "tiles.png", columns=COLS, rows=ROWS, cells=self.cells,
-            view_width=W, view_height=ROWS * TILE)
+            view_width=W, view_height=VIEW_H)
         self.eggs = self.build_rim()
         self.autotile()
 
@@ -70,7 +78,7 @@ class Game(vs2.Scene):
         for col in range(1, COLS, 2):
             bird = self.world.sprite("sprites.png", frame=BIRD)
             bird.wx = col * TILE
-            bird.wy = randrange(8, ROWS - 4) * TILE
+            bird.wy = randrange(8, BIRD_TOP) * TILE
             bird.vx = bird.vy = 0
             bird.turn = 0
             bird.alive = True
@@ -97,6 +105,7 @@ class Game(vs2.Scene):
         self.facing = 1
         self.ticks = 0
         self.playing = True
+        self.dead = False
         self.show_clock()
         self.place()
 
@@ -229,7 +238,7 @@ class Game(vs2.Scene):
             bird.vy = (randrange(-30, 31)) * 0.024
         bird.turn -= 1
         bird.wx = (bird.wx + bird.vx) % W
-        bird.wy = min(max(bird.wy + bird.vy, 5 * TILE), (ROWS - 5) * TILE)
+        bird.wy = min(max(bird.wy + bird.vy, 5 * TILE), BIRD_TOP * TILE)
         bird.frame = BIRD + (self.ticks // 5) % 2
 
     def check_birds(self):
@@ -274,6 +283,7 @@ class Game(vs2.Scene):
         if not self.playing:
             return
         self.playing = False
+        self.dead = True
         self.runner.hide()
         self.boom(self.wx, max(self.wy, 0))
         vs2.audio.sound("die")
@@ -295,9 +305,12 @@ class Game(vs2.Scene):
     def place(self):
         """Put everything on the disc, with the camera on the runner."""
         cam = int(self.wx)
+        cam_y = int(min(max(self.wy - PLAYER_DEPTH, 0), ROWS * TILE - VIEW_H))
         self.rim.x = ANCHOR - cam
-        self.runner.x = ANCHOR + self.wx - cam
-        self.runner.y = self.wy
+        self.rim.view_y = cam_y
+        self.put_sprite(self.runner, self.wx, self.wy, cam, cam_y)
+        if self.dead:
+            self.runner.hide()
         # The picture faces screen-right, which at the bottom of the disc is
         # toward lower x.
         self.runner.flip_x = self.facing > 0
@@ -307,13 +320,17 @@ class Game(vs2.Scene):
             self.runner.frame = RUNNER + (self.ticks // 4) % 2 if joy1.held(LEFT) or joy1.held(RIGHT) else RUNNER
         for bird in self.birds:
             if bird.alive:
-                bird.x = (ANCHOR + bird.wx - cam) % W
-                bird.y = bird.wy
+                self.put_sprite(bird, bird.wx, bird.wy, cam, cam_y)
                 bird.flip_x = bird.vx > 0
         for boom in self.booms:
             if boom.active:
-                boom.x = (ANCHOR + boom.wx - cam) % W
-                boom.y = boom.wy
+                self.put_sprite(boom, boom.wx, boom.wy, cam, cam_y)
+
+    def put_sprite(self, sprite, wx, wy, cam, cam_y):
+        """Place a sprite at world (wx, wy); hidden when it is out of view."""
+        sprite.x = (ANCHOR + wx - cam) % W
+        sprite.y = wy - cam_y
+        sprite.visible = -TILE < sprite.y < VIEW_H
 
 
 class Title(vs2.Scene):

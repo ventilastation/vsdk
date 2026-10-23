@@ -14,6 +14,9 @@ All five share a design:
 - The camera turns with you. You are always at the top of the disc (x = 128),
   except in Rim Runner, where you run on the rim at the bottom, so the picture
   never leaves your end of the display.
+- Rim Runner also scrolls inward with you, keeping your feet about four LEDs from
+  the rim, since things near the middle of the disc are hard to read. It only
+  stops following where the level runs out above you.
 - Everything is made once in `build()` and moved afterwards: tiles come from one
   `bytearray` shared with the tilemap, sprites are fixed lists, and the walls get
   their outline from an autotile pass at build time.
