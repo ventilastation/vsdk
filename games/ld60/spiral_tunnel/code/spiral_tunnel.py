@@ -22,11 +22,12 @@ ROWS = 56                  # the tunnel is this many tiles deep
 VIEW_ROWS = 18             # how many rows of it are drawn at a time
 VIEW_H = VIEW_ROWS * TILE
 ANCHOR = W // 2 - TILE // 2    # the player is drawn at the top of the disc
-# The ship is kept this many rows down the view, about halfway to the centre of
-# the disc (depth 40). Further in, things are too small to read, so the camera
-# goes on following the ship to the end of the tunnel instead of stopping when
-# the map runs out: the view then shows empty space past the tunnel.
-PLAYER_ROW = 5
+# The ship is kept this deep in the view: about a quarter of the radius in from
+# the rim (depth 18, LED 40), where tunnel walls and UFOs are still big enough to
+# steer by. Further in, things are too small to read, so the camera goes on
+# following the ship to the end of the tunnel instead of stopping when the map
+# runs out: the view then shows empty space past the tunnel.
+PLAYER_DEPTH = 18
 
 SHIP, UFO, BOMB, BOOM = 0, 1, 4, 5     # frames of sprites.png
 UFO_FRAMES = 3
@@ -296,7 +297,7 @@ class Game(vs2.Scene):
     def place(self):
         """Put everything on the disc, with the camera on the ship."""
         self.cam_x = int(self.wx)
-        top = self.wy - PLAYER_ROW * TILE
+        top = self.wy - PLAYER_DEPTH
         self.cam_y = int(max(top, 0))
         self.walls.x = ANCHOR - self.cam_x
         self.walls.view_y = self.cam_y

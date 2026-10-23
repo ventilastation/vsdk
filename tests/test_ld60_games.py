@@ -287,24 +287,26 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         self.assertLessEqual(sum(1 for b in game.bombs if b.visible), 4)
 
     def test_the_camera_follows_the_ship_down_the_tunnel(self):
+        from games.ld60.spiral_tunnel.code.spiral_tunnel import PLAYER_DEPTH
+
         game = self.start_game()
         self.assertEqual(game.walls.view_y, 0)
         game.wy = 30 * 8
         game.wx = next(c for c in range(32) if not game.solid[30 * 32 + c]) * 8 + 1
         self.step(0)
-        self.assertEqual(game.walls.view_y, 30 * 8 - 5 * 8)
-        self.assertEqual(game.ship.y, 5 * 8)
+        self.assertEqual(game.walls.view_y, 30 * 8 - PLAYER_DEPTH)
+        self.assertEqual(game.ship.y, PLAYER_DEPTH)
 
-    def test_the_ship_stays_halfway_out_even_at_the_end_of_the_tunnel(self):
-        from games.ld60.spiral_tunnel.code.spiral_tunnel import ROWS
+    def test_the_ship_stays_a_quarter_of_the_way_in_even_at_the_end_of_the_tunnel(self):
+        from games.ld60.spiral_tunnel.code.spiral_tunnel import PLAYER_DEPTH, ROWS
 
         game = self.start_game()
         row = ROWS - 5
         game.wy = row * 8.0
         game.wx = next(c for c in range(32) if not game.solid[row * 32 + c]) * 8 + 1
         self.step(0)
-        self.assertEqual(game.walls.view_y, row * 8 - 5 * 8)
-        self.assertEqual(game.ship.y, 5 * 8)
+        self.assertEqual(game.walls.view_y, row * 8 - PLAYER_DEPTH)
+        self.assertEqual(game.ship.y, PLAYER_DEPTH)
 
 
 class DodgeEmTests(GameTests, unittest.TestCase):
