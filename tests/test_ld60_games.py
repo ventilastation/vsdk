@@ -195,19 +195,56 @@ class GameTests:
 class SpiralTunnelTests(GameTests, unittest.TestCase):
     slug = "ld60.spiral_tunnel"
 
-    def test_the_tunnel_is_wide_enough_and_always_connects_to_the_next_row(self):
-        from games.ld60.spiral_tunnel.code.spiral_tunnel import COLS, ROWS
+    def middle(self, game, row):
+        """Where a ship can fly in the open, in the middle of the tunnel."""
+        return (game.left[row] * 8 + game.span[row] * 4 - 4) % 256
+
+    def test_the_tunnel_is_wide_and_each_edge_moves_two_to_five_tiles_a_row(self):
+        from games.ld60.spiral_tunnel.code.spiral_tunnel import ROWS
 
         for _ in range(5):
             game = self.start_game()
-            rows = [{c for c in range(COLS) if not game.solid[r * COLS + c]}
-                    for r in range(ROWS)]
-            for row, free in enumerate(rows):
-                self.assertGreaterEqual(len(free), 13, "row %d" % row)
+            for row in range(ROWS):
+                self.assertTrue(13 <= game.span[row] <= 16, "row %d" % row)
+                self.assertTrue(2 <= game.left_shift[row] <= 5, "row %d" % row)
+                self.assertTrue(2 <= game.right_shift[row] <= 5, "row %d" % row)
                 if row:
-                    self.assertGreaterEqual(len(free & rows[row - 1]), 8, "row %d" % row)
-            self.press(director.BUTTON_Y)   # leave to the launcher
+                    # Each row starts where the slant of the one above ended.
+                    self.assertEqual(game.left[row],
+                                     (game.left[row - 1] + game.left_shift[row - 1]) % 32)
+                    self.assertEqual(game.span[row], game.span[row - 1]
+                                     + game.right_shift[row - 1] - game.left_shift[row - 1])
             director.scene_stack.clear()
+            self.setUp_again()
+
+    def setUp_again(self):
+        self.tearDown()
+        self.setUp()
+
+    def test_what_is_drawn_as_wall_is_wall_and_what_is_drawn_open_is_open(self):
+        from games.ld60.spiral_tunnel.code.spiral_tunnel import COLS, NO_TILE, ROWS
+
+        game = self.start_game()
+        for row in range(ROWS - 1):
+            for col in range(COLS):
+                tile = game.cells[row * COLS + col]
+                centre = (col * 8 + 4, row * 8 + 4)
+                if tile == NO_TILE:
+                    self.assertFalse(game.wall_at(*centre), (row, col))
+                elif tile == 0:
+                    self.assertTrue(game.wall_at(*centre), (row, col))
+
+    def test_the_slanted_edge_is_a_straight_line_across_the_tiles_it_spans(self):
+        game = self.start_game()
+        row = 5
+        left = game.left[row] * 8
+        shift = game.left_shift[row]
+        # A point just inside the open side of the left edge, a quarter, half and
+        # three quarters of the way down the row, moves right as the edge does.
+        for depth in (2, 4, 6):
+            edge = left + shift * depth
+            self.assertTrue(game.wall_at(edge - 1, row * 8 + depth))
+            self.assertFalse(game.wall_at(edge + 1, row * 8 + depth))
 
     def test_the_ship_starts_in_the_open_at_the_top_of_the_disc(self):
         game = self.start_game()
@@ -235,8 +272,7 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
 
     def test_flying_into_the_wall_ends_the_game(self):
         game = self.start_game()
-        col = next(c for c in range(32) if game.solid[2 * 32 + c])
-        game.wx = col * 8
+        game.wx = (game.left[2] * 8 - 12) % 256        # in the wall, left of the tunnel
         game.wy = 2 * 8
         self.step(0)
         self.assertFalse(game.playing)
@@ -249,7 +285,7 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         game = self.start_game()
         row = ROWS - 3
         game.wy = row * 8
-        game.wx = next(c for c in range(32) if not game.solid[row * 32 + c]) * 8 + 1
+        game.wx = float(self.middle(game, row))
         self.step(0)
         self.assertFalse(game.playing)
         self.run_ticks(40)
@@ -292,7 +328,7 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         game = self.start_game()
         self.assertEqual(game.walls.view_y, 0)
         game.wy = 30 * 8
-        game.wx = next(c for c in range(32) if not game.solid[30 * 32 + c]) * 8 + 1
+        game.wx = float(self.middle(game, 30))
         self.step(0)
         self.assertEqual(game.walls.view_y, 30 * 8 - PLAYER_DEPTH)
         self.assertEqual(game.ship.y, PLAYER_DEPTH)
@@ -303,7 +339,7 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         game = self.start_game()
         row = ROWS - 5
         game.wy = row * 8.0
-        game.wx = next(c for c in range(32) if not game.solid[row * 32 + c]) * 8 + 1
+        game.wx = float(self.middle(game, row))
         self.step(0)
         self.assertEqual(game.walls.view_y, row * 8 - PLAYER_DEPTH)
         self.assertEqual(game.ship.y, PLAYER_DEPTH)

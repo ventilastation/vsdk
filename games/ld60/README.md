@@ -19,7 +19,9 @@ All five share a design:
   stops following where the level runs out above you.
 - Everything is made once in `build()` and moved afterwards: tiles come from one
   `bytearray` shared with the tilemap, sprites are fixed lists, and the walls get
-  their outline from an autotile pass at build time.
+  their outline from an autotile pass at build time. (Spiral Tunnel's edges are
+  slanted tiles instead, like the prototype's, since the tunnel moves sideways as
+  it goes down.)
 - You are scored on the time you take to finish. Faster than your best saves a
   new best (`vs2.saves`, under the name `best`).
 

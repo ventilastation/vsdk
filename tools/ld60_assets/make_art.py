@@ -203,11 +203,47 @@ BOOM = [
 ]
 
 
+def slope_tiles(top, fill, edge):
+    """The walls of Spiral Tunnel: one solid tile, then the diagonal tiles that
+    join a row of the tunnel to the next one.
+
+    The tunnel's edge moves 2 to 5 tiles sideways from each row to the next, so
+    the edge is a straight line that crosses that many tiles while it drops one
+    tile: `shift` tiles, each holding a slice of it. Frame 0 is solid. Then the
+    left edge, wall below the line, for shifts 2..5 (2 + 3 + 4 + 5 = 14 frames),
+    then the right edge, wall above the line, the same. Drawn upright, with +x to
+    the right and the centre of the disc down, like the original game's tiles.
+    """
+    def tile(shift, k, left):
+        image = Image.new("RGBA", (TILE, TILE), CLEAR)
+        for y in range(TILE):
+            for x in range(TILE):
+                line = (k * TILE + x + 0.5) / shift         # the line's y at this x
+                below = (y + 0.5) - line                     # > 0: under the line
+                if left:
+                    if below >= 1.0:
+                        image.putpixel((x, y), fill + (255,))
+                    elif below >= 0.0:
+                        image.putpixel((x, y), edge + (255,))
+                else:
+                    if below <= -1.0:
+                        image.putpixel((x, y), fill + (255,))
+                    elif below <= 0.0:
+                        image.putpixel((x, y), edge + (255,))
+        return image
+
+    frames = [Image.new("RGBA", (TILE, TILE), fill + (255,))]
+    for left in (True, False):
+        for shift in range(2, 6):
+            for k in range(shift):
+                frames.append(tile(shift, k, left))
+    return frames
+
+
 def make_spiral_tunnel():
     top = True
     out = GAMES / "spiral_tunnel" / "images"
-    walls = wall_tiles(top, (8, 14, 34), (14, 24, 56), (40, 200, 235), (16, 80, 110))
-    strip(walls, top).save(out / "tiles.png")
+    strip(slope_tiles(top, (190, 62, 0), (255, 200, 60)), top).save(out / "tiles.png")
     strip(TUNNEL_SPRITES + BOOM, top).save(out / "sprites.png")
 
 

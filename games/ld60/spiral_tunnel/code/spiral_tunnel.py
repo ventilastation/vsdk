@@ -33,6 +33,12 @@ SHIP, UFO, BOMB, BOOM = 0, 1, 4, 5     # frames of sprites.png
 UFO_FRAMES = 3
 BOOM_FRAMES = 3
 NO_TILE = vs2.EMPTY_TILE
+# Frames of tiles.png: 0 is solid wall. The tunnel's edge slants across `shift`
+# tiles (2..5) in each row, and each slanted piece is one frame, in order along
+# the edge. LEFT_AT[shift] is the first of them on the left edge, RIGHT_AT[shift]
+# on the right edge.
+LEFT_AT = (0, 0, 1, 3, 6, 10)
+RIGHT_AT = (0, 0, 15, 17, 20, 24)
 
 CRUISE = 1.2               # columns per tick the player flies round at
 STEER_X = 0.75             # extra or less with right and left
@@ -67,13 +73,12 @@ class Game(vs2.Scene):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
 
-        self.solid = bytearray(COLS * ROWS)
         self.cells = bytearray([NO_TILE] * (COLS * ROWS))
         self.walls = self.world.tilemap(
             "tiles.png", columns=COLS, rows=ROWS, cells=self.cells,
             view_width=W, view_height=VIEW_H)
         ufo_spots = self.carve_tunnel()
-        self.autotile()
+        self.draw_tunnel()
 
         self.ufos = []
         for col, row in ufo_spots:
@@ -100,8 +105,10 @@ class Game(vs2.Scene):
         self.hud.label("steel8x8.png", columns=4, x=4, y=1, text="TIME")
         self.clock = self.hud.label("steel8x8.png", columns=4, x=-36, y=1)
 
-        self.wx = float(self.start_col * TILE)
-        self.wy = float(TILE)
+        # Start on the rim, in the middle of the first row: the edges slant away
+        # as the ship goes down, so a lower start can already be in the wall.
+        self.wx = float(self.start_col * TILE - TILE // 2)
+        self.wy = 0.0
         self.cam_x = int(self.wx)
         self.cam_y = 0
         self.ticks = 0
@@ -113,53 +120,63 @@ class Game(vs2.Scene):
     # -- the level -------------------------------------------------------
 
     def carve_tunnel(self):
-        """Fill the map with wall, then cut a tunnel that drifts round the disc
-        as it goes down. Returns where the UFOs start."""
-        cells = self.solid
-        for i in range(len(cells)):
-            cells[i] = 1
-        centre = COLS // 2
+        """Lay out a tunnel that drifts round the disc as it goes down. Each row
+        has its left edge, its width and how far each edge moves sideways by the
+        next row (2 to 5 tiles), which is what makes the edges slant. Returns
+        where the UFOs start."""
+        self.left = [0] * ROWS
+        self.span = [0] * ROWS
+        self.left_shift = [0] * ROWS
+        self.right_shift = [0] * ROWS
+        left = COLS // 2 - 7
         width = 15
         ufo_spots = []
         for row in range(ROWS):
-            for c in range(width):
-                cells[row * COLS + (centre - width // 2 + c) % COLS] = 0
-            if row == 0:
-                self.start_col = centre
+            shift = randrange(2, 6)
+            # The right edge moves by whatever keeps the tunnel 13 to 16 wide.
+            options = [s for s in range(2, 6) if 13 <= width + s - shift <= 16]
+            right_shift = options[randrange(len(options))]
+            self.left[row] = left
+            self.span[row] = width
+            self.left_shift[row] = shift
+            self.right_shift[row] = right_shift
             if row > 3 and row % 2 == 1 and len(ufo_spots) < UFO_COUNT:
-                ufo_spots.append((centre % COLS, row))
-            centre = (centre + randrange(2, 6)) % COLS
-            width = min(16, max(13, width + randrange(-1, 2)))
+                ufo_spots.append(((left + width // 2) % COLS, row))
+            left = (left + shift) % COLS
+            width += right_shift - shift
+        self.start_col = self.left[0] + self.span[0] // 2
         return ufo_spots
 
-    def is_wall(self, col, row):
-        if row < 0 or row >= ROWS:
-            return True
-        return self.solid[row * COLS + col % COLS] == 1
-
-    def autotile(self):
-        """Pick each wall tile by which of its neighbours are open, so the
-        tunnel is outlined in light."""
+    def draw_tunnel(self):
+        """Fill the map with wall and cut the tunnel out of it, with a slanted
+        tile where each edge crosses from one row to the next."""
         for row in range(ROWS):
+            left = self.left[row]
+            width = self.span[row]
+            shift = self.left_shift[row]
+            right_shift = self.right_shift[row]
             for col in range(COLS):
-                index = row * COLS + col
-                if not self.solid[index]:
-                    continue
-                mask = 0
-                if not self.is_wall(col + 1, row):
-                    mask |= 1
-                if not self.is_wall(col - 1, row):
-                    mask |= 2
-                if row + 1 < ROWS and not self.is_wall(col, row + 1):
-                    mask |= 4
-                if row > 0 and not self.is_wall(col, row - 1):
-                    mask |= 8
-                self.cells[index] = mask
+                k = (col - left) % COLS             # tiles in from the left edge
+                if k < shift:
+                    tile = LEFT_AT[shift] + k
+                elif k < width:
+                    tile = NO_TILE
+                elif k - width < right_shift:
+                    tile = RIGHT_AT[right_shift] + k - width
+                else:
+                    tile = 0
+                self.cells[row * COLS + col] = tile
 
     def wall_at(self, px, py):
-        if py < 0:
+        """Whether the point is in the wall, along the same slanted edges that
+        are drawn."""
+        if py < 0 or py >= ROWS * TILE:
             return True
-        return self.is_wall(int(px) // TILE, int(py) // TILE)
+        row = int(py) // TILE
+        into = py - row * TILE                      # how far down this row
+        start = self.left[row] * TILE + self.left_shift[row] * into
+        width = self.span[row] * TILE + (self.right_shift[row] - self.left_shift[row]) * into
+        return (px - start) % W >= width
 
     # -- the game --------------------------------------------------------
 
