@@ -21,7 +21,11 @@ LAST_ROW = 33
 VIEW_ROWS = 18             # how many rows of it are drawn at a time
 VIEW_H = VIEW_ROWS * TILE
 ANCHOR = W // 2 - TILE // 2    # the player is drawn at the top of the disc
-PLAYER_ROW = 5             # which row of the view the player is kept on
+# The player is kept this many rows down the view, which is about halfway to the
+# centre of the disc (depth 40). Further in, things get too small to read, so the
+# camera goes on following the player right to the bottom of the maze instead of
+# stopping when the map runs out: the view then shows empty space past the maze.
+PLAYER_ROW = 5
 ROBOTS = 20
 
 PLAYER, ROBOT, BOOM = 0, 2, 4      # frames of sprites.png
@@ -280,7 +284,7 @@ class Game(vs2.Scene):
     def place(self):
         """Put everything on the disc, with the camera on the player."""
         cam_x = int(self.player.x)
-        cam_y = int(min(max(self.player.y - PLAYER_ROW * TILE, 0), ROWS * TILE - VIEW_H))
+        cam_y = int(max(self.player.y - PLAYER_ROW * TILE, 0))
         self.maze.x = ANCHOR - cam_x
         self.maze.view_y = cam_y
         self.show(self.player.sprite, self.player.x, self.player.y, cam_x, cam_y)

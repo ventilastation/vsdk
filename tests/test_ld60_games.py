@@ -471,9 +471,14 @@ class CatchTheRobotsTests(GameTests, unittest.TestCase):
         game.player.row = 20
         self.step(0)
         self.assertEqual(game.maze.view_y, 15 * 8)
-        game.player.y = 34 * 8
+        # At the bottom of the maze the view goes on following the player, so the
+        # player is never deeper than five rows down the view (halfway to the
+        # centre), even though the map has no more rows to show there.
+        game.player.y = 32 * 8
+        game.player.row = 32
         self.step(0)
-        self.assertEqual(game.maze.view_y, 36 * 8 - 18 * 8)
+        self.assertEqual(game.maze.view_y, 27 * 8)
+        self.assertEqual(game.player.sprite.y, 5 * 8)
 
 
 class RimRunnerTests(GameTests, unittest.TestCase):
