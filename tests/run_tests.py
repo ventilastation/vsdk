@@ -58,6 +58,7 @@ CPYTHON_TESTS = [
     "tests/test_emulator_vs2_render.py",
     "tests/test_scene_shader_pack.py",
     "tests/test_tutorial_game.py",
+    "tests/test_ld60_games.py",
     "tests/test_dream_garden.py",
     "tests/test_launch_flag.py",
     "tests/test_tutorial_steps.py",
