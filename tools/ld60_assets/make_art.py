@@ -325,7 +325,9 @@ ROBOT_SPRITES = [
 def make_catch_the_robots():
     top = True
     out = GAMES / "catch_the_robots" / "images"
-    walls = wall_tiles(top, (8, 22, 14), (14, 34, 22), (70, 220, 90), (20, 90, 40))
+    # Solid, fairly bright walls (no speckle) against black passages, so it is
+    # obvious which is which.
+    walls = wall_tiles(top, (24, 110, 48), (24, 110, 48), (150, 255, 170))
     strip(walls, top).save(out / "tiles.png")
     strip(ROBOT_SPRITES, top).save(out / "sprites.png")
 
