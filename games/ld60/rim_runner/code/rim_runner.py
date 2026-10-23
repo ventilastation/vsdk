@@ -21,11 +21,15 @@ COLS = W // TILE
 ROWS = 40                  # tiles from the rim inward; the level is much taller than the view
 VIEW_ROWS = 18             # how many rows of it are drawn at a time
 VIEW_H = VIEW_ROWS * TILE
-# The camera scrolls inward with the runner, keeping the runner's feet this deep.
-# Depth 5 is about four LEDs in from the rim, where things are big and clear.
-# Things near the middle of the disc are hard to read, so the view only stops
-# following when the level runs out above you.
-PLAYER_DEPTH = 5
+# The camera scrolls inward with the runner, keeping the runner's feet this deep,
+# so there is room between the runner and the rim. Depth 12 is about eight LEDs in
+# from the rim, where things are still big and clear; things near the middle of
+# the disc are hard to read, so the view only stops following when the level runs
+# out above you.
+PLAYER_DEPTH = 12
+# But it never scrolls outward past the lowest floor: only this many pixels of
+# ground are shown below it, rather than spending the outer LEDs on solid ground.
+GROUND_SHOWN = 4
 BIRD_TOP = 16              # birds fly between this row and row 5
 ANCHOR = -TILE // 2        # the player is drawn at the bottom of the disc
 BIRDS = 16
@@ -116,6 +120,7 @@ class Game(vs2.Scene):
         on them. Returns how many eggs there are."""
         eggs = 0
         height = 2
+        lowest = 99
         for col in range(COLS):
             if col % 4 == 3:
                 height = randrange(1, 5)
@@ -129,8 +134,11 @@ class Game(vs2.Scene):
             else:
                 for row in range(height + 1):
                     self.put(col, row)
+                lowest = min(lowest, height)
                 if randrange(5) == 0:
                     eggs += self.egg(col, height + 1)
+        # Depth of the surface of the lowest floor.
+        self.floor_depth = (lowest + 1) * TILE
         return eggs
 
     def put(self, col, row):
@@ -305,7 +313,8 @@ class Game(vs2.Scene):
     def place(self):
         """Put everything on the disc, with the camera on the runner."""
         cam = int(self.wx)
-        cam_y = int(min(max(self.wy - PLAYER_DEPTH, 0), ROWS * TILE - VIEW_H))
+        follow = max(self.wy - PLAYER_DEPTH, self.floor_depth - GROUND_SHOWN, 0)
+        cam_y = int(min(follow, ROWS * TILE - VIEW_H))
         self.rim.x = ANCHOR - cam
         self.rim.view_y = cam_y
         self.put_sprite(self.runner, self.wx, self.wy, cam, cam_y)

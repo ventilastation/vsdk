@@ -500,19 +500,43 @@ class RimRunnerTests(GameTests, unittest.TestCase):
         self.run_ticks(3)
         self.assertTrue(game.grounded)
         self.assertEqual(game.runner.x % 256, 252)
-        self.assertEqual(game.runner.y, 5)       # four LEDs in from the rim
+        # On the lowest floor, with four pixels of it below.
+        self.assertEqual(game.runner.y, game.wy - (game.floor_depth - 4))
 
     def test_the_view_scrolls_inward_with_the_runner_to_keep_it_near_the_rim(self):
+        from games.ld60.rim_runner.code.rim_runner import PLAYER_DEPTH
+
         game = self.start_game()
-        self.run_ticks(2)
-        self.assertEqual(game.rim.view_y, 24 - 5)
-        # Up on a platform the whole view has moved with the runner.
+        # Up on a platform the whole view has moved with the runner, which stays
+        # PLAYER_DEPTH from the rim.
         game.wy = 13 * 8.0
         game.vy = 0.0
         game.grounded = False
         self.step(0)
-        self.assertAlmostEqual(game.runner.y, 5, delta=1)
-        self.assertAlmostEqual(game.rim.view_y, game.wy - 5, delta=1)
+        self.assertAlmostEqual(game.runner.y, PLAYER_DEPTH, delta=1)
+        self.assertAlmostEqual(game.rim.view_y, game.wy - PLAYER_DEPTH, delta=1)
+
+    def test_the_view_shows_only_four_pixels_of_ground_below_the_lowest_floor(self):
+        from games.ld60.rim_runner.code.rim_runner import GROUND_SHOWN, PLAYER_DEPTH
+
+        game = self.start_game()
+        floor = game.floor_depth
+        self.assertIn(floor, (16, 24, 32, 40))
+        self.assertTrue(any(game.solid[(floor // 8 - 1) * 32 + c]
+                            and not game.solid[(floor // 8) * 32 + c] for c in range(32)))
+        # Standing on the lowest floor: four pixels of floor below the runner,
+        # though the runner could be PLAYER_DEPTH deep.
+        game.wy = float(floor)
+        game.vy = 0.0
+        game.grounded = False
+        self.step(0)
+        self.assertEqual(game.rim.view_y, floor - GROUND_SHOWN)
+        self.assertAlmostEqual(game.runner.y, GROUND_SHOWN, delta=1)
+        self.assertLess(GROUND_SHOWN, PLAYER_DEPTH)
+        # Falling into a hole does not scroll the view outward any further.
+        game.wy = 2.0
+        self.step(0)
+        self.assertEqual(game.rim.view_y, floor - GROUND_SHOWN)
 
     def test_the_view_stops_scrolling_where_the_level_ends(self):
         from games.ld60.rim_runner.code.rim_runner import ROWS, VIEW_H
