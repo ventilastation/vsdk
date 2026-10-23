@@ -308,11 +308,21 @@ class DodgeEmTests(GameTests, unittest.TestCase):
             pills = [c for c in range(COLS) if game.cells[lane * COLS + c] == PILL]
             self.assertEqual(len(pills), COLS - 4)
         # Walls between the lanes have exactly four gaps (none in the outer two).
-        for row in (3, 5, 7, 9):
+        for row in (2, 4, 6, 8):
             gaps = [c for c in range(COLS) if not game.solid[row * COLS + c]]
             self.assertEqual(gaps, [6, 14, 22, 30])
-        for row in (1, 11):
+        for row in (0, 10):
             self.assertEqual(sum(game.solid[row * COLS:(row + 1) * COLS]), COLS)
+
+    def test_the_outer_wall_is_one_led_wide_on_the_rim(self):
+        from games.ld60.dodge_em.code.dodge_em import SHIFT, TILE
+
+        game = self.start_game()
+        # Row 0 is drawn from depth SHIFT, so only its last pixel row (depth 0,
+        # the outermost LED) is on the disc, and the first lane starts right after.
+        self.assertEqual(game.track.y, SHIFT)
+        self.assertEqual(SHIFT + TILE, 1)
+        self.assertEqual(game.player.sprite.y, 1)
 
     def test_the_player_drives_round_eating_pills_and_the_camera_follows(self):
         game = self.start_game()
@@ -336,20 +346,20 @@ class DodgeEmTests(GameTests, unittest.TestCase):
         game = self.start_game()
         player = game.player
         self.run_ticks(3, director.JOY_DOWN)       # column 1 has a wall below
-        self.assertEqual(player.row, 2)
+        self.assertEqual(player.row, 1)
         self.assertGreater(player.col, 1)
         # At column 6 the wall has a gap.
         while player.col != 6 or player.ticks:
             self.step(0)
         self.step(director.JOY_DOWN)
-        self.assertEqual((player.col, player.row), (6, 4))
+        self.assertEqual((player.col, player.row), (6, 3))
 
     def test_eating_the_last_pill_wins(self):
         from games.ld60.dodge_em.code.dodge_em import NO_TILE, PILL
 
         game = self.start_game()
         for i, cell in enumerate(game.cells):
-            if cell == PILL and i != 2 * 32 + 3:
+            if cell == PILL and i != 1 * 32 + 3:
                 game.cells[i] = NO_TILE
         game.pills = 1
         self.run_ticks(60)
@@ -375,10 +385,10 @@ class DodgeEmTests(GameTests, unittest.TestCase):
         enemy = game.enemies[0]
         enemy.ticks = 0
         enemy.col, enemy.x = 6, 6 * 8
-        enemy.row, enemy.y = 6, 6 * 8
-        game.player.row = 2                       # three lanes away
+        enemy.row, enemy.y = 5, 5 * 8
+        game.player.row = 1                       # two lanes away
         self.step(0)
-        self.assertEqual(enemy.row, 4)
+        self.assertEqual(enemy.row, 3)
 
 
 class CatchTheRobotsTests(GameTests, unittest.TestCase):

@@ -271,7 +271,8 @@ PILL = sprite([
 def make_dodge_em():
     top = True
     out = GAMES / "dodge_em" / "images"
-    walls = wall_tiles(top, (14, 8, 30), (22, 14, 44), (200, 60, 200), (80, 24, 90))
+    # Solid walls with a bright edge line, so wall and track are easy to tell apart.
+    walls = wall_tiles(top, (96, 30, 110), (96, 30, 110), (255, 130, 255))
     strip(walls + [PILL], top).save(out / "tiles.png")
     strip(DODGEM_SPRITES, top).save(out / "sprites.png")
 

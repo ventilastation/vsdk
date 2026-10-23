@@ -18,9 +18,12 @@ from vs2.controls import *
 W = vs2.display.width      # 256 columns round the disc
 TILE = 8
 COLS = W // TILE
-ROWS = 13
+ROWS = 12
 ANCHOR = W // 2 - TILE // 2    # the player is drawn at the top of the disc
-LANES = (2, 4, 6, 8, 10)       # rows you can drive on; the odd rows are walls
+LANES = (1, 3, 5, 7, 9)        # rows you can drive on; the even rows are walls
+# The whole track is drawn this far in from where its rows say, so the top wall,
+# row 0, shows as just its last line of pixels: one LED right on the rim.
+SHIFT = -(TILE - 1)
 GAP_EVERY = 8                  # a gap in the walls every this many columns...
 GAP_AT = 6                     # ...at this column
 
@@ -89,17 +92,17 @@ class Game(vs2.Scene):
         self.cells = bytearray([NO_TILE] * (COLS * ROWS))
         self.track = self.world.tilemap(
             "tiles.png", columns=COLS, rows=ROWS, cells=self.cells,
-            view_width=W, view_height=ROWS * TILE)
+            y=SHIFT, view_width=W, view_height=ROWS * TILE)
         self.pills = self.lay_track()
 
         self.enemies = []
-        for lane in (4, 6, 8):
+        for lane in (3, 5, 7):
             sprite = self.world.sprite("sprites.png", frame=ENEMY, flip_x=True)
             enemy = Car(sprite, randrange(COLS // 2, COLS), lane, ENEMY)
             enemy.step_ticks = randrange(22, 34)
             enemy.lane_ticks = randrange(11, 17)
             self.enemies.append(enemy)
-        self.player = Car(self.world.sprite("sprites.png", frame=CAR), 1, 2, CAR)
+        self.player = Car(self.world.sprite("sprites.png", frame=CAR), 1, 1, CAR)
         self.cars = [self.player] + self.enemies
         self.booms = []
         for _ in range(2):
@@ -121,16 +124,17 @@ class Game(vs2.Scene):
         """Walls between the lanes, with gaps, and a pill on every free lane
         tile. Returns how many pills there are."""
         pills = 0
-        for row in range(1, ROWS - 1):
+        for row in range(ROWS - 1):
             for col in range(COLS):
                 index = row * COLS + col
-                if row % 2:
+                if row % 2 == 0:
+                    # The outer and inner walls have no gaps.
                     self.solid[index] = 1 if not (
-                        2 < row < ROWS - 2 and col % GAP_EVERY == GAP_AT) else 0
+                        0 < row < ROWS - 2 and col % GAP_EVERY == GAP_AT) else 0
                 elif col % GAP_EVERY != GAP_AT:
                     self.cells[index] = PILL
                     pills += 1
-        for row in range(1, ROWS - 1, 2):
+        for row in range(0, ROWS - 1, 2):
             for col in range(COLS):
                 index = row * COLS + col
                 if self.solid[index]:
@@ -235,7 +239,7 @@ class Game(vs2.Scene):
         boom.age = 0
         boom.frame = BOOM
         boom.x = ANCHOR
-        boom.y = self.player.y
+        boom.y = self.player.y + SHIFT
         boom.show()
         vs2.audio.sound("die")
         self.call_later(1000, self.finish, False)
@@ -260,7 +264,7 @@ class Game(vs2.Scene):
         for car in self.cars:
             sprite = car.sprite
             sprite.x = (ANCHOR + car.x - cam) % W
-            sprite.y = car.y
+            sprite.y = car.y + SHIFT
             sprite.frame = car.frame + (self.ticks // 4) % 2
 
 
