@@ -3,9 +3,10 @@
     python3 tools/ld60_assets/make_art.py
 
 Every game gets ``images/tiles.png`` (an autotiled wall set plus a few extra
-tiles), ``images/sprites.png`` (8x8 frames) and a copy of the tutorial's
-``steel8x8.png`` font. Each ``menu.png`` is a moment of play drawn with these,
-so run capture_menu_icons.py after this. Needs Pillow.
+tiles), ``images/sprites.png`` (8x8 frames) and copies of two fonts: the
+tutorial's ``steel8x8.png`` for text and the system's ``rainbow8x8.png`` for the
+title. Each ``menu.png`` is a moment of play drawn with these, so run
+capture_menu_icons.py after this. Needs Pillow.
 
 Art is drawn the way a player sees it: upright, right-facing, head toward the
 top of the picture. A game whose player flies at the top of the disc (x = 128)
@@ -21,7 +22,10 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[2]
 GAMES = ROOT / "games" / "ld60"
-FONT = ROOT / "games" / "demos" / "tutorial_game" / "images" / "steel8x8.png"
+FONTS = (
+    ROOT / "games" / "demos" / "tutorial_game" / "images" / "steel8x8.png",
+    ROOT / "system" / "shared" / "other" / "images" / "8x8fonts" / "rainbow8x8.png",
+)
 
 TILE = 8
 CLEAR = (0, 0, 0, 0)
@@ -525,7 +529,8 @@ GAME_NAMES = ("spiral_tunnel", "catch_the_robots", "rim_runner", "dodge_em", "de
 def main():
     for name in GAME_NAMES:
         (GAMES / name / "images").mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(FONT, GAMES / name / "images" / "steel8x8.png")
+        for font in FONTS:
+            shutil.copyfile(font, GAMES / name / "images" / font.name)
     make_spiral_tunnel()
     make_catch_the_robots()
     make_rim_runner()

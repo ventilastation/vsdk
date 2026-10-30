@@ -65,7 +65,8 @@ All five share a design:
 Art is generated, not drawn by hand: run `python3 tools/ld60_assets/make_art.py`
 to rewrite every `images/tiles.png` and `images/sprites.png`, and
 `python3 tools/ld60_assets/make_sounds.py` (needs ffmpeg) for the MP3s in
-`sounds/`. The font is the tutorial's `steel8x8.png`.
+`sounds/`. Text is in the tutorial's `steel8x8.png`, and each game's name on
+its title screen in the system's `rainbow8x8.png`.
 
 Each `menu.png` is a moment of the game itself:
 `python3 tools/ld60_assets/capture_menu_icons.py` plays every game headless from
