@@ -677,6 +677,21 @@ class CatchTheRobotsTests(GameTests, unittest.TestCase):
             robot.alive = False
             robot.sprite.hide()
 
+    def test_the_wall_outlines_are_drawn_over_the_fill_from_the_same_cells(self):
+        game = self.start_game()
+        self.assertIs(game.outlines.cells, game.maze.cells)
+        # Fill, then outlines, then the robots and the player over both.
+        drawables = game.world._drawables
+        self.assertLess(drawables.index(game.maze), drawables.index(game.outlines))
+        self.assertLess(drawables.index(game.outlines), drawables.index(game.player.sprite))
+        # They scroll together.
+        game.player.y = 20 * 8
+        game.player.row = 20
+        self.run_ticks(20, director.JOY_RIGHT)
+        self.assertGreater(game.maze.view_y, 0)
+        self.assertEqual((game.outlines.x, game.outlines.view_y),
+                         (game.maze.x, game.maze.view_y))
+
     def test_the_camera_scrolls_down_the_maze(self):
         game = self.start_game()
         self.assertEqual(game.maze.view_y, 0)

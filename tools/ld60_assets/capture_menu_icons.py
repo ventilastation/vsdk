@@ -5,13 +5,13 @@ from the games themselves.
 
 Each ``menu.png`` is a real moment of play. The game runs headless, the way
 tests/test_ld60_games.py drives it, from a fixed seed with scripted input, and
-its world layer (the tilemap and every visible sprite, in the game's own
-``images/tiles.png`` and ``images/sprites.png``) is painted flat in game
-coordinates: x round the disc, y in from the rim. The 64 x 30 window round the
-player is the icon, turned the way the player sees it. The four games played at
-the top of the disc store their pictures turned through 180 degrees (see
-make_art.py), so each picture is turned back; Rim Runner is played at the bottom,
-where x and y run the other way, so its whole window is turned instead.
+its world layer (its tilemaps and every visible sprite, in the game's own
+images) is painted flat in game coordinates: x round the disc, y in from the
+rim. The 64 x 30 window round the player is the icon, turned the way the player
+sees it. The four games played at the top of the disc store their pictures
+turned through 180 degrees (see make_art.py), so each picture is turned back;
+Rim Runner is played at the bottom, where x and y run the other way, so its
+whole window is turned instead.
 
 Run make_art.py first when the art changes. Needs Pillow.
 """
@@ -166,8 +166,13 @@ def frames_of(path):
 def paint_world(name, game):
     """The world layer, flat, in game coordinates, each picture turned back
     upright from how a top-of-the-disc game stores it."""
-    images = {strip: frames_of(GAMES / name / "images" / strip)
-              for strip in ("tiles.png", "sprites.png")}
+    images = {}
+
+    def frames_for(image):
+        if image.name not in images:
+            images[image.name] = frames_of(GAMES / name / "images" / image.name)
+        return images[image.name]
+
     canvas = Image.new("RGBA", (W, DEPTH), (0, 0, 0, 255))
 
     def put(picture, x, y):
@@ -178,7 +183,7 @@ def paint_world(name, game):
     for tilemap in game.world.tilemaps:
         if not tilemap.visible:
             continue
-        frames = images[tilemap.image.name]
+        frames = frames_for(tilemap.image)
         view_x, view_y = tilemap.view_x, tilemap.view_y
         view_right = view_x + tilemap._view_width
         view_bottom = view_y + tilemap._view_height
@@ -200,7 +205,7 @@ def paint_world(name, game):
     for sprite in game.world.sprites:
         if not sprite.visible:
             continue
-        picture = images[sprite.image.name][sprite.frame].rotate(180)
+        picture = frames_for(sprite.image)[sprite.frame].rotate(180)
         if sprite.flip_x:
             picture = picture.transpose(Image.FLIP_LEFT_RIGHT)
         if sprite.flip_y:

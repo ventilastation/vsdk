@@ -3,10 +3,12 @@
     python3 tools/ld60_assets/make_art.py
 
 Every game gets ``images/tiles.png`` (an autotiled wall set plus a few extra
-tiles), ``images/sprites.png`` (8x8 frames) and copies of four fonts: the
-tutorial's ``steel8x8.png`` for the in-game text, and from the system
-``rainbow8x8.png`` for the headings of the title and end screens and the 4x6
-``tinyfont_white.png`` and ``tinyfont_red.png`` for the lines below them. Each ``menu.png`` is a moment of play drawn with these, so run
+tiles; Catch the Robots draws its wall outlines from ``images/outlines.png``
+over a plain fill), ``images/sprites.png`` (8x8 frames) and copies of four
+fonts: the tutorial's ``steel8x8.png`` for the in-game text, and from the
+system ``rainbow8x8.png`` for the headings of the title and end screens and the
+4x6 ``tinyfont_white.png`` and ``tinyfont_red.png`` for the lines below them.
+Each ``menu.png`` is a moment of play drawn with these, so run
 capture_menu_icons.py after this. Needs Pillow.
 
 Art is drawn the way a player sees it: upright, right-facing, head toward the
@@ -81,7 +83,8 @@ def wall_tiles(top, fill, speck, edge, glow=None):
     Frame bit 0 is an open cell on the +x side, bit 1 on the -x side, bit 2 on
     the +y (toward the centre) side and bit 3 on the -y (toward the rim) side.
     Where a side is open the tile gets a bright edge line facing it. The lines
-    are drawn upright and turned with the rest of the strip.
+    are drawn upright and turned with the rest of the strip. With no ``fill``
+    the tiles hold only those lines, on a clear background.
     """
     # Which edge of the upright picture each map direction is. Seen from the top
     # of the disc +x is to the right and +y is down; seen from the bottom both
@@ -92,11 +95,11 @@ def wall_tiles(top, fill, speck, edge, glow=None):
         sides = ((0, None), (7, None), (None, 0), (None, 7))
     frames = []
     for mask in range(16):
-        image = Image.new("RGBA", (TILE, TILE), fill + (255,))
+        image = Image.new("RGBA", (TILE, TILE), fill + (255,) if fill else CLEAR)
         draw = ImageDraw.Draw(image)
         for y in range(TILE):
             for x in range(TILE):
-                if (x * 3 + y * 5) % 7 == 0:
+                if fill and (x * 3 + y * 5) % 7 == 0:
                     image.putpixel((x, y), speck + (255,))
         for bit, (col, row) in enumerate(sides):
             if not mask & (1 << bit):
@@ -371,9 +374,15 @@ def make_catch_the_robots():
     top = True
     out = GAMES / "catch_the_robots" / "images"
     # Solid, fairly bright walls (no speckle) against black passages, so it is
-    # obvious which is which.
-    walls = wall_tiles(top, (24, 110, 48), (24, 110, 48), (150, 255, 170))
-    strip(walls, top).save(out / "tiles.png")
+    # obvious which is which. The fill and the bright outlines are two tilemaps
+    # over the same cells. A TUNNEL layer can land several rows of a tile on one
+    # LED, and the last row drawn wins, so an outline drawn in the same tile as
+    # the fill behind it could vanish. In a tilemap of its own, drawn over the
+    # fill, it always shows. The fill has a frame for each outline frame, all
+    # alike, so that both can read the same cells.
+    fill = Image.new("RGBA", (TILE, TILE), (24, 110, 48, 255))
+    strip([fill] * 16, top).save(out / "tiles.png")
+    strip(wall_tiles(top, None, None, (150, 255, 170)), top).save(out / "outlines.png")
     strip(ROBOT_SPRITES, top).save(out / "sprites.png")
 
 

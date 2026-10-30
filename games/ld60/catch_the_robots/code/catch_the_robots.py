@@ -143,8 +143,15 @@ class Game(vs2.Scene):
 
         self.solid = bytearray(COLS * ROWS)
         self.cells = bytearray([NO_TILE] * (COLS * ROWS))
+        # The walls are two tilemaps over the same cells, moved together: the
+        # dark fill, then the bright outlines over it. On a TUNNEL layer several
+        # rows of a tile can land on one LED, and the last one drawn wins, so in
+        # one tilemap the fill could hide an outline drawn in the same tile.
         self.maze = self.world.tilemap(
             "tiles.png", columns=COLS, rows=ROWS, cells=self.cells,
+            view_width=W, view_height=VIEW_H)
+        self.outlines = self.world.tilemap(
+            "outlines.png", columns=COLS, rows=ROWS, cells=self.cells,
             view_width=W, view_height=VIEW_H)
         open_cells = self.dig_maze()
         self.autotile()
@@ -352,8 +359,9 @@ class Game(vs2.Scene):
         player."""
         cam_x = int(self.cam_turn + 0.5) % W
         cam_y = int(self.cam_depth + 0.5)
-        self.maze.x = ANCHOR - cam_x
-        self.maze.view_y = cam_y
+        for walls in (self.maze, self.outlines):
+            walls.x = ANCHOR - cam_x
+            walls.view_y = cam_y
         self.show(self.player.sprite, self.player.x, self.player.y, cam_x, cam_y)
         for robot in self.robots:
             if robot.alive:

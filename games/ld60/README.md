@@ -45,6 +45,10 @@ All five share a design:
   their outline from an autotile pass at build time. (Spiral Tunnel's edges are
   slanted tiles instead, like the prototype's, since the tunnel moves sideways as
   it goes down.)
+- Catch the Robots draws its maze as two tilemaps over the same cells, moved
+  together: the dark fill, then the bright outlines over it. A `TUNNEL` layer
+  can land several rows of a tile on one LED, and the last row drawn wins, so in
+  a single tilemap the fill could hide a one-pixel outline.
 - You are scored on the time you take to finish. Faster than your best saves a
   new best (`vs2.saves`, under the name `best`).
 
@@ -70,7 +74,8 @@ All five share a design:
 ## Art and sound
 
 Art is generated, not drawn by hand: run `python3 tools/ld60_assets/make_art.py`
-to rewrite every `images/tiles.png` and `images/sprites.png`, and
+to rewrite every `images/tiles.png` and `images/sprites.png` (and Catch the
+Robots' `images/outlines.png`), and
 `python3 tools/ld60_assets/make_sounds.py` (needs ffmpeg) for the MP3s in
 `sounds/`. In-game text is in the tutorial's `steel8x8.png`. The title and end
 screens put their heading in the system's `rainbow8x8.png` and the lines below
