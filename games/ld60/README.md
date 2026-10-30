@@ -44,7 +44,8 @@ All five share a design:
   `bytearray` shared with the tilemap, sprites are fixed lists, and the walls get
   their outline from an autotile pass at build time. (Spiral Tunnel's edges are
   slanted tiles instead, like the prototype's, since the tunnel moves sideways as
-  it goes down.)
+  it goes down, and rocks are scattered through its walls at random so you can
+  see them move.)
 - Catch the Robots draws its maze as two tilemaps over the same cells, moved
   together: the dark fill, then the bright outlines over it. A `TUNNEL` layer
   can land several rows of a tile on one LED, and the last row drawn wins, so in

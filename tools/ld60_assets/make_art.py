@@ -251,10 +251,86 @@ def slope_tiles(top, fill, edge):
     return frames
 
 
+# Solid wall with rocks in it, as the player sees it: "x" is rock, "h" its lit
+# side and "." the wall around it. The game scatters these through the wall at
+# random, so that you can see the walls move as they scroll by.
+ROCKS = [
+    [
+        "........",
+        "..hh....",
+        ".hxxx...",
+        ".xxxx...",
+        "..xx....",
+        "........",
+        "........",
+        "........",
+    ], [
+        "........",
+        "......h.",
+        ".....hx.",
+        "........",
+        "........",
+        ".h......",
+        ".xx.....",
+        "........",
+    ], [
+        "........",
+        "........",
+        "........",
+        "....hh..",
+        "...hxxx.",
+        "...xxxx.",
+        "....xx..",
+        "........",
+    ], [
+        "........",
+        "........",
+        "xx......",
+        "..xx....",
+        "....xxx.",
+        ".......x",
+        "........",
+        "........",
+    ], [
+        "........",
+        ".....hh.",
+        "....hxx.",
+        ".....x..",
+        "........",
+        "..h.....",
+        "..x.....",
+        "........",
+    ], [
+        ".h......",
+        "........",
+        "....x...",
+        "........",
+        "........",
+        "......h.",
+        ".x......",
+        "........",
+    ],
+]
+
+
+def rock_tiles(fill, rock, lit):
+    colours = {".": fill + (255,), "x": rock + (255,), "h": lit + (255,)}
+    frames = []
+    for rows in ROCKS:
+        image = Image.new("RGBA", (TILE, TILE), CLEAR)
+        for y, row in enumerate(rows):
+            for x, char in enumerate(row):
+                image.putpixel((x, y), colours[char])
+        frames.append(image)
+    return frames
+
+
 def make_spiral_tunnel():
     top = True
     out = GAMES / "spiral_tunnel" / "images"
-    strip(slope_tiles(top, (190, 62, 0), (255, 200, 60)), top).save(out / "tiles.png")
+    fill = (190, 62, 0)
+    tiles = slope_tiles(top, fill, (255, 200, 60)) + rock_tiles(fill, (110, 34, 0), (240, 130, 40))
+    strip(tiles, top).save(out / "tiles.png")
     strip(TUNNEL_SPRITES + BOOM, top).save(out / "sprites.png")
 
 

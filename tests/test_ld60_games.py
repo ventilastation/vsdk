@@ -318,7 +318,8 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         self.setUp()
 
     def test_what_is_drawn_as_wall_is_wall_and_what_is_drawn_open_is_open(self):
-        from games.ld60.spiral_tunnel.code.spiral_tunnel import COLS, NO_TILE, ROWS
+        from games.ld60.spiral_tunnel.code.spiral_tunnel import (
+            COLS, NO_TILE, ROCKS, ROCKS_AT, ROWS)
 
         game = self.start_game()
         for row in range(ROWS - 1):
@@ -327,8 +328,18 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
                 centre = (col * 8 + 4, row * 8 + 4)
                 if tile == NO_TILE:
                     self.assertFalse(game.wall_at(*centre), (row, col))
-                elif tile == 0:
+                elif tile == 0 or ROCKS_AT <= tile < ROCKS_AT + ROCKS:
                     self.assertTrue(game.wall_at(*centre), (row, col))
+
+    def test_rocks_are_scattered_through_the_solid_wall(self):
+        from games.ld60.spiral_tunnel.code.spiral_tunnel import ROCKS, ROCKS_AT
+
+        game = self.start_game()
+        rocks = [tile for tile in game.cells if ROCKS_AT <= tile < ROCKS_AT + ROCKS]
+        solid = len(rocks) + sum(1 for tile in game.cells if tile == 0)
+        # About half the solid wall, with every kind of rock in it.
+        self.assertTrue(0.35 * solid < len(rocks) < 0.65 * solid, (len(rocks), solid))
+        self.assertEqual(set(rocks), set(range(ROCKS_AT, ROCKS_AT + ROCKS)))
 
     def test_the_slanted_edge_is_a_straight_line_across_the_tiles_it_spans(self):
         game = self.start_game()
