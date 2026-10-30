@@ -58,10 +58,16 @@ def centred_label(layer, text, y):
     return label
 
 
-def title_label(layer, text):
-    """The game's name in rainbow8x8.png, centred on the top of the disc. A
-    label there would read upside down, so it is flipped on both axes."""
-    label = layer.label("rainbow8x8.png", columns=len(text), x=0, y=1, text=text,
+# How far in from the rim the end-of-game heading sits: a little inward reads
+# better than right on the rim.
+RESULT_Y = 6
+
+
+def title_label(layer, text, y=1):
+    """A heading in rainbow8x8.png, centred on the top of the disc: the game's
+    name, or how the game ended. A label there would read upside down, so it is
+    flipped on both axes."""
+    label = layer.label("rainbow8x8.png", columns=len(text), x=0, y=y, text=text,
                         flip_x=True, flip_y=True)
     label.x = W // 2 - (len(text) * label.image.width) // 2
     return label
@@ -343,9 +349,9 @@ class Result(vs2.Scene):
 
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "NEW BEST!" if self.new_best else "ALL CAUGHT", y=1)
+        title_label(hud, "NEW BEST!" if self.new_best else "ALL CAUGHT", y=RESULT_Y)
         centred_label(hud, "TIME " + format_time(self.ticks), y=10)
-        centred_label(hud, "PRESS A", y=19)
+        centred_label(hud, "PRESS A", y=1)
 
     def update(self):
         if joy1.just_pressed(A):
