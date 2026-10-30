@@ -57,6 +57,10 @@ NO_TILE = vs2.EMPTY_TILE
 # on the right edge.
 LEFT_AT = (0, 0, 1, 3, 6, 10)
 RIGHT_AT = (0, 0, 15, 17, 20, 24)
+# Then ROCKS frames of solid wall with rocks in it, scattered through the wall at
+# random so that you can see the walls move as they scroll by.
+ROCKS_AT = 29
+ROCKS = 6
 
 CRUISE = 1.2               # columns per tick the player flies round at
 STEER_X = 0.75             # extra or less with right and left
@@ -205,7 +209,8 @@ class Game(vs2.Scene):
 
     def draw_tunnel(self):
         """Fill the map with wall and cut the tunnel out of it, with a slanted
-        tile where each edge crosses from one row to the next."""
+        tile where each edge crosses from one row to the next. Half the solid
+        wall gets a rock in it."""
         for row in range(ROWS):
             left = self.left[row]
             width = self.span[row]
@@ -220,7 +225,8 @@ class Game(vs2.Scene):
                 elif k - width < right_shift:
                     tile = RIGHT_AT[right_shift] + k - width
                 else:
-                    tile = 0
+                    rock = randrange(2 * ROCKS)
+                    tile = ROCKS_AT + rock if rock < ROCKS else 0
                 self.cells[row * COLS + col] = tile
 
     def wall_at(self, px, py):

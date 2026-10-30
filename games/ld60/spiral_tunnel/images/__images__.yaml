@@ -1,7 +1,7 @@
 palettegroups:
   main:
     - strip: tiles.png
-      frames: 29
+      frames: 35
     - strip: sprites.png
       frames: 8
   text:
