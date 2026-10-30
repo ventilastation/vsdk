@@ -7,3 +7,12 @@ palettegroups:
   text:
     - strip: steel8x8.png
       frames: 256
+  title:
+    # Its own group: a rainbow face spends most of a palette.
+    - strip: rainbow8x8.png
+      frames: 256
+  small:
+    - strip: tinyfont_white.png
+      frames: 256
+    - strip: tinyfont_red.png
+      frames: 256

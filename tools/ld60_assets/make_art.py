@@ -3,8 +3,11 @@
     python3 tools/ld60_assets/make_art.py
 
 Every game gets ``images/tiles.png`` (an autotiled wall set plus a few extra
-tiles), ``images/sprites.png`` (8x8 frames), ``menu.png`` and a copy of the
-tutorial's ``steel8x8.png`` font. Needs Pillow.
+tiles), ``images/sprites.png`` (8x8 frames) and copies of four fonts: the
+tutorial's ``steel8x8.png`` for the in-game text, and from the system
+``rainbow8x8.png`` for the headings of the title and end screens and the 4x6
+``tinyfont_white.png`` and ``tinyfont_red.png`` for the lines below them. Each ``menu.png`` is a moment of play drawn with these, so run
+capture_menu_icons.py after this. Needs Pillow.
 
 Art is drawn the way a player sees it: upright, right-facing, head toward the
 top of the picture. A game whose player flies at the top of the disc (x = 128)
@@ -20,7 +23,12 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[2]
 GAMES = ROOT / "games" / "ld60"
-FONT = ROOT / "games" / "demos" / "tutorial_game" / "images" / "steel8x8.png"
+FONTS = (
+    ROOT / "games" / "demos" / "tutorial_game" / "images" / "steel8x8.png",
+    ROOT / "system" / "shared" / "other" / "images" / "8x8fonts" / "rainbow8x8.png",
+    ROOT / "system" / "shared" / "other" / "images" / "tinyfont_white.png",
+    ROOT / "system" / "shared" / "other" / "images" / "tinyfont_red.png",
+)
 
 TILE = 8
 CLEAR = (0, 0, 0, 0)
@@ -518,81 +526,19 @@ def make_defender():
     strip(DEFENDER_SPRITES, top).save(out / "sprites.png")
 
 
-# --- Menu icons (64 x 30) ------------------------------------------------------
-
-def icon(name, draw_scene):
-    image = Image.new("RGB", (64, 30), (0, 0, 0))
-    draw_scene(ImageDraw.Draw(image))
-    image.save(GAMES / name / "menu.png")
-
-
-def icon_spiral_tunnel(d):
-    for i, radius in enumerate(range(26, 4, -3)):
-        shade = (20 + i * 10, 90 + i * 12, 130 + i * 10)
-        d.ellipse((32 - radius * 1.2, 15 - radius * 0.55 + i, 32 + radius * 1.2,
-                   15 + radius * 0.55 + i), outline=shade)
-    d.polygon(((6, 24), (16, 21), (6, 18)), fill=(235, 240, 255))
-    d.ellipse((40, 12, 46, 16), fill=(230, 70, 220))
-
-
-def icon_dodge_em(d):
-    for i, radius in enumerate((26, 20, 14, 8)):
-        d.ellipse((32 - radius * 1.2, 15 - radius * 0.55, 32 + radius * 1.2,
-                   15 + radius * 0.55), outline=(110, 40, 130))
-    for angle_x in range(8, 58, 4):
-        d.point((angle_x, 15 + 9 - abs(angle_x - 32) // 5), fill=(255, 220, 60))
-    d.rectangle((28, 22, 36, 26), fill=(40, 220, 235))
-    d.rectangle((14, 5, 20, 8), fill=(235, 50, 50))
-
-
-def icon_catch_the_robots(d):
-    for x in range(0, 64, 8):
-        d.line((x, 0, x, 29), fill=(20, 70, 36))
-    for y in range(2, 30, 8):
-        d.line((0, y, 63, y), fill=(20, 70, 36))
-    for x, y in ((12, 6), (40, 14), (52, 22), (22, 22)):
-        d.rectangle((x, y, x + 5, y + 5), fill=(110, 120, 140))
-        d.point((x + 1, y + 1), fill=(70, 220, 90))
-        d.point((x + 4, y + 1), fill=(70, 220, 90))
-    d.rectangle((30, 6, 35, 11), fill=(255, 220, 60))
-
-
-def icon_rim_runner(d):
-    d.ellipse((-20, 12, 84, 70), outline=(230, 150, 50))
-    d.ellipse((-18, 14, 82, 68), outline=(110, 60, 20))
-    d.rectangle((29, 6, 34, 12), fill=(70, 110, 255))
-    d.rectangle((29, 3, 34, 4), fill=(255, 220, 60))
-    d.polygon(((12, 14), (18, 8), (24, 14)), fill=(150, 80, 220))
-    d.ellipse((46, 9, 50, 14), fill=(235, 240, 255))
-
-
-def icon_defender(d):
-    d.polygon(((0, 29), (0, 22), (8, 16), (14, 21), (22, 12), (30, 20), (40, 14),
-               (50, 22), (58, 17), (63, 22), (63, 29)), fill=(110, 40, 30))
-    d.line((0, 22, 8, 16, 14, 21, 22, 12, 30, 20, 40, 14, 50, 22, 58, 17, 63, 22),
-           fill=(230, 90, 60))
-    d.polygon(((14, 6), (24, 8), (14, 10)), fill=(235, 240, 255))
-    d.rectangle((40, 4, 47, 8), fill=(230, 70, 220))
-    d.rectangle((48, 5, 54, 5), fill=(235, 50, 50))
-
-
 GAME_NAMES = ("spiral_tunnel", "catch_the_robots", "rim_runner", "dodge_em", "defender")
 
 
 def main():
     for name in GAME_NAMES:
         (GAMES / name / "images").mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(FONT, GAMES / name / "images" / "steel8x8.png")
+        for font in FONTS:
+            shutil.copyfile(font, GAMES / name / "images" / font.name)
     make_spiral_tunnel()
     make_catch_the_robots()
     make_rim_runner()
     make_dodge_em()
     make_defender()
-    icon("spiral_tunnel", icon_spiral_tunnel)
-    icon("catch_the_robots", icon_catch_the_robots)
-    icon("rim_runner", icon_rim_runner)
-    icon("dodge_em", icon_dodge_em)
-    icon("defender", icon_defender)
     print("wrote art for", ", ".join(GAME_NAMES))
 
 

@@ -100,11 +100,11 @@ def badge(text, card_fill, card_outline, glow_rgb, text_top, text_bottom,
 
 
 def marquee_line(image, text, center_y, max_height, text_top, text_bottom, outline_rgb,
-                 dark_letter=None, dark_rgb=None):
+                 dark_span=None, dark_rgb=None):
     """One line of a marquee(): shadowed, outlined text centred on center_y,
     its fill graded from text_top to text_bottom over the line's own height.
-    text[dark_letter], if given, is unlit instead: dark_rgb inside the same
-    outline, a sign letter whose bulb has gone out."""
+    The letters text[start:end] of dark_span, if given, are unlit instead:
+    dark_rgb inside the same outline, sign letters whose bulbs have gone out."""
     font = fit_font(text, max_width=56, max_height=max_height, max_size=20, min_size=6)
     bbox = font.getbbox(text)
     text_width = bbox[2] - bbox[0]
@@ -124,14 +124,14 @@ def marquee_line(image, text, center_y, max_height, text_top, text_bottom, outli
         return mask
 
     lit_mask = text_mask(text)
-    if dark_letter is not None:
-        # The letter alone is what text up to and including it covers beyond
-        # the text before it, so it sits exactly where the whole line puts it.
-        letter_mask = ImageChops.subtract(text_mask(text[:dark_letter + 1]),
-                                          text_mask(text[:dark_letter]))
-        lit_mask = ImageChops.subtract(lit_mask, letter_mask)
+    if dark_span is not None:
+        # The letters alone are what text up to their end covers beyond the
+        # text before them, so they sit exactly where the whole line puts them.
+        start, end = dark_span
+        letters_mask = ImageChops.subtract(text_mask(text[:end]), text_mask(text[:start]))
+        lit_mask = ImageChops.subtract(lit_mask, letters_mask)
         unlit = Image.new("RGBA", (WIDTH, HEIGHT), dark_rgb + (255,))
-        unlit.putalpha(letter_mask)
+        unlit.putalpha(letters_mask)
         image.alpha_composite(unlit)
 
     top = center_y - text_height // 2 - 1
@@ -148,7 +148,7 @@ def marquee_line(image, text, center_y, max_height, text_top, text_bottom, outli
 
 def marquee_frame(top_text, bottom_text, card_fill, card_outline, glow_rgb,
                   top_colors, bottom_colors, outline_rgb, bulb_rgbs, glow_alpha,
-                  phase, dark_letter, dark_rgb):
+                  phase, dark_spans, dark_rgb):
     image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
 
     draw = ImageDraw.Draw(image)
@@ -159,9 +159,10 @@ def marquee_frame(top_text, bottom_text, card_fill, card_outline, glow_rgb,
     ImageDraw.Draw(glow).ellipse((6, 5, WIDTH - 7, HEIGHT + 4), fill=glow_rgb + (glow_alpha,))
     image.alpha_composite(glow.filter(ImageFilter.GaussianBlur(6)))
 
-    marquee_line(image, top_text, 9, 9, *top_colors, outline_rgb)
+    marquee_line(image, top_text, 9, 9, *top_colors, outline_rgb,
+                 dark_span=dark_spans.get("top"), dark_rgb=dark_rgb)
     marquee_line(image, bottom_text, 20, 10, *bottom_colors, outline_rgb,
-                 dark_letter=dark_letter, dark_rgb=dark_rgb)
+                 dark_span=dark_spans.get("bottom"), dark_rgb=dark_rgb)
 
     bulbs = [(x, 1) for x in range(5, WIDTH - 4, 4)] + [(x, HEIGHT - 2) for x in range(5, WIDTH - 4, 4)]
     bulbs += [(1, y) for y in range(6, HEIGHT - 5, 4)] + [(WIDTH - 2, y) for y in range(6, HEIGHT - 5, 4)]
@@ -173,21 +174,22 @@ def marquee_frame(top_text, bottom_text, card_fill, card_outline, glow_rgb,
 
 def marquee(top_text, bottom_text, card_fill, card_outline, glow_rgb,
             top_colors, bottom_colors, outline_rgb, bulb_rgbs, glow_alpha=90,
-            frames=1, failing_letter=None, dark_rgb=None):
+            frames=1, failing=None, dark_rgb=None):
     """A badge() for a two-word name: each word on its own line, so neither
     shrinks to an unreadable size, on a taller card whose edge is a ring of
     marquee bulbs in place of badge()'s accent lines.
 
     Returns a strip of `frames` frames side by side. Each frame steps every
     bulb on to the next of bulb_rgbs, so the bulbs alternate as the strip
-    plays; the last frame also turns off bottom_text[failing_letter], which
-    flickers out once per loop like a failing bulb."""
+    plays. failing maps a frame number to the letters that are out in it,
+    {"top" or "bottom": (start, end)} slices of that line, so they flicker
+    off once per loop like failing bulbs."""
+    failing = failing or {}
     strip = Image.new("RGBA", (WIDTH * frames, HEIGHT), (0, 0, 0, 0))
     for frame in range(frames):
-        dark_letter = failing_letter if frame == frames - 1 else None
         image = marquee_frame(top_text, bottom_text, card_fill, card_outline, glow_rgb,
                               top_colors, bottom_colors, outline_rgb, bulb_rgbs,
-                              glow_alpha, frame, dark_letter, dark_rgb)
+                              glow_alpha, frame, failing.get(frame, {}), dark_rgb)
         strip.paste(image, (WIDTH * frame, 0))
     return strip
 
@@ -247,14 +249,17 @@ MARQUEES = [
     # Circular Arcade (games/ld60): the five LD60 arcade games get an arcade
     # sign -- a yellow and pink marquee with bulbs round the edge, ten frames
     # (see ANIMATED_ICON_STRIPS in system/launcher for how slowly they play)
-    # whose last one loses the second A of ARCADE to a failing bulb.
+    # in which failing bulbs put out the E of ARCADE for two frames in a row
+    # and ULAR of CIRCULAR for one.
     ("circular_arcade.png", dict(
         top_text="CIRCULAR", bottom_text="ARCADE",
         card_fill=(26, 6, 22, 210), card_outline=(170, 30, 140, 255),
         glow_rgb=(255, 40, 200), top_colors=((255, 250, 200), (255, 190, 30)),
         bottom_colors=((255, 225, 250), (240, 60, 190)), outline_rgb=(45, 6, 38),
         bulb_rgbs=((255, 230, 90), (255, 120, 220)),
-        frames=10, failing_letter=3, dark_rgb=(70, 18, 58),
+        frames=10, failing={3: {"bottom": (5, 6)}, 4: {"bottom": (5, 6)},
+                            7: {"top": (4, 8)}},
+        dark_rgb=(70, 18, 58),
     )),
 ]
 

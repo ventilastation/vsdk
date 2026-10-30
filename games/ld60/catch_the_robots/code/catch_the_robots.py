@@ -50,11 +50,26 @@ def format_time(ticks):
     return "%d.%d" % (tenths // 10, tenths % 10)
 
 
-def centred_label(layer, text, y):
-    """A label for ``text``, centred on the bottom of the disc, where it reads
-    upright. steel8x8.png is a full CP437 font, 8 columns per character."""
-    label = layer.label("steel8x8.png", columns=len(text), x=0, y=y, text=text)
+def centred_label(layer, text, y, font="tinyfont_white.png"):
+    """A label for ``text`` in a 4x6 tinyfont, centred on the bottom of the disc,
+    where it reads upright. The tinyfonts are ASCII, 4 columns per character."""
+    label = layer.label(font, columns=len(text), x=0, y=y, text=text)
     label.x = -(len(text) * label.image.width) // 2
+    return label
+
+
+# How far in from the rim the end-of-game heading sits: a little inward reads
+# better than right on the rim.
+RESULT_Y = 6
+
+
+def title_label(layer, text, y=1):
+    """A heading in rainbow8x8.png, centred on the top of the disc: the game's
+    name, or how the game ended. A label there would read upside down, so it is
+    flipped on both axes."""
+    label = layer.label("rainbow8x8.png", columns=len(text), x=0, y=y, text=text,
+                        flip_x=True, flip_y=True)
+    label.x = W // 2 - (len(text) * label.image.width) // 2
     return label
 
 
@@ -312,10 +327,10 @@ class Game(vs2.Scene):
 class Title(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "CATCH THE ROBOTS", y=1)
+        title_label(hud, "CATCH THE ROBOTS")
         best = vs2.saves.load(BEST, 0)
-        centred_label(hud, "BEST " + format_time(best) if best else "ARROWS RUN", y=10)
-        centred_label(hud, "PRESS A", y=19)
+        centred_label(hud, "BEST " + format_time(best) if best else "ARROWS RUN", y=8)
+        centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
         if joy1.just_pressed(A):
@@ -334,9 +349,9 @@ class Result(vs2.Scene):
 
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
-        centred_label(hud, "NEW BEST!" if self.new_best else "ALL CAUGHT", y=1)
-        centred_label(hud, "TIME " + format_time(self.ticks), y=10)
-        centred_label(hud, "PRESS A", y=19)
+        title_label(hud, "NEW BEST!" if self.new_best else "ALL CAUGHT", y=RESULT_Y)
+        centred_label(hud, "TIME " + format_time(self.ticks), y=8)
+        centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
         if joy1.just_pressed(A):

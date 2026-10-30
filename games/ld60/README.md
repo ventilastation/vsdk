@@ -63,6 +63,13 @@ All five share a design:
 ## Art and sound
 
 Art is generated, not drawn by hand: run `python3 tools/ld60_assets/make_art.py`
-to rewrite every `images/tiles.png`, `images/sprites.png` and `menu.png`, and
+to rewrite every `images/tiles.png` and `images/sprites.png`, and
 `python3 tools/ld60_assets/make_sounds.py` (needs ffmpeg) for the MP3s in
-`sounds/`. The font is the tutorial's `steel8x8.png`.
+`sounds/`. In-game text is in the tutorial's `steel8x8.png`. The title and end
+screens put their heading in the system's `rainbow8x8.png` and the lines below
+it in the 4x6 `tinyfont_white.png`, with PRESS A in `tinyfont_red.png`.
+
+Each `menu.png` is a moment of the game itself:
+`python3 tools/ld60_assets/capture_menu_icons.py` plays every game headless from
+a fixed seed and saves the 64 x 30 window round the player, drawn with the
+game's own tiles and sprites. Run it again after changing the art.
