@@ -9,7 +9,8 @@ The planet's mountains rise toward the rim, and the aliens hover over them and
 fire at you when they see you. Flying into the ground, an alien or a shot ends
 the game. The camera turns with you: you always fly at the top of the disc.
 
-Controls: the arrows fly, A fires the way you are facing.
+Controls: the arrows fly, A fires the way you are facing. Either controller
+plays.
 """
 
 import math
@@ -41,6 +42,17 @@ FIRE_TICKS = 8
 ALIEN_SHOT_SPEED = 1.0
 ALIEN_SHOT_LIFE = 66
 BEST = "best"
+
+
+def held(button):
+    """Whether ``button`` is down on either controller: it is a one-player game,
+    so both sticks and both sets of buttons play it."""
+    return joy1.held(button) or joy2.held(button)
+
+
+def pressed(button):
+    """Whether ``button`` went down on this tick, on either controller."""
+    return joy1.just_pressed(button) or joy2.just_pressed(button)
 
 
 def format_time(ticks):
@@ -201,15 +213,15 @@ class Game(vs2.Scene):
         self.place()
 
     def fly(self):
-        step = joy1.held(RIGHT) - joy1.held(LEFT)
+        step = held(RIGHT) - held(LEFT)
         if step:
             self.facing = step
         self.wx = (self.wx + step * SPEED) % W
-        self.wy += SPEED * (joy1.held(DOWN) - joy1.held(UP))
+        self.wy += SPEED * (held(DOWN) - held(UP))
         self.wy = min(max(self.wy, 0), FLOOR)
         if self.cooldown:
             self.cooldown -= 1
-        elif joy1.held(A):
+        elif held(A):
             self.fire()
         if (self.solid_at(self.wx + 2, self.wy + 6) or self.solid_at(self.wx + 5, self.wy + 6)):
             self.lose()
@@ -359,7 +371,7 @@ class Game(vs2.Scene):
         self.ship.x = ANCHOR + self.wx - cam
         self.ship.y = self.wy
         self.ship.flip_x = self.facing < 0
-        self.ship.frame = SHIP_THRUST if (joy1.held(LEFT) or joy1.held(RIGHT)) else SHIP
+        self.ship.frame = SHIP_THRUST if (held(LEFT) or held(RIGHT)) else SHIP
         for group in (self.aliens, self.shots, self.alien_shots, self.booms):
             for item in group:
                 if item.visible:
@@ -376,7 +388,7 @@ class Title(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 
@@ -401,7 +413,7 @@ class Result(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 

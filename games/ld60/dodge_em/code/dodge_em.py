@@ -11,7 +11,7 @@ through the gaps to cut you off. The camera turns with you: you always drive at
 the top of the disc.
 
 Controls: up and down change lane when you are at a gap, right speeds you up and
-left slows you down.
+left slows you down. Either controller plays.
 """
 
 from urandom import randrange
@@ -39,6 +39,17 @@ NO_TILE = vs2.EMPTY_TILE
 # Ticks a car takes to cross one tile.
 SLOW, NORMAL, FAST = 11, 7, 4
 BEST = "best"
+
+
+def held(button):
+    """Whether ``button`` is down on either controller: it is a one-player game,
+    so both sticks and both sets of buttons play it."""
+    return joy1.held(button) or joy2.held(button)
+
+
+def pressed(button):
+    """Whether ``button`` went down on this tick, on either controller."""
+    return joy1.just_pressed(button) or joy2.just_pressed(button)
 
 
 def format_time(ticks):
@@ -192,13 +203,13 @@ class Game(vs2.Scene):
             if car.advance():
                 self.eat(car.col, car.row)
             return
-        if joy1.held(RIGHT):
+        if held(RIGHT):
             speed = FAST
-        elif joy1.held(LEFT):
+        elif held(LEFT):
             speed = SLOW
         else:
             speed = NORMAL
-        lane = joy1.held(DOWN) - joy1.held(UP)       # down is toward the centre
+        lane = held(DOWN) - held(UP)       # down is toward the centre
         if lane and not car.changed_lane and not self.wall(car.col, car.row + lane):
             car.go(car.col, car.row + 2 * lane, speed * 2)
             car.changed_lane = True
@@ -296,7 +307,7 @@ class Title(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 
@@ -321,7 +332,7 @@ class Result(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 

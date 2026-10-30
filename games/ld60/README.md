@@ -52,7 +52,8 @@ All five share a design:
 
 ## What changed from the prototypes
 
-- Controls are the controller's, not W A S D and L.
+- Controls are the controller's, not W A S D and L, and either controller plays:
+  every game reads joy1 and joy2 alike.
 - Rim Runner's platforms are four tiles above each other instead of five. A jump
   rises about 4.6 tiles, so the originals could not be reached from below.
 - The tunnel and the maze are shorter, and the numbers (speeds, gravity) are

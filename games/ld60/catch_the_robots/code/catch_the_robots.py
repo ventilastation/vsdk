@@ -10,7 +10,7 @@ look for you, so the trick is to work out where they will come round. The
 camera turns with you and follows you down the maze: you always run at the top
 of the disc.
 
-Controls: the arrows run you through the maze.
+Controls: the arrows run you through the maze, on either controller.
 """
 
 from urandom import randrange
@@ -43,6 +43,17 @@ BEST = "best"
 
 # Up is toward the rim, so a step up is one row less deep.
 STEPS = ((-1, 0), (0, 1), (1, 0), (0, -1))     # left, down, right, up
+
+
+def held(button):
+    """Whether ``button`` is down on either controller: it is a one-player game,
+    so both sticks and both sets of buttons play it."""
+    return joy1.held(button) or joy2.held(button)
+
+
+def pressed(button):
+    """Whether ``button`` went down on this tick, on either controller."""
+    return joy1.just_pressed(button) or joy2.just_pressed(button)
 
 
 def format_time(ticks):
@@ -219,14 +230,14 @@ class Game(vs2.Scene):
         if walker.ticks:
             walker.advance()
             return
-        if joy1.held(UP):
+        if held(UP):
             d_col, d_row = 0, -1
-        elif joy1.held(DOWN):
+        elif held(DOWN):
             d_col, d_row = 0, 1
-        elif joy1.held(LEFT):
+        elif held(LEFT):
             d_col, d_row = -1, 0
             walker.sprite.flip_x = True
-        elif joy1.held(RIGHT):
+        elif held(RIGHT):
             d_col, d_row = 1, 0
             walker.sprite.flip_x = False
         else:
@@ -333,7 +344,7 @@ class Title(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 
@@ -354,7 +365,7 @@ class Result(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 

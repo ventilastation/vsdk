@@ -12,6 +12,7 @@ birds that kill you unless you land on them first. The camera turns with you:
 you always run at the bottom of the disc.
 
 Controls: left and right run, up or A jumps. Left runs toward higher x.
+Either controller plays.
 """
 
 from urandom import randrange
@@ -54,6 +55,17 @@ GRAVITY = 0.08
 FALL_MAX = 2.4
 STOMP = 2.0
 BEST = "best"
+
+
+def held(button):
+    """Whether ``button`` is down on either controller: it is a one-player game,
+    so both sticks and both sets of buttons play it."""
+    return joy1.held(button) or joy2.held(button)
+
+
+def pressed(button):
+    """Whether ``button`` went down on this tick, on either controller."""
+    return joy1.just_pressed(button) or joy2.just_pressed(button)
 
 
 def format_time(ticks):
@@ -214,7 +226,7 @@ class Game(vs2.Scene):
 
     def run(self):
         # Left is toward higher x at the bottom of the disc.
-        step = joy1.held(LEFT) - joy1.held(RIGHT)
+        step = held(LEFT) - held(RIGHT)
         if step:
             self.facing = step
             new_x = (self.wx + step * RUN) % W
@@ -223,7 +235,7 @@ class Game(vs2.Scene):
                 self.wx = new_x
         left, right = self.wx + 1, self.wx + TILE - 2
         if self.grounded:
-            if joy1.held(UP) or joy1.held(A):
+            if held(UP) or held(A):
                 self.vy = JUMP
                 self.grounded = False
                 vs2.audio.sound("jump")
@@ -345,7 +357,7 @@ class Game(vs2.Scene):
         if not self.grounded:
             self.runner.frame = JUMP_FRAME
         else:
-            self.runner.frame = RUNNER + (self.ticks // 4) % 2 if joy1.held(LEFT) or joy1.held(RIGHT) else RUNNER
+            self.runner.frame = RUNNER + (self.ticks // 4) % 2 if held(LEFT) or held(RIGHT) else RUNNER
         for bird in self.birds:
             if bird.alive:
                 self.put_sprite(bird, bird.wx, bird.wy, cam, cam_y)
@@ -370,7 +382,7 @@ class Title(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 
@@ -395,7 +407,7 @@ class Result(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 

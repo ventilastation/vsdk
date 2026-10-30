@@ -11,7 +11,7 @@ the tunnel; lob bombs to clear them. The camera turns with you: you always fly
 at the top of the disc.
 
 Controls: arrows steer (left and right also change the speed you fly round at),
-A drops a bomb.
+A drops a bomb. Either controller plays.
 """
 
 from urandom import randrange
@@ -57,6 +57,17 @@ BEST = "best"
 UFO_COUNT = (ROWS - 4) // 2
 BOMBS = 4
 BOOMS = 4
+
+
+def held(button):
+    """Whether ``button`` is down on either controller: it is a one-player game,
+    so both sticks and both sets of buttons play it."""
+    return joy1.held(button) or joy2.held(button)
+
+
+def pressed(button):
+    """Whether ``button`` went down on this tick, on either controller."""
+    return joy1.just_pressed(button) or joy2.just_pressed(button)
 
 
 def format_time(ticks):
@@ -213,14 +224,14 @@ class Game(vs2.Scene):
         self.place()
 
     def fly(self):
-        steer = joy1.held(RIGHT) - joy1.held(LEFT)
+        steer = held(RIGHT) - held(LEFT)
         self.wx = (self.wx + CRUISE + STEER_X * steer) % W
-        self.wy += STEER_Y * (joy1.held(DOWN) - joy1.held(UP))
+        self.wy += STEER_Y * (held(DOWN) - held(UP))
         if self.wy < 0:
             self.wy = 0
         if self.cooldown:
             self.cooldown -= 1
-        elif joy1.held(A):
+        elif held(A):
             self.drop_bomb()
         # The corners of the ship, a little inside its picture.
         left, right = self.wx + 1, self.wx + TILE - 2
@@ -360,7 +371,7 @@ class Title(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 
@@ -385,7 +396,7 @@ class Result(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 

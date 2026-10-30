@@ -63,6 +63,12 @@ class GameTests:
 
     def setUp(self):
         self.game_name = self.slug.split(".")[1]
+        self.saved_ticks_ms = sys.modules["utime"].ticks_ms
+        self.boot()
+
+    def boot(self):
+        """A fresh runtime, clock and random seed, so that booting twice in one
+        test plays the same game twice."""
         reset_runtime()
         api_guard.reset()
         runtime_director = configure_runtime("headless")
@@ -78,8 +84,11 @@ class GameTests:
                 }
 
         runtime_director.load_rom = fake_load_rom
+        # The second controller, which the headless comms otherwise lacks.
+        self.joy2 = 0
+        runtime_director.platform.comms.next_joy2 = lambda: self.joy2
+        runtime_director.platform.comms.next_extra = lambda: 0
         self.clock = 1000
-        self.saved_ticks_ms = sys.modules["utime"].ticks_ms
         sys.modules["utime"].ticks_ms = lambda: self.clock
         random.seed(self.id())
 
@@ -88,7 +97,10 @@ class GameTests:
         reset_runtime()
         api_guard.reset()
 
-    def step(self, buttons=0):
+    def step(self, buttons=0, joy2=0):
+        """One tick, with ``buttons`` held on the first controller and ``joy2``
+        on the second (the JOY_ and BUTTON_A bits are the same on both)."""
+        self.joy2 = joy2
         director.platform.comms.push_input(bytes([buttons]))
         self.clock += TICK_MS
         try:
@@ -155,6 +167,40 @@ class GameTests:
                 self.step(0)
                 self.press(director.BUTTON_A)       # play again
                 self.assertEqual(self.scene_name(), "Game")
+
+    def play_on(self, controller, moves):
+        """Boot, start with A and play ``moves`` (buttons, ticks) on controller 1
+        or 2; returns the game and where everything in its world ended up."""
+        self.boot()
+        load_app(self.slug)
+        press = (lambda b: self.step(b)) if controller == 1 else (lambda b: self.step(0, joy2=b))
+        press(director.BUTTON_A)
+        press(0)
+        game = director.scene_stack[-1]
+        self.assertEqual(type(game).__name__, "Game")
+        for buttons, ticks in moves:
+            for _ in range(ticks):
+                press(buttons)
+        world = ([(s.x, s.y, s.frame, s.visible) for s in game.world.sprites]
+                 + [(t.x, t.view_y) for t in game.world.tilemaps])
+        return game, world
+
+    def test_either_controller_plays_and_both_play_alike(self):
+        moves = ((director.JOY_RIGHT, 12), (director.JOY_DOWN, 8),
+                 (director.JOY_DOWN | director.BUTTON_A, 2), (0, 3),
+                 (director.JOY_LEFT, 12), (director.JOY_UP | director.BUTTON_A, 6),
+                 (0, 10))
+        _, idle = self.play_on(1, ())
+        _, on_joy1 = self.play_on(1, moves)
+        self.assertNotEqual(on_joy1, idle)          # the moves did move things
+        game, on_joy2 = self.play_on(2, moves)
+        self.assertEqual(on_joy2, on_joy1)
+        # A on the second controller plays again, too.
+        self.finish_with(lambda g: g.win())
+        self.step(0, joy2=director.BUTTON_A)
+        self.step(0)
+        self.assertEqual(self.scene_name(), "Game")
+        self.assertIsNot(director.scene_stack[-1], game)
 
     def finish_with(self, trigger):
         """Run ``trigger`` on the game, then let its end-of-game timer run."""
