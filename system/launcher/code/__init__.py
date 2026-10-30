@@ -192,8 +192,8 @@ ICON_ANIM_RATE = 4
 ANIMATED_ICON_STRIPS = {
     "pollitos.png": ICON_ANIM_RATE,
     game_menu_strip("vsjam-oct25.tincho_vrunner"): ICON_ANIM_RATE,
-    # A marquee's bulbs alternate slowly: 300 ms a frame, so the failing
-    # bulb in its last frame flickers out once every 3 seconds.
+    # A marquee's bulbs alternate slowly: 300 ms a frame, so its failing
+    # bulbs flicker out once every 3 seconds.
     "circular_arcade.png": 10,
 }
 # ROM libraries are always label-only, and the 4x6 list font is tiny next to
