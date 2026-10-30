@@ -33,7 +33,9 @@ All five share a design:
   feet about eight LEDs from the rim (but never shows more than 4 pixels of
   ground below the lowest floor), Spiral Tunnel flies a quarter of the way in, and
   Catch the Robots no deeper than halfway. They follow you to the very end of the
-  level instead of stopping where the map runs out.
+  level instead of stopping where the map runs out. Spiral Tunnel's camera, like
+  the prototype's, follows a moment behind as you steer in or out: the ship moves
+  at once and the tunnel catches up.
 - Everything is made once in `build()` and moved afterwards: tiles come from one
   `bytearray` shared with the tilemap, sprites are fixed lists, and the walls get
   their outline from an autotile pass at build time. (Spiral Tunnel's edges are

@@ -368,25 +368,55 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         self.run_ticks(10, director.BUTTON_A)
         self.assertLessEqual(sum(1 for b in game.bombs if b.visible), 4)
 
+    def clear_the_way(self, game):
+        """No walls and no UFOs, so the ship can be flown anywhere to watch the
+        camera."""
+        game.wall_at = lambda px, py: False
+        for ufo in game.ufos:
+            ufo.alive = False
+            ufo.hide()
+
     def test_the_camera_follows_the_ship_down_the_tunnel(self):
         from games.ld60.spiral_tunnel.code.spiral_tunnel import PLAYER_DEPTH
 
         game = self.start_game()
+        self.clear_the_way(game)
         self.assertEqual(game.walls.view_y, 0)
         game.wy = 30 * 8
-        game.wx = float(self.middle(game, 30))
         self.step(0)
+        self.assertLess(game.walls.view_y, 30 * 8 - PLAYER_DEPTH)   # on its way
+        self.run_ticks(60)
         self.assertEqual(game.walls.view_y, 30 * 8 - PLAYER_DEPTH)
         self.assertEqual(game.ship.y, PLAYER_DEPTH)
+
+    def test_steering_in_or_out_moves_the_ship_at_once_and_the_camera_after_it(self):
+        from games.ld60.spiral_tunnel.code.spiral_tunnel import PLAYER_DEPTH
+
+        game = self.start_game()
+        self.clear_the_way(game)
+        game.wy = 20 * 8.0
+        self.run_ticks(60)
+        self.assertEqual(game.ship.y, PLAYER_DEPTH)
+        view_y = game.walls.view_y
+        self.step(director.JOY_DOWN)
+        self.assertEqual(game.ship.y, PLAYER_DEPTH + 1)     # the ship has moved
+        self.assertEqual(game.walls.view_y, view_y)         # the camera not yet
+        self.run_ticks(30, director.JOY_DOWN)
+        self.assertGreater(game.walls.view_y, view_y + 15)  # it follows...
+        self.assertGreater(game.ship.y, PLAYER_DEPTH + 4)   # ...a little behind
+        self.run_ticks(60)
+        self.assertEqual(game.ship.y, PLAYER_DEPTH)         # and catches up
+        self.run_ticks(30, director.JOY_UP)
+        self.assertLess(game.ship.y, PLAYER_DEPTH - 4)      # the same going out
 
     def test_the_ship_stays_a_quarter_of_the_way_in_even_at_the_end_of_the_tunnel(self):
         from games.ld60.spiral_tunnel.code.spiral_tunnel import PLAYER_DEPTH, ROWS
 
         game = self.start_game()
+        self.clear_the_way(game)
         row = ROWS - 5
         game.wy = row * 8.0
-        game.wx = float(self.middle(game, row))
-        self.step(0)
+        self.run_ticks(60)
         self.assertEqual(game.walls.view_y, row * 8 - PLAYER_DEPTH)
         self.assertEqual(game.ship.y, PLAYER_DEPTH)
 

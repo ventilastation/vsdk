@@ -32,6 +32,12 @@ ANCHOR = W // 2 - TILE // 2    # the player is drawn at the top of the disc
 # following the ship to the end of the tunnel instead of stopping when the map
 # runs out: the view then shows empty space past the tunnel.
 PLAYER_DEPTH = 18
+# Steering in or out moves the ship at once, and the camera follows a little
+# behind, as in the prototype: each tick it closes this much of the gap to
+# where it would hold the ship at PLAYER_DEPTH. The prototype closes 7% of the
+# gap 60 times a second; 12% at the console's 33 ticks is the same pace, so
+# while you steer the ship is drawn about a tile off PLAYER_DEPTH.
+FOLLOW = 0.12
 
 SHIP, UFO, BOMB, BOOM = 0, 1, 4, 5     # frames of sprites.png
 UFO_FRAMES = 3
@@ -141,6 +147,7 @@ class Game(vs2.Scene):
         self.wy = 0.0
         self.cam_x = int(self.wx)
         self.cam_y = 0
+        self.cam_depth = 0.0        # where the camera is easing, cam_y unrounded
         self.ticks = 0
         self.cooldown = 0
         self.playing = True
@@ -221,7 +228,12 @@ class Game(vs2.Scene):
             if self.ticks % 33 == 0:
                 self.show_clock()
         self.move_booms()
+        self.follow()
         self.place()
+
+    def follow(self):
+        """Ease the camera after the ship's depth (see FOLLOW)."""
+        self.cam_depth += FOLLOW * (max(self.wy - PLAYER_DEPTH, 0) - self.cam_depth)
 
     def fly(self):
         steer = held(RIGHT) - held(LEFT)
@@ -342,10 +354,10 @@ class Game(vs2.Scene):
     # -- drawing -----------------------------------------------------------
 
     def place(self):
-        """Put everything on the disc, with the camera on the ship."""
+        """Put everything on the disc, with the camera on the ship: round the
+        disc exactly, in and out a little behind it."""
         self.cam_x = int(self.wx)
-        top = self.wy - PLAYER_DEPTH
-        self.cam_y = int(max(top, 0))
+        self.cam_y = int(self.cam_depth + 0.5)
         self.walls.x = ANCHOR - self.cam_x
         self.walls.view_y = self.cam_y
         self.ship.x = ANCHOR + self.wx - self.cam_x
