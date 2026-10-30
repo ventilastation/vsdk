@@ -25,9 +25,15 @@ All five share a design:
   Tile row 0 is the rim and the rows count toward the centre, on a `TUNNEL`
   layer, so the rows near the rim are big and the middle of the disc is where
   the ground, or the rest of the tunnel, is too small to play on.
-- The camera turns with you. You are always at the top of the disc (x = 128),
+- The camera turns with you. You are always near the top of the disc (x = 128),
   except in Rim Runner, where you run on the rim at the bottom, so the picture
   never leaves your end of the display.
+- As in the prototype, you move at once and the camera follows a moment behind.
+  Round the disc it closes a share of the gap that grows with the gap, so while
+  you move you are drawn a few columns ahead (about 5 at cruising speed, never
+  more than a twentieth of a turn) and when you stop it drifts back onto you. In
+  and out, in the three games that scroll that way, it closes 12% of the gap
+  each tick, the pace of the prototype's 7% a frame at 60 frames a second.
 - Things near the middle of the disc are hard to read, so the games with a deep
   level scroll inward with you and keep you toward the rim: Rim Runner keeps your
   feet about eight LEDs from the rim (but never shows more than 4 pixels of
@@ -52,7 +58,8 @@ All five share a design:
 
 ## What changed from the prototypes
 
-- Controls are the controller's, not W A S D and L.
+- Controls are the controller's, not W A S D and L, and either controller plays:
+  every game reads joy1 and joy2 alike.
 - Rim Runner's platforms are four tiles above each other instead of five. A jump
   rises about 4.6 tiles, so the originals could not be reached from below.
 - The tunnel and the maze are shorter, and the numbers (speeds, gravity) are

@@ -7,9 +7,11 @@ This is a port of it to Ventilastation (see games/ld60/README.md).
 
 The planet's mountains rise toward the rim, and the aliens hover over them and
 fire at you when they see you. Flying into the ground, an alien or a shot ends
-the game. The camera turns with you: you always fly at the top of the disc.
+the game. The camera turns with you, a moment behind as in the prototype: you
+always fly near the top of the disc.
 
-Controls: the arrows fly, A fires the way you are facing.
+Controls: the arrows fly, A fires the way you are facing. Either controller
+plays.
 """
 
 import math
@@ -40,7 +42,35 @@ SHOT_LIFE = 33
 FIRE_TICKS = 8
 ALIEN_SHOT_SPEED = 1.0
 ALIEN_SHOT_LIFE = 66
+# Round the disc the camera follows the ship a moment behind, as the prototype's
+# does: it turns its view by a share of the gap that grows with the gap, 4%
+# of it for each hundredth of a turn, 60 times a second. At 33 ticks that is
+# TURN_FOLLOW of the gap for each column of it, so while you fly you are drawn
+# ahead of the top of the disc (about 5 columns), and when you stop the camera
+# drifts back onto you. A gap of a twentieth of a turn or more is jumped.
+TURN_FOLLOW = 1 / 36
+TURN_JUMP = W / 20
 BEST = "best"
+
+
+def held(button):
+    """Whether ``button`` is down on either controller: it is a one-player game,
+    so both sticks and both sets of buttons play it."""
+    return joy1.held(button) or joy2.held(button)
+
+
+def pressed(button):
+    """Whether ``button`` went down on this tick, on either controller."""
+    return joy1.just_pressed(button) or joy2.just_pressed(button)
+
+
+def turn_after(cam, x):
+    """Where the camera looks round the disc a tick later, following ``x`` (see
+    TURN_FOLLOW)."""
+    gap = (x - cam + W // 2) % W - W // 2
+    if -TURN_JUMP < gap < TURN_JUMP:
+        return (cam + TURN_FOLLOW * gap * abs(gap)) % W
+    return x % W
 
 
 def format_time(ticks):
@@ -120,6 +150,7 @@ class Game(vs2.Scene):
         self.wx = float(TILE)
         self.wy = float(TILE)
         self.facing = 1
+        self.cam_turn = self.wx     # where the camera is easing to, unrounded
         self.cooldown = 0
         self.left = ALIENS
         self.ticks = 0
@@ -198,18 +229,19 @@ class Game(vs2.Scene):
             if self.ticks % 33 == 0:
                 self.show_clock()
         self.move_booms()
+        self.cam_turn = turn_after(self.cam_turn, self.wx)
         self.place()
 
     def fly(self):
-        step = joy1.held(RIGHT) - joy1.held(LEFT)
+        step = held(RIGHT) - held(LEFT)
         if step:
             self.facing = step
         self.wx = (self.wx + step * SPEED) % W
-        self.wy += SPEED * (joy1.held(DOWN) - joy1.held(UP))
+        self.wy += SPEED * (held(DOWN) - held(UP))
         self.wy = min(max(self.wy, 0), FLOOR)
         if self.cooldown:
             self.cooldown -= 1
-        elif joy1.held(A):
+        elif held(A):
             self.fire()
         if (self.solid_at(self.wx + 2, self.wy + 6) or self.solid_at(self.wx + 5, self.wy + 6)):
             self.lose()
@@ -353,13 +385,13 @@ class Game(vs2.Scene):
         self.clock.set_number(self.ticks * 30 // 1000, width=4, pad=" ")
 
     def place(self):
-        """Put everything on the disc, with the camera on the ship."""
-        cam = int(self.wx)
+        """Put everything on the disc, with the camera a moment behind the ship."""
+        cam = int(self.cam_turn + 0.5) % W
         self.planet.x = ANCHOR - cam
-        self.ship.x = ANCHOR + self.wx - cam
+        self.ship.x = (ANCHOR + self.wx - cam) % W
         self.ship.y = self.wy
         self.ship.flip_x = self.facing < 0
-        self.ship.frame = SHIP_THRUST if (joy1.held(LEFT) or joy1.held(RIGHT)) else SHIP
+        self.ship.frame = SHIP_THRUST if (held(LEFT) or held(RIGHT)) else SHIP
         for group in (self.aliens, self.shots, self.alien_shots, self.booms):
             for item in group:
                 if item.visible:
@@ -376,7 +408,7 @@ class Title(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 
@@ -401,7 +433,7 @@ class Result(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 

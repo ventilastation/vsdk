@@ -8,10 +8,11 @@ This is a port of it to Ventilastation (see games/ld60/README.md).
 The ground is the outer ring of the disc and "up" is toward the centre, so you
 run like a hamster in a wheel, with your head toward the middle. There are
 holes in the rim (fall in and you are gone), platforms floating above it and
-birds that kill you unless you land on them first. The camera turns with you:
-you always run at the bottom of the disc.
+birds that kill you unless you land on them first. The camera turns with you, a
+moment behind as in the prototype: you always run near the bottom of the disc.
 
 Controls: left and right run, up or A jumps. Left runs toward higher x.
+Either controller plays.
 """
 
 from urandom import randrange
@@ -34,6 +35,18 @@ PLAYER_DEPTH = 12
 # But it never scrolls outward past the lowest floor: only this many pixels of
 # ground are shown below it, rather than spending the outer LEDs on solid ground.
 GROUND_SHOWN = 4
+# Round the disc the camera follows the runner a moment behind, as the
+# prototype's does: it turns its view by a share of the gap that grows with the
+# gap, 4% of it for each hundredth of a turn, 60 times a second. At 33 ticks
+# that is TURN_FOLLOW of the gap for each column of it, so while you run you are
+# drawn ahead of the bottom of the disc (about 5 columns), and when you stop the
+# camera drifts back onto you. A gap of a twentieth of a turn or more is jumped.
+TURN_FOLLOW = 1 / 36
+TURN_JUMP = W / 20
+# In and out the camera follows a moment behind too: each tick it closes this
+# much of the gap. The prototype closes 7% of the gap 60 times a second, and
+# 12% at the console's 33 ticks is the same pace.
+FOLLOW = 0.12
 BIRD_TOP = 16              # birds fly between this row and row 5
 ANCHOR = -TILE // 2        # the player is drawn at the bottom of the disc
 BIRDS = 16
@@ -54,6 +67,26 @@ GRAVITY = 0.08
 FALL_MAX = 2.4
 STOMP = 2.0
 BEST = "best"
+
+
+def held(button):
+    """Whether ``button`` is down on either controller: it is a one-player game,
+    so both sticks and both sets of buttons play it."""
+    return joy1.held(button) or joy2.held(button)
+
+
+def pressed(button):
+    """Whether ``button`` went down on this tick, on either controller."""
+    return joy1.just_pressed(button) or joy2.just_pressed(button)
+
+
+def turn_after(cam, x):
+    """Where the camera looks round the disc a tick later, following ``x`` (see
+    TURN_FOLLOW)."""
+    gap = (x - cam + W // 2) % W - W // 2
+    if -TURN_JUMP < gap < TURN_JUMP:
+        return (cam + TURN_FOLLOW * gap * abs(gap)) % W
+    return x % W
 
 
 def format_time(ticks):
@@ -130,6 +163,9 @@ class Game(vs2.Scene):
         self.playing = True
         self.dead = False
         self.show_clock()
+        # Where the camera is easing to, unrounded; it starts on the runner.
+        self.cam_turn = self.wx
+        self.cam_depth = float(self.depth_to_show())
         self.place()
 
     # -- the level -------------------------------------------------------
@@ -210,11 +246,24 @@ class Game(vs2.Scene):
             if self.ticks % 33 == 0:
                 self.show_clock()
         self.move_booms()
+        self.follow()
         self.place()
+
+    def depth_to_show(self):
+        """How far in the camera wants to look: the runner's feet PLAYER_DEPTH
+        in, but no more than GROUND_SHOWN of the ground below the lowest floor,
+        and no further in than the level goes."""
+        follow = max(self.wy - PLAYER_DEPTH, self.floor_depth - GROUND_SHOWN, 0)
+        return min(follow, ROWS * TILE - VIEW_H)
+
+    def follow(self):
+        """Ease the camera after the runner (see FOLLOW and TURN_FOLLOW)."""
+        self.cam_turn = turn_after(self.cam_turn, self.wx)
+        self.cam_depth += FOLLOW * (self.depth_to_show() - self.cam_depth)
 
     def run(self):
         # Left is toward higher x at the bottom of the disc.
-        step = joy1.held(LEFT) - joy1.held(RIGHT)
+        step = held(LEFT) - held(RIGHT)
         if step:
             self.facing = step
             new_x = (self.wx + step * RUN) % W
@@ -223,7 +272,7 @@ class Game(vs2.Scene):
                 self.wx = new_x
         left, right = self.wx + 1, self.wx + TILE - 2
         if self.grounded:
-            if joy1.held(UP) or joy1.held(A):
+            if held(UP) or held(A):
                 self.vy = JUMP
                 self.grounded = False
                 vs2.audio.sound("jump")
@@ -330,10 +379,10 @@ class Game(vs2.Scene):
         self.clock.set_number(self.ticks * 30 // 1000, width=4, pad=" ")
 
     def place(self):
-        """Put everything on the disc, with the camera on the runner."""
-        cam = int(self.wx)
-        follow = max(self.wy - PLAYER_DEPTH, self.floor_depth - GROUND_SHOWN, 0)
-        cam_y = int(min(follow, ROWS * TILE - VIEW_H))
+        """Put everything on the disc, with the camera a moment behind the
+        runner."""
+        cam = int(self.cam_turn + 0.5) % W
+        cam_y = int(self.cam_depth + 0.5)
         self.rim.x = ANCHOR - cam
         self.rim.view_y = cam_y
         self.put_sprite(self.runner, self.wx, self.wy, cam, cam_y)
@@ -345,7 +394,7 @@ class Game(vs2.Scene):
         if not self.grounded:
             self.runner.frame = JUMP_FRAME
         else:
-            self.runner.frame = RUNNER + (self.ticks // 4) % 2 if joy1.held(LEFT) or joy1.held(RIGHT) else RUNNER
+            self.runner.frame = RUNNER + (self.ticks // 4) % 2 if held(LEFT) or held(RIGHT) else RUNNER
         for bird in self.birds:
             if bird.alive:
                 self.put_sprite(bird, bird.wx, bird.wy, cam, cam_y)
@@ -370,7 +419,7 @@ class Title(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 
@@ -395,7 +444,7 @@ class Result(vs2.Scene):
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")
 
     def update(self):
-        if joy1.just_pressed(A):
+        if pressed(A):
             self.switch(Game())
 
 
