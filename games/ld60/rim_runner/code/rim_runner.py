@@ -1,11 +1,15 @@
 """Rim Runner: run round the inside of the rim and collect every egg.
 
-One of five LD60 "Circular Arcade" concept games (games/ld60). The ground is the
-outer ring of the disc and "up" is toward the centre, so you run like a
-hamster in a wheel, with your head toward the middle. There are holes in the
-rim (fall in and you are gone), platforms floating above it and birds that kill
-you unless you land on them first. The camera turns with you: you always run at
-the bottom of the disc.
+The idea for this game is by @borisvanschooten. It is one of the five games in
+the Ludum Dare 60 entry "Circular Arcade", originally published at
+https://tmtg.nl/ludumdare/ld60/jgame.html?game=jgame-games/ld60/
+This is a port of it to Ventilastation (see games/ld60/README.md).
+
+The ground is the outer ring of the disc and "up" is toward the centre, so you
+run like a hamster in a wheel, with your head toward the middle. There are
+holes in the rim (fall in and you are gone), platforms floating above it and
+birds that kill you unless you land on them first. The camera turns with you:
+you always run at the bottom of the disc.
 
 Controls: left and right run, up or A jumps. Left runs toward higher x.
 """

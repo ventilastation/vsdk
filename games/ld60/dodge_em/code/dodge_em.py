@@ -1,10 +1,14 @@
 """Dodge 'Em: eat every pill on the circular race track without crashing.
 
-One of five LD60 "Circular Arcade" concept games (games/ld60). Five lanes run
-round the disc, walled off from each other except for four gaps. You drive
-round the track one way, the red cars come the other way and slip through the
-gaps to cut you off. The camera turns with you: you always drive at the top of
-the disc.
+The idea for this game is by @borisvanschooten. It is one of the five games in
+the Ludum Dare 60 entry "Circular Arcade", originally published at
+https://tmtg.nl/ludumdare/ld60/jgame.html?game=jgame-games/ld60/
+This is a port of it to Ventilastation (see games/ld60/README.md).
+
+Five lanes run round the disc, walled off from each other except for four gaps.
+You drive round the track one way, the red cars come the other way and slip
+through the gaps to cut you off. The camera turns with you: you always drive at
+the top of the disc.
 
 Controls: up and down change lane when you are at a gap, right speeds you up and
 left slows you down.

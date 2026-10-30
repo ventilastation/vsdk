@@ -1,10 +1,14 @@
 """Spiral Tunnel: dive down a winding tunnel to the centre of the disc.
 
-One of five LD60 "Circular Arcade" concept games (games/ld60). The tunnel
-spirals round the disc as it sinks, so you must keep flying round it while you
-steer toward the centre. Walls kill you, so do the UFOs that patrol the tunnel;
-lob bombs to clear them. The camera turns with you: you always fly at the top
-of the disc.
+The idea for this game is by @borisvanschooten. It is one of the five games in
+the Ludum Dare 60 entry "Circular Arcade", originally published at
+https://tmtg.nl/ludumdare/ld60/jgame.html?game=jgame-games/ld60/
+This is a port of it to Ventilastation (see games/ld60/README.md).
+
+The tunnel spirals round the disc as it sinks, so you must keep flying round it
+while you steer toward the centre. Walls kill you, so do the UFOs that patrol
+the tunnel; lob bombs to clear them. The camera turns with you: you always fly
+at the top of the disc.
 
 Controls: arrows steer (left and right also change the speed you fly round at),
 A drops a bomb.

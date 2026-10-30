@@ -1,9 +1,13 @@
 """Defender: shoot every alien before they shoot you, over a planet in the middle.
 
-One of five LD60 "Circular Arcade" concept games (games/ld60). The planet's
-mountains rise toward the rim, and the aliens hover over them and fire at you
-when they see you. Flying into the ground, an alien or a shot ends the game. The
-camera turns with you: you always fly at the top of the disc.
+The idea for this game is by @borisvanschooten. It is one of the five games in
+the Ludum Dare 60 entry "Circular Arcade", originally published at
+https://tmtg.nl/ludumdare/ld60/jgame.html?game=jgame-games/ld60/
+This is a port of it to Ventilastation (see games/ld60/README.md).
+
+The planet's mountains rise toward the rim, and the aliens hover over them and
+fire at you when they see you. Flying into the ground, an alien or a shot ends
+the game. The camera turns with you: you always fly at the top of the disc.
 
 Controls: the arrows fly, A fires the way you are facing.
 """

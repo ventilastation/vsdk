@@ -1,9 +1,23 @@
 # LD60 Circular Arcade
 
-Five small games for the disc, based on the concept prototypes in the Ludum Dare
-60 entry "Circular Arcade" (<https://tmtg.nl/ludumdare/ld60/>, built with the JGame
-engine). The original plays on a screen that is bent into a circle; here the same
-five levels are written with the VS2 API, so the bending is done by the display.
+## Credits
+
+**The ideas for all five games are by
+[@borisvanschooten](https://github.com/borisvanschooten).** Together they are
+the Ludum Dare 60 entry "Circular Arcade", originally published at
+<https://tmtg.nl/ludumdare/ld60/jgame.html?game=jgame-games/ld60/>.
+
+Spiral Tunnel, Catch the Robots, Rim Runner, Dodge 'Em and Defender, their
+levels, rules, enemies and the idea of playing an arcade game on a circle all
+come from that entry. What this folder adds is only the port to Ventilastation:
+the VS2 code, the generated art and sound, and the changes listed under "What
+changed from the prototypes" below.
+
+## The games
+
+Five small games for the disc. The original plays on a screen that is bent into
+a circle; here the same five levels are written with the VS2 API, so the bending
+is done by the display.
 
 All five share a design:
 
