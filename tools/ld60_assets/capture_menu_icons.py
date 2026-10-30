@@ -64,6 +64,7 @@ W = 256                 # columns round the disc
 DEPTH = 256             # rows in from the rim
 TILE = 8
 ICON_W, ICON_H = 64, 30
+ABOVE = 64              # rows of the map a whole_map painting shows above the view
 EMPTY_TILE = 255
 
 
@@ -90,8 +91,9 @@ def run_left_now_and_then(game, tick):
     return director.JOY_LEFT if (tick // 40) % 2 else 0
 
 
-def fly_down_to_the_planet(game, tick):
-    return director.JOY_DOWN if tick <= 25 else 0
+def fly_down_and_into_the_aliens(game, tick):
+    """Defender: down toward the planet, then left, at a crowd of aliens."""
+    return director.JOY_DOWN if tick <= 25 else director.JOY_LEFT
 
 
 def stand_still(game, tick):
@@ -101,17 +103,21 @@ def stand_still(game, tick):
 # Which moment each icon shows: the seed, how many ticks into the game, the input,
 # the player's sprite, and how far below the player-centred window it is taken
 # (positive moves it toward the centre of the disc). Picked by eye for a frame
-# with the player, an enemy and the level all in view.
+# with the player, enemies and the level all in view. Spiral Tunnel's walls are
+# further apart than the icon is wide, so its window paints the whole map (not
+# only what the camera shows) and is ``squeeze``d: rows of empty tunnel are cut
+# from between the walls, so they come closer together and the icon looks full.
 MOMENTS = {
-    "spiral_tunnel": dict(seed="s2", ticks=84, play=dive_down_the_tunnel,
-                          player=lambda game: game.ship, shift=-6, top=True),
+    "spiral_tunnel": dict(seed="s4", ticks=86, play=dive_down_the_tunnel,
+                          player=lambda game: game.ship, shift=-11, top=True,
+                          whole_map=True, squeeze=14),
     "catch_the_robots": dict(seed="s0", ticks=200, play=stand_still,
                              player=lambda game: game.player.sprite, shift=0, top=True),
     "rim_runner": dict(seed="s2", ticks=64, play=run_left_now_and_then,
                        player=lambda game: game.runner, shift=8, top=False),
     "dodge_em": dict(seed="s0", ticks=120, play=stand_still,
                      player=lambda game: game.player.sprite, shift=0, top=True),
-    "defender": dict(seed="s3", ticks=136, play=fly_down_to_the_planet,
+    "defender": dict(seed="s4", ticks=76, play=fly_down_and_into_the_aliens,
                      player=lambda game: game.ship, shift=3, top=True),
 }
 
@@ -163,9 +169,11 @@ def frames_of(path):
             for index in range(strip.width // TILE)]
 
 
-def paint_world(name, game):
+def paint_world(name, game, whole_map=False):
     """The world layer, flat, in game coordinates, each picture turned back
-    upright from how a top-of-the-disc game stores it."""
+    upright from how a top-of-the-disc game stores it. It is ABOVE rows taller
+    than the view, at the top: with ``whole_map`` the tilemaps are painted there
+    too, beyond the edge of the view the game draws, and anywhere below it."""
     images = {}
 
     def frames_for(image):
@@ -173,12 +181,12 @@ def paint_world(name, game):
             images[image.name] = frames_of(GAMES / name / "images" / image.name)
         return images[image.name]
 
-    canvas = Image.new("RGBA", (W, DEPTH), (0, 0, 0, 255))
+    canvas = Image.new("RGBA", (W, ABOVE + DEPTH), (0, 0, 0, 255))
 
     def put(picture, x, y):
         x = int(x) % W
         for wrap in (0, -W):
-            canvas.paste(picture, (x + wrap, int(y)), picture)
+            canvas.paste(picture, (x + wrap, ABOVE + int(y)), picture)
 
     for tilemap in game.world.tilemaps:
         if not tilemap.visible:
@@ -187,6 +195,10 @@ def paint_world(name, game):
         view_x, view_y = tilemap.view_x, tilemap.view_y
         view_right = view_x + tilemap._view_width
         view_bottom = view_y + tilemap._view_height
+        if whole_map:
+            view_top, view_bottom = view_y - ABOVE, DEPTH
+        else:
+            view_top = view_y
         for row in range(tilemap.rows):
             for col in range(tilemap.columns):
                 frame = tilemap.cells[row * tilemap.columns + col]
@@ -194,7 +206,7 @@ def paint_world(name, game):
                     continue
                 # Only the part of the tile inside the view is drawn.
                 sx, sy = col * TILE, row * TILE
-                left, top = max(sx, view_x), max(sy, view_y)
+                left, top = max(sx, view_x), max(sy, view_top)
                 right, bottom = min(sx + TILE, view_right), min(sy + TILE, view_bottom)
                 if left >= right or top >= bottom:
                     continue
@@ -214,17 +226,41 @@ def paint_world(name, game):
     return canvas
 
 
+def squeeze(window, rows):
+    """Cut ``rows`` rows that are empty all the way across out of the window,
+    the ones nearest its middle, then trim it to the icon's height. Nothing
+    drawn is cut: the walls on either side just come closer together."""
+    width, height = window.size
+    pixels = window.load()
+    middle = height // 2
+    empty = [y for y in range(height)
+             if all(pixels[x, y][:3] == (0, 0, 0) for x in range(width))]
+    cut = set(sorted(empty, key=lambda y: abs(y - middle))[:rows])
+    kept = [y for y in range(height) if y not in cut]
+    out = Image.new("RGBA", (width, len(kept)))
+    for new_y, y in enumerate(kept):
+        out.paste(window.crop((0, y, width, y + 1)), (0, new_y))
+    extra = len(kept) - ICON_H
+    return out.crop((0, extra // 2, width, extra // 2 + ICON_H))
+
+
 def icon(name, moment):
     game = play(name, moment)
-    world = paint_world(name, game)
+    whole_map = moment.get("whole_map", False)
+    world = paint_world(name, game, whole_map)
     player = moment["player"](game)
+    rows = moment.get("squeeze", 0)
+    height = ICON_H + rows
     left = int(player.x) + TILE // 2 - ICON_W // 2
-    top = max(int(player.y) + TILE // 2 - ICON_H // 2 + moment["shift"], 0)
+    top = ABOVE + int(player.y) + TILE // 2 - height // 2 + moment["shift"]
+    top = max(top, 0 if whole_map else ABOVE)
     # Three copies side by side, so a window across x = 0 needs no special case.
-    round_the_disc = Image.new("RGBA", (W * 3, DEPTH))
+    round_the_disc = Image.new("RGBA", (W * 3, ABOVE + DEPTH))
     for copy in range(3):
         round_the_disc.paste(world, (copy * W, 0))
-    window = round_the_disc.crop((W + left, top, W + left + ICON_W, top + ICON_H))
+    window = round_the_disc.crop((W + left, top, W + left + ICON_W, top + height))
+    if rows:
+        window = squeeze(window, rows)
     if not moment["top"]:
         window = window.rotate(180)
     return window.convert("RGB")
