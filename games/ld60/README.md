@@ -25,17 +25,21 @@ All five share a design:
   Tile row 0 is the rim and the rows count toward the centre, on a `TUNNEL`
   layer, so the rows near the rim are big and the middle of the disc is where
   the ground, or the rest of the tunnel, is too small to play on.
-- The camera turns with you. You are always at the top of the disc (x = 128),
+- The camera turns with you. You are always near the top of the disc (x = 128),
   except in Rim Runner, where you run on the rim at the bottom, so the picture
   never leaves your end of the display.
+- As in the prototype, you move at once and the camera follows a moment behind.
+  Round the disc it closes a share of the gap that grows with the gap, so while
+  you move you are drawn a few columns ahead (about 5 at cruising speed, never
+  more than a twentieth of a turn) and when you stop it drifts back onto you. In
+  and out, in the three games that scroll that way, it closes 12% of the gap
+  each tick, the pace of the prototype's 7% a frame at 60 frames a second.
 - Things near the middle of the disc are hard to read, so the games with a deep
   level scroll inward with you and keep you toward the rim: Rim Runner keeps your
   feet about eight LEDs from the rim (but never shows more than 4 pixels of
   ground below the lowest floor), Spiral Tunnel flies a quarter of the way in, and
   Catch the Robots no deeper than halfway. They follow you to the very end of the
-  level instead of stopping where the map runs out. Spiral Tunnel's camera, like
-  the prototype's, follows a moment behind as you steer in or out: the ship moves
-  at once and the tunnel catches up.
+  level instead of stopping where the map runs out.
 - Everything is made once in `build()` and moved afterwards: tiles come from one
   `bytearray` shared with the tilemap, sprites are fixed lists, and the walls get
   their outline from an autotile pass at build time. (Spiral Tunnel's edges are

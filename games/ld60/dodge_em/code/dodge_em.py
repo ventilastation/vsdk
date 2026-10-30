@@ -7,8 +7,8 @@ This is a port of it to Ventilastation (see games/ld60/README.md).
 
 Five lanes run round the disc, walled off from each other except for four gaps.
 You drive round the track one way, the red cars come the other way and slip
-through the gaps to cut you off. The camera turns with you: you always drive at
-the top of the disc.
+through the gaps to cut you off. The camera turns with you, a moment behind as
+in the prototype: you always drive near the top of the disc.
 
 Controls: up and down change lane when you are at a gap, right speeds you up and
 left slows you down. Either controller plays.
@@ -38,6 +38,14 @@ NO_TILE = vs2.EMPTY_TILE
 
 # Ticks a car takes to cross one tile.
 SLOW, NORMAL, FAST = 11, 7, 4
+# Round the disc the camera follows your car a moment behind, as the prototype's
+# does: it turns its view by a share of the gap that grows with the gap, 4%
+# of it for each hundredth of a turn, 60 times a second. At 33 ticks that is
+# TURN_FOLLOW of the gap for each column of it, so while you drive you are drawn
+# ahead of the top of the disc (about 5 columns, 6 flat out), and the faster you
+# go the further ahead. A gap of a twentieth of a turn or more is jumped.
+TURN_FOLLOW = 1 / 36
+TURN_JUMP = W / 20
 BEST = "best"
 
 
@@ -50,6 +58,15 @@ def held(button):
 def pressed(button):
     """Whether ``button`` went down on this tick, on either controller."""
     return joy1.just_pressed(button) or joy2.just_pressed(button)
+
+
+def turn_after(cam, x):
+    """Where the camera looks round the disc a tick later, following ``x`` (see
+    TURN_FOLLOW)."""
+    gap = (x - cam + W // 2) % W - W // 2
+    if -TURN_JUMP < gap < TURN_JUMP:
+        return (cam + TURN_FOLLOW * gap * abs(gap)) % W
+    return x % W
 
 
 def format_time(ticks):
@@ -137,7 +154,7 @@ class Game(vs2.Scene):
         self.booms = []
         for _ in range(2):
             boom = self.world.sprite("sprites.png", frame=BOOM, visible=False)
-            boom.age = 0
+            boom.age = boom.wx = 0
             self.booms.append(boom)
 
         # "TIME" then four digits, centred on the bottom of the disc. x counts
@@ -148,6 +165,8 @@ class Game(vs2.Scene):
         self.ticks = 0
         self.playing = True
         self.show_clock()
+        # Where the camera is easing to, unrounded; it starts on the player.
+        self.cam_turn = float(self.player.x)
         self.place()
 
     def lay_track(self):
@@ -195,6 +214,7 @@ class Game(vs2.Scene):
             if self.ticks % 33 == 0:
                 self.show_clock()
         self.move_booms()
+        self.cam_turn = turn_after(self.cam_turn, self.player.x)
         self.place()
 
     def drive_player(self):
@@ -268,7 +288,7 @@ class Game(vs2.Scene):
         boom = self.booms[0]
         boom.age = 0
         boom.frame = BOOM
-        boom.x = ANCHOR
+        boom.wx = self.player.x
         boom.y = self.player.y + SHIFT
         boom.show()
         vs2.audio.sound("die")
@@ -288,14 +308,18 @@ class Game(vs2.Scene):
         self.clock.set_number(self.ticks * 30 // 1000, width=4, pad=" ")
 
     def place(self):
-        """Put everything on the disc, with the camera on the player."""
-        cam = int(self.player.x)
+        """Put everything on the disc, with the camera a moment behind the
+        player."""
+        cam = int(self.cam_turn + 0.5) % W
         self.track.x = ANCHOR - cam
         for car in self.cars:
             sprite = car.sprite
             sprite.x = (ANCHOR + car.x - cam) % W
             sprite.y = car.y + SHIFT
             sprite.frame = car.frame + (self.ticks // 4) % 2
+        for boom in self.booms:
+            if boom.visible:
+                boom.x = (ANCHOR + boom.wx - cam) % W
 
 
 class Title(vs2.Scene):

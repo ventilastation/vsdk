@@ -7,8 +7,8 @@ This is a port of it to Ventilastation (see games/ld60/README.md).
 
 The maze is a new one every time. The robots trudge along the walls and never
 look for you, so the trick is to work out where they will come round. The
-camera turns with you and follows you down the maze: you always run at the top
-of the disc.
+camera turns with you and follows you down the maze, a moment behind as in the
+prototype: you always run near the top of the disc.
 
 Controls: the arrows run you through the maze, on either controller.
 """
@@ -31,6 +31,18 @@ ANCHOR = W // 2 - TILE // 2    # the player is drawn at the top of the disc
 # camera goes on following the player right to the bottom of the maze instead of
 # stopping when the map runs out: the view then shows empty space past the maze.
 PLAYER_ROW = 5
+# Round the disc the camera follows you a moment behind, as the prototype's
+# does: it turns its view by a share of the gap that grows with the gap, 4%
+# of it for each hundredth of a turn, 60 times a second. At 33 ticks that is
+# TURN_FOLLOW of the gap for each column of it, so while you run you are drawn
+# ahead of the top of the disc (about 6 columns), and when you stop the camera
+# drifts back onto you. A gap of a twentieth of a turn or more is jumped.
+TURN_FOLLOW = 1 / 36
+TURN_JUMP = W / 20
+# In and out the camera follows a moment behind too: each tick it closes this
+# much of the gap. The prototype closes 7% of the gap 60 times a second, and
+# 12% at the console's 33 ticks is the same pace.
+FOLLOW = 0.12
 ROBOTS = 20
 
 PLAYER, ROBOT, BOOM = 0, 2, 4      # frames of sprites.png
@@ -54,6 +66,15 @@ def held(button):
 def pressed(button):
     """Whether ``button`` went down on this tick, on either controller."""
     return joy1.just_pressed(button) or joy2.just_pressed(button)
+
+
+def turn_after(cam, x):
+    """Where the camera looks round the disc a tick later, following ``x`` (see
+    TURN_FOLLOW)."""
+    gap = (x - cam + W // 2) % W - W // 2
+    if -TURN_JUMP < gap < TURN_JUMP:
+        return (cam + TURN_FOLLOW * gap * abs(gap)) % W
+    return x % W
 
 
 def format_time(ticks):
@@ -157,6 +178,9 @@ class Game(vs2.Scene):
         self.playing = True
         self.show_clock()
         self.left_label.set_number(self.left, width=4, pad=" ")
+        # Where the camera is easing to, unrounded; it starts on the player.
+        self.cam_turn = float(self.player.x)
+        self.cam_depth = float(self.depth_to_show())
         self.place()
 
     # -- the maze ----------------------------------------------------------
@@ -223,7 +247,18 @@ class Game(vs2.Scene):
             if self.ticks % 33 == 0:
                 self.show_clock()
         self.move_booms()
+        self.follow()
         self.place()
+
+    def depth_to_show(self):
+        """How far down the maze the camera wants to look: PLAYER_ROW rows above
+        the player."""
+        return max(self.player.y - PLAYER_ROW * TILE, 0)
+
+    def follow(self):
+        """Ease the camera after the player (see FOLLOW and TURN_FOLLOW)."""
+        self.cam_turn = turn_after(self.cam_turn, self.player.x)
+        self.cam_depth += FOLLOW * (self.depth_to_show() - self.cam_depth)
 
     def run_player(self):
         walker = self.player
@@ -313,9 +348,10 @@ class Game(vs2.Scene):
         self.clock.set_number(self.ticks * 30 // 1000, width=4, pad=" ")
 
     def place(self):
-        """Put everything on the disc, with the camera on the player."""
-        cam_x = int(self.player.x)
-        cam_y = int(max(self.player.y - PLAYER_ROW * TILE, 0))
+        """Put everything on the disc, with the camera a moment behind the
+        player."""
+        cam_x = int(self.cam_turn + 0.5) % W
+        cam_y = int(self.cam_depth + 0.5)
         self.maze.x = ANCHOR - cam_x
         self.maze.view_y = cam_y
         self.show(self.player.sprite, self.player.x, self.player.y, cam_x, cam_y)

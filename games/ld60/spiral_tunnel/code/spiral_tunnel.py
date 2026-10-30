@@ -7,8 +7,8 @@ This is a port of it to Ventilastation (see games/ld60/README.md).
 
 The tunnel spirals round the disc as it sinks, so you must keep flying round it
 while you steer toward the centre. Walls kill you, so do the UFOs that patrol
-the tunnel; lob bombs to clear them. The camera turns with you: you always fly
-at the top of the disc.
+the tunnel; lob bombs to clear them. The camera turns with you, a moment
+behind as in the prototype: you always fly near the top of the disc.
 
 Controls: arrows steer (left and right also change the speed you fly round at),
 A drops a bomb. Either controller plays.
@@ -32,12 +32,20 @@ ANCHOR = W // 2 - TILE // 2    # the player is drawn at the top of the disc
 # following the ship to the end of the tunnel instead of stopping when the map
 # runs out: the view then shows empty space past the tunnel.
 PLAYER_DEPTH = 18
-# Steering in or out moves the ship at once, and the camera follows a little
-# behind, as in the prototype: each tick it closes this much of the gap to
-# where it would hold the ship at PLAYER_DEPTH. The prototype closes 7% of the
-# gap 60 times a second; 12% at the console's 33 ticks is the same pace, so
-# while you steer the ship is drawn about a tile off PLAYER_DEPTH.
+# The ship moves at once and the camera follows a moment behind, as in the
+# prototype. In and out, each tick it closes this much of the gap to where it
+# would hold the ship at PLAYER_DEPTH: the prototype closes 7% of the gap 60
+# times a second, and 12% at the console's 33 ticks is the same pace. So while
+# you steer the ship is drawn about a tile off PLAYER_DEPTH.
 FOLLOW = 0.12
+# Round the disc the prototype turns its view by a share of the gap that grows
+# with the gap: 4% of it for each hundredth of a turn, 60 times a second. At 33
+# ticks that is TURN_FOLLOW of the gap for each column of it, so the faster you
+# fly the further ahead of the top of the disc you are drawn (about 5 columns
+# at cruising speed), and when you slow down the camera drifts back onto you. A
+# gap of a twentieth of a turn or more is jumped, not eased.
+TURN_FOLLOW = 1 / 36
+TURN_JUMP = W / 20
 
 SHIP, UFO, BOMB, BOOM = 0, 1, 4, 5     # frames of sprites.png
 UFO_FRAMES = 3
@@ -74,6 +82,15 @@ def held(button):
 def pressed(button):
     """Whether ``button`` went down on this tick, on either controller."""
     return joy1.just_pressed(button) or joy2.just_pressed(button)
+
+
+def turn_after(cam, x):
+    """Where the camera looks round the disc a tick later, following ``x`` (see
+    TURN_FOLLOW)."""
+    gap = (x - cam + W // 2) % W - W // 2
+    if -TURN_JUMP < gap < TURN_JUMP:
+        return (cam + TURN_FOLLOW * gap * abs(gap)) % W
+    return x % W
 
 
 def format_time(ticks):
@@ -147,7 +164,9 @@ class Game(vs2.Scene):
         self.wy = 0.0
         self.cam_x = int(self.wx)
         self.cam_y = 0
-        self.cam_depth = 0.0        # where the camera is easing, cam_y unrounded
+        # Where the camera is easing to: cam_x and cam_y, unrounded.
+        self.cam_turn = self.wx
+        self.cam_depth = 0.0
         self.ticks = 0
         self.cooldown = 0
         self.playing = True
@@ -232,7 +251,8 @@ class Game(vs2.Scene):
         self.place()
 
     def follow(self):
-        """Ease the camera after the ship's depth (see FOLLOW)."""
+        """Ease the camera after the ship (see FOLLOW and TURN_FOLLOW)."""
+        self.cam_turn = turn_after(self.cam_turn, self.wx)
         self.cam_depth += FOLLOW * (max(self.wy - PLAYER_DEPTH, 0) - self.cam_depth)
 
     def fly(self):
@@ -354,13 +374,12 @@ class Game(vs2.Scene):
     # -- drawing -----------------------------------------------------------
 
     def place(self):
-        """Put everything on the disc, with the camera on the ship: round the
-        disc exactly, in and out a little behind it."""
-        self.cam_x = int(self.wx)
+        """Put everything on the disc, with the camera a moment behind the ship."""
+        self.cam_x = int(self.cam_turn + 0.5) % W
         self.cam_y = int(self.cam_depth + 0.5)
         self.walls.x = ANCHOR - self.cam_x
         self.walls.view_y = self.cam_y
-        self.ship.x = ANCHOR + self.wx - self.cam_x
+        self.ship.x = (ANCHOR + self.wx - self.cam_x) % W
         self.ship.y = self.wy - self.cam_y
         for group in (self.ufos, self.bombs, self.booms):
             for item in group:

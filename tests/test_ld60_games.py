@@ -42,6 +42,9 @@ from ventilastation.director import configure_runtime, director, reset_runtime, 
 
 GAMES = os.path.join(ROOT, "games", "ld60")
 TICK_MS = 30
+# director.JOY_LEFT and JOY_RIGHT, for class attributes: the director can only
+# be asked once a runtime is configured.
+JOY_LEFT, JOY_RIGHT = 0x01, 0x02
 
 
 def read_strips(game):
@@ -202,6 +205,53 @@ class GameTests:
         self.assertEqual(self.scene_name(), "Game")
         self.assertIsNot(director.scene_stack[-1], game)
 
+    # How each game's tests find the player on the disc and move it round, for
+    # the camera tests.
+    anchor = 124            # the column the camera holds the player at
+    round_button = 0        # what to hold to go round the disc, toward higher x
+
+    def player_sprite(self, game):
+        raise NotImplementedError
+
+    def make_room(self, game):
+        """Take out whatever could stop or kill the player, so that it can go
+        round the disc for as long as a camera test needs."""
+        raise NotImplementedError
+
+    def ahead(self, game):
+        """How many columns round the disc the player is drawn past the anchor."""
+        return (self.player_sprite(game).x - self.anchor + 128) % 256 - 128
+
+    def lead_holding(self, game, buttons):
+        """Hold ``buttons`` for a while, then return how far ahead the player is
+        drawn on average over ten ticks: the camera sits on whole columns, so
+        any one tick is up to half a column out."""
+        self.run_ticks(50, buttons)
+        total = 0
+        for _ in range(10):
+            self.step(buttons)
+            total += self.ahead(game)
+        return total / 10
+
+    def test_going_round_the_disc_the_camera_turns_a_moment_behind(self):
+        game = self.start_game()
+        self.make_room(game)
+        self.run_ticks(60, self.round_button)
+        # Drawn ahead of the anchor, but never by a twentieth of a turn (12.8
+        # columns): a gap that big is jumped.
+        self.assertGreater(self.ahead(game), 3)
+        self.assertLess(self.ahead(game), 12.8)
+
+    def test_when_the_player_stops_the_camera_comes_round_onto_it(self):
+        if not self.round_button:
+            self.skipTest("in this game you never stop going round")
+        game = self.start_game()
+        self.make_room(game)
+        self.run_ticks(60, self.round_button)
+        self.assertGreater(self.ahead(game), 3)
+        self.run_ticks(150)
+        self.assertAlmostEqual(self.ahead(game), 0, delta=1)
+
     def finish_with(self, trigger):
         """Run ``trigger`` on the game, then let its end-of-game timer run."""
         game = director.scene_stack[-1]
@@ -295,7 +345,8 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
     def test_the_ship_starts_in_the_open_at_the_top_of_the_disc(self):
         game = self.start_game()
         self.assertFalse(game.wall_at(game.wx + 4, game.wy + 4))
-        self.assertAlmostEqual(game.ship.x, 124, delta=1)
+        # A tick in, it is a column ahead: the camera turns a moment behind.
+        self.assertAlmostEqual(game.ship.x, 124, delta=2)
 
     def test_the_ship_flies_round_and_down(self):
         game = self.start_game()
@@ -368,7 +419,10 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         self.run_ticks(10, director.BUTTON_A)
         self.assertLessEqual(sum(1 for b in game.bombs if b.visible), 4)
 
-    def clear_the_way(self, game):
+    def player_sprite(self, game):
+        return game.ship
+
+    def make_room(self, game):
         """No walls and no UFOs, so the ship can be flown anywhere to watch the
         camera."""
         game.wall_at = lambda px, py: False
@@ -380,7 +434,7 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         from games.ld60.spiral_tunnel.code.spiral_tunnel import PLAYER_DEPTH
 
         game = self.start_game()
-        self.clear_the_way(game)
+        self.make_room(game)
         self.assertEqual(game.walls.view_y, 0)
         game.wy = 30 * 8
         self.step(0)
@@ -393,7 +447,7 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         from games.ld60.spiral_tunnel.code.spiral_tunnel import PLAYER_DEPTH
 
         game = self.start_game()
-        self.clear_the_way(game)
+        self.make_room(game)
         game.wy = 20 * 8.0
         self.run_ticks(60)
         self.assertEqual(game.ship.y, PLAYER_DEPTH)
@@ -409,11 +463,18 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
         self.run_ticks(30, director.JOY_UP)
         self.assertLess(game.ship.y, PLAYER_DEPTH - 4)      # the same going out
 
+    def test_the_faster_you_fly_round_the_further_ahead_you_are_drawn(self):
+        game = self.start_game()
+        self.make_room(game)
+        cruising = self.lead_holding(game, 0)
+        self.assertGreater(self.lead_holding(game, director.JOY_RIGHT), cruising + 0.5)
+        self.assertLess(self.lead_holding(game, director.JOY_LEFT), cruising - 0.5)
+
     def test_the_ship_stays_a_quarter_of_the_way_in_even_at_the_end_of_the_tunnel(self):
         from games.ld60.spiral_tunnel.code.spiral_tunnel import PLAYER_DEPTH, ROWS
 
         game = self.start_game()
-        self.clear_the_way(game)
+        self.make_room(game)
         row = ROWS - 5
         game.wy = row * 8.0
         self.run_ticks(60)
@@ -454,7 +515,22 @@ class DodgeEmTests(GameTests, unittest.TestCase):
         pills = game.pills
         self.run_ticks(60)
         self.assertLess(game.pills, pills)
-        self.assertAlmostEqual(game.player.sprite.x, 124, delta=1)
+        self.assertTrue(3 < self.ahead(game) < 12.8)
+
+    def player_sprite(self, game):
+        return game.player.sprite
+
+    def make_room(self, game):
+        """The red cars park where they are, off your lane."""
+        for car in game.enemies:
+            car.go(car.col, car.row, 10 ** 6)
+
+    def test_the_faster_you_drive_the_further_ahead_you_are_drawn(self):
+        game = self.start_game()
+        self.make_room(game)
+        cruising = self.lead_holding(game, 0)
+        self.assertGreater(self.lead_holding(game, director.JOY_RIGHT), cruising + 0.5)
+        self.assertLess(self.lead_holding(game, director.JOY_LEFT), cruising - 0.5)
 
     def test_right_is_faster_than_left(self):
         game = self.start_game()
@@ -589,21 +665,43 @@ class CatchTheRobotsTests(GameTests, unittest.TestCase):
         self.run_ticks(40)
         self.assertEqual(self.scene_name(), "Result")
 
+    round_button = JOY_RIGHT
+
+    def player_sprite(self, game):
+        return game.player.sprite
+
+    def make_room(self, game):
+        """No walls and no robots."""
+        game.is_wall = lambda col, row: False
+        for robot in game.robots:
+            robot.alive = False
+            robot.sprite.hide()
+
     def test_the_camera_scrolls_down_the_maze(self):
         game = self.start_game()
         self.assertEqual(game.maze.view_y, 0)
         game.player.y = 20 * 8
         game.player.row = 20
         self.step(0)
+        self.assertLess(game.maze.view_y, 15 * 8)          # on its way
+        self.run_ticks(60)
         self.assertEqual(game.maze.view_y, 15 * 8)
         # At the bottom of the maze the view goes on following the player, so the
         # player is never deeper than five rows down the view (halfway to the
         # centre), even though the map has no more rows to show there.
         game.player.y = 32 * 8
         game.player.row = 32
-        self.step(0)
+        self.run_ticks(60)
         self.assertEqual(game.maze.view_y, 27 * 8)
         self.assertEqual(game.player.sprite.y, 5 * 8)
+
+    def test_running_down_the_maze_the_camera_follows_a_moment_behind(self):
+        game = self.start_game()
+        self.make_room(game)
+        self.run_ticks(20, director.JOY_DOWN)
+        self.assertGreater(game.player.sprite.y, 5 * 8 + 4)  # drawn further down
+        self.run_ticks(60)
+        self.assertEqual(game.player.sprite.y, 5 * 8)       # until it catches up
 
 
 class RimRunnerTests(GameTests, unittest.TestCase):
@@ -617,18 +715,57 @@ class RimRunnerTests(GameTests, unittest.TestCase):
         # On the lowest floor, with four pixels of it below.
         self.assertEqual(game.runner.y, game.wy - (game.floor_depth - 4))
 
+    anchor = 252            # the bottom of the disc
+    round_button = JOY_LEFT     # at the bottom, left is toward higher x
+
+    def player_sprite(self, game):
+        return game.runner
+
+    def make_room(self, game):
+        """A rim with no holes, nothing on it to run into, and no birds; the
+        runner stands on it."""
+        game.solid_at = lambda x, y: y < game.floor_depth
+        game.wy = float(game.floor_depth)
+        game.vy = 0.0
+        game.grounded = True
+        for bird in game.birds:
+            bird.alive = False
+            bird.hide()
+
+    def hold_at(self, game, wy, ticks):
+        """Keep the runner hanging at depth ``wy`` while the view catches up."""
+        for _ in range(ticks):
+            game.wy = wy
+            game.vy = 0.0
+            game.grounded = False
+            self.step(0)
+
     def test_the_view_scrolls_inward_with_the_runner_to_keep_it_near_the_rim(self):
         from games.ld60.rim_runner.code.rim_runner import PLAYER_DEPTH
 
         game = self.start_game()
         # Up on a platform the whole view has moved with the runner, which stays
         # PLAYER_DEPTH from the rim.
-        game.wy = 13 * 8.0
-        game.vy = 0.0
-        game.grounded = False
-        self.step(0)
+        self.hold_at(game, 13 * 8.0, 60)
         self.assertAlmostEqual(game.runner.y, PLAYER_DEPTH, delta=1)
         self.assertAlmostEqual(game.rim.view_y, game.wy - PLAYER_DEPTH, delta=1)
+
+    def test_the_view_follows_a_jump_a_moment_behind(self):
+        from games.ld60.rim_runner.code.rim_runner import PLAYER_DEPTH
+
+        game = self.start_game()
+        self.make_room(game)
+        self.run_ticks(60)
+        self.step(director.JOY_UP)
+        highest = 0
+        for _ in range(120):
+            self.step(0)
+            highest = max(highest, game.runner.y)
+            if game.grounded:
+                break
+        # Rising, the runner is drawn further in than PLAYER_DEPTH: the view
+        # only catches up later.
+        self.assertGreater(highest, PLAYER_DEPTH + 3)
 
     def test_the_view_shows_only_four_pixels_of_ground_below_the_lowest_floor(self):
         from games.ld60.rim_runner.code.rim_runner import GROUND_SHOWN, PLAYER_DEPTH
@@ -656,10 +793,7 @@ class RimRunnerTests(GameTests, unittest.TestCase):
         from games.ld60.rim_runner.code.rim_runner import ROWS, VIEW_H
 
         game = self.start_game()
-        game.wy = (ROWS - 2) * 8.0
-        game.vy = 0.0
-        game.grounded = False
-        self.step(0)
+        self.hold_at(game, (ROWS - 2) * 8.0, 60)
         self.assertEqual(game.rim.view_y, ROWS * 8 - VIEW_H)
         self.assertGreater(game.runner.y, 5)
 
@@ -770,6 +904,16 @@ class RimRunnerTests(GameTests, unittest.TestCase):
 
 class DefenderTests(GameTests, unittest.TestCase):
     slug = "ld60.defender"
+    round_button = JOY_RIGHT
+
+    def player_sprite(self, game):
+        return game.ship
+
+    def make_room(self, game):
+        """No aliens, so nothing shoots."""
+        for alien in game.aliens:
+            alien.alive = False
+            alien.hide()
 
     def test_the_planet_has_mountains_and_an_alien_over_each_column(self):
         from games.ld60.defender.code.defender import COLS, ROWS
