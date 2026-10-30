@@ -11,7 +11,23 @@ Spiral Tunnel, Catch the Robots, Rim Runner, Dodge 'Em and Defender, their
 levels, rules, enemies and the idea of playing an arcade game on a circle all
 come from that entry. What this folder adds is only the port to Ventilastation:
 the VS2 code, the generated art and sound, and the changes listed under "What
-changed from the prototypes" below.
+changed from the prototypes" below. The Ventilastation version is by alecu.
+
+### Music
+
+Each game has its own song, which starts on the title screen and loops from
+then on:
+
+| Game | Song | Music by |
+|---|---|---|
+| Spiral Tunnel | CHIPTOON | snifkey |
+| Catch the Robots | WINDUPCARAVAN | snifkey |
+| Rim Runner | SkateThisBorder | JuanJuan |
+| Dodge 'Em | BIGVTINY | snifkey |
+| Defender | SPACERAKER2 | snifkey |
+
+Every title screen has three lines of credits under the game's name: "a game
+by boris", who made the music, and "ported by alecu".
 
 ## The games
 
@@ -77,10 +93,12 @@ All five share a design:
 Art is generated, not drawn by hand: run `python3 tools/ld60_assets/make_art.py`
 to rewrite every `images/tiles.png` and `images/sprites.png` (and Catch the
 Robots' `images/outlines.png`), and
-`python3 tools/ld60_assets/make_sounds.py` (needs ffmpeg) for the MP3s in
-`sounds/`. In-game text is in the tutorial's `steel8x8.png`. The title and end
-screens put their heading in the system's `rainbow8x8.png` and the lines below
-it in the 4x6 `tinyfont_white.png`, with PRESS A in `tinyfont_red.png`.
+`python3 tools/ld60_assets/make_sounds.py` (needs ffmpeg) for the sound effects
+in `sounds/`. The songs there are the musicians' own MP3s (see Music, above),
+not generated. In-game text is in the tutorial's `steel8x8.png`. The title and
+end screens put their heading in the system's `rainbow8x8.png` and the lines
+below it, and the credits, in the 4x6 `tinyfont_white.png`, with PRESS A in
+`tinyfont_red.png`.
 
 Each `menu.png` is a moment of the game itself:
 `python3 tools/ld60_assets/capture_menu_icons.py` plays every game headless from
