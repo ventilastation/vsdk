@@ -71,6 +71,11 @@ BOMB_GRAVITY = 0.06
 BOMB_LIFE = 45
 FIRE_TICKS = 8
 BEST = "best"
+# The game's song, in sounds/: it starts on the title screen and loops through
+# every game and every replay.
+SONG = "chiptoon"
+# Shown under the game's name on the title screen.
+CREDITS = ("designed by borisvanschooten", "music by snifkey", "vs version by alecu")
 
 UFO_COUNT = (ROWS - 4) // 2
 BOMBS = 4
@@ -115,11 +120,11 @@ def centred_label(layer, text, y, font="tinyfont_white.png"):
 RESULT_Y = 6
 
 
-def title_label(layer, text, y=1):
+def title_label(layer, text, y=1, font="rainbow8x8.png"):
     """A heading in rainbow8x8.png, centred on the top of the disc: the game's
-    name, or how the game ended. A label there would read upside down, so it is
-    flipped on both axes."""
-    label = layer.label("rainbow8x8.png", columns=len(text), x=0, y=y, text=text,
+    name, or how the game ended (or, in another font, a line under it). A label
+    there would read upside down, so it is flipped on both axes."""
+    label = layer.label(font, columns=len(text), x=0, y=y, text=text,
                         flip_x=True, flip_y=True)
     label.x = W // 2 - (len(text) * label.image.width) // 2
     return label
@@ -402,7 +407,10 @@ def near(ax, ay, bx, by):
 class Title(vs2.Scene):
     def build(self):
         hud = self.layer("hud", projection=vs2.HUD)
+        vs2.audio.music(SONG, loop=True)
         title_label(hud, "SPIRAL TUNNEL")
+        for line, credit in enumerate(CREDITS):
+            title_label(hud, credit, y=11 + 7 * line, font="tinyfont_white.png")
         best = vs2.saves.load(BEST, 0)
         centred_label(hud, "BEST " + format_time(best) if best else "ARROWS  A=BOMB", y=8)
         centred_label(hud, "PRESS A", y=1, font="tinyfont_red.png")

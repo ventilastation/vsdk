@@ -63,6 +63,7 @@ class GameTests:
 
     slug = None
     can_lose = True
+    composer = "snifkey"
 
     def setUp(self):
         self.game_name = self.slug.split(".")[1]
@@ -143,6 +144,26 @@ class GameTests:
         self.assertIn("PRESS A", self.labels(title))
         self.press(director.BUTTON_A)
         self.assertEqual(self.scene_name(), "Game")
+
+    def test_the_title_credits_the_game_and_starts_its_song_looping(self):
+        title = load_app(self.slug)
+        self.step(0)
+        labels = self.labels(title)
+        self.assertIn("designed by borisvanschooten", labels)
+        self.assertIn("music by " + self.composer, labels)
+        self.assertIn("vs version by alecu", labels)
+        song = sys.modules[type(title).__module__].SONG
+        self.assertEqual(self.music_sent(),
+                         [("music %s/%s loop" % (self.slug, song)).encode()])
+        # The song plays on through a game, its end and a replay.
+        self.press(director.BUTTON_A)
+        self.finish_with(lambda g: g.win())
+        self.press(director.BUTTON_A)
+        self.assertEqual(self.scene_name(), "Game")
+        self.assertEqual(len(self.music_sent()), 1)
+
+    def music_sent(self):
+        return [line for line, _ in director.platform.comms.sent if line.startswith(b"music")]
 
     def test_game_exports_a_vs2_scene_within_the_budgets(self):
         import vs2
@@ -732,6 +753,7 @@ class CatchTheRobotsTests(GameTests, unittest.TestCase):
 
 class RimRunnerTests(GameTests, unittest.TestCase):
     slug = "ld60.rim_runner"
+    composer = "JuanJuan"
 
     def test_the_runner_starts_on_the_rim_at_the_bottom_of_the_disc(self):
         game = self.start_game()
@@ -1070,7 +1092,9 @@ class LaunchTests(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(folder, "menu.png")), name)
             with open(os.path.join(folder, "code", name + ".py")) as handle:
                 source = handle.read()
-            for sound in set(re.findall(r'audio\.sound\("(\w+)"\)', source)):
+            songs = re.findall(r'^SONG = "(\w+)"', source, re.M)
+            self.assertEqual(len(songs), 1, name)
+            for sound in set(re.findall(r'audio\.sound\("(\w+)"\)', source)) | set(songs):
                 self.assertTrue(os.path.exists(os.path.join(folder, "sounds", sound + ".mp3")),
                                 "%s needs sounds/%s.mp3" % (name, sound))
 
