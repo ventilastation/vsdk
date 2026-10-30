@@ -56,7 +56,7 @@ BEST = "best"
 # every game and every replay.
 SONG = "windupcaravan"
 # Shown under the game's name on the title screen.
-CREDITS = ("designed by borisvanschooten", "music by snifkey", "vs version by alecu")
+CREDITS = ("a game by boris", "music by snifkey", "ported by alecu")
 
 # Up is toward the rim, so a step up is one row less deep.
 STEPS = ((-1, 0), (0, 1), (1, 0), (0, -1))     # left, down, right, up

@@ -26,8 +26,8 @@ then on:
 | Dodge 'Em | BIGVTINY | snifkey |
 | Defender | SPACERAKER2 | snifkey |
 
-Every title screen credits the game's design, its music and this version, in
-three lines under the game's name.
+Every title screen has three lines of credits under the game's name: "a game
+by boris", who made the music, and "ported by alecu".
 
 ## The games
 

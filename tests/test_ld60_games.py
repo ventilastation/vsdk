@@ -149,9 +149,9 @@ class GameTests:
         title = load_app(self.slug)
         self.step(0)
         labels = self.labels(title)
-        self.assertIn("designed by borisvanschooten", labels)
+        self.assertIn("a game by boris", labels)
         self.assertIn("music by " + self.composer, labels)
-        self.assertIn("vs version by alecu", labels)
+        self.assertIn("ported by alecu", labels)
         song = sys.modules[type(title).__module__].SONG
         self.assertEqual(self.music_sent(),
                          [("music %s/%s loop" % (self.slug, song)).encode()])

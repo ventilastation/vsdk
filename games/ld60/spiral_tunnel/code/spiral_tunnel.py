@@ -75,7 +75,7 @@ BEST = "best"
 # every game and every replay.
 SONG = "chiptoon"
 # Shown under the game's name on the title screen.
-CREDITS = ("designed by borisvanschooten", "music by snifkey", "vs version by alecu")
+CREDITS = ("a game by boris", "music by snifkey", "ported by alecu")
 
 UFO_COUNT = (ROWS - 4) // 2
 BOMBS = 4
