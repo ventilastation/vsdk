@@ -35,6 +35,10 @@ jobs:
       - name: Compile MicroPython unix port
         if: steps.upy.outputs.cache-hit != 'true'
         run: |
+          # v1.24.1 predates newer GCCs, which reject a few of its sources
+          # (-Werror=unterminated-string-initialization). Keep the pinned release
+          # and show those warnings without failing the build.
+          export CFLAGS_EXTRA=-Wno-error
           git clone --depth 1 --branch v1.24.1 https://github.com/micropython/micropython /tmp/mpy
           make -C /tmp/mpy/mpy-cross -j2
           make -C /tmp/mpy/ports/unix -j2 submodules
