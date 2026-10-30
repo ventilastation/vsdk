@@ -3,9 +3,10 @@
     python3 tools/ld60_assets/make_art.py
 
 Every game gets ``images/tiles.png`` (an autotiled wall set plus a few extra
-tiles), ``images/sprites.png`` (8x8 frames) and copies of two fonts: the
-tutorial's ``steel8x8.png`` for text and the system's ``rainbow8x8.png`` for the
-title. Each ``menu.png`` is a moment of play drawn with these, so run
+tiles), ``images/sprites.png`` (8x8 frames) and copies of four fonts: the
+tutorial's ``steel8x8.png`` for the in-game text, and from the system
+``rainbow8x8.png`` for the headings of the title and end screens and the 4x6
+``tinyfont_white.png`` and ``tinyfont_red.png`` for the lines below them. Each ``menu.png`` is a moment of play drawn with these, so run
 capture_menu_icons.py after this. Needs Pillow.
 
 Art is drawn the way a player sees it: upright, right-facing, head toward the
@@ -25,6 +26,8 @@ GAMES = ROOT / "games" / "ld60"
 FONTS = (
     ROOT / "games" / "demos" / "tutorial_game" / "images" / "steel8x8.png",
     ROOT / "system" / "shared" / "other" / "images" / "8x8fonts" / "rainbow8x8.png",
+    ROOT / "system" / "shared" / "other" / "images" / "tinyfont_white.png",
+    ROOT / "system" / "shared" / "other" / "images" / "tinyfont_red.png",
 )
 
 TILE = 8
