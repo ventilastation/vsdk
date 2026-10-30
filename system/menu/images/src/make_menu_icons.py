@@ -6,12 +6,14 @@ factors the shared "rounded card + glow + gradient text" style out of).
 Each entry in ICONS is one 64x30 strip, styled by hand to read as a small
 badge for its theme -- a jam badge, a console badge, a warning-stripe demo
 badge -- rather than borrowing any single game's actual in-game art, since a
-group holds many unrelated games.
+group holds many unrelated games. MARQUEES are the same kind of badge for a
+name too long for one line: two lines of text on a card ringed with bulbs.
 """
 
 from pathlib import Path
 
 from PIL import Image
+from PIL import ImageChops
 from PIL import ImageDraw
 from PIL import ImageFilter
 from PIL import ImageFont
@@ -97,6 +99,99 @@ def badge(text, card_fill, card_outline, glow_rgb, text_top, text_bottom,
     return image
 
 
+def marquee_line(image, text, center_y, max_height, text_top, text_bottom, outline_rgb,
+                 dark_letter=None, dark_rgb=None):
+    """One line of a marquee(): shadowed, outlined text centred on center_y,
+    its fill graded from text_top to text_bottom over the line's own height.
+    text[dark_letter], if given, is unlit instead: dark_rgb inside the same
+    outline, a sign letter whose bulb has gone out."""
+    font = fit_font(text, max_width=56, max_height=max_height, max_size=20, min_size=6)
+    bbox = font.getbbox(text)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    x = (WIDTH - text_width) // 2 - bbox[0]
+    y = center_y - text_height // 2 - bbox[1]
+
+    shadow = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).text((x + 1, y + 1), text, font=font, fill=(0, 0, 0, 220),
+                                stroke_width=1, stroke_fill=(0, 0, 0, 220))
+    image.alpha_composite(shadow)
+
+    def text_mask(part):
+        mask = Image.new("L", (WIDTH, HEIGHT), 0)
+        ImageDraw.Draw(mask).text((x, y), part, font=font, fill=255,
+                                  stroke_width=1, stroke_fill=255)
+        return mask
+
+    lit_mask = text_mask(text)
+    if dark_letter is not None:
+        # The letter alone is what text up to and including it covers beyond
+        # the text before it, so it sits exactly where the whole line puts it.
+        letter_mask = ImageChops.subtract(text_mask(text[:dark_letter + 1]),
+                                          text_mask(text[:dark_letter]))
+        lit_mask = ImageChops.subtract(lit_mask, letter_mask)
+        unlit = Image.new("RGBA", (WIDTH, HEIGHT), dark_rgb + (255,))
+        unlit.putalpha(letter_mask)
+        image.alpha_composite(unlit)
+
+    top = center_y - text_height // 2 - 1
+    gradient = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    gradient.paste(vertical_gradient((WIDTH, text_height + 2), text_top, text_bottom), (0, top))
+    gradient.putalpha(lit_mask)
+    image.alpha_composite(gradient)
+
+    outline = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    ImageDraw.Draw(outline).text((x, y), text, font=font, fill=(0, 0, 0, 0),
+                                 stroke_width=1, stroke_fill=outline_rgb + (255,))
+    image.alpha_composite(outline)
+
+
+def marquee_frame(top_text, bottom_text, card_fill, card_outline, glow_rgb,
+                  top_colors, bottom_colors, outline_rgb, bulb_rgbs, glow_alpha,
+                  phase, dark_letter, dark_rgb):
+    image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((1, 1, WIDTH - 2, HEIGHT - 2), radius=6, fill=card_fill)
+    draw.rounded_rectangle((2, 2, WIDTH - 3, HEIGHT - 3), radius=5, outline=card_outline, width=1)
+
+    glow = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse((6, 5, WIDTH - 7, HEIGHT + 4), fill=glow_rgb + (glow_alpha,))
+    image.alpha_composite(glow.filter(ImageFilter.GaussianBlur(6)))
+
+    marquee_line(image, top_text, 9, 9, *top_colors, outline_rgb)
+    marquee_line(image, bottom_text, 20, 10, *bottom_colors, outline_rgb,
+                 dark_letter=dark_letter, dark_rgb=dark_rgb)
+
+    bulbs = [(x, 1) for x in range(5, WIDTH - 4, 4)] + [(x, HEIGHT - 2) for x in range(5, WIDTH - 4, 4)]
+    bulbs += [(1, y) for y in range(6, HEIGHT - 5, 4)] + [(WIDTH - 2, y) for y in range(6, HEIGHT - 5, 4)]
+    draw = ImageDraw.Draw(image)
+    for index, point in enumerate(bulbs):
+        draw.point(point, fill=bulb_rgbs[(index + phase) % len(bulb_rgbs)] + (255,))
+    return image
+
+
+def marquee(top_text, bottom_text, card_fill, card_outline, glow_rgb,
+            top_colors, bottom_colors, outline_rgb, bulb_rgbs, glow_alpha=90,
+            frames=1, failing_letter=None, dark_rgb=None):
+    """A badge() for a two-word name: each word on its own line, so neither
+    shrinks to an unreadable size, on a taller card whose edge is a ring of
+    marquee bulbs in place of badge()'s accent lines.
+
+    Returns a strip of `frames` frames side by side. Each frame steps every
+    bulb on to the next of bulb_rgbs, so the bulbs alternate as the strip
+    plays; the last frame also turns off bottom_text[failing_letter], which
+    flickers out once per loop like a failing bulb."""
+    strip = Image.new("RGBA", (WIDTH * frames, HEIGHT), (0, 0, 0, 0))
+    for frame in range(frames):
+        dark_letter = failing_letter if frame == frames - 1 else None
+        image = marquee_frame(top_text, bottom_text, card_fill, card_outline, glow_rgb,
+                              top_colors, bottom_colors, outline_rgb, bulb_rgbs,
+                              glow_alpha, frame, dark_letter, dark_rgb)
+        strip.paste(image, (WIDTH * frame, 0))
+    return strip
+
+
 # Each group holds many unrelated games, so there's no single "in-game"
 # palette to borrow -- these lean on what the group itself represents
 # instead: a jam badge for a jam, a console badge for emulators, a
@@ -147,10 +242,27 @@ ICONS = [
     )),
 ]
 
+# (filename, kwargs for marquee()).
+MARQUEES = [
+    # Circular Arcade (games/ld60): the five LD60 arcade games get an arcade
+    # sign -- a yellow and pink marquee with bulbs round the edge, ten frames
+    # (see ANIMATED_ICON_STRIPS in system/launcher for how slowly they play)
+    # whose last one loses the second A of ARCADE to a failing bulb.
+    ("circular_arcade.png", dict(
+        top_text="CIRCULAR", bottom_text="ARCADE",
+        card_fill=(26, 6, 22, 210), card_outline=(170, 30, 140, 255),
+        glow_rgb=(255, 40, 200), top_colors=((255, 250, 200), (255, 190, 30)),
+        bottom_colors=((255, 225, 250), (240, 60, 190)), outline_rgb=(45, 6, 38),
+        bulb_rgbs=((255, 230, 90), (255, 120, 220)),
+        frames=10, failing_letter=3, dark_rgb=(70, 18, 58),
+    )),
+]
+
 
 def main():
-    for filename, kwargs in ICONS:
-        image = badge(**kwargs)
+    images = [(filename, badge(**kwargs)) for filename, kwargs in ICONS]
+    images += [(filename, marquee(**kwargs)) for filename, kwargs in MARQUEES]
+    for filename, image in images:
         output = ROOT / filename
         image.save(output)
         print(f"Created {output}")

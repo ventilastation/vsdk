@@ -9,13 +9,18 @@ from ventilastation.director import director, stripes
 def game_menu_strip(game_slug):
     return game_slug.replace(".", "/") + "/menu.png"
 
+GROUP_PREFIX = "group:"
+
 # The curated root (see HighlightsMenu): a handful of "greatest hits" plus
 # a way into everything else, rather than every group and system scene at
 # once. Titles here are deliberately shorter/punchier than a game's own
 # meta.json title (e.g. "Sencom" vs "Senile Command") -- this is the one
-# screen everybody sees first, not the full catalog entry.
+# screen everybody sees first, not the full catalog entry. A hit can be a
+# whole group (Circular Arcade's five games), which opens like it does from
+# "Más aplicaciones".
 MORE_APPS_ID = "more_apps"
 HIGHLIGHT_ENTRIES = [
+    (5, GROUP_PREFIX + "ld60", "circular_arcade.png", 0, "Circular Arcade"),
     (10, "alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0, "Super Ventilagon"),
     (20, "alecu.vyruss_vs2", game_menu_strip("alecu.vyruss_vs2"), 0, "Vyruss VS2"),
     (30, "emulators.voom", "voom.png", 0, "Voom"),
@@ -34,8 +39,6 @@ MORE_APPS_STATIC_ENTRIES = [
     (240, "credits", "menu.png", 3, "Credits"),
 ]
 
-GROUP_PREFIX = "group:"
-
 # Order and label for each games/<group>/ folder's top-level tile. A folder
 # not listed here (a new group added later) still gets a tile -- just at the
 # end of the menu, labelled from its folder name (see _build_groups_and_tiles).
@@ -45,6 +48,7 @@ FOLDER_GROUP_ORDER = {
     "vsjam-may25": 40,
     "vsjam-oct25": 50,
     "pycamp-mar25": 60,
+    "ld60": 70,
 }
 GROUP_LABELS = {
     "emulators": "Emulators",
@@ -53,6 +57,7 @@ GROUP_LABELS = {
     "vsjam-may25": "VS Jam May 25",
     "vsjam-oct25": "VS Jam Oct 25",
     "pycamp-mar25": "PyCamp Mar 25",
+    "ld60": "Circular Arcade",
     "tech_demos": "Tech Demos",
 }
 # See system/menu/images/src/make_menu_icons.py -- a group holds many
@@ -65,6 +70,7 @@ GROUP_ICONS = {
     "vsjam-may25": "vsjam_may25.png",
     "vsjam-oct25": "vsjam_oct25.png",
     "pycamp-mar25": "pycamp_mar25.png",
+    "ld60": "circular_arcade.png",
     "tech_demos": "tech_demos.png",
 }
 
@@ -173,19 +179,23 @@ def _option_index(options, option_id):
 # sits at that slot's offset from the selection.
 POOL_SIZE = 12
 Y_STEP = 20
-# Strips that hold real animation frames for one icon -- restoring exactly
-# the pre-vs2 menu's pollitos/tincho animation, see ListMenu._animate_icons().
-# NOT "any multi-frame strip": menu.png alone packs 16 unrelated static
-# icons (Credits, Tutorial, Debug Mode, ...), one fixed frame per entry --
-# animating on frame count alone would cycle through all of those instead.
-ANIMATED_ICON_STRIPS = frozenset({
-    "pollitos.png",
-    game_menu_strip("vsjam-oct25.tincho_vrunner"),
-})
 # Ticks per animation-frame advance. The pre-vs2 menu hand-picked a rate per
-# icon (4 for pollitos, 6 for tincho); one shared rate is close enough and
-# needs no per-icon bookkeeping.
+# icon (4 for pollitos, 6 for tincho); one shared rate is close enough for
+# those two.
 ICON_ANIM_RATE = 4
+# Strips that hold real animation frames for one icon, and the ticks each
+# frame stays up -- restoring the pre-vs2 menu's pollitos/tincho animation,
+# see ListMenu._animate_icons(). NOT "any multi-frame strip": menu.png alone
+# packs 16 unrelated static icons (Credits, Tutorial, Debug Mode, ...), one
+# fixed frame per entry -- animating on frame count alone would cycle
+# through all of those instead.
+ANIMATED_ICON_STRIPS = {
+    "pollitos.png": ICON_ANIM_RATE,
+    game_menu_strip("vsjam-oct25.tincho_vrunner"): ICON_ANIM_RATE,
+    # A marquee's bulbs alternate slowly: 300 ms a frame, so the failing
+    # bulb in its last frame flickers out once every 3 seconds.
+    "circular_arcade.png": 10,
+}
 # ROM libraries are always label-only, and the 4x6 list font is tiny next to
 # the ~30-LED icons the 20-step spacing was picked for. Packing those rows
 # closer puts more of them on the disc and reads as one list rather than a
@@ -457,11 +467,12 @@ class ListMenu(vs2.Scene):
     def _animate_sprite(self, sprite):
         if not sprite.visible:
             return
-        if sprite.image.name not in ANIMATED_ICON_STRIPS:
+        rate = ANIMATED_ICON_STRIPS.get(sprite.image.name)
+        if rate is None:
             return
         frames = sprite.image.frames
         if frames > 1:
-            sprite.frame = (self._icon_anim_tick // ICON_ANIM_RATE) % frames
+            sprite.frame = (self._icon_anim_tick // rate) % frames
 
     def _animate_icons(self):
         """Cycle pollitos/tincho -- regression fix: the vs2 port always
@@ -519,8 +530,8 @@ def _dispatch_app(scene, slug, group_id):
 
 class HighlightsMenu(ListMenu):
     """Root: a curated set of Ventilastation's greatest hits (see
-    HIGHLIGHT_ENTRIES), plus a "Más aplicaciones" tile into everything else
-    (GroupsMenu)."""
+    HIGHLIGHT_ENTRIES) -- games, or whole groups -- plus a "Más
+    aplicaciones" tile into everything else (GroupsMenu)."""
 
     enable_back = False
     idle_timeout = None
@@ -547,6 +558,10 @@ class HighlightsMenu(ListMenu):
         option_id = entry[0]
         if option_id == MORE_APPS_ID:
             self.push(GroupsMenu())
+            return
+        if is_group_tile(option_id):
+            native_apps.write_launcher_state({"group_id": option_id, "slug": None, "rom_path": None})
+            self.push(GroupMenu(option_id))
             return
         _dispatch_app(self, option_id, None)
 
@@ -659,15 +674,22 @@ class DebugMenu(ListMenu):
         pass
 
 
+def _on_root(option_id):
+    return any(option[0] == option_id for option in MAIN_MENU_OPTIONS)
+
+
 def main(launcher_state=None):
     launcher_state = launcher_state or native_apps.read_launcher_state()
     group_id = launcher_state.get("group_id")
     slug = launcher_state.get("slug")
-    # Resuming into any group means the curated root should show "Más
-    # aplicaciones" pre-selected -- setup() pushes the real group screens on
-    # top of it. Resuming into one of the root's own curated slugs (no
-    # group) highlights that tile directly instead.
-    if group_id:
+    # Resuming into a group means the curated root should show the tile it
+    # was opened from pre-selected -- its own tile when the group is one of
+    # the root's hits, "Más aplicaciones" otherwise -- and setup() pushes the
+    # real group screens on top of it. Resuming into one of the root's own
+    # curated slugs (no group) highlights that tile directly instead.
+    if group_id and _on_root(group_id):
+        target = group_id
+    elif group_id:
         target = MORE_APPS_ID
     elif slug:
         target = slug
@@ -691,7 +713,7 @@ def setup():
         # Emulators moved off "Más aplicaciones" into the debug menu (see
         # SYS_MENU_OPTIONS) -- resuming into it goes through there instead.
         director.push(DebugMenu())
-    else:
+    elif not _on_root(group_id):
         director.push(GroupsMenu(_option_index(MORE_APPS_MENU_OPTIONS, group_id)))
     director.push(GroupMenu(group_id, selected_slug=slug))
 
