@@ -76,14 +76,28 @@ class MainMenuOptionsTests(unittest.TestCase):
         for slug, _strip, _frame, title in MAIN_MENU_OPTIONS:
             self.assertTrue(title, "missing title for %r" % (slug,))
 
-    def test_curated_root_has_no_group_tiles_of_its_own(self):
+    def test_curated_root_only_holds_hand_picked_groups(self):
         # The curated root (HIGHLIGHT_ENTRIES) is a handful of hand-picked
-        # slugs plus the MORE_APPS_ID tile into GroupsMenu -- every actual
-        # games/<group>/ tile now lives one level down, in
-        # MORE_APPS_MENU_OPTIONS (see test_more_apps_*  below).
+        # slugs plus the MORE_APPS_ID tile into GroupsMenu. Every
+        # games/<group>/ tile lives one level down, in MORE_APPS_MENU_OPTIONS
+        # (see test_more_apps_* below); Circular Arcade is the one group also
+        # curated on the root.
         top_level_slugs = [slug for slug, _s, _f, _t in MAIN_MENU_OPTIONS]
-        self.assertFalse([slug for slug in top_level_slugs if is_group_tile(slug)])
+        self.assertEqual([slug for slug in top_level_slugs if is_group_tile(slug)],
+                         [group_tile_id("ld60")])
         self.assertIn(MORE_APPS_ID, top_level_slugs)
+
+    def test_circular_arcade_is_first_on_the_root_and_in_more_apps(self):
+        group_id = group_tile_id("ld60")
+        self.assertEqual(MAIN_MENU_OPTIONS[0][0], group_id)
+        for options in (MAIN_MENU_OPTIONS, MORE_APPS_MENU_OPTIONS):
+            entry = [option for option in options if option[0] == group_id]
+            self.assertEqual(entry, [(group_id, "circular_arcade.png", 0, "Circular Arcade")])
+        members = [slug for slug, _s, _f, _t in GROUP_MEMBERS[group_id]]
+        self.assertEqual(members, [
+            "ld60.spiral_tunnel", "ld60.catch_the_robots", "ld60.rim_runner",
+            "ld60.dodge_em", "ld60.defender",
+        ])
 
     def test_more_apps_group_tiles_have_members(self):
         group_ids = [slug for slug, _s, _f, _t in MORE_APPS_MENU_OPTIONS if is_group_tile(slug)]
@@ -158,6 +172,20 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(kind, "push")
         self.assertIsInstance(target, GroupMenu)
         self.assertEqual(target.group_id, group_id)
+        self.assertEqual(native_apps.read_launcher_state(), {
+            "group_id": group_id, "slug": None, "rom_path": None,
+        })
+
+    def test_selecting_a_group_tile_on_the_root_pushes_that_group(self):
+        root = HighlightsMenu()
+        group_id = group_tile_id("ld60")
+        root.on_select((group_id, "circular_arcade.png", 0, "Circular Arcade"))
+
+        kind, target = root._pending_transition
+        self.assertEqual(kind, "push")
+        self.assertIsInstance(target, GroupMenu)
+        self.assertEqual(target.group_id, group_id)
+        self.assertEqual(target.heading, "Circular Arcade")
         self.assertEqual(native_apps.read_launcher_state(), {
             "group_id": group_id, "slug": None, "rom_path": None,
         })
@@ -242,6 +270,12 @@ class MainRestoreTests(unittest.TestCase):
 
         self.assertEqual(scene.entries[scene.selected_index][0], MORE_APPS_ID)
 
+    def test_restoring_a_group_curated_on_the_root_selects_its_own_tile(self):
+        group_id = group_tile_id("ld60")
+        scene = main({"group_id": group_id, "slug": "ld60.defender", "rom_path": None})
+
+        self.assertEqual(scene.entries[scene.selected_index][0], group_id)
+
     def test_restoring_a_standalone_slug_selects_it_directly(self):
         scene = main({"group_id": None, "slug": "gallery", "rom_path": None})
 
@@ -262,8 +296,8 @@ class SetupIntegrationTests(unittest.TestCase):
         # Mirrors system/menu/images/__images__.yaml: every strip the launcher
         # resolves during build(), with the real ROM's metadata. favalli is a
         # `fullscreen:` entry, so it arrives reprojected to 256x54 rather than
-        # at its 320x320 source size.
-        fake_strips = [
+        # at its 320x320 source size. Tests add icons with _add_strip().
+        self.fake_strips = [
             ("menu.png", 64, 30, 16, 0),
             ("vslogo.png", 84, 11, 1, 0),
             ("loviejo-3.png", 84, 11, 1, 0),
@@ -273,7 +307,7 @@ class SetupIntegrationTests(unittest.TestCase):
         ]
 
         def fake_load_rom(_filename):
-            for index, (name, width, height, frames, palette) in enumerate(fake_strips):
+            for index, (name, width, height, frames, palette) in enumerate(self.fake_strips):
                 stripes[name] = index
                 self.runtime_director.platform.sprites.stripes[index] = {
                     "width": width, "height": height,
@@ -289,6 +323,13 @@ class SetupIntegrationTests(unittest.TestCase):
     def _build(self, scene):
         director.push(scene)
         return scene
+
+    def _add_strip(self, name, width, height, frames):
+        """Put one more strip in the fake ROM. It has to go through
+        fake_load_rom: a strip registered by hand before the scene loads its
+        ROM gets its index's metadata overwritten by whichever fake strip
+        shares that index."""
+        self.fake_strips.append((name, width, height, frames, 0))
 
     def _roms(self, roms):
         """Stand in for a real ROM directory while a menu is constructed."""
@@ -431,11 +472,7 @@ class SetupIntegrationTests(unittest.TestCase):
         # Regression test for a bug in the animation fix itself: it must be
         # driven off ANIMATED_ICON_STRIPS, not "the image has >1 frames" --
         # see the next test for the strip that distinction exists for.
-        index = len(self.runtime_director.platform.sprites.stripes)
-        self.runtime_director.platform.sprites.stripes[index] = {
-            "width": 51, "height": 19, "frames": 5, "palette": 0,
-        }
-        stripes["pollitos.png"] = index
+        self._add_strip("pollitos.png", 51, 19, 5)
         gallery_index = [slug for slug, _s, _f, _t in MAIN_MENU_OPTIONS].index("gallery")
         root = self._build(HighlightsMenu(gallery_index))
 
@@ -445,6 +482,23 @@ class SetupIntegrationTests(unittest.TestCase):
             frames_seen.add(root.selected_sprite.frame)
 
         self.assertGreater(len(frames_seen), 1)
+
+    def test_circular_arcade_marquee_plays_all_ten_frames_slowly(self):
+        # Its bulbs alternate at 10 ticks a frame, much slower than
+        # pollitos, and the last frame (the failing bulb) must come round too.
+        self._add_strip("circular_arcade.png", 64, 30, 10)
+        root = self._build(HighlightsMenu())
+        self.assertEqual(root.selected_sprite.image.name, "circular_arcade.png")
+        self.assertEqual(root.selected_sprite.image.frames, 10)
+
+        frames = []
+        for _ in range(100):
+            root._animate_icons()
+            frames.append(root.selected_sprite.frame)
+
+        self.assertEqual(frames[:9], [0] * 9)
+        self.assertEqual(frames[9], 1)
+        self.assertEqual(sorted(set(frames)), list(range(10)))
 
     def test_a_shared_menu_png_frame_does_not_animate(self):
         # tutorial_vs2 pins frame 10 of the generic 16-frame menu.png --
@@ -587,6 +641,25 @@ class SetupIntegrationTests(unittest.TestCase):
         self.assertEqual(stack[1].entries[stack[1].selected_index][0], group_tile_id("alecu"))
         self.assertEqual(stack[2].group_id, group_tile_id("alecu"))
         self.assertEqual(stack[2].entries[stack[2].selected_index][0], "alecu.vyruss")
+
+    def test_restores_a_group_curated_on_the_root_straight_from_the_root(self):
+        # Circular Arcade has its own tile on the root, so back from it
+        # should land there, not in a "Más aplicaciones" it was never opened
+        # from.
+        group_id = group_tile_id("ld60")
+        native_apps.write_launcher_state({
+            "group_id": group_id, "slug": "ld60.rim_runner", "rom_path": None,
+        })
+
+        setup()
+
+        stack = director.scene_stack
+        self.assertEqual(len(stack), 2)
+        self.assertIsInstance(stack[0], HighlightsMenu)
+        self.assertEqual(stack[0].entries[stack[0].selected_index][0], group_id)
+        self.assertIsInstance(stack[1], GroupMenu)
+        self.assertEqual(stack[1].group_id, group_id)
+        self.assertEqual(stack[1].entries[stack[1].selected_index][0], "ld60.rim_runner")
 
 
 if __name__ == "__main__":

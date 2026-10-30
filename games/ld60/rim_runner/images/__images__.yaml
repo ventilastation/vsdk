@@ -1,0 +1,9 @@
+palettegroups:
+  main:
+    - strip: tiles.png
+      frames: 17
+    - strip: sprites.png
+      frames: 8
+  text:
+    - strip: steel8x8.png
+      frames: 256
