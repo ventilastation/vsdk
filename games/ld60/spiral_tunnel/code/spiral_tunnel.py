@@ -178,6 +178,9 @@ class Game(vs2.Scene):
         self.cam_depth = 0.0
         self.ticks = 0
         self.cooldown = 0
+        # The A that started the game is still down as it begins: it only
+        # fires once it has been let go.
+        self.a_bombs = False
         self.playing = True
         self.show_clock()
         self.place()
@@ -272,9 +275,11 @@ class Game(vs2.Scene):
         self.wy += STEER_Y * (held(DOWN) - held(UP))
         if self.wy < 0:
             self.wy = 0
+        if not held(A):
+            self.a_bombs = True
         if self.cooldown:
             self.cooldown -= 1
-        elif held(A):
+        elif held(A) and self.a_bombs:
             self.drop_bomb()
         # The corners of the ship, a little inside its picture.
         left, right = self.wx + 1, self.wx + TILE - 2

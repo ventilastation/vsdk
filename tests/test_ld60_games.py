@@ -273,6 +273,26 @@ class GameTests:
         self.run_ticks(150)
         self.assertAlmostEqual(self.ahead(game), 0, delta=1)
 
+    # What the game's A button fires, for the test below; None if it fires
+    # nothing.
+    fired_by_a = None
+
+    def test_the_a_that_starts_the_game_does_not_fire(self):
+        if self.fired_by_a is None:
+            self.skipTest("A fires nothing in this game")
+        load_app(self.slug)
+        self.step(0)
+        # A held down for a while, as a person presses it, starts the game...
+        self.run_ticks(10, director.BUTTON_A)
+        game = director.scene_stack[-1]
+        self.assertEqual(type(game).__name__, "Game")
+        shots = getattr(game, self.fired_by_a)
+        self.assertFalse(any(shot.visible for shot in shots))
+        # ...and only a fresh press of it fires.
+        self.step(0)
+        self.step(director.BUTTON_A)
+        self.assertTrue(any(shot.visible for shot in shots))
+
     def finish_with(self, trigger):
         """Run ``trigger`` on the game, then let its end-of-game timer run."""
         game = director.scene_stack[-1]
@@ -311,6 +331,7 @@ class GameTests:
 
 class SpiralTunnelTests(GameTests, unittest.TestCase):
     slug = "ld60.spiral_tunnel"
+    fired_by_a = "bombs"
 
     def middle(self, game, row):
         """Where a ship can fly in the open, in the middle of the tunnel."""
@@ -864,6 +885,20 @@ class RimRunnerTests(GameTests, unittest.TestCase):
         self.run_ticks(2, director.JOY_RIGHT)
         self.assertLess(game.wx, x + 1.2)
 
+    def test_the_a_that_starts_the_game_does_not_make_the_runner_jump(self):
+        load_app(self.slug)
+        self.step(0)
+        # A held down for a while, as a person presses it, starts the game...
+        self.run_ticks(10, director.BUTTON_A)
+        game = director.scene_stack[-1]
+        self.assertEqual(type(game).__name__, "Game")
+        self.assertTrue(game.grounded)
+        self.assertEqual(game.runner.frame, 0)          # standing, not jumping
+        # ...and only a fresh press of it jumps.
+        self.step(0)
+        self.step(director.BUTTON_A)
+        self.assertFalse(game.grounded)
+
     def test_jumping_leaves_the_ground_and_comes_back(self):
         game = self.start_game()
         self.run_ticks(2)
@@ -952,6 +987,7 @@ class RimRunnerTests(GameTests, unittest.TestCase):
 
 class DefenderTests(GameTests, unittest.TestCase):
     slug = "ld60.defender"
+    fired_by_a = "shots"
     round_button = JOY_RIGHT
 
     def player_sprite(self, game):
