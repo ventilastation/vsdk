@@ -4,10 +4,11 @@
 
 Every game gets ``images/tiles.png`` (an autotiled wall set plus a few extra
 tiles; Catch the Robots draws its wall outlines from ``images/outlines.png``
-over a plain fill), ``images/sprites.png`` (8x8 frames) and copies of four
-fonts: the tutorial's ``steel8x8.png`` for the in-game text, and from the
-system ``rainbow8x8.png`` for the headings of the title and end screens and the
-4x6 ``tinyfont_white.png`` and ``tinyfont_red.png`` for the lines below them.
+and Spiral Tunnel its edges and rocks from ``images/details.png``, over a plain
+fill), ``images/sprites.png`` (8x8 frames) and copies of four fonts: the
+tutorial's ``steel8x8.png`` for the in-game text, and from the system
+``rainbow8x8.png`` for the headings of the title and end screens and the 4x6
+``tinyfont_white.png`` and ``tinyfont_red.png`` for the lines below them.
 Each ``menu.png`` is a moment of play drawn with these, so run
 capture_menu_icons.py after this. Needs Pillow.
 
@@ -224,6 +225,9 @@ def slope_tiles(top, fill, edge):
     left edge, wall below the line, for shifts 2..5 (2 + 3 + 4 + 5 = 14 frames),
     then the right edge, wall above the line, the same. Drawn upright, with +x to
     the right and the centre of the disc down, like the original game's tiles.
+
+    With no ``edge`` the fill reaches right to the line; with no ``fill`` the
+    tiles hold only the edge line, on a clear background.
     """
     def tile(shift, k, left):
         image = Image.new("RGBA", (TILE, TILE), CLEAR)
@@ -231,19 +235,14 @@ def slope_tiles(top, fill, edge):
             for x in range(TILE):
                 line = (k * TILE + x + 0.5) / shift         # the line's y at this x
                 below = (y + 0.5) - line                     # > 0: under the line
-                if left:
-                    if below >= 1.0:
-                        image.putpixel((x, y), fill + (255,))
-                    elif below >= 0.0:
-                        image.putpixel((x, y), edge + (255,))
-                else:
-                    if below <= -1.0:
-                        image.putpixel((x, y), fill + (255,))
-                    elif below <= 0.0:
-                        image.putpixel((x, y), edge + (255,))
+                inside = below if left else -below           # > 0: in the wall
+                if inside >= 0.0 and edge and inside < 1.0:
+                    image.putpixel((x, y), edge + (255,))
+                elif inside >= 0.0 and fill:
+                    image.putpixel((x, y), fill + (255,))
         return image
 
-    frames = [Image.new("RGBA", (TILE, TILE), fill + (255,))]
+    frames = [Image.new("RGBA", (TILE, TILE), fill + (255,) if fill else CLEAR)]
     for left in (True, False):
         for shift in range(2, 6):
             for k in range(shift):
@@ -314,7 +313,9 @@ ROCKS = [
 
 
 def rock_tiles(fill, rock, lit):
-    colours = {".": fill + (255,), "x": rock + (255,), "h": lit + (255,)}
+    """The rocky wall tiles; a colour left out is drawn clear."""
+    colours = {char: colour + (255,) if colour else CLEAR
+               for char, colour in ((".", fill), ("x", rock), ("h", lit))}
     frames = []
     for rows in ROCKS:
         image = Image.new("RGBA", (TILE, TILE), CLEAR)
@@ -328,9 +329,17 @@ def rock_tiles(fill, rock, lit):
 def make_spiral_tunnel():
     top = True
     out = GAMES / "spiral_tunnel" / "images"
-    fill = (190, 62, 0)
-    tiles = slope_tiles(top, fill, (255, 200, 60)) + rock_tiles(fill, (110, 34, 0), (240, 130, 40))
-    strip(tiles, top).save(out / "tiles.png")
+    fill, edge = (190, 62, 0), (255, 200, 60)
+    rock, lit = (110, 34, 0), (240, 130, 40)
+    # Like the Catch the Robots maze, two tilemaps over the same cells: the
+    # brown fill, then the yellow edges and the rocks over it, so that a
+    # one-pixel edge or a rock can't be hidden by the fill drawn after it when
+    # several rows of a tile land on one LED. Every frame of the one has its
+    # frame in the other.
+    under = slope_tiles(top, fill, None) + rock_tiles(fill, None, None)
+    over = slope_tiles(top, None, edge) + rock_tiles(None, rock, lit)
+    strip(under, top).save(out / "tiles.png")
+    strip(over, top).save(out / "details.png")
     strip(TUNNEL_SPRITES + BOOM, top).save(out / "sprites.png")
 
 

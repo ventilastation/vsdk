@@ -373,6 +373,21 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
                 elif tile == 0 or ROCKS_AT <= tile < ROCKS_AT + ROCKS:
                     self.assertTrue(game.wall_at(*centre), (row, col))
 
+    def test_the_edges_and_rocks_are_drawn_over_the_fill_from_the_same_cells(self):
+        game = self.start_game()
+        self.assertIs(game.details.cells, game.walls.cells)
+        # Fill, then edges and rocks, then the UFOs and the ship over both.
+        drawables = game.world._drawables
+        self.assertLess(drawables.index(game.walls), drawables.index(game.details))
+        self.assertLess(drawables.index(game.details), drawables.index(game.ship))
+        # They scroll together.
+        self.make_room(game)
+        game.wy = 20 * 8.0
+        self.run_ticks(20, director.JOY_RIGHT)
+        self.assertGreater(game.walls.view_y, 0)
+        self.assertEqual((game.details.x, game.details.view_y),
+                         (game.walls.x, game.walls.view_y))
+
     def test_rocks_are_scattered_through_the_solid_wall(self):
         from games.ld60.spiral_tunnel.code.spiral_tunnel import ROCKS, ROCKS_AT
 
