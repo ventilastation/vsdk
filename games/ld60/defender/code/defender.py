@@ -157,6 +157,9 @@ class Game(vs2.Scene):
         self.facing = 1
         self.cam_turn = self.wx     # where the camera is easing to, unrounded
         self.cooldown = 0
+        # The A that started the game is still down as it begins: it only
+        # fires once it has been let go.
+        self.a_fires = False
         self.left = ALIENS
         self.ticks = 0
         self.playing = True
@@ -244,9 +247,11 @@ class Game(vs2.Scene):
         self.wx = (self.wx + step * SPEED) % W
         self.wy += SPEED * (held(DOWN) - held(UP))
         self.wy = min(max(self.wy, 0), FLOOR)
+        if not held(A):
+            self.a_fires = True
         if self.cooldown:
             self.cooldown -= 1
-        elif held(A):
+        elif held(A) and self.a_fires:
             self.fire()
         if (self.solid_at(self.wx + 2, self.wy + 6) or self.solid_at(self.wx + 5, self.wy + 6)):
             self.lose()
