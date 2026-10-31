@@ -864,6 +864,20 @@ class RimRunnerTests(GameTests, unittest.TestCase):
         self.run_ticks(2, director.JOY_RIGHT)
         self.assertLess(game.wx, x + 1.2)
 
+    def test_the_a_that_starts_the_game_does_not_make_the_runner_jump(self):
+        load_app(self.slug)
+        self.step(0)
+        # A held down for a while, as a person presses it, starts the game...
+        self.run_ticks(10, director.BUTTON_A)
+        game = director.scene_stack[-1]
+        self.assertEqual(type(game).__name__, "Game")
+        self.assertTrue(game.grounded)
+        self.assertEqual(game.runner.frame, 0)          # standing, not jumping
+        # ...and only a fresh press of it jumps.
+        self.step(0)
+        self.step(director.BUTTON_A)
+        self.assertFalse(game.grounded)
+
     def test_jumping_leaves_the_ground_and_comes_back(self):
         game = self.start_game()
         self.run_ticks(2)

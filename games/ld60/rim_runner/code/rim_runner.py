@@ -159,11 +159,15 @@ class Game(vs2.Scene):
         self.clock = self.hud.label("steel8x8.png", columns=4, x=132, y=1,
                                     flip_x=True, flip_y=True)
 
+        # On the rim, which is three tiles deep where the level starts.
         self.wx = float(TILE)
         self.wy = float(TILE * 3)
         self.vy = 0.0
-        self.grounded = False
+        self.grounded = True
         self.facing = 1
+        # The A that started the game is still down as it begins: it only
+        # jumps once it has been let go.
+        self.a_jumps = False
         self.ticks = 0
         self.playing = True
         self.dead = False
@@ -276,8 +280,10 @@ class Game(vs2.Scene):
             if not (self.solid_at(ahead, self.wy + 1) or self.solid_at(ahead, self.wy + 6)):
                 self.wx = new_x
         left, right = self.wx + 1, self.wx + TILE - 2
+        if not held(A):
+            self.a_jumps = True
         if self.grounded:
-            if held(UP) or held(A):
+            if held(UP) or (held(A) and self.a_jumps):
                 self.vy = JUMP
                 self.grounded = False
                 vs2.audio.sound("jump")
