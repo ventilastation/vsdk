@@ -135,9 +135,16 @@ class Game(vs2.Scene):
         self.world = self.layer("world", projection=vs2.TUNNEL)
         self.hud = self.layer("hud", projection=vs2.HUD)
 
+        # The walls are two tilemaps over the same cells, moved together: the
+        # brown fill, then the yellow edges and the rocks over it. On a TUNNEL
+        # layer several rows of a tile can land on one LED, and the last one
+        # drawn wins, so in one tilemap the fill could hide an edge or a rock.
         self.cells = bytearray([NO_TILE] * (COLS * ROWS))
         self.walls = self.world.tilemap(
             "tiles.png", columns=COLS, rows=ROWS, cells=self.cells,
+            view_width=W, view_height=VIEW_H)
+        self.details = self.world.tilemap(
+            "details.png", columns=COLS, rows=ROWS, cells=self.cells,
             view_width=W, view_height=VIEW_H)
         ufo_spots = self.carve_tunnel()
         self.draw_tunnel()
@@ -388,8 +395,9 @@ class Game(vs2.Scene):
         """Put everything on the disc, with the camera a moment behind the ship."""
         self.cam_x = int(self.cam_turn + 0.5) % W
         self.cam_y = int(self.cam_depth + 0.5)
-        self.walls.x = ANCHOR - self.cam_x
-        self.walls.view_y = self.cam_y
+        for walls in (self.walls, self.details):
+            walls.x = ANCHOR - self.cam_x
+            walls.view_y = self.cam_y
         self.ship.x = (ANCHOR + self.wx - self.cam_x) % W
         self.ship.y = self.wy - self.cam_y
         for group in (self.ufos, self.bombs, self.booms):

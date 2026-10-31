@@ -62,10 +62,11 @@ All five share a design:
   slanted tiles instead, like the prototype's, since the tunnel moves sideways as
   it goes down, and rocks are scattered through its walls at random so you can
   see them move.)
-- Catch the Robots draws its maze as two tilemaps over the same cells, moved
-  together: the dark fill, then the bright outlines over it. A `TUNNEL` layer
-  can land several rows of a tile on one LED, and the last row drawn wins, so in
-  a single tilemap the fill could hide a one-pixel outline.
+- Catch the Robots and Spiral Tunnel draw their walls as two tilemaps over the
+  same cells, moved together: the plain fill, then the bright outlines (and
+  Spiral Tunnel's rocks) over it. A `TUNNEL` layer can land several rows of a
+  tile on one LED, and the last row drawn wins, so in a single tilemap the fill
+  could hide a one-pixel outline.
 - You are scored on the time you take to finish. Faster than your best saves a
   new best (`vs2.saves`, under the name `best`).
 
@@ -92,7 +93,7 @@ All five share a design:
 
 Art is generated, not drawn by hand: run `python3 tools/ld60_assets/make_art.py`
 to rewrite every `images/tiles.png` and `images/sprites.png` (and Catch the
-Robots' `images/outlines.png`), and
+Robots' `images/outlines.png` and Spiral Tunnel's `images/details.png`), and
 `python3 tools/ld60_assets/make_sounds.py` (needs ffmpeg) for the sound effects
 in `sounds/`. The songs there are the musicians' own MP3s (see Music, above),
 not generated. In-game text is in the tutorial's `steel8x8.png`. The title and
