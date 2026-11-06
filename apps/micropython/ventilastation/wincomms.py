@@ -7,6 +7,8 @@ pipe = open(r'\\.\pipe\ventilastation-emu', 'b+')
 set_blocking(pipe.fileno(), False)
 _parser = InputParser()
 _new_connection = True
+_WOULD_BLOCK_ERRNOS = (11, 22, 35, 232)
+_RETRYABLE_WRITE_ERRNOS = (11, 35, 232)
 
 
 def was_new_connection():
@@ -17,10 +19,13 @@ def was_new_connection():
 
 
 def receive(_bufsize):
+    # This Windows MicroPython reports EINVAL when a nonblocking read asks for
+    # more bytes than are currently queued.  Read one byte, as the working
+    # pre-v2 transport did; InputParser already handles fragmented frames.
     try:
-        data = pipe.read(64)
+        data = pipe.read(1)
     except OSError as error:
-        if error.args[0] not in (11, 35, 232):
+        if error.args[0] not in _WOULD_BLOCK_ERRNOS:
             raise
         data = None
     if data:
@@ -64,6 +69,6 @@ def send(line, data=b''):
             else:
                 utime.sleep_ms(10)
         except OSError as error:
-            if error.args[0] not in (11, 35, 232):
+            if error.args[0] not in _RETRYABLE_WRITE_ERRNOS:
                 raise
             utime.sleep_ms(10)

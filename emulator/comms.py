@@ -167,57 +167,91 @@ class ConnSerial(ConnectionBase):
             self.sockfile.write(b)
 
 class ConnWinNamedPipe(ConnectionBase):
-    alreadysetup = False
+    def __init__(self):
+        super().__init__()
+        self.pipe = None
+        self.buffer = b""
+        self.connected = False
+
     def setup(self):
-        if self.alreadysetup:
-            return
+        import pywintypes
         import win32pipe
 
-        self.pipe = win32pipe.CreateNamedPipe(
-            r'\\.\pipe\ventilastation-emu',
-            win32pipe.PIPE_ACCESS_DUPLEX,
-            win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
-            1, 65536 * 8, 65536 * 8, 0, None
-        )
+        if self.pipe is None:
+            self.pipe = win32pipe.CreateNamedPipe(
+                r'\\.\pipe\ventilastation-emu',
+                win32pipe.PIPE_ACCESS_DUPLEX,
+                win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
+                1, 65536 * 8, 65536 * 8, 0, None
+            )
+        else:
+            try:
+                win32pipe.DisconnectNamedPipe(self.pipe)
+            except pywintypes.error:
+                # A broken client may already have disconnected its end, or
+                # the handle may still be waiting for its first client.
+                pass
 
         self.buffer = b""
-        self.alreadysetup = True
+        self.connected = False
+        try:
+            # Creating a server pipe only makes it available.  Do not report
+            # a connection until the MicroPython client has actually opened it.
+            win32pipe.ConnectNamedPipe(self.pipe, None)
+        except pywintypes.error as error:
+            # The client can open the pipe between CreateNamedPipe() and
+            # ConnectNamedPipe(); Windows reports that successful race as 535.
+            if getattr(error, "winerror", error.args[0]) != 535:  # ERROR_PIPE_CONNECTED
+                raise socket.error(str(error)) from error
+        self.connected = True
+
+    def _read_chunk(self):
+        import pywintypes
+        import win32file
+
+        try:
+            _result, data = win32file.ReadFile(self.pipe, 65536, None)
+            return data
+        except pywintypes.error as error:
+            self.connected = False
+            raise socket.error(str(error)) from error
 
     def send(self, b):
+        import pywintypes
         import win32file
-        win32file.WriteFile(self.pipe, b)
+        try:
+            win32file.WriteFile(self.pipe, b)
+        except pywintypes.error as error:
+            self.connected = False
+            raise socket.error(str(error)) from error
 
     def read(self, numbytes):
-        import win32file
         while len(self.buffer) < numbytes:
-            try:
-                result, data = win32file.ReadFile(self.pipe, 65536, None)
-            except Exception:
-                data = b""
+            data = self._read_chunk()
+            if not data:
+                self.connected = False
+                raise socket.error("connection closed")
             self.buffer += data
         ret, self.buffer = self.buffer[:numbytes], self.buffer[numbytes:]
         return ret
 
     def readline(self):
-        import win32file
         while b"\n" not in self.buffer:
-            try:
-                result, data = win32file.ReadFile(self.pipe, 65536, None)
-            except Exception:
-                data = b""
+            data = self._read_chunk()
             if not data:
-                break
+                self.connected = False
+                raise socket.error("connection closed")
             self.buffer += data
-        try:
-            if b"\n" in self.buffer:
-                ret, self.buffer = self.buffer.split(b"\n", 1)
-                return ret
-            else:
-                return b""
-        except Exception:
-            print(traceback.format_exc())
-            print("BUFFER WAS:", self.buffer)
-            raise
+        ret, self.buffer = self.buffer.split(b"\n", 1)
+        return ret
+
+    def close(self):
+        if self.pipe is None:
+            return
+        import win32file
+        win32file.CloseHandle(self.pipe)
+        self.pipe = None
+        self.connected = False
 
 
 class WorkbenchTelemetryConn:

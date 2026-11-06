@@ -3,5 +3,5 @@
 import json
 from pathlib import Path
 
-LAYOUT = json.loads((Path(__file__).resolve().parent.parent / "web" / "keyboard-layout.json").read_text())
+LAYOUT = json.loads((Path(__file__).resolve().parent.parent / "web" / "keyboard-layout.json").read_text(encoding="utf-8"))
 KEYS = LAYOUT["keys"]
