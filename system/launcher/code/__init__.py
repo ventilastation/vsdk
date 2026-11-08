@@ -23,7 +23,6 @@ HIGHLIGHT_ENTRIES = [
     (5, GROUP_PREFIX + "ld60", "circular_arcade.png", 0, "Circular Arcade"),
     (10, "alecu.ventilagon_game", game_menu_strip("alecu.ventilagon_game"), 0, "Super Ventilagon"),
     (20, "alecu.vyruss_vs2", game_menu_strip("alecu.vyruss_vs2"), 0, "Vyruss VS2"),
-    (30, "emulators.voom", "voom.png", 0, "Voom"),
     (40, "vsjam-oct25.2bam_sencom", game_menu_strip("vsjam-oct25.2bam_sencom"), 0, "Sencom"),
     (50, "vsjam-may25.vasura_espacial", game_menu_strip("vsjam-may25.vasura_espacial"), 0, "Vasura Espacial"),
     (60, "gallery", "pollitos.png", 0, "Gallery"),
@@ -151,6 +150,15 @@ def _build_groups_and_tiles():
         strip = GROUP_ICONS.get(group_name)
         tiles.append((order, tile_id, strip, 0, _group_label(group_name)))
 
+    # Voom is a native app (see EMULATOR_ICONS) that hands off to the
+    # prboom-go partition and reboots the rotor on the way back, which
+    # reopened the root with its tile pre-selected: one press from a loop
+    # at a festival. For Overkill it lives inside Alecu's group instead of
+    # on the curated root (and stays in the debug menu's Emulators group).
+    alecu_id = group_tile_id("alecu")
+    if alecu_id in members:
+        members[alecu_id].append(("emulators.voom", EMULATOR_ICONS["emulators.voom"], 0, "Voom"))
+
     tech_demos_id = group_tile_id("tech_demos")
     members[tech_demos_id] = catalog.build_menu_options(
         TECH_DEMO_STATIC_ENTRIES, catalog.discover_tech_demo_entries())
@@ -235,22 +243,34 @@ BYLINE_Y = 11
 # their generators live in docs/overkill/logo-tests of the parent repo.
 OVERKILL_BRANDING = True
 # Title wrapped as a curved banner around the top arc, a little in from the rim.
+# 80x24 (was 100x30) so "Dream" below it can sit further out: near the hub a
+# LED covers few columns and the legacy intensity table dims the inner LEDs,
+# so the subtitle was unreadable on the spinning fan (2026-11-07 spin test).
 OVERKILL_BANNER_IMAGE = "overkill_banner.png"
-OVERKILL_BANNER_Y = 3
+OVERKILL_BANNER_Y = 2
 # "Dream" subtitle, reprojected flat across the whole disc (FULLSCREEN y=0 is
 # nearest: the image spans every LED, like the old perspective-0 set_y(255)).
+# Variant y5-ccw5 of docs/overkill/logo-tests/make_dream_up.py: 130 px wide,
+# top at LED 29 from the hub, arched 14 px, tilted 5 degrees so the gap to
+# the banner is even on both sides.
 OVERKILL_DREAM_IMAGE = "overkill_dream_flat.png"
 OVERKILL_DREAM_Y = 0
 # Carousel spinning in place on the left: 36 frames (10 degrees each),
-# pre-distorted for the HUD projection, advanced every 4 ticks.
+# pre-distorted for the HUD projection, advanced every 4 ticks. Centred 8
+# columns below the 9 o'clock horizon (column 56, strip is 49 wide): halfway
+# between the logo above and the menu tiles below on the real fan (the
+# original spot, 17 below, sat on the tiles; on the horizon it crowded Dream).
 OVERKILL_CAROUSEL_IMAGE = "overkill_carousel.png"
-OVERKILL_CAROUSEL_X = 23
+OVERKILL_CAROUSEL_X = 32
 OVERKILL_CAROUSEL_Y = 8
 OVERKILL_CAROUSEL_RATE = 4
 # Hand reaching in from the right rim and back: 13 frames pushed 0..12 LEDs
-# outward, played with a sine ease (6 - 6*cos over 60 ticks).
+# outward, played with a sine ease (6 - 6*cos over 60 ticks). Axis 8 columns
+# below the 3 o'clock horizon (column 200, strip is 41 wide), mirroring the
+# carousel, so it reaches in slightly tilted; the frames are radial, so
+# moving the sprite needs no regeneration.
 OVERKILL_HAND_IMAGE = "overkill_hand.png"
-OVERKILL_HAND_X = 189
+OVERKILL_HAND_X = 180
 OVERKILL_HAND_Y = 0
 OVERKILL_HAND_EASE = bytes((0,0,0,0,1,1,1,2,2,2,3,4,4,5,5,6,7,7,8,8,9,10,10,10,11,11,11,12,12,12,
                             12,12,12,12,11,11,11,10,10,10,9,8,8,7,7,6,5,5,4,4,3,2,2,2,1,1,1,0,0,0))

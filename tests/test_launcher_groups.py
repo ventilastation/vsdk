@@ -131,11 +131,15 @@ class MainMenuOptionsTests(unittest.TestCase):
         debug_slugs = [slug for slug, _s, _f, _t in SYS_MENU_OPTIONS]
         self.assertIn(group_tile_id("emulators"), debug_slugs)
 
-    def test_a_native_slug_can_be_a_curated_highlight(self):
-        # Voom sits directly on the curated root now, not nested under a
-        # group tile -- see HighlightsMenu.on_select()'s use of _dispatch_app.
+    def test_voom_is_nested_under_alecu_not_on_the_root(self):
+        # For Overkill, Voom (a native app) is tucked inside Alecu's group:
+        # every launch reboots the rotor on return and the root would
+        # reopen with its tile pre-selected. GroupMenu dispatches native
+        # slugs through _dispatch_app just like HighlightsMenu does.
         top_level_slugs = [slug for slug, _s, _f, _t in MAIN_MENU_OPTIONS]
-        self.assertIn("emulators.voom", top_level_slugs)
+        self.assertNotIn("emulators.voom", top_level_slugs)
+        alecu = [slug for slug, _s, _f, _t in GROUP_MEMBERS[group_tile_id("alecu")]]
+        self.assertEqual(alecu[-1], "emulators.voom")
 
     def test_tech_demos_group_includes_the_hardware_test(self):
         tech_demos = [slug for slug, _s, _f, _t in GROUP_MEMBERS[group_tile_id("tech_demos")]]
@@ -446,7 +450,7 @@ class SetupIntegrationTests(unittest.TestCase):
     OVERKILL_STRIPS = [
         # name, width, height, frames (dream_flat is a `fullscreen:` entry,
         # so it arrives reprojected to 256x54 like favalli).
-        ("overkill_banner.png", 100, 30, 1),
+        ("overkill_banner.png", 80, 24, 1),
         ("overkill_dream_flat.png", 256, 54, 1),
         ("overkill_carousel.png", 49, 25, 36),
         ("overkill_hand.png", 41, 34, 13),
@@ -479,7 +483,7 @@ class SetupIntegrationTests(unittest.TestCase):
         self.assertEqual([s.image.name for s in branding],
                          ["overkill_banner.png", "overkill_carousel.png", "overkill_hand.png"])
         banner, carousel, hand = branding
-        self.assertEqual(banner.x, launcher.DISC_TOP - 100 // 2)
+        self.assertEqual(banner.x, launcher.DISC_TOP - 80 // 2)
         self.assertEqual(banner.y, launcher.OVERKILL_BANNER_Y)
         self.assertEqual((carousel.x, carousel.y),
                          (launcher.OVERKILL_CAROUSEL_X, launcher.OVERKILL_CAROUSEL_Y))
