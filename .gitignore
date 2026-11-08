@@ -59,3 +59,6 @@ docs/_build/
 
 # Per-board mirror-mode WiFi credentials (see secrets.py.example)
 apps/micropython/ventilastation/secrets.py
+# Written by the launcher at runtime (resume-after-reboot state); the desktop
+# emulator drops it inside the source tree.
+apps/micropython/ventilastation/launcher_state.json
