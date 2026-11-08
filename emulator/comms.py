@@ -501,6 +501,9 @@ def dispatch_command(conn, command, args):
         print("-------------------------------------")
         print(tb.decode("utf-8"))
         print("-------------------------------------")
+        # The rotor resets itself right after sending this (main.py), so keep
+        # it next to the reboot it explains.
+        log_rotor_event("traceback: " + tb.decode("utf-8", "replace").strip().replace("\n", " | "))
 
     elif command == b"info":
         # Hardware Python stdout is carried as a length-delimited payload so
