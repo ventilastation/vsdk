@@ -201,6 +201,19 @@ except RuntimeError as _re:
     import vsdk_recovery
     vsdk_recovery.run()
 
+if sys.platform == "esp32":
+    # The Overkill fan's strip (107 x APA102 clone) does not reproduce the
+    # calibrated pipeline's lowest PWM codes reliably at POV column times:
+    # dim colours (menu backdrop, starfields) sparkle. The legacy tables
+    # clip dim values to black instead, which reads clean on this strip
+    # (A/B over the link while spinning, 2026-11-07). Runtime only: a
+    # "povcal set" re-enables the calibrated path until the next boot.
+    try:
+        director.platform.display.set_color_pipeline_enabled(False)
+        print("main: legacy colour mode")
+    except Exception as _color_error:
+        print("main: legacy colour mode failed:", _color_error)
+
 from system.launcher.code import setup as setup_launcher
 
 def setup():
