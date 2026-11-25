@@ -63,7 +63,7 @@ class GameTests:
 
     slug = None
     can_lose = True
-    composer = "snifkey"
+    composer = "Vectorbot"
 
     def setUp(self):
         self.game_name = self.slug.split(".")[1]

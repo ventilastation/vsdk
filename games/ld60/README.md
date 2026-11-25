@@ -20,11 +20,11 @@ then on:
 
 | Game | Song | Music by |
 |---|---|---|
-| Spiral Tunnel | CHIPTOON | snifkey |
-| Catch the Robots | WINDUPCARAVAN | snifkey |
+| Spiral Tunnel | CHIPTOON | Vectorbot |
+| Catch the Robots | WINDUPCARAVAN | Vectorbot |
 | Rim Runner | SkateThisBorder | JuanJuan |
-| Dodge 'Em | BIGVTINY | snifkey |
-| Defender | SPACERAKER2 | snifkey |
+| Dodge 'Em | BIGVTINY | Vectorbot |
+| Defender | SPACERAKER2 | Vectorbot |
 
 The base plays music and effects at the same gain, so the levels live in the
 files: every song is set to about −24 LUFS integrated, around 6 dB under the
