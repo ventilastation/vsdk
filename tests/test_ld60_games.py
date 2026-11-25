@@ -552,7 +552,6 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
 
 class DodgeEmTests(GameTests, unittest.TestCase):
     slug = "ld60.dodge_em"
-    composer = "MrJuanJuan"
 
     def test_the_track_has_five_lanes_with_a_pill_on_every_free_tile(self):
         from games.ld60.dodge_em.code.dodge_em import COLS, LANES, PILL
@@ -790,7 +789,7 @@ class CatchTheRobotsTests(GameTests, unittest.TestCase):
 
 class RimRunnerTests(GameTests, unittest.TestCase):
     slug = "ld60.rim_runner"
-    composer = "JuanJuan"
+    composer = "MrJuanJuan"
 
     def test_the_runner_starts_on_the_rim_at_the_bottom_of_the_disc(self):
         game = self.start_game()
