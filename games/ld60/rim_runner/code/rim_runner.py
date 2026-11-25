@@ -69,9 +69,9 @@ STOMP = 2.0
 BEST = "best"
 # The game's song, in sounds/: it starts on the title screen and loops through
 # every game and every replay.
-SONG = "skatethisborder"
+SONG = "jankwamthuis4zaaagsv5"
 # Shown under the game's name on the title screen.
-CREDITS = ("a game by boris", "music by JuanJuan", "ported by alecu")
+CREDITS = ("a game by boris", "music by MrJuanJuan", "ported by alecu")
 
 
 def held(button):

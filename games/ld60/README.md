@@ -22,7 +22,7 @@ then on:
 |---|---|---|
 | Spiral Tunnel | CHIPTOON | Vectorbot |
 | Catch the Robots | WINDUPCARAVAN | Vectorbot |
-| Rim Runner | SkateThisBorder | JuanJuan |
+| Rim Runner | JanKwamThuis4ZaaagsV5 | MrJuanJuan |
 | Dodge 'Em | BIGVTINY | Vectorbot |
 | Defender | SPACERAKER2 | Vectorbot |
 

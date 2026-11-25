@@ -789,7 +789,7 @@ class CatchTheRobotsTests(GameTests, unittest.TestCase):
 
 class RimRunnerTests(GameTests, unittest.TestCase):
     slug = "ld60.rim_runner"
-    composer = "JuanJuan"
+    composer = "MrJuanJuan"
 
     def test_the_runner_starts_on_the_rim_at_the_bottom_of_the_disc(self):
         game = self.start_game()
