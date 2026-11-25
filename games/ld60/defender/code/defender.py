@@ -55,7 +55,7 @@ BEST = "best"
 # every game and every replay.
 SONG = "spaceraker2"
 # Shown under the game's name on the title screen.
-CREDITS = ("a game by boris", "music by snifkey", "ported by alecu")
+CREDITS = ("a game by boris", "music by Vectorbot", "ported by alecu")
 
 
 def held(button):
