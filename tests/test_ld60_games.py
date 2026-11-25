@@ -552,6 +552,7 @@ class SpiralTunnelTests(GameTests, unittest.TestCase):
 
 class DodgeEmTests(GameTests, unittest.TestCase):
     slug = "ld60.dodge_em"
+    composer = "MrJuanJuan"
 
     def test_the_track_has_five_lanes_with_a_pill_on_every_free_tile(self):
         from games.ld60.dodge_em.code.dodge_em import COLS, LANES, PILL

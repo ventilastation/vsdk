@@ -23,7 +23,7 @@ then on:
 | Spiral Tunnel | CHIPTOON | Vectorbot |
 | Catch the Robots | WINDUPCARAVAN | Vectorbot |
 | Rim Runner | SkateThisBorder | JuanJuan |
-| Dodge 'Em | BIGVTINY | Vectorbot |
+| Dodge 'Em | JanKwamThuis4ZaaagsV5 | MrJuanJuan |
 | Defender | SPACERAKER2 | Vectorbot |
 
 The base plays music and effects at the same gain, so the levels live in the
